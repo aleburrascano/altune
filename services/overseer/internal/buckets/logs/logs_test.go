@@ -361,3 +361,44 @@ func TestSnapshotCarriesRawFields(t *testing.T) {
 		t.Fatalf("field key/value not carried verbatim: %+v", rec.Fields)
 	}
 }
+
+func TestReconnectingSourceReportsConnectingReason(t *testing.T) {
+	cases := []struct {
+		status     goapi.Status
+		wantState  core.State
+		wantReason string
+	}{
+		{goapi.StatusConnecting, core.StateStale, "connecting"},
+		{goapi.StatusUp, core.StateLive, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.status.String(), func(t *testing.T) {
+			snap := logs.New(logs.Deps{Source: newFakeSource(tc.status, 0)}).Snapshot()
+
+			if snap.State != tc.wantState || snap.Reason != tc.wantReason {
+				t.Errorf("snapshot state %q reason %q, want %q/%q", snap.State, snap.Reason, tc.wantState, tc.wantReason)
+			}
+		})
+	}
+}
+
+type droppingSource struct {
+	*fakeSource
+	streamDrops int
+}
+
+func (d droppingSource) Dropped() int { return d.streamDrops }
+
+func TestSnapshotDroppedCountsStreamDropsWithRingEvictions(t *testing.T) {
+	const ringOverflow, streamDrops = 5, 7
+	src := droppingSource{fakeSource: newFakeSource(goapi.StatusUp, logCapacity+ringOverflow), streamDrops: streamDrops}
+	b := logs.New(logs.Deps{Source: src})
+	for range logCapacity + ringOverflow {
+		src.ch <- goapi.LogRecord{Level: "INFO", Message: "x"}
+	}
+	drive(t, b)
+
+	if got := snapData(t, b.Snapshot()).Dropped; got != ringOverflow+streamDrops {
+		t.Fatalf("snapshot dropped = %d, want %d ring evictions + %d stream drops", got, ringOverflow, streamDrops)
+	}
+}

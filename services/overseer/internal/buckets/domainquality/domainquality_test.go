@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -561,5 +562,317 @@ func collectN(t *testing.T, b *domainquality.Bucket, n int) {
 		if _, err := b.Collect(context.Background()); err != nil {
 			t.Fatalf("Collect #%d: %v", i, err)
 		}
+	}
+}
+
+type blockingSeries struct {
+	target  string
+	entered chan struct{}
+	release chan struct{}
+}
+
+func newBlockingSeries(target string) *blockingSeries {
+	return &blockingSeries{
+		target:  target,
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+}
+
+func (s *blockingSeries) Record(_, series string, _ core.Point) {
+	if series != s.target {
+		return
+	}
+	select {
+	case s.entered <- struct{}{}:
+	default:
+	}
+	<-s.release
+}
+
+func (s *blockingSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
+}
+
+func assertSnapshotUnblocked(t *testing.T, b *domainquality.Bucket, series *blockingSeries, collect func() error) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- collect() }()
+
+	select {
+	case <-series.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("series.Record was never entered")
+	}
+
+	snapshotDone := make(chan struct{})
+	go func() {
+		b.Snapshot()
+		close(snapshotDone)
+	}()
+
+	select {
+	case <-snapshotDone:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Snapshot blocked behind an in-flight series.Record call")
+	}
+
+	close(series.release)
+	if err := <-done; err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+}
+
+func TestSnapshotDoesNotBlockOnInFlightEvalSeriesRecord(t *testing.T) {
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq()})
+	series := newBlockingSeries("eval_score")
+	b.UseSeries(series)
+
+	assertSnapshotUnblocked(t, b, series, func() error {
+		_, err := b.Collect(context.Background())
+		return err
+	})
+}
+
+func TestSnapshotDoesNotBlockOnInFlightAcquisitionSeriesRecord(t *testing.T) {
+	reader := &steppingAcqReader{
+		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
+		acqs: []goapi.AcquisitionStatus{
+			{Succeeded: 90, Failed: 10},
+			{Succeeded: 180, Failed: 20},
+		},
+	}
+	b := newBucket(reader)
+	series := newBlockingSeries("acquisition_rate")
+	b.UseSeries(series)
+
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("seed collect: %v", err)
+	}
+
+	assertSnapshotUnblocked(t, b, series, func() error {
+		_, err := b.Collect(context.Background())
+		return err
+	})
+}
+
+type blockedEvalReader struct {
+	acq   goapi.AcquisitionStatus
+	disco goapi.DiscographyQuality
+}
+
+func (blockedEvalReader) AdminEval(ctx context.Context) (goapi.EvalStatus, error) {
+	<-ctx.Done()
+	return goapi.EvalStatus{}, ctx.Err()
+}
+
+func (r blockedEvalReader) AdminAcquisition(ctx context.Context) (goapi.AcquisitionStatus, error) {
+	if err := ctx.Err(); err != nil {
+		return goapi.AcquisitionStatus{}, err
+	}
+	return r.acq, nil
+}
+
+func (r blockedEvalReader) AdminDiscographyQuality(ctx context.Context) (goapi.DiscographyQuality, error) {
+	if err := ctx.Err(); err != nil {
+		return goapi.DiscographyQuality{}, err
+	}
+	return r.disco, nil
+}
+
+type panicEvalReader struct {
+	acq   goapi.AcquisitionStatus
+	disco goapi.DiscographyQuality
+}
+
+func (panicEvalReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
+	panic("boom: eval reader misbehaved")
+}
+
+func (r panicEvalReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, error) {
+	return r.acq, nil
+}
+
+func (r panicEvalReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
+	return r.disco, nil
+}
+
+func TestParallelReadPanicDoesNotCrashProcess(t *testing.T) {
+	reader := panicEvalReader{
+		acq: goapi.AcquisitionStatus{Succeeded: 19, Failed: 1, InFlight: 2, QueueDepth: 4, QueueCapacity: 64},
+		disco: goapi.DiscographyQuality{
+			WindowDays: 30, GroupBy: "artist",
+			Cases: []goapi.DiscographyCase{{Artist: "Radiohead", Releases: 42, SingleProvider: 9}},
+		},
+	}
+	b := newBucket(reader)
+
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect errored though acquisition and discography were live: %v", err)
+	}
+
+	d := snapData(t, b.Snapshot())
+	if !d.EvalStale || d.Eval != nil {
+		t.Fatalf("panicking eval side not flagged stale: %+v", d)
+	}
+	if d.AcqStale || d.Acquisition == nil || d.Acquisition.Succeeded != 19 {
+		t.Fatalf("acquisition not recorded fresh despite the panicking eval read: %+v", d)
+	}
+	if d.DiscoStale || d.Discography == nil {
+		t.Fatalf("discography not recorded fresh despite the panicking eval read: %+v", d)
+	}
+}
+
+func TestParallelReadsIsolateASlowOne(t *testing.T) {
+	reader := blockedEvalReader{
+		acq: goapi.AcquisitionStatus{Succeeded: 19, Failed: 1, InFlight: 2, QueueDepth: 4, QueueCapacity: 64},
+		disco: goapi.DiscographyQuality{
+			WindowDays: 30, GroupBy: "artist",
+			Cases: []goapi.DiscographyCase{{Artist: "Radiohead", Releases: 42, SingleProvider: 9}},
+		},
+	}
+	b := newBucket(reader)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := b.Collect(ctx); err != nil {
+		t.Fatalf("Collect errored though acquisition and discography were live: %v", err)
+	}
+
+	d := snapData(t, b.Snapshot())
+	if !d.EvalStale || d.Eval != nil {
+		t.Fatalf("blocked eval side not flagged stale: %+v", d)
+	}
+	if d.AcqStale || d.Acquisition == nil || d.Acquisition.Succeeded != 19 {
+		t.Fatalf("acquisition not recorded fresh despite the blocked eval read: %+v", d)
+	}
+	if d.DiscoStale || d.Discography == nil {
+		t.Fatalf("discography not recorded fresh despite the blocked eval read: %+v", d)
+	}
+}
+
+type recordedPoint struct {
+	bucket string
+	series string
+	point  core.Point
+}
+
+type recordingSeries struct {
+	mu     sync.Mutex
+	points []recordedPoint
+}
+
+func (r *recordingSeries) Record(bucket, series string, p core.Point) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.points = append(r.points, recordedPoint{bucket: bucket, series: series, point: p})
+}
+
+func (r *recordingSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
+}
+
+func (r *recordingSeries) named(series string) []core.Point {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []core.Point
+	for _, p := range r.points {
+		if p.bucket == "domainquality" && p.series == series {
+			out = append(out, p.point)
+		}
+	}
+	return out
+}
+
+func bucketWithSeries(r reader) (*domainquality.Bucket, *recordingSeries) {
+	b := newBucket(r)
+	series := &recordingSeries{}
+	b.UseSeries(series)
+	return b, series
+}
+
+func TestCollectRecordsEvalScoreSeries(t *testing.T) {
+	b, series := bucketWithSeries(fakeReader{eval: scoredEval(), acq: healthyAcq()})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	got := series.named("eval_score")
+	if len(got) != 1 {
+		t.Fatalf("eval_score recorded %d points, want 1: %+v", len(got), got)
+	}
+	if got[0].Value != 0.81 {
+		t.Errorf("eval_score = %v, want 0.81", got[0].Value)
+	}
+}
+
+func TestCollectRecordsDiscoSuccessRateSeries(t *testing.T) {
+	b, series := bucketWithSeries(fakeReader{
+		eval:  scoredEval(),
+		acq:   healthyAcq(),
+		disco: goapi.DiscographyQuality{SuspectRate: 0.25},
+	})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	got := series.named("disco_success_rate")
+	if len(got) != 1 {
+		t.Fatalf("disco_success_rate recorded %d points, want 1: %+v", len(got), got)
+	}
+	if got[0].Value != 0.75 {
+		t.Errorf("disco_success_rate = %v, want 0.75", got[0].Value)
+	}
+}
+
+func TestCollectRecordsAcquisitionRateOnceWindowed(t *testing.T) {
+	reader := &steppingAcqReader{
+		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
+		acqs: []goapi.AcquisitionStatus{
+			{Succeeded: 90, Failed: 10},
+			{Succeeded: 180, Failed: 20},
+		},
+	}
+	b, series := bucketWithSeries(reader)
+	collectN(t, b, 2)
+
+	got := series.named("acquisition_rate")
+	if len(got) != 1 {
+		t.Fatalf("acquisition_rate recorded %d points, want 1: %+v", len(got), got)
+	}
+	if got[0].Value != 0.9 {
+		t.Errorf("acquisition_rate = %v, want 0.9", got[0].Value)
+	}
+}
+
+func TestCollectRecordsNoAcquisitionRateOnFirstCollect(t *testing.T) {
+	b, series := bucketWithSeries(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	if got := series.named("acquisition_rate"); len(got) != 0 {
+		t.Fatalf("acquisition_rate recorded %d points on the first collect, want 0 (no window yet): %+v", len(got), got)
+	}
+}
+
+func TestKeySeriesIsDiscoSuccessRate(t *testing.T) {
+	b := newBucket(fakeReader{})
+	if got := b.KeySeries(); got != "disco_success_rate" {
+		t.Errorf("KeySeries() = %q, want %q", got, "disco_success_rate")
+	}
+}
+
+func TestBucketIsASeriesWriter(t *testing.T) {
+	var bucket core.Bucket = newBucket(fakeReader{})
+	if _, ok := bucket.(core.SeriesWriter); !ok {
+		t.Fatal("domainquality does not implement core.SeriesWriter, so the composition root never hands it the history store")
+	}
+}
+
+func TestCollectWithoutSeriesStillCollects(t *testing.T) {
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect with no series wired: %v", err)
 	}
 }

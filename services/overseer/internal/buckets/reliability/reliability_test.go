@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -494,5 +495,314 @@ func TestANonPositiveIntervalPollsAtTheDefaultCadence(t *testing.T) {
 				t.Fatalf("interval %v probed %d times in 50ms, want 1: the default cadence is seconds apart", interval, got)
 			}
 		})
+	}
+}
+
+func TestAdminReasonOutranksPollDegraded(t *testing.T) {
+	cases := []struct {
+		name     string
+		adminErr error
+		want     string
+	}{
+		{"token failure stays auth", &goapi.TokenError{Op: "acquire read-only token", Err: goapi.ErrNoToken}, goapi.ReasonAuth},
+		{"forbidden stays auth", &goapi.APIError{Op: "GET /observe/health", StatusCode: http.StatusForbidden}, goapi.ReasonAuth},
+		{"rate limit stays throttled", &goapi.APIError{Op: "GET /observe/health", StatusCode: http.StatusTooManyRequests}, goapi.ReasonThrottled},
+		{"unreachable observe yields to degraded", srcDown("GET /observe/health"), goapi.ReasonDegraded},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := &fakeReader{}
+			reader.set(goapi.OperatorHealth{}, tc.adminErr)
+			b, probe := probedBucket(t, reader)
+			_ = collectStore(t, b)
+			probe.answer(degraded())
+
+			if got := b.Snapshot().Reason; got != tc.want {
+				t.Errorf("Reason = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDependencyDownOutranksPollDegraded(t *testing.T) {
+	reader := &fakeReader{}
+	down := healthyHealth()
+	down.DB = "down"
+	reader.set(down, nil)
+	b, probe := probedBucket(t, reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect = %v, want nil", err)
+	}
+	probe.answer(degraded())
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical — a down dependency must not be demoted to warn", snap.Severity)
+	}
+	if snap.Headline != "dependency down · uptime 100.0%" {
+		t.Errorf("headline = %q, want dependency down", snap.Headline)
+	}
+}
+
+func TestDegradedProbeCountsAsReachableForUptime(t *testing.T) {
+	b, probe := probedBucket(t, &fakeReader{})
+
+	probe.answer(degraded())
+	probe.answer(up())
+
+	snap := b.Snapshot()
+
+	if snap.Headline != "uptime 100.0%" {
+		t.Errorf("headline = %q, want uptime 100.0%% with no flap", snap.Headline)
+	}
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+}
+
+func TestDegradedWindowReportsFullUptime(t *testing.T) {
+	b, probe := probedBucket(t, &fakeReader{})
+
+	probe.answer(degraded())
+	probe.answer(degraded())
+
+	if got := b.Snapshot().Headline; got != "go-api degraded · uptime 100.0%" {
+		t.Errorf("headline = %q, want go-api degraded at uptime 100.0%%", got)
+	}
+}
+
+func TestKeySeriesIsLatencyMS(t *testing.T) {
+	if got := newBucket(&fakeReader{}).KeySeries(); got != "latency_ms" {
+		t.Errorf("KeySeries() = %q, want latency_ms", got)
+	}
+}
+
+func TestAnsweredProbeWritesUnderTheDeclaredKeySeries(t *testing.T) {
+	b, probe, series := bucketWithSeries(t, nil)
+
+	probe.answer(up())
+
+	name := b.KeySeries()
+	if got := series.named(name); len(got) != 1 {
+		t.Fatalf("series recorded under KeySeries() (%q) = %+v, want exactly one point", name, got)
+	}
+}
+
+func TestUnansweredProbeWritesNothingUnderTheDeclaredKeySeries(t *testing.T) {
+	b, probe, series := bucketWithSeries(t, nil)
+
+	probe.answer(goapi.Health{}, srcDown("GET /health"))
+
+	name := b.KeySeries()
+	if got := series.named(name); len(got) != 0 {
+		t.Fatalf("series recorded under KeySeries() (%q) = %+v, want none: probe was unanswered", name, got)
+	}
+}
+
+func TestTokenFailureReasonIsAuthNeverDown(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(goapi.OperatorHealth{}, &goapi.TokenError{Op: "acquire read-only token", Err: goapi.ErrNoToken})
+
+	b := newBucket(reader)
+	if err := collectStore(t, b); err == nil {
+		t.Fatal("Collect with a failing token source returned nil error")
+	}
+
+	snap := b.Snapshot()
+	if snap.Reason != "auth" {
+		t.Errorf("Reason = %q, want auth", snap.Reason)
+	}
+	if snap.Reason == "down" {
+		t.Fatal("a dead credential classified as down; must be auth")
+	}
+}
+
+func TestReasonClearsOnRecovery(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(goapi.OperatorHealth{}, &goapi.TokenError{Op: "acquire read-only token", Err: goapi.ErrNoToken})
+
+	b := newBucket(reader)
+	_ = collectStore(t, b)
+	if b.Snapshot().Reason != "auth" {
+		t.Fatalf("Reason after failure = %q, want auth", b.Snapshot().Reason)
+	}
+
+	reader.set(healthyHealth(), nil)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect after recovery = %v, want nil", err)
+	}
+	if got := b.Snapshot().Reason; got != "" {
+		t.Errorf("Reason after recovery = %q, want empty", got)
+	}
+}
+
+func ringNamed(t *testing.T, b core.Restorable, name string) *core.RingStore {
+	t.Helper()
+	ring := b.Rings()[name]
+	if ring == nil {
+		t.Fatalf("Rings() has no %q ring", name)
+	}
+	return ring
+}
+
+func TestRestoredHistoryAndPollRingsShowInTheSnapshot(t *testing.T) {
+	b := reliability.New(reliability.Deps{})
+	at := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	history := []core.Signal{{At: at, Kind: "health", Text: "db=up redis=up auth=up (healthy)"}}
+	poll := []core.Signal{{At: at, Kind: "poll", Text: "up"}, {At: at.Add(time.Minute), Kind: "poll", Text: "down"}}
+	historyRing, pollRing := ringNamed(t, b, "history"), ringNamed(t, b, "poll")
+
+	historyRing.Restore(history)
+	pollRing.Restore(poll)
+
+	var data reliability.Data
+	if err := json.Unmarshal(b.Snapshot().Data, &data); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(data.History) != 1 || data.History[0].Text != history[0].Text {
+		t.Fatalf("snapshot history = %+v, want the restored %+v", data.History, history)
+	}
+	if len(data.Poll) != 2 || data.Poll[0].Text != "up" || data.Poll[1].Text != "down" {
+		t.Fatalf("snapshot poll = %+v, want the restored %+v", data.Poll, poll)
+	}
+}
+
+type recordedPoint struct {
+	bucket string
+	series string
+	point  core.Point
+}
+
+type recordingSeries struct {
+	mu     sync.Mutex
+	points []recordedPoint
+}
+
+func (r *recordingSeries) Record(bucket, series string, p core.Point) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.points = append(r.points, recordedPoint{bucket: bucket, series: series, point: p})
+}
+
+func (r *recordingSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
+}
+
+func (r *recordingSeries) named(series string) []core.Point {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []core.Point
+	for _, p := range r.points {
+		if p.bucket == "reliability" && p.series == series {
+			out = append(out, p.point)
+		}
+	}
+	return out
+}
+
+type steppingClock struct {
+	at   time.Time
+	step time.Duration
+}
+
+func (c *steppingClock) now() time.Time {
+	current := c.at
+	c.at = c.at.Add(c.step)
+	return current
+}
+
+func bucketWithSeries(t *testing.T, now func() time.Time) (*reliability.Bucket, *probes, *recordingSeries) {
+	t.Helper()
+	probe := newProbes(t)
+	b := reliability.New(reliability.Deps{Reader: &fakeReader{}, Checker: probe, Interval: fastInterval, Now: now})
+	series := &recordingSeries{}
+	b.UseSeries(series)
+	probe.start(b)
+	return b, probe, series
+}
+
+func TestReachableProbeRecordsUpAndItsLatency(t *testing.T) {
+	clock := &steppingClock{at: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), step: 42 * time.Millisecond}
+	_, probe, series := bucketWithSeries(t, clock.now)
+
+	probe.answer(up())
+
+	up := series.named("up")
+	if len(up) != 1 || up[0].Value != 1 {
+		t.Fatalf("up series = %+v, want one point of 1", up)
+	}
+	latency := series.named("latency_ms")
+	if len(latency) != 1 || latency[0].Value != 42 {
+		t.Fatalf("latency_ms series = %+v, want one point of 42", latency)
+	}
+	if !latency[0].At.Equal(up[0].At) {
+		t.Fatalf("latency at %v and up at %v differ; one probe is one instant", latency[0].At, up[0].At)
+	}
+	if want := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC).Add(42 * time.Millisecond); !up[0].At.Equal(want) {
+		t.Fatalf("probe recorded at %v, want its finish time %v", up[0].At, want)
+	}
+}
+
+func TestUnreachableProbeRecordsDownWithoutALatency(t *testing.T) {
+	_, probe, series := bucketWithSeries(t, nil)
+
+	probe.answer(goapi.Health{}, srcDown("GET /health"))
+
+	if up := series.named("up"); len(up) != 1 || up[0].Value != 0 {
+		t.Fatalf("up series = %+v, want one point of 0", up)
+	}
+	if latency := series.named("latency_ms"); len(latency) != 0 {
+		t.Fatalf("latency_ms series = %+v, want none: a probe with no answer has no latency", latency)
+	}
+}
+
+func TestAnsweredDegradedProbeRecordsUpAndItsLatency(t *testing.T) {
+	_, probe, series := bucketWithSeries(t, nil)
+
+	probe.answer(degraded())
+
+	if up := series.named("up"); len(up) != 1 || up[0].Value != 1 {
+		t.Fatalf("up series = %+v, want one point of 1 (degraded is reachable)", up)
+	}
+	if latency := series.named("latency_ms"); len(latency) != 1 {
+		t.Fatalf("latency_ms series = %+v, want one point: go-api answered", latency)
+	}
+}
+
+func TestBucketIsASeriesWriter(t *testing.T) {
+	var bucket core.Bucket = newBucket(&fakeReader{})
+	if _, ok := bucket.(core.SeriesWriter); !ok {
+		t.Fatal("reliability does not implement core.SeriesWriter, so the composition root never hands it the history store")
+	}
+}
+
+func TestProbeWithoutSeriesStillPolls(t *testing.T) {
+	b, probe := probedBucket(t, &fakeReader{})
+
+	probe.answer(up())
+
+	if got := snapData(t, b.Snapshot()).Reachability; got != "up" {
+		t.Fatalf("reachability = %q, want up with no history store wired", got)
+	}
+}
+
+var _ core.Waiter = (*reliability.Bucket)(nil)
+
+func TestWaitReturnsOnceThePollerHasStopped(t *testing.T) {
+	b := reliability.New(reliability.Deps{Interval: time.Hour})
+	ctx, cancel := context.WithCancel(context.Background())
+	b.Start(ctx)
+	cancel()
+
+	joined := make(chan struct{})
+	go func() {
+		b.Wait()
+		close(joined)
+	}()
+	select {
+	case <-joined:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait did not return after the poller's ctx was cancelled")
 	}
 }

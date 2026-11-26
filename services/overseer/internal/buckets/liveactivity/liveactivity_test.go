@@ -300,3 +300,47 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 		t.Errorf("unconfigured state = %q, want source_down", snap.State)
 	}
 }
+
+func TestReconnectingSourceReportsConnectingReason(t *testing.T) {
+	cases := []struct {
+		status     goapi.Status
+		wantState  core.State
+		wantReason string
+	}{
+		{goapi.StatusConnecting, core.StateStale, "connecting"},
+		{goapi.StatusUp, core.StateLive, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.status.String(), func(t *testing.T) {
+			src := newFakeSource(1)
+			src.setStatus(tc.status)
+
+			snap := liveactivity.New(liveactivity.Deps{Source: src}).Snapshot()
+
+			if snap.State != tc.wantState || snap.Reason != tc.wantReason {
+				t.Errorf("snapshot state %q reason %q, want %q/%q", snap.State, snap.Reason, tc.wantState, tc.wantReason)
+			}
+		})
+	}
+}
+
+type droppingSource struct {
+	*fakeSource
+	streamDrops int
+}
+
+func (d droppingSource) Dropped() int { return d.streamDrops }
+
+func TestSnapshotDroppedCountsStreamDropsWithRingEvictions(t *testing.T) {
+	const ringOverflow, streamDrops = 5, 7
+	src := droppingSource{fakeSource: newFakeSource(eventCapacity + ringOverflow), streamDrops: streamDrops}
+	b := liveactivity.New(liveactivity.Deps{Source: src})
+	for range eventCapacity + ringOverflow {
+		src.push(goapi.Event{Type: "track.played"})
+	}
+	collectStore(t, b)
+
+	if got := snapData(t, b.Snapshot()).Dropped; got != ringOverflow+streamDrops {
+		t.Fatalf("snapshot dropped = %d, want %d ring evictions + %d stream drops", got, ringOverflow, streamDrops)
+	}
+}

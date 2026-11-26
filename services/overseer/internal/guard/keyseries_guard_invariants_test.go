@@ -64,11 +64,11 @@ func runBucketOnce(b core.Bucket) (cleanCollect bool) {
 }
 
 var offlineProofByBucket = map[string]string{
-	"backendperf":   "backendperf/series_test.go: TestCollectRecordsEachOverallSeriesOnce",
-	"cost":          "cost/series_test.go: TestRefreshSpendRecordsOnePointOnANewReading",
-	"domainquality": "domainquality/series_test.go: TestCollectRecordsDiscoSuccessRateSeries",
-	"usage":         "usage/series_test.go: TestCollectRecordsRequestsAndUsersOncePerCompletedWindow",
-	"reliability":   "reliability/keyseries_write_test.go: TestAnsweredProbeWritesUnderTheDeclaredKeySeries",
+	"backendperf":   "backendperf/backendperf_test.go: TestCollectRecordsEachOverallSeriesOnce",
+	"cost":          "cost/cost_test.go: TestRefreshSpendRecordsOnePointOnANewReading",
+	"domainquality": "domainquality/domainquality_test.go: TestCollectRecordsDiscoSuccessRateSeries",
+	"usage":         "usage/usage_test.go: TestCollectRecordsRequestsAndUsersOncePerCompletedWindow",
+	"reliability":   "reliability/reliability_test.go: TestAnsweredProbeWritesUnderTheDeclaredKeySeries",
 }
 
 func TestRealBucketsWriteUnderTheirDeclaredKeySeries(t *testing.T) {

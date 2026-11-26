@@ -415,3 +415,107 @@ func TestMetaNamesTheBucket(t *testing.T) {
 		t.Errorf("meta = %+v, want security / Security", m)
 	}
 }
+
+func TestARestoredHistoryRingShowsInTheSnapshot(t *testing.T) {
+	b := security.New(security.Deps{})
+	restored := []core.Signal{{At: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), Kind: "suite", Text: "4/4 passed"}}
+
+	ring := b.Rings()["history"]
+	if ring == nil {
+		t.Fatal("Rings() has no history ring")
+	}
+
+	ring.Restore(restored)
+
+	var data security.Data
+	if err := json.Unmarshal(b.Snapshot().Data, &data); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(data.History) != 1 || data.History[0].Text != "4/4 passed" {
+		t.Fatalf("snapshot history = %+v, want the restored %+v", data.History, restored)
+	}
+}
+
+const (
+	bucketID            = "security"
+	seriesFindingsOpen  = "findings_open"
+	seriesProbeFailures = "probe_failures"
+)
+
+type recordedPoint struct {
+	bucket string
+	series string
+	point  core.Point
+}
+
+type recordingSeries struct {
+	mu     sync.Mutex
+	points []recordedPoint
+}
+
+func (r *recordingSeries) Record(bucket, series string, p core.Point) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.points = append(r.points, recordedPoint{bucket: bucket, series: series, point: p})
+}
+
+func (r *recordingSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
+}
+
+func (r *recordingSeries) named(series string) []core.Point {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []core.Point
+	for _, p := range r.points {
+		if p.bucket == bucketID && p.series == series {
+			out = append(out, p.point)
+		}
+	}
+	return out
+}
+
+func TestRecordWritesEachSeriesOncePerRun(t *testing.T) {
+	_, _, series := runOnce(t, status(200))
+
+	findings := series.named(seriesFindingsOpen)
+	if len(findings) != 1 {
+		t.Fatalf("findings_open recorded %d points, want 1: %+v", len(findings), findings)
+	}
+	if findings[0].Value != suiteSize || !findings[0].At.Equal(runAt(1)) {
+		t.Errorf("findings_open = %+v, want %d at the run's start (every check served, none rejected)", findings[0], suiteSize)
+	}
+	failures := series.named(seriesProbeFailures)
+	if len(failures) != 1 {
+		t.Fatalf("probe_failures recorded %d points, want 1: %+v", len(failures), failures)
+	}
+	if failures[0].Value != 0 || !failures[0].At.Equal(runAt(1)) {
+		t.Errorf("probe_failures = %+v, want 0 at the run's start (every check reached go-api)", failures[0])
+	}
+}
+
+func TestRecordCountsUnreachedRunAsProbeFailures(t *testing.T) {
+	_, _, series := runOnce(t, down(errors.New("dial tcp: refused")))
+
+	failures := series.named(seriesProbeFailures)
+	if len(failures) != 1 || failures[0].Value != suiteSize {
+		t.Errorf("probe_failures = %+v, want one point of %d", failures, suiteSize)
+	}
+	findings := series.named(seriesFindingsOpen)
+	if len(findings) != 1 || findings[0].Value != 0 {
+		t.Errorf("findings_open = %+v, want one point of 0 (nothing reached to grade)", findings)
+	}
+}
+
+func TestKeySeriesIsFindingsOpen(t *testing.T) {
+	if got := security.New(security.Deps{}).KeySeries(); got != seriesFindingsOpen {
+		t.Errorf("KeySeries() = %q, want %q", got, seriesFindingsOpen)
+	}
+}
+
+func TestSecurityBucketIsASeriesWriter(t *testing.T) {
+	var bucket core.Bucket = security.New(security.Deps{})
+	if _, ok := bucket.(core.SeriesWriter); !ok {
+		t.Fatal("security does not implement core.SeriesWriter, so the composition root never hands it the history store")
+	}
+}
