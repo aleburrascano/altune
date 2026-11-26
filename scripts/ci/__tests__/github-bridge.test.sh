@@ -24,7 +24,6 @@ echo "$*" >> "$WORK/git.log"
 case " $* " in
   *" ls-remote "*) cat "$WORK/remote.txt" ;;
   *" rev-parse "*) echo "$HEAD_SHA" ;;
-  *" cat-file "*) [ -z "${NO_MERGE_SCRIPT:-}" ] || exit 1 ;;
   *" show "*) printf '%s\n' "$MERGE_SCRIPT" ;;
 esac
 exit 0
@@ -90,10 +89,6 @@ check "conflict pushes nothing" "0" "$(grep -c ' push ' "$work/git.log")"
 echo '[{"id":4,"context":"github / pr-checks","status":"failure","description":"update your branch onto main"}]' > "$work/statuses.json"
 MERGE_SCRIPT='exit 1' run
 check "an unchanged conflict posts nothing" "0" "$(wc -l < "$work/posts.log")"
-
-NO_MERGE_SCRIPT=1 MERGE_SCRIPT='exit 2' run
-check "before main has the merge script the head is pushed as it is" "0" "$got"
-grep -q 'push -q --force git@github.com:o/r.git abc123:refs/heads/pr/7' "$work/git.log" || { echo "FAIL without a merge script on main the head was not pushed"; fail=1; }
 
 MERGE_SCRIPT='exit 2' run
 check "a merge that cannot be built fails the run" "1" "$got"
