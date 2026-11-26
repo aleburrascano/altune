@@ -41,3 +41,33 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
+	at := time.Date(2026, 7, 8, 9, 10, 11, 0, time.FixedZone("plus2", 2*60*60))
+	var got time.Time
+	repo := &search.FakeHistoryWriter{
+		InsertFn: func(_ context.Context, e *search.SearchHistoryEntry) error {
+			got = e.ExecutedAt
+			return nil
+		},
+	}
+	svc := search.NewRecordSearchHistoryService(repo, clocktest.NewManual(at).Func())
+
+	if err := svc.RecordSubmitted(context.Background(), search.NewUser(), "some query"); err != nil {
+		t.Fatalf("RecordSubmitted: %v", err)
+	}
+
+	if !got.Equal(at) || got.Location() != time.UTC {
+		t.Errorf("ExecutedAt = %v, want %v in UTC", got, at.UTC())
+	}
+}
+
+func TestNewRecordSearchHistoryService_RefusesANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("a nil clock was accepted, want a panic at construction")
+		}
+	}()
+
+	search.NewRecordSearchHistoryService(&search.FakeHistoryWriter{}, nil)
+}

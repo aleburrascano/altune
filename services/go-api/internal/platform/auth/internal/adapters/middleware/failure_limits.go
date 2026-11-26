@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"cmp"
 	"slices"
 	"sync"
@@ -39,11 +40,11 @@ func positiveOr[T int | time.Duration](v, fallback T) T {
 type failureThrottle struct {
 	mu      sync.Mutex
 	limits  FailureLimits
-	now     func() time.Time
+	now     clock.Func
 	clients map[string]*rate.Limiter
 }
 
-func newFailureThrottle(limits FailureLimits, now func() time.Time) *failureThrottle {
+func newFailureThrottle(limits FailureLimits, now clock.Func) *failureThrottle {
 	return &failureThrottle{limits: limits, now: now, clients: make(map[string]*rate.Limiter)}
 }
 

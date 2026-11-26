@@ -3,6 +3,7 @@ package audio
 import (
 	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"log/slog"
@@ -22,7 +23,7 @@ type AudioLinkService struct {
 	trackRepo ports.TrackBatchGetter
 	signer    ports.AudioLinkSigner
 	metrics   ports.AudioStoreMetrics
-	now       func() time.Time
+	now       clock.Func
 }
 
 func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, opts ...func(*AudioLinkService)) *AudioLinkService {
@@ -42,7 +43,7 @@ func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioLinkService) {
 	}
 }
 
-func WithAudioURLClock(now func() time.Time) func(*AudioLinkService) {
+func WithAudioURLClock(now clock.Func) func(*AudioLinkService) {
 	return func(s *AudioLinkService) {
 		if now != nil {
 			s.now = now

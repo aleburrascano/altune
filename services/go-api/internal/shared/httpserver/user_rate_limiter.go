@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"net/http"
@@ -27,13 +28,13 @@ func UserKey(userID func(context.Context) (ids.UserId, bool)) UserKeyFunc {
 type UserRateLimiter struct {
 	mu        sync.Mutex
 	limit     RateLimit
-	now       func() time.Time
+	now       clock.Func
 	active    map[string]*rate.Limiter
 	cooling   map[string]*rate.Limiter
 	rotatedAt time.Time
 }
 
-func NewUserRateLimiter(limit RateLimit, now func() time.Time) *UserRateLimiter {
+func NewUserRateLimiter(limit RateLimit, now clock.Func) *UserRateLimiter {
 	if limit.Burst < 1 {
 		limit.Burst = 1
 	}

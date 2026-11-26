@@ -35,8 +35,8 @@ type sources struct {
 func newSources(t *testing.T) sources {
 	t.Helper()
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	tap := monitoring.NewEventTap(bus)
-	alertMonitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second)
+	tap := monitoring.NewEventTap(bus, time.Now)
+	alertMonitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, time.Now)
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)
 	}

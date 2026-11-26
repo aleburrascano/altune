@@ -176,7 +176,7 @@ func buildDiscoveryRouter(t *testing.T,
 	}
 	searchSvc := searchtest.NewSearchServiceWith(t, bg, providers, cb, withHistory)
 	historySvc := search.NewListSearchHistoryService(historyRepo)
-	clearHistorySvc := search.NewClearSearchHistoryService(historyRepo)
+	clearHistorySvc := search.NewClearSearchHistoryService(historyRepo, time.Now)
 
 	var albumSvc *search.GetAlbumTracksService
 	if albumProviders != nil {

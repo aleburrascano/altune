@@ -1,6 +1,7 @@
 package eventwatch
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -23,6 +24,7 @@ type TapEvent struct {
 
 type EventWatcher struct {
 	inner events.Publisher
+	now   clock.Func
 
 	mu      sync.Mutex
 	ch      chan TapEvent
@@ -31,8 +33,11 @@ type EventWatcher struct {
 
 var _ events.Publisher = (*EventWatcher)(nil)
 
-func New(inner events.Publisher) *EventWatcher {
-	return &EventWatcher{inner: inner}
+func New(inner events.Publisher, now clock.Func) *EventWatcher {
+	if now == nil {
+		panic("eventwatch: New requires a clock")
+	}
+	return &EventWatcher{inner: inner, now: now}
 }
 
 func (t *EventWatcher) Publish(ctx context.Context, userId ids.UserId, payload events.Payload) {
@@ -41,7 +46,7 @@ func (t *EventWatcher) Publish(ctx context.Context, userId ids.UserId, payload e
 	t.mu.Lock()
 	if t.ch != nil {
 		select {
-		case t.ch <- TapEvent{Type: string(payload.EventType()), Timestamp: time.Now().UTC(), User: userId.String(), Subject: tapSubject(payload), CorrID: logging.CorrelationIDFromContext(ctx)}:
+		case t.ch <- TapEvent{Type: string(payload.EventType()), Timestamp: t.now().UTC(), User: userId.String(), Subject: tapSubject(payload), CorrID: logging.CorrelationIDFromContext(ctx)}:
 		default:
 			t.dropped.Add(1)
 		}
@@ -53,7 +58,7 @@ func (t *EventWatcher) EmitActivity(eventType string) {
 	t.mu.Lock()
 	if t.ch != nil {
 		select {
-		case t.ch <- TapEvent{Type: eventType, Timestamp: time.Now().UTC()}:
+		case t.ch <- TapEvent{Type: eventType, Timestamp: t.now().UTC()}:
 		default:
 			t.dropped.Add(1)
 		}

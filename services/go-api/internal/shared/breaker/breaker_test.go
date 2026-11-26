@@ -2,6 +2,7 @@ package breaker_test
 
 import (
 	"altune/go-api/internal/shared/breaker"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -14,23 +15,6 @@ const (
 	openFor   = 30 * time.Second
 	lease     = 20 * time.Second
 )
-
-type clock struct {
-	mu  sync.Mutex
-	now time.Time
-}
-
-func (c *clock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
-}
-
-func (c *clock) advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.now = c.now.Add(d)
-}
 
 type recorder struct {
 	mu      sync.Mutex
@@ -53,8 +37,8 @@ func (r *recorder) kinds() []breaker.Kind {
 	return out
 }
 
-func newBreaker() (*breaker.Breaker, *clock, *recorder) {
-	clk := &clock{now: time.Unix(1_700_000_000, 0)}
+func newBreaker() (*breaker.Breaker, *clocktest.Manual, *recorder) {
+	clk := clocktest.NewManual(time.Unix(1_700_000_000, 0))
 	rec := &recorder{}
 	b := breaker.New(breaker.Config{Threshold: threshold, OpenFor: openFor, ProbeLease: lease, Now: clk.Now, OnChange: rec.record})
 	return b, clk, rec
@@ -66,10 +50,10 @@ func trip(b *breaker.Breaker) {
 	}
 }
 
-func probe(t *testing.T, b *breaker.Breaker, clk *clock) breaker.Admission {
+func probe(t *testing.T, b *breaker.Breaker, clk *clocktest.Manual) breaker.Admission {
 	t.Helper()
 	trip(b)
-	clk.advance(openFor + time.Nanosecond)
+	clk.Advance(openFor + time.Nanosecond)
 	adm, ok := b.Allow(context.Background())
 	if !ok {
 		t.Fatal("the probe was refused after the open window")
@@ -132,12 +116,12 @@ func TestBreaker_AnOpenCircuitRefusesUntilTheWindowHasPassed(t *testing.T) {
 	b, clk, _ := newBreaker()
 	trip(b)
 
-	clk.advance(openFor)
+	clk.Advance(openFor)
 	if _, ok := b.Allow(context.Background()); ok {
 		t.Fatal("the circuit admitted a caller at exactly the open window")
 	}
 
-	clk.advance(time.Nanosecond)
+	clk.Advance(time.Nanosecond)
 	if _, ok := b.Allow(context.Background()); !ok {
 		t.Error("the circuit refused the probe once the window had passed")
 	}
@@ -149,10 +133,10 @@ func TestBreaker_AnOpenCircuitRefusesUntilTheWindowHasPassed(t *testing.T) {
 func TestBreaker_AFailureWhileOpenExtendsTheWindow(t *testing.T) {
 	b, clk, _ := newBreaker()
 	trip(b)
-	clk.advance(openFor - time.Second)
+	clk.Advance(openFor - time.Second)
 
 	b.Failure(context.Background(), breaker.Admission{})
-	clk.advance(2 * time.Second)
+	clk.Advance(2 * time.Second)
 
 	if _, ok := b.Allow(context.Background()); ok {
 		t.Error("a failure recorded while open did not restart the window")
@@ -162,7 +146,7 @@ func TestBreaker_AFailureWhileOpenExtendsTheWindow(t *testing.T) {
 func TestBreaker_HalfOpenAdmitsExactlyOneConcurrentProbe(t *testing.T) {
 	b, clk, _ := newBreaker()
 	trip(b)
-	clk.advance(openFor + time.Second)
+	clk.Advance(openFor + time.Second)
 
 	var admitted atomic.Int32
 	var wg sync.WaitGroup
@@ -250,7 +234,7 @@ func TestBreaker_AProbeSuccessAfterTheCircuitReopenedIsIgnored(t *testing.T) {
 	b, clk, _ := newBreaker()
 	first := probe(t, b, clk)
 	b.Failure(context.Background(), breaker.Admission{})
-	clk.advance(openFor + time.Second)
+	clk.Advance(openFor + time.Second)
 	if _, ok := b.Allow(context.Background()); !ok {
 		t.Fatal("the second probe was refused")
 	}
@@ -306,12 +290,12 @@ func TestBreaker_AnAbandonedProbeLeaseExpiresAfterTheLease(t *testing.T) {
 	b, clk, rec := newBreaker()
 	probe(t, b, clk)
 
-	clk.advance(lease)
+	clk.Advance(lease)
 	if _, ok := b.Allow(context.Background()); ok {
 		t.Fatal("a probe was re-admitted at exactly the lease")
 	}
 
-	clk.advance(time.Nanosecond)
+	clk.Advance(time.Nanosecond)
 	if _, ok := b.Allow(context.Background()); !ok {
 		t.Fatal("an expired lease did not admit a new probe")
 	}
@@ -327,7 +311,7 @@ func TestBreaker_AnAbandonedProbeLeaseExpiresAfterTheLease(t *testing.T) {
 func TestBreaker_AProbeThatLostItsLeaseCannotFreeTheNewProbesSlot(t *testing.T) {
 	b, clk, _ := newBreaker()
 	lost := probe(t, b, clk)
-	clk.advance(lease + time.Second)
+	clk.Advance(lease + time.Second)
 	if _, ok := b.Allow(context.Background()); !ok {
 		t.Fatal("the second probe was refused")
 	}
@@ -342,7 +326,7 @@ func TestBreaker_AProbeThatLostItsLeaseCannotFreeTheNewProbesSlot(t *testing.T) 
 func TestBreaker_AFailureFromAProbeThatLostItsLeaseStillReopens(t *testing.T) {
 	b, clk, _ := newBreaker()
 	lost := probe(t, b, clk)
-	clk.advance(lease + time.Second)
+	clk.Advance(lease + time.Second)
 	live, _ := b.Allow(context.Background())
 
 	b.Failure(context.Background(), lost)
@@ -393,7 +377,7 @@ func TestBreaker_AWalkThroughEveryStateUnderConcurrency(t *testing.T) {
 		t.Fatal("the circuit stayed closed after the threshold")
 	}
 
-	clk.advance(openFor + time.Second)
+	clk.Advance(openFor + time.Second)
 	var admitted atomic.Int32
 	var live atomic.Value
 	hammer(16, func() {

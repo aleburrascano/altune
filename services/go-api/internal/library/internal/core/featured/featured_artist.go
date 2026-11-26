@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library/internal/core/ports"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -41,7 +42,7 @@ func WithBackfillItemTimeout(timeout time.Duration) BackfillOption {
 	}
 }
 
-func WithBackfillClock(now func() time.Time) BackfillOption {
+func WithBackfillClock(now clock.Func) BackfillOption {
 	return func(s *FillFeaturedArtistsService) {
 		if now != nil {
 			s.admission.now = now
@@ -227,14 +228,14 @@ var (
 
 type backfillAdmission struct {
 	cooldown time.Duration
-	now      func() time.Time
+	now      clock.Func
 
 	mu           sync.Mutex
 	running      map[ids.UserId]struct{}
 	lastFinished map[ids.UserId]time.Time
 }
 
-func newBackfillAdmission(cooldown time.Duration, now func() time.Time) *backfillAdmission {
+func newBackfillAdmission(cooldown time.Duration, now clock.Func) *backfillAdmission {
 	return &backfillAdmission{
 		cooldown:     cooldown,
 		now:          now,

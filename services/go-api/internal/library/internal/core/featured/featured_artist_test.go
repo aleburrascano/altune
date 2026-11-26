@@ -3,6 +3,7 @@ package featured_test
 import (
 	"altune/go-api/internal/library"
 	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/testdb"
@@ -26,15 +27,9 @@ const (
 	backfillTimeBudget   = 45 * time.Second
 )
 
-type manualClock struct{ at time.Time }
-
-func newManualClock() *manualClock {
-	return &manualClock{at: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+func newManualClock() *clocktest.Manual {
+	return clocktest.NewManual(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 }
-
-func (c *manualClock) now() time.Time { return c.at }
-
-func (c *manualClock) advance(d time.Duration) { c.at = c.at.Add(d) }
 
 func newTrackFeat(t *testing.T, userId ids.UserId, title string) *library.Track {
 	t.Helper()
@@ -60,7 +55,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			"Track A": {library.NewFeaturedArtistIdentityOnly("Guest", "m1", 0)},
 		}}
 		clock := newManualClock()
-		svc := library.NewBackfillFeaturedService(repo, repo, resolver, library.WithBackfillClock(clock.now))
+		svc := library.NewBackfillFeaturedService(repo, repo, resolver, library.WithBackfillClock(clock.Now))
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -73,7 +68,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Errorf("t1 featured = %+v", t1.FeaturedArtists)
 		}
 
-		clock.advance(backfillCooldown)
+		clock.Advance(backfillCooldown)
 		res2, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("second Execute: %v", err)
@@ -270,12 +265,12 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
 		clock := newManualClock()
-		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, library.WithBackfillClock(clock.now))
+		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, library.WithBackfillClock(clock.Now))
 
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("first run: %v", err)
 		}
-		clock.advance(backfillCooldown - time.Second)
+		clock.Advance(backfillCooldown - time.Second)
 		res, err := svc.Execute(ctx, userId, 0)
 		if !errors.Is(err, library.ErrBackfillCoolingDown) || res != nil {
 			t.Fatalf("run within cooldown: want catalog.ErrBackfillCoolingDown and nil result, got %+v, %v", res, err)
@@ -283,7 +278,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if library.ErrBackfillCoolingDown.Code().Kind() != apierror.KindRateLimited || library.ErrBackfillInProgress.Code().Kind() != apierror.KindConflict {
 			t.Fatalf("throttle errors must be rate limited and conflict")
 		}
-		clock.advance(time.Second)
+		clock.Advance(time.Second)
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("run after cooldown: %v", err)
 		}
@@ -332,7 +327,7 @@ func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 		pastTheCap: {library.NewFeaturedArtistIdentityOnly("Guest", "m1", 0)},
 	}}
 	clock := newManualClock()
-	svc := library.NewBackfillFeaturedService(repo, repo, resolver, library.WithBackfillClock(clock.now))
+	svc := library.NewBackfillFeaturedService(repo, repo, resolver, library.WithBackfillClock(clock.Now))
 
 	first, err := svc.Execute(ctx, userId, 0)
 	if err != nil {
@@ -345,7 +340,7 @@ func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 		t.Fatalf("first run = %+v, want scanned and next offset %d", first, capTracks)
 	}
 
-	clock.advance(backfillCooldown)
+	clock.Advance(backfillCooldown)
 	second, err := svc.Execute(ctx, userId, first.NextOffset)
 	if err != nil {
 		t.Fatalf("follow-up run: %v", err)

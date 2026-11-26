@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -15,14 +16,8 @@ import (
 
 const lease = time.Minute
 
-type clock struct{ now time.Time }
-
-func (c *clock) Now() time.Time { return c.now }
-
-func (c *clock) advance(d time.Duration) { c.now = c.now.Add(d) }
-
-func newQueue() (*inmemoryqueue.Queue, *clock) {
-	c := &clock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+func newQueue() (*inmemoryqueue.Queue, *clocktest.Manual) {
+	c := clocktest.NewManual(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	return inmemoryqueue.New(nil, c.Now), c
 }
 
@@ -88,10 +83,10 @@ func TestQueue_AnExpiringLeaseIsReclaimedOnlyOnceItHasLapsed(t *testing.T) {
 	enqueue(t, q, trackID, download.JobKindAcquire, 0)
 	first := claim(t, q)
 
-	c.advance(lease - time.Nanosecond)
+	c.Advance(lease - time.Nanosecond)
 	wantNothingToClaim(t, q, "a moment before the lease lapses")
 
-	c.advance(time.Nanosecond)
+	c.Advance(time.Nanosecond)
 	second := claim(t, q)
 	if second.TrackID != trackID || second.ClaimNumber == first.ClaimNumber || second.Run != 2 {
 		t.Errorf("reclaim = %+v, want the same track at run 2 under a fence other than %v", second, first.ClaimNumber)
@@ -106,7 +101,7 @@ func TestQueue_AReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *tes
 	var stale download.Job
 	for range 3 {
 		stale = claim(t, q)
-		c.advance(2 * lease)
+		c.Advance(2 * lease)
 	}
 
 	enqueue(t, q, trackID, download.JobKindAcquire, 0)
@@ -125,10 +120,10 @@ func TestQueue_AJobEnqueuedWithADelayIsClaimableOnceTheDelayHasPassed(t *testing
 	trackID := ids.NewTrackId()
 	enqueue(t, q, trackID, download.JobKindAcquire, 10*time.Second)
 
-	c.advance(10*time.Second - time.Nanosecond)
+	c.Advance(10*time.Second - time.Nanosecond)
 	wantNothingToClaim(t, q, "a moment before the delay passed")
 
-	c.advance(time.Nanosecond)
+	c.Advance(time.Nanosecond)
 	if job := claim(t, q); job.TrackID != trackID || job.Waited != 0 {
 		t.Errorf("Claim = %+v, want track %s having waited 0 past its delay", job, trackID)
 	}
@@ -144,10 +139,10 @@ func TestQueue_ReleaseWithADelayIsClaimableOnlyOnceTheClockPassesIt(t *testing.T
 		t.Fatalf("Release = %v", err)
 	}
 
-	c.advance(9 * time.Second)
+	c.Advance(9 * time.Second)
 	wantNothingToClaim(t, q, "before the delay elapsed")
 
-	c.advance(time.Second)
+	c.Advance(time.Second)
 	if again := claim(t, q); again.TrackID != trackID {
 		t.Errorf("Claim after the delay = %+v, want track %s", again, trackID)
 	}
@@ -191,7 +186,7 @@ func TestQueue_SettleRemovesTheJob(t *testing.T) {
 		t.Fatalf("Settle = %v, want nil", err)
 	}
 
-	c.advance(2 * lease)
+	c.Advance(2 * lease)
 	wantNothingToClaim(t, q, "after Settle")
 	wantDepth(t, q, 0, 0)
 	if err := q.Release(ctx, trackID, job.ClaimNumber, 0); err == nil || errors.Is(err, download.ErrLeaseLost) {
@@ -206,7 +201,7 @@ func TestQueue_ClaimReportsHowLongTheJobWaited(t *testing.T) {
 	q, c := newQueue()
 	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
 
-	c.advance(45 * time.Second)
+	c.Advance(45 * time.Second)
 
 	if job := claim(t, q); job.Waited != 45*time.Second {
 		t.Errorf("Waited = %v, want 45s", job.Waited)
@@ -224,7 +219,7 @@ func TestQueue_ClaimTakesTheEarliestJobAmongEquallyBusyUsers(t *testing.T) {
 	for _, i := range []int{2, 0, 3, 1} {
 		enqueue(t, q, tracks[i], download.JobKindAcquire, time.Duration(i)*time.Second)
 	}
-	c.advance(time.Minute)
+	c.Advance(time.Minute)
 
 	for i, want := range tracks {
 		if got := claim(t, q); got.TrackID != want {
@@ -240,7 +235,7 @@ func TestQueue_ClaimPrefersTheUserWithFewerLiveLeases(t *testing.T) {
 		trackID := ids.NewTrackId()
 		q.RememberUser(trackID, user)
 		enqueue(t, q, trackID, download.JobKindAcquire, 0)
-		c.advance(time.Second)
+		c.Advance(time.Second)
 		return trackID
 	}
 	add(busy)
@@ -300,7 +295,7 @@ func TestQueue_AnEnqueueOverALiveLeaseRestartsTheRunCountForTheNextClaim(t *test
 	trackID := ids.NewTrackId()
 	enqueue(t, q, trackID, download.JobKindAcquire, 0)
 	claim(t, q)
-	c.advance(2 * lease)
+	c.Advance(2 * lease)
 	owner := claim(t, q)
 
 	enqueue(t, q, trackID, download.JobKindAcquire, 5*time.Second)
@@ -308,9 +303,9 @@ func TestQueue_AnEnqueueOverALiveLeaseRestartsTheRunCountForTheNextClaim(t *test
 		t.Fatalf("owner Settle = %v", err)
 	}
 
-	c.advance(5*time.Second - time.Nanosecond)
+	c.Advance(5*time.Second - time.Nanosecond)
 	wantNothingToClaim(t, q, "before the re-enqueue's delay passed")
-	c.advance(time.Nanosecond)
+	c.Advance(time.Nanosecond)
 	if next := claim(t, q); next.Run != 1 {
 		t.Errorf("Run after a re-enqueue over a live lease = %d, want a new run at 1", next.Run)
 	}
@@ -332,7 +327,7 @@ func TestQueue_AReleaseClearsAReEnqueueSoTheNextSettleRemovesTheJob(t *testing.T
 		t.Fatalf("Settle = %v", err)
 	}
 
-	c.advance(2 * lease)
+	c.Advance(2 * lease)
 	wantNothingToClaim(t, q, "after the Settle of the released job")
 }
 
@@ -368,7 +363,7 @@ func TestQueue_ClaimUpgradeSkipsUpgradesThatAreDelayedOrLeased(t *testing.T) {
 
 	wantNoUpgradeToClaim(t, q, "with one upgrade leased and one delayed")
 
-	c.advance(time.Second)
+	c.Advance(time.Second)
 	if got := claimUpgrade(t, q); got.TrackID != delayed {
 		t.Errorf("ClaimUpgrade = %s, want the delayed %s once it is due", got.TrackID, delayed)
 	}
@@ -393,9 +388,9 @@ func TestQueue_PendingDepthCountsWaitingUserJobsAndAgesTheOldestDueOne(t *testin
 	wantDepth(t, q, 1, 0)
 
 	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
-	c.advance(10 * time.Second)
+	c.Advance(10 * time.Second)
 	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
-	c.advance(5 * time.Second)
+	c.Advance(5 * time.Second)
 	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, -20*time.Second)
 	wantDepth(t, q, 4, 20*time.Second)
 
@@ -409,7 +404,7 @@ func TestQueue_PendingDepthLeavesOutALiveLeaseButCountsALapsedOne(t *testing.T) 
 	claim(t, q)
 	wantDepth(t, q, 0, 0)
 
-	c.advance(lease)
+	c.Advance(lease)
 
 	wantDepth(t, q, 1, lease)
 }
@@ -502,7 +497,7 @@ func TestQueue_VerifyLeaseHoldsOnlyForTheCurrentFenceOfALiveLease(t *testing.T) 
 		t.Errorf("VerifyLease on another fence = %v, want ErrLeaseLost", err)
 	}
 
-	c.advance(lease)
+	c.Advance(lease)
 	if err := q.VerifyLease(ctx, trackID, job.ClaimNumber); !errors.Is(err, download.ErrLeaseLost) {
 		t.Errorf("VerifyLease once the lease lapsed = %v, want ErrLeaseLost", err)
 	}
@@ -521,14 +516,14 @@ func TestQueue_HeartbeatExtendsTheLeaseFromNow(t *testing.T) {
 	}
 	job := claim(t, q)
 
-	c.advance(30 * time.Second)
+	c.Advance(30 * time.Second)
 	if err := q.Heartbeat(ctx, trackID, job.ClaimNumber, lease); err != nil {
 		t.Fatalf("Heartbeat = %v", err)
 	}
 
-	c.advance(lease - time.Nanosecond)
+	c.Advance(lease - time.Nanosecond)
 	wantNothingToClaim(t, q, "a moment before the extended lease lapses")
-	c.advance(time.Nanosecond)
+	c.Advance(time.Nanosecond)
 	claim(t, q)
 }
 

@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/search/service/unreleased"
 	"altune/go-api/internal/search/service/useractivity"
 	"altune/go-api/internal/search/service/vocabulary"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
@@ -75,7 +76,7 @@ func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *Discovery
 	return h.WithRateLimitsAt(limits, time.Now)
 }
 
-func (h *DiscoveryHandler) WithRateLimitsAt(limits DiscoveryRateLimits, now func() time.Time) *DiscoveryHandler {
+func (h *DiscoveryHandler) WithRateLimitsAt(limits DiscoveryRateLimits, now clock.Func) *DiscoveryHandler {
 	h.searchLimiter = newUserRateLimiter(limits.Search, now)
 	h.suggestLimiter = newUserRateLimiter(limits.Suggest, now)
 	h.eventLimiter = newUserRateLimiter(limits.Events, now)

@@ -2,6 +2,7 @@ package alert_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"bytes"
 	"context"
 	"errors"
@@ -128,7 +129,7 @@ func startMonitor(t *testing.T, m *monitoring.AlertMonitor) {
 
 func newMonitor(t *testing.T, n monitoring.AlertNotifier, interval time.Duration, conds ...monitoring.Condition) *monitoring.AlertMonitor {
 	t.Helper()
-	m, err := monitoring.NewAlertMonitor(n, interval, conds...)
+	m, err := monitoring.NewAlertMonitor(n, interval, time.Now, conds...)
 	if err != nil {
 		t.Fatalf("NewAlertMonitor(interval %v): %v", interval, err)
 	}
@@ -472,7 +473,7 @@ func TestMonitorStatus_NopNotifierIsReported(t *testing.T) {
 
 func TestNewAlertMonitor_RefusesAnIntervalThatIsNotPositive(t *testing.T) {
 	for _, interval := range []time.Duration{0, -time.Second} {
-		m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, interval)
+		m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, interval, time.Now)
 		if !errors.Is(err, monitoring.ErrInvalidInterval) {
 			t.Errorf("NewAlertMonitor(interval %v) error = %v, want ErrInvalidInterval", interval, err)
 		}
@@ -658,5 +659,64 @@ func assertNewPage(t *testing.T, pages []monitoring.Alert) {
 	}
 	if pages[1].Message != "seen 2 times" {
 		t.Errorf("second page message = %q, want the new evaluation's %q", pages[1].Message, "seen 2 times")
+	}
+}
+
+var monitorEpoch = time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+
+func clockedMonitor(t *testing.T, n monitoring.AlertNotifier, clk *clocktest.Manual, conds ...monitoring.Condition) (*monitoring.AlertMonitor, *passes) {
+	t.Helper()
+	p := &passes{begin: make(chan bool), ended: make(chan struct{}, 1)}
+	m, err := monitoring.NewAlertMonitor(n, time.Millisecond, clk.Func(), conds...)
+	if err != nil {
+		t.Fatalf("NewAlertMonitor: %v", err)
+	}
+	m.WithLeadership(p.scope)
+	startMonitor(t, m)
+	return m, p
+}
+
+func TestMonitorClock_PageCarriesTheInjectedTimeAsFiredAt(t *testing.T) {
+	firing := true
+	log := &pageLog{}
+	_, p := clockedMonitor(t, log, clocktest.NewManual(monitorEpoch), signalCond("k", &firing))
+
+	p.step(t)
+
+	if len(log.pages) != 1 || !log.pages[0].FiredAt.Equal(monitorEpoch) {
+		t.Fatalf("pages = %+v, want one page fired at %v", log.pages, monitorEpoch)
+	}
+}
+
+func TestMonitorClock_StatusTimesFollowTheInjectedClock(t *testing.T) {
+	firing := true
+	clk := clocktest.NewManual(monitorEpoch)
+	m, p := clockedMonitor(t, &pageLog{failures: 1}, clk, signalCond("k", &firing))
+
+	p.step(t)
+	failedAt := clk.Now()
+	clk.Advance(time.Hour)
+	p.step(t)
+
+	st := m.Status()
+	if !st.LastNotifyErrorAt.Equal(failedAt) {
+		t.Errorf("LastNotifyErrorAt = %v, want %v", st.LastNotifyErrorAt, failedAt)
+	}
+	if want := failedAt.Add(time.Hour); !st.LastNotifyOKAt.Equal(want) {
+		t.Errorf("LastNotifyOKAt = %v, want %v", st.LastNotifyOKAt, want)
+	}
+	if want := failedAt.Add(time.Hour); !st.LastPass.Equal(want) {
+		t.Errorf("LastPass = %v, want %v", st.LastPass, want)
+	}
+}
+
+func TestNewMonitor_RefusesANilClock(t *testing.T) {
+	m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, nil)
+
+	if !errors.Is(err, monitoring.ErrAlertClockRequired) {
+		t.Fatalf("NewAlertMonitor(nil clock) error = %v, want ErrAlertClockRequired", err)
+	}
+	if m != nil {
+		t.Error("NewAlertMonitor returned a monitor with its error")
 	}
 }

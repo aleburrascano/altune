@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"expvar"
 	"log/slog"
@@ -33,12 +34,12 @@ const (
 
 type Signal struct {
 	ops     *expvar.Map
-	now     func() time.Time
+	now     clock.Func
 	mu      sync.Mutex
 	lastLog map[string]time.Time
 }
 
-func NewSignal(ops *expvar.Map, now func() time.Time) *Signal {
+func NewSignal(ops *expvar.Map, now clock.Func) *Signal {
 	return &Signal{ops: ops, now: now, lastLog: map[string]time.Time{}}
 }
 

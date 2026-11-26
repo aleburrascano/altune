@@ -2,6 +2,7 @@ package handler
 
 import (
 	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"net/http"
@@ -22,14 +23,14 @@ var (
 
 type rateLimitMiddleware = func(http.Handler) http.Handler
 
-func newAudioRateLimiter(limit httpserver.RateLimit, now func() time.Time) rateLimitMiddleware {
+func newAudioRateLimiter(limit httpserver.RateLimit, now clock.Func) rateLimitMiddleware {
 	return newUserRateLimiter(limit, now, errAudioRateLimited)
 }
 
-func newWriteRateLimiter(limit httpserver.RateLimit, now func() time.Time) rateLimitMiddleware {
+func newWriteRateLimiter(limit httpserver.RateLimit, now clock.Func) rateLimitMiddleware {
 	return newUserRateLimiter(limit, now, errWriteRateLimited)
 }
 
-func newUserRateLimiter(limit httpserver.RateLimit, now func() time.Time, refused error) rateLimitMiddleware {
+func newUserRateLimiter(limit httpserver.RateLimit, now clock.Func, refused error) rateLimitMiddleware {
 	return httpserver.NewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), refused, nil)
 }

@@ -3,6 +3,7 @@ package health
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
 	"net/http"
@@ -56,14 +57,14 @@ func probe(ctx context.Context, check func(context.Context) error, timeout time.
 type Endpoint struct {
 	check   func(context.Context) monitoring.DependencyHealth
 	version string
-	now     func() time.Time
+	now     clock.Func
 
 	mu        sync.Mutex
 	result    monitoring.DependencyHealth
 	expiresAt time.Time
 }
 
-func NewEndpoint(check func(context.Context) monitoring.DependencyHealth, version string, now func() time.Time) *Endpoint {
+func NewEndpoint(check func(context.Context) monitoring.DependencyHealth, version string, now clock.Func) *Endpoint {
 	return &Endpoint{check: check, version: version, now: now}
 }
 

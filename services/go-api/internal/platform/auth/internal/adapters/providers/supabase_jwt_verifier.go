@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/platform/auth/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -25,7 +26,7 @@ const maxAccessTokenLifetime = time.Hour
 const defaultJWKSFetchTimeout = 10 * time.Second
 
 type jwksSchedule struct {
-	now             func() time.Time
+	now             clock.Func
 	fetchTimeout    time.Duration
 	refreshInterval time.Duration
 	refreshWindow   time.Duration
@@ -66,7 +67,7 @@ func WithTokenRevoker(r ports.TokenRevoker) SupabaseJWTVerifierOption {
 	}
 }
 
-func WithJWKSClock(now func() time.Time) SupabaseJWTVerifierOption {
+func WithJWKSClock(now clock.Func) SupabaseJWTVerifierOption {
 	return func(v *SupabaseJWTVerifier) {
 		if now != nil {
 			v.schedule.now = now

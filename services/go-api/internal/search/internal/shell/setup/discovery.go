@@ -107,7 +107,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, err
 	}
-	recordHistory, err := history.NewRecordSearchHistoryService(s.History)
+	recordHistory, err := history.NewRecordSearchHistoryService(s.History, time.Now)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the history recorder: %w", err)
 	}
@@ -127,7 +127,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 		Search:        search,
 		History:       history.NewListSearchHistoryService(s.History),
 		RecordHistory: recordHistory,
-		ClearHistory:  history.NewClearSearchHistoryService(s.History),
+		ClearHistory:  history.NewClearSearchHistoryService(s.History, time.Now),
 		Album:         album,
 		Artist:        artist,
 		Related:       relatedTracks,

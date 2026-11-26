@@ -188,7 +188,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 	if err != nil {
 		return nil, fmt.Errorf("favorites lifter: %w", err)
 	}
-	recorder, err := history.NewRecordSearchHistoryService(c.History)
+	recorder, err := history.NewRecordSearchHistoryService(c.History, time.Now)
 	if err != nil {
 		return nil, fmt.Errorf("history recorder: %w", err)
 	}

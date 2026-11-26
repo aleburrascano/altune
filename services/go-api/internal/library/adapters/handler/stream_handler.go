@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library/domain"
 	audioservice "altune/go-api/internal/library/internal/core/audio"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -21,7 +22,7 @@ const audioWriteIdleTimeout = 30 * time.Second
 type StreamHandler struct {
 	svc              *audioservice.StreamTrackService
 	writeIdleTimeout time.Duration
-	now              func() time.Time
+	now              clock.Func
 	limiter          rateLimitMiddleware
 }
 
@@ -34,7 +35,7 @@ func NewStreamHandler(svc *audioservice.StreamTrackService, opts ...func(*Stream
 	return h
 }
 
-func WithStreamLimiterClock(now func() time.Time) func(*StreamHandler) {
+func WithStreamLimiterClock(now clock.Func) func(*StreamHandler) {
 	return func(h *StreamHandler) {
 		if now != nil {
 			h.now = now

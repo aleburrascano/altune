@@ -2,6 +2,7 @@ package eventwatch_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
@@ -17,7 +18,7 @@ import (
 const tapBufferSize = 256
 
 func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
-	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -41,7 +42,7 @@ func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
 }
 
 func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
-	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -62,7 +63,7 @@ func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
 }
 
 func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
-	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -82,7 +83,7 @@ func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
 }
 
 func TestSubscribeAll_SingleConsumer(t *testing.T) {
-	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("first SubscribeAll: %v", err)
@@ -95,7 +96,7 @@ func TestSubscribeAll_SingleConsumer(t *testing.T) {
 }
 
 func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
-	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -112,7 +113,7 @@ func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 }
 
 func TestTap_ReleasedAfterCancel(t *testing.T) {
-	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -126,7 +127,7 @@ func TestTap_ReleasedAfterCancel(t *testing.T) {
 }
 
 func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
-	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	tp := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -143,7 +144,7 @@ func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
 
 func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	tp := monitoring.NewEventTap(bus)
+	tp := monitoring.NewEventTap(bus, time.Now)
 	ch, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -171,4 +172,54 @@ func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
 	if after := bus.HighestIssuedID(); after != before {
 		t.Errorf("HighestIssuedID moved from %d to %d, Emit must never publish to the inner bus", before, after)
 	}
+}
+
+func newTap(t *testing.T, now func() time.Time) *monitoring.EventTap {
+	t.Helper()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
+	return monitoring.NewEventTap(bus, now)
+}
+
+func TestTapClock_PublishedEventCarriesTheInjectedTimeInUTC(t *testing.T) {
+	zone := time.FixedZone("plus2", 2*60*60)
+	at := time.Date(2026, 5, 6, 12, 0, 0, 0, zone)
+	tp := newTap(t, clocktest.NewManual(at).Func())
+	tap, cancel, err := tp.SubscribeAll()
+	if err != nil {
+		t.Fatalf("SubscribeAll: %v", err)
+	}
+	defer cancel()
+
+	tp.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Named("track_added"))
+
+	evt := <-tap
+	if !evt.Timestamp.Equal(at) || evt.Timestamp.Location() != time.UTC {
+		t.Errorf("timestamp = %v, want %v in UTC", evt.Timestamp, at.UTC())
+	}
+}
+
+func TestTapClock_ActivityEventCarriesTheInjectedTime(t *testing.T) {
+	at := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	tp := newTap(t, clocktest.NewManual(at).Func())
+	tap, cancel, err := tp.SubscribeAll()
+	if err != nil {
+		t.Fatalf("SubscribeAll: %v", err)
+	}
+	defer cancel()
+
+	tp.EmitActivity("log_burst")
+
+	if evt := <-tap; !evt.Timestamp.Equal(at) {
+		t.Errorf("timestamp = %v, want %v", evt.Timestamp, at)
+	}
+}
+
+func TestNewEventTap_RefusesANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("a nil clock was accepted, want a panic at construction")
+		}
+	}()
+
+	newTap(t, nil)
 }

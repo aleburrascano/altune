@@ -1,6 +1,7 @@
 package breaker
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"sync"
 	"time"
@@ -32,7 +33,7 @@ type Config struct {
 	Threshold  int
 	OpenFor    time.Duration
 	ProbeLease time.Duration
-	Now        func() time.Time
+	Now        clock.Func
 	OnChange   func(ctx context.Context, c Change)
 }
 

@@ -100,7 +100,7 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 
 func (a *App) openEventBus() {
 	a.eventBus = events.NewInProcessBus(time.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
-	a.eventTap = monitoring.NewEventTap(a.eventBus)
+	a.eventTap = monitoring.NewEventTap(a.eventBus, time.Now)
 }
 
 type features struct {

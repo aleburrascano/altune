@@ -3,6 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/library/domain"
 	audioservice "altune/go-api/internal/library/internal/core/audio"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"log/slog"
@@ -17,7 +18,7 @@ const maxAudioURLBatch = 200
 type AudioURLHandler struct {
 	svc             *audioservice.AudioLinkService
 	prefetchEnabled bool
-	now             func() time.Time
+	now             clock.Func
 	limiter         rateLimitMiddleware
 }
 
@@ -30,7 +31,7 @@ func NewAudioURLHandler(svc *audioservice.AudioLinkService, opts ...func(*AudioU
 	return h
 }
 
-func WithAudioURLLimiterClock(now func() time.Time) func(*AudioURLHandler) {
+func WithAudioURLLimiterClock(now clock.Func) func(*AudioURLHandler) {
 	return func(h *AudioURLHandler) {
 		if now != nil {
 			h.now = now

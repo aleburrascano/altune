@@ -3,6 +3,7 @@ package history
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
@@ -17,15 +18,19 @@ const HistoryRingSize = 100
 
 type RecordSearchHistoryService struct {
 	HistoryRepo ports.HistoryWriter
+	now         clock.Func
 }
 
 var ErrCollaboratorRequired = errors.New("history recorder needs its repository, pass the absent adapter to switch it off")
 
-func NewRecordSearchHistoryService(historyRepo ports.HistoryWriter) (*RecordSearchHistoryService, error) {
+func NewRecordSearchHistoryService(historyRepo ports.HistoryWriter, now clock.Func) (*RecordSearchHistoryService, error) {
 	if historyRepo == nil {
 		return nil, ErrCollaboratorRequired
 	}
-	return &RecordSearchHistoryService{HistoryRepo: historyRepo}, nil
+	if now == nil {
+		panic("history: NewRecordSearchHistoryService requires a clock")
+	}
+	return &RecordSearchHistoryService{HistoryRepo: historyRepo, now: now}, nil
 }
 
 func (s *RecordSearchHistoryService) Record(
@@ -65,6 +70,6 @@ func (s *RecordSearchHistoryService) RecordSubmitted(ctx context.Context, userId
 		return err
 	}
 	queryNorm := textnorm.NormalizeForMatch(domain.SearchText(query.Raw))
-	s.Record(ctx, userId, query, queryNorm, time.Now())
+	s.Record(ctx, userId, query, queryNorm, s.now())
 	return nil
 }
