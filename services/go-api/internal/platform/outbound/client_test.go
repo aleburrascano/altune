@@ -46,7 +46,10 @@ func TestNewClient_UsesTheGivenTransport(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 
-	_, err = client.Get("http://example.invalid/")
+	resp, err := client.Get("http://example.invalid/")
+	if err == nil {
+		_ = resp.Body.Close()
+	}
 
 	if !errors.Is(err, errGiven) {
 		t.Fatalf("err = %v, want the given transport's error", err)

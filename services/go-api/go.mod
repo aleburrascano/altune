@@ -17,6 +17,7 @@ require (
 	github.com/mozillazg/go-unidecode v0.2.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
+	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/tdewolff/parse/v2 v2.8.16
 	github.com/wasilibs/go-pgquery v0.0.0-20260915022521-81f99195012b
@@ -39,7 +40,6 @@ require (
 )
 
 require (
-	github.com/quasilyte/go-ruleguard/dsl v0.3.23 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 )
