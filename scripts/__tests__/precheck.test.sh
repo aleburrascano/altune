@@ -558,6 +558,69 @@ run_with_tools --lint
 expect_log "golangci-lint-cache run"
 expect_log "--fast-only"
 
+CASE="a Go-only commit installs and touches no client dependencies and runs no jest"
+new_repo
+add_go_fixture
+printf '#!/usr/bin/env bash\necho "worktree-deps $*" >>"%s/deps.log"\necho true\n' "$WORK" >"$WORK/repo/scripts/worktree-deps.sh"
+mkdir -p "$WORK/repo/client/src/shared/a/__tests__"
+printf "// 'go-api'\n" >"$WORK/repo/client/src/shared/a/__tests__/aContract.test.ts"
+git -C "$WORK/repo" add -A
+git -C "$WORK/repo" commit -qm "client fixture and deps stub"
+git -C "$WORK/repo" update-ref refs/remotes/gitea/main HEAD
+stage_go_file internal/discovery/adapters/x/x.go
+: >"$WORK/deps.log"
+run_with_tools --lint
+[ ! -s "$WORK/deps.log" ] || fail "a Go-only commit must not call worktree-deps: $(cat "$WORK/deps.log")"
+[ ! -s "$WORK/npx.log" ] || fail "a Go-only commit must not run npx: $(cat "$WORK/npx.log")"
+expect_log "golangci-lint-cache run"
+
+CASE="a commit that touches no workflow file does not run gate parity or the duplicate-CI check, so it needs no root node_modules"
+new_repo
+add_go_fixture
+printf '#!/usr/bin/env bash\necho "worktree-deps $*" >>"%s/deps.log"\necho true\n' "$WORK" >"$WORK/repo/scripts/worktree-deps.sh"
+printf 'process.exit(1);\n' >"$WORK/repo/scripts/gate-parity.mjs"
+git -C "$WORK/repo" add -A
+git -C "$WORK/repo" commit -qm "deps stub"
+git -C "$WORK/repo" update-ref refs/remotes/gitea/main HEAD
+stage_go_file internal/discovery/adapters/x/x.go
+: >"$WORK/deps.log"
+run_with_tools --lint
+grep -qF "gate parity" "$WORK/out.log" && fail "gate parity must not run for a Go-only commit"
+[ ! -s "$WORK/deps.log" ] || fail "no dependencies may be linked for a Go-only commit: $(cat "$WORK/deps.log")"
+
+CASE="a commit staging only the events package installs no client dependencies"
+new_repo
+add_go_fixture
+mkdir -p "$WORK/repo/services/go-api/internal/shared/events" "$WORK/repo/client/src/x"
+printf 'package events\n' >"$WORK/repo/services/go-api/internal/shared/events/e.go"
+printf '#!/bin/sh\nexit 0\n' >"$WORK/bin/npx"
+chmod +x "$WORK/bin/npx"
+printf '#!/usr/bin/env bash\necho "worktree-deps $*" >>"%s/deps.log"\necho true\n' "$WORK" >"$WORK/repo/scripts/worktree-deps.sh"
+git -C "$WORK/repo" add -A
+git -C "$WORK/repo" commit -qm "events fixture and deps stub"
+git -C "$WORK/repo" update-ref refs/remotes/gitea/main HEAD
+stage_go_file internal/shared/events/e.go
+: >"$WORK/deps.log"
+run_with_tools --lint
+[ ! -s "$WORK/deps.log" ] || fail "staging the events package must not link client dependencies: $(cat "$WORK/deps.log")"
+[ ! -s "$WORK/npx.log" ] || fail "staging the events package must not run npx: $(cat "$WORK/npx.log")"
+
+CASE="a commit that stages a workflow file still runs gate parity and the duplicate-CI check"
+new_repo
+printf '#!/usr/bin/env bash\necho true\n' >"$WORK/repo/scripts/worktree-deps.sh"
+printf 'process.exit(0);\n' >"$WORK/repo/scripts/gate-parity.mjs"
+mkdir -p "$WORK/repo/scripts/ci" "$WORK/repo/.github/workflows"
+printf 'process.exit(0);\n' >"$WORK/repo/scripts/ci/pr-ci-dupes.mjs"
+printf 'name: x\n' >"$WORK/repo/.github/workflows/x.yml"
+git -C "$WORK/repo" add -A
+git -C "$WORK/repo" commit -qm "workflow fixture"
+git -C "$WORK/repo" update-ref refs/remotes/gitea/main HEAD
+printf 'name: y\n' >"$WORK/repo/.github/workflows/x.yml"
+git -C "$WORK/repo" add -A
+run_with_tools --lint
+expect_out "ok    gate parity with main"
+expect_out "ok    no duplicate PR CI work"
+
 CASE="--lint lints nothing when the working tree matches HEAD"
 new_repo
 add_go_fixture

@@ -285,7 +285,7 @@ if touches '^services/overseer/'; then
   fi
 fi
 
-if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile contract tests"; then
+if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile contract tests"; then
   if link_deps client; then
     jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" '\.contract\.test\.tsx?$'
   else
@@ -293,10 +293,10 @@ if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.g
   fi
 fi
 
-if touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
+if [ $lint_only = 0 ] && touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
   contract_tests=$(grep -rlF --include='*.test.ts' --include='*.test.tsx' "'go-api'" client/src | sed 's#^client/##' | sort)
   if [ -z "$contract_tests" ]; then
-    [ $lint_only = 1 ] || { echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; record_fail "mobile contract tests (go-api changed)" 1 "no client test file mentions 'go-api'"; failed=1; }
+    echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; record_fail "mobile contract tests (go-api changed)" 1 "no client test file mentions 'go-api'"; failed=1
   elif link_deps client; then
     jest_check "mobile contract tests (go-api changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" $contract_tests
   else
@@ -349,11 +349,13 @@ if touches '^scripts/(__tests__/)?precheck(\.test)?\.sh$'; then
   test_check "precheck self-tests" . bash scripts/__tests__/precheck.test.sh
 fi
 
-if [ -f scripts/gate-parity.mjs ] && need node "gate parity" && link_deps .; then
+workflow_files='^(\.github|\.gitea)/|^scripts/(ci/|gate-parity\.mjs|precheck\.sh$)'
+
+if [ -f scripts/gate-parity.mjs ] && { [ $stage = push ] || touches "$workflow_files"; } && need node "gate parity" && link_deps .; then
   check "gate parity with main" . node scripts/gate-parity.mjs
 fi
 
-if [ -f scripts/ci/pr-ci-dupes.mjs ] && need node "duplicate PR CI work" && link_deps .; then
+if [ -f scripts/ci/pr-ci-dupes.mjs ] && { [ $stage = push ] || touches "$workflow_files"; } && need node "duplicate PR CI work" && link_deps .; then
   check "no duplicate PR CI work" . node scripts/ci/pr-ci-dupes.mjs
 fi
 
