@@ -2134,6 +2134,9 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 			for scheduler.Status().InFlight > 0 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond)
 			}
+			if inFlight := scheduler.Status().InFlight; inFlight > 0 {
+				t.Errorf("%d jobs still in flight %s after release", inFlight, jobSettleTimeout)
+			}
 		}
 		t.Cleanup(release)
 
