@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,7 +76,7 @@ func (musicBrainz *musicBrainzClient) get(ctx context.Context, target string) (j
 		if !musicBrainzBusy(err) || attempt == musicBrainzRetries {
 			return body, err
 		}
-		if err := pause(ctx, musicBrainz.backoff<<attempt); err != nil {
+		if err := clock.Sleep(ctx, musicBrainz.backoff<<attempt); err != nil {
 			return nil, err
 		}
 	}

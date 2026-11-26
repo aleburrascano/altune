@@ -3,6 +3,7 @@ package previewcheck
 import (
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/songfields"
 	"context"
 	"encoding/json"
@@ -111,10 +112,24 @@ type Previews struct {
 	backoff backoff.Policy
 	pause   cooldown
 	printer RawFingerprint
+	sleep   clock.Sleeper
 }
 
-func New(client *http.Client, baseURL string, printer RawFingerprint) *Previews {
-	return &Previews{client: client, baseURL: baseURL, backoff: deezerPause, printer: printer}
+var ErrSleeperRequired = errors.New("previewcheck: the Deezer client needs a sleeper")
+
+func New(client *http.Client, baseURL string, printer RawFingerprint, sleep clock.Sleeper) (*Previews, error) {
+	if sleep == nil {
+		return nil, fmt.Errorf("New: %w", ErrSleeperRequired)
+	}
+	return &Previews{client: client, baseURL: baseURL, backoff: deezerPause, printer: printer, sleep: sleep}, nil
+}
+
+func MustNew(client *http.Client, baseURL string, printer RawFingerprint, sleep clock.Sleeper) *Previews {
+	previews, err := New(client, baseURL, printer, sleep)
+	if err != nil {
+		panic(err)
+	}
+	return previews
 }
 
 type deezerTrackBody struct {
@@ -222,7 +237,10 @@ func (d *Previews) get(ctx context.Context, target string, bodyCap int64, isThro
 }
 
 func (d *Previews) awaitTurn(ctx context.Context) error {
-	return sleepContext(ctx, d.pause.remaining())
+	if err := d.sleep(ctx, d.pause.remaining()); err != nil {
+		return fmt.Errorf("wait out the deezer pause: %w", err)
+	}
+	return nil
 }
 
 func newDeezerRequest(ctx context.Context, target string) (*http.Request, error) {
@@ -257,13 +275,3 @@ func (d *Previews) getOnce(ctx context.Context, target string, bodyCap int64) (i
 	return resp.StatusCode, body, nil
 }
 
-func sleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("wait out the deezer pause: %w", ctx.Err())
-	case <-timer.C:
-		return nil
-	}
-}

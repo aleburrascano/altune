@@ -2,6 +2,7 @@ package previewcheck_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"io"
@@ -89,10 +90,18 @@ type previewSource interface {
 }
 
 func (s *deezerStub) serve() previewSource {
-	return download.NewDeezerPreview(&http.Client{Transport: s}, deezer, fixedPrinter{print: []uint32{7, 8, 9}})
+	return download.MustNewDeezerPreview(&http.Client{Transport: s}, deezer, fixedPrinter{print: []uint32{7, 8, 9}}, clock.Sleep)
 }
 
 const trackJSON = `{"id":132201194,"title":"outside","isrc":"USSM11607554","preview":"` + deezer + `/preview.mp3"}`
+
+func TestNewDeezerPreview_RefusesAMissingSleeper(t *testing.T) {
+	previews, err := download.NewDeezerPreview(&http.Client{}, deezer, fixedPrinter{}, nil)
+
+	if previews != nil || !errors.Is(err, download.ErrDeezerSleeperMissing) {
+		t.Fatalf("got (%v, %v), want a nil client and ErrDeezerSleeperMissing", previews, err)
+	}
+}
 
 func TestDeezerPreviews_FetchesAndFingerprintsThePreviewOfTheBoundISRC(t *testing.T) {
 	stub := &deezerStub{trackBody: func(int) string { return trackJSON }}
@@ -191,7 +200,7 @@ func TestDeezerPreviews_GivesUpAfterFiveAttemptsWhenQuotaNeverLifts(t *testing.T
 func TestDeezerPreviews_AnHTTP429BacksOffLikeAQuotaError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stub := &throttlingOnce{deezerStub: deezerStub{trackBody: func(int) string { return noPreview }}}
-		previews := download.NewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{})
+		previews := download.MustNewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{}, clock.Sleep)
 		started := time.Now()
 
 		clip, err := previews.Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "USSM11607554"})

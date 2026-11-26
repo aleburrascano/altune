@@ -12,12 +12,14 @@ var (
 	BestOffset            = deezerpreview.BestOffset
 	NotComparable         = deezerpreview.NotComparable
 	NewDeezerPreview      = deezerpreview.New
+	MustNewDeezerPreview  = deezerpreview.MustNew
 	NewFpcalcPrinter      = deezerpreview.NewFpcalcPrinter
 	NewPreviewMatcher     = deezerpreview.NewMatcher
 	PreviewOverlapSeconds = deezerpreview.OverlapSeconds
 )
 
 var (
+	ErrDeezerSleeperMissing = deezerpreview.ErrSleeperRequired
 	ErrDeezerThrottled    = deezerpreview.ErrDeezerThrottled
 	ErrFileReachesCap     = deezerpreview.ErrFileReachesCap
 	ErrPreviewTooShort    = deezerpreview.ErrPreviewTooShort

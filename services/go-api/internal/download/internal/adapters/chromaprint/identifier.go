@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
@@ -44,11 +45,17 @@ type Identifier struct {
 	apiKey   string
 	endpoint string
 	client   *http.Client
+	sleep    clock.Sleeper
 }
 
-func NewIdentifier(binDir, apiKey string, client *http.Client) (*Identifier, error) {
+var ErrSleeperRequired = errors.New("chromaprint: the identifier needs a sleeper")
+
+func NewIdentifier(binDir, apiKey string, client *http.Client, sleep clock.Sleeper) (*Identifier, error) {
 	if client == nil {
 		return nil, ErrClientRequired
+	}
+	if sleep == nil {
+		return nil, fmt.Errorf("NewIdentifier: %w", ErrSleeperRequired)
 	}
 	key := strings.TrimSpace(apiKey)
 	if key == "" {
@@ -62,11 +69,12 @@ func NewIdentifier(binDir, apiKey string, client *http.Client) (*Identifier, err
 		apiKey:   key,
 		endpoint: defaultEndpoint,
 		client:   &bounded,
+		sleep:    sleep,
 	}, nil
 }
 
-func MustNewIdentifier(binDir, apiKey string, client *http.Client) *Identifier {
-	i, err := NewIdentifier(binDir, apiKey, client)
+func MustNewIdentifier(binDir, apiKey string, client *http.Client, sleep clock.Sleeper) *Identifier {
+	i, err := NewIdentifier(binDir, apiKey, client, sleep)
 	if err != nil {
 		panic(err)
 	}
@@ -192,12 +200,8 @@ func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values,
 	wait := retryAfter(resp.Header.Get("Retry-After"))
 	_ = resp.Body.Close()
 
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("%s: %w", label, ctx.Err())
-	case <-timer.C:
+	if err := i.sleep(ctx, wait); err != nil {
+		return nil, fmt.Errorf("%s: %w", label, err)
 	}
 
 	resp, err = i.post(ctx, endpoint, form, label)
