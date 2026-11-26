@@ -11,6 +11,7 @@ const COPIED = [
   'package.json',
   'tsconfig.json',
   '.fallowrc.json',
+  'knip.json',
   'fallow/modules.json',
   'fallow/parts.json',
   'scripts/fallow-changed.mjs',
