@@ -71,7 +71,8 @@ func (ExpvarPlaybackMetrics) RetryOwnerDropped()     { erasureRetryOwnersDropped
 
 func (ExpvarPlaybackMetrics) EnrichmentBreakerRejected() { enrichmentBreakerRejections.Add(1) }
 func (ExpvarPlaybackMetrics) EnrichmentBreakerOpened()   { enrichmentBreakerOpen.Set(breakerDegraded) }
-func (ExpvarPlaybackMetrics) EnrichmentBreakerClosed()   { enrichmentBreakerOpen.Set(breakerHealthy) }
+
+func (ExpvarPlaybackMetrics) EnrichmentBreakerClosed() { enrichmentBreakerOpen.Set(breakerHealthy) }
 
 type Snapshot struct {
 	EnrichmentFailures          int64 `json:"now_playing_enrichment_failures_total"`

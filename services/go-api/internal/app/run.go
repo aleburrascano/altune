@@ -41,11 +41,11 @@ func (a *App) Run(ctx context.Context) error {
 	return serveErr
 }
 
-func serve(ctx context.Context, server *http.Server) error {
+func serve(ctx context.Context, httpServer *http.Server) error {
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, "server listening", "addr", server.Addr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		slog.InfoContext(ctx, "server listening", "addr", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()
@@ -57,6 +57,6 @@ func serve(ctx context.Context, server *http.Server) error {
 		slog.InfoContext(ctx, "shutting down")
 	}
 
-	shutdown.DrainServer(server, shutdown.ServerDrainTimeout)
+	shutdown.DrainServer(httpServer, shutdown.ServerDrainTimeout)
 	return nil
 }

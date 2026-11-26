@@ -50,13 +50,13 @@ func withoutSensitiveLeaves(prefix string, attrs []slog.Attr) []slog.Attr {
 }
 
 func attrWithoutSensitiveMembers(prefix string, a slog.Attr) (safe slog.Attr, survives bool) {
-	val := a.Value.Resolve()
+	value := a.Value.Resolve()
 	key := dottedKey(prefix, a.Key)
-	if val.Kind() == slog.KindGroup {
-		members := withoutSensitiveLeaves(key, val.Group())
+	if value.Kind() == slog.KindGroup {
+		members := withoutSensitiveLeaves(key, value.Group())
 		return slog.Attr{Key: a.Key, Value: slog.GroupValue(members...)}, len(members) > 0
 	}
-	return slog.Attr{Key: a.Key, Value: scrubbedValue(a.Key, val)}, !isSensitiveLeaf(key, val)
+	return slog.Attr{Key: a.Key, Value: scrubbedValue(a.Key, value)}, !isSensitiveLeaf(key, value)
 }
 
 func carriesFailureText(key string, v slog.Value) bool {

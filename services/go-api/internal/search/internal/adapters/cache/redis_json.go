@@ -29,13 +29,13 @@ func (r redisJSON) disabled() bool { return r.client == nil }
 
 func getJSON[T any](ctx context.Context, r redisJSON, key string) (T, bool) {
 	var zero T
-	val, err := r.client.Get(ctx, key).Result()
+	raw, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		r.recordReadFailure(ctx, key, err)
 		return zero, false
 	}
 	var v T
-	if err := json.Unmarshal([]byte(val), &v); err != nil {
+	if err := json.Unmarshal([]byte(raw), &v); err != nil {
 		r.signal.failure(ctx, kindOf(key), opDecode, err)
 		return zero, false
 	}

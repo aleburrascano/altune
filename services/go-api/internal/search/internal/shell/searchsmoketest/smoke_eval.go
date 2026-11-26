@@ -101,11 +101,11 @@ func evalQuery(
 	q, expect string,
 	kinds map[domain.ResultKind]bool,
 ) (QueryResult, error) {
-	query, err := domain.NewSearchQuery(q, kinds, limit)
+	parsed, err := domain.NewSearchQuery(q, kinds, limit)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("eval query %q: %w", q, err)
 	}
-	out, err := svc.Execute(ctx, user, query)
+	out, err := svc.Execute(ctx, user, parsed)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("eval search %q: %w", q, err)
 	}

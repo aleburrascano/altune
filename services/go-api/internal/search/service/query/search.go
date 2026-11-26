@@ -284,10 +284,10 @@ func (s *Service) execute(
 	ranked := s.favorites.Lift(ctx, userId, resolution.ranked)
 	favoritesDone()
 
-	var related []domain.RelatedGroup
+	var relatedGroups []domain.RelatedGroup
 	relatedDone := timeStage(&stages.related)
 	if s.findRelatedSvc != nil && len(ranked) > 0 {
-		related = s.findRelatedSvc.Execute(ctx, userId, ranked)
+		relatedGroups = s.findRelatedSvc.Execute(ctx, userId, ranked)
 	}
 	relatedDone()
 
@@ -310,7 +310,7 @@ func (s *Service) execute(
 			shown:     shown,
 			organic:   organic,
 			fullSlate: fullSlate,
-			related:   related,
+			related:   relatedGroups,
 			explored:  explored,
 			timing:    searchTiming{stages: stages, total: time.Since(startedAt), cached: resolution.cached, partial: resolution.partial},
 		})
@@ -321,7 +321,7 @@ func (s *Service) execute(
 		"results", len(shown),
 		"partial", resolution.partial,
 		"corrected", resolution.correctedQuery != "",
-		"related_groups", len(related),
+		"related_groups", len(relatedGroups),
 		"cached", resolution.cached,
 		"continued", searchId == continues,
 		"offset", query.Offset,
@@ -342,7 +342,7 @@ func (s *Service) execute(
 		Partial:          resolution.partial,
 		CorrectedQuery:   resolution.correctedQuery,
 		OriginalQuery:    resolution.originalQuery,
-		Related:          related,
+		Related:          relatedGroups,
 		Cached:           resolution.cached,
 	}, nil
 }

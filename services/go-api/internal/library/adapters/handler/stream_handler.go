@@ -73,7 +73,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		httpserver.HandleServiceError(w, r, err)
 		return
 	}
-	defer out.Reader.Close()
+	defer func() { _ = out.Reader.Close() }()
 
 	slog.InfoContext(r.Context(), "stream.serving",
 		"track_id", trackId.String(),

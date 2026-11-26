@@ -258,14 +258,14 @@ func decodeEntry(raw any) (domain.SpellingHintsEntry, bool) {
 	if !isString {
 		return domain.SpellingHintsEntry{}, false
 	}
-	var data vocabEntryData
-	if err := json.Unmarshal([]byte(blob), &data); err != nil {
+	var stored vocabEntryData
+	if err := json.Unmarshal([]byte(blob), &stored); err != nil {
 		return domain.SpellingHintsEntry{}, false
 	}
 	return domain.SpellingHintsEntry{
-		Term:       data.Term,
-		Kind:       domain.SpellingHintsKind(data.Kind),
-		Popularity: data.Popularity,
+		Term:       stored.Term,
+		Kind:       domain.SpellingHintsKind(stored.Kind),
+		Popularity: stored.Popularity,
 	}, true
 }
 

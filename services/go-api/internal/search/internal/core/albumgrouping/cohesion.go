@@ -96,11 +96,11 @@ func (u *providerUnionFind) largestComponent() (domain.ProviderName, int) {
 		}
 	}
 	var best domain.ProviderName
-	max := 0
+	bestCount := 0
 	for root, n := range counts {
-		if n > max || (n == max && n > 0 && minMember[root] < minMember[best]) {
-			best, max = root, n
+		if n > bestCount || (n == bestCount && n > 0 && minMember[root] < minMember[best]) {
+			best, bestCount = root, n
 		}
 	}
-	return best, max
+	return best, bestCount
 }

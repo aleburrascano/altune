@@ -117,12 +117,12 @@ func (s *ObjectStorageAudioStore) ListWithAge(ctx context.Context, prefix string
 	return objects, nil
 }
 
-func (s *ObjectStorageAudioStore) Store(ctx context.Context, sourcePath string, audioRef string) error {
+func (s *ObjectStorageAudioStore) Store(ctx context.Context, sourcePath, audioRef string) error {
 	file, err := os.Open(sourcePath)
 	if err != nil {
 		return fmt.Errorf("open source file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	stat, err := file.Stat()
 	if err != nil {
@@ -146,7 +146,7 @@ func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (
 
 	stat, err := obj.Stat()
 	if err != nil {
-		obj.Close()
+		_ = obj.Close()
 		return nil, 0, fmt.Errorf("stat object: %w", err)
 	}
 

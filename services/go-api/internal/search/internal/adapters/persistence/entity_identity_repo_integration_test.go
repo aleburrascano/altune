@@ -29,7 +29,7 @@ func TestPostgresIdentityStore_RoundTrip(t *testing.T) {
 	seedIdentity(t, pool, domain.ResultKindArtist, mbid, xref)
 
 	for provider, externalID := range xref {
-		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, domain.ProviderKey(provider), externalID)
+		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, provider, externalID)
 		if !ok {
 			t.Errorf("lookup (%s,%s): not found, want hit", provider, externalID)
 			continue

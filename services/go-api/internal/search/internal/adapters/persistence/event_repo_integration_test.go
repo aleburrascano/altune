@@ -14,6 +14,119 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func performSearch(t *testing.T, store *persistence.PostgresEventStore, userId ids.UserId, queryNorm, searchID string) {
+	t.Helper()
+	appendOrFatal(t, store, domain.InteractionEvent{
+		UserId: userId, Type: domain.EventTypeSearchPerformed,
+		QueryNorm: queryNorm, SearchId: searchID,
+		Payload: map[string]any{"zero_result": false},
+	})
+}
+
+func storedQueryNorm(t *testing.T, pool *pgxpool.Pool, userId ids.UserId, eventID string) *string {
+	t.Helper()
+	var queryNorm *string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT query_norm FROM discovery_events WHERE user_id = $1 AND event_id = $2`,
+		userId.UUID(), uuid.MustParse(eventID),
+	).Scan(&queryNorm); err != nil {
+		t.Fatalf("read stored query_norm: %v", err)
+	}
+	return queryNorm
+}
+
+func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T) {
+	testdb.RequireIntegration(t)
+	pool := testdb.Pool(t)
+	store := persistence.NewPostgresEventStore(pool)
+	ctx := context.Background()
+	honest := newEventTestUser(t, pool)
+	attacker := newEventTestUser(t, pool)
+
+	suffix := uuid.New().String()[:8]
+	qAnswered := "qn answered " + suffix
+	qTarget := "qn target gap " + suffix
+	answeredSearch := uuid.New().String()
+
+	performSearch(t, store, honest, qAnswered, answeredSearch)
+	appendOrFatal(t, store, domain.InteractionEvent{
+		UserId: honest, Type: domain.EventTypeResultClicked,
+		SearchId: answeredSearch, QueryNorm: "garbled " + suffix,
+		Payload: map[string]any{"result_signature": "s"},
+	})
+
+	performSearch(t, store, honest, qTarget, uuid.New().String())
+	attackerSearch := uuid.New().String()
+	performSearch(t, store, attacker, "qn attacker own "+suffix, attackerSearch)
+	for _, searchID := range []string{"", attackerSearch} {
+		appendOrFatal(t, store, domain.InteractionEvent{
+			UserId: attacker, Type: domain.EventTypeResultClicked,
+			SearchId: searchID, QueryNorm: qTarget,
+			Payload: map[string]any{"result_signature": "s"},
+		})
+	}
+
+	counts, err := store.NonZeroNoClickQueries(ctx, time.Now().UTC().Add(-time.Minute), 1000)
+	if err != nil {
+		t.Fatalf("NonZeroNoClickQueries: %v", err)
+	}
+	got := map[string]int{}
+	for _, qc := range counts {
+		got[qc.QueryNorm] = qc.Count
+	}
+	if _, present := got[qAnswered]; present {
+		t.Errorf("%q reported as no-click, want excluded (its search was clicked under a garbled client query_norm)", qAnswered)
+	}
+	if got[qTarget] != 1 {
+		t.Errorf("count(%q) = %d, want 1 (a forged client query_norm must not mark it answered)", qTarget, got[qTarget])
+	}
+}
+
+func TestPostgresEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
+	testdb.RequireIntegration(t)
+	pool := testdb.Pool(t)
+	store := persistence.NewPostgresEventStore(pool)
+	owner := newEventTestUser(t, pool)
+	other := newEventTestUser(t, pool)
+
+	suffix := uuid.New().String()[:8]
+	canonical := "qn canonical " + suffix
+	searchID := uuid.New().String()
+	performSearch(t, store, owner, canonical, searchID)
+
+	cases := []struct {
+		name     string
+		userId   ids.UserId
+		searchID string
+		want     *string
+	}{
+		{"own search overrides client value", owner, searchID, &canonical},
+		{"another user's search resolves nothing", other, searchID, nil},
+		{"unknown search resolves nothing", owner, uuid.New().String(), nil},
+		{"no search resolves nothing", owner, "", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eventID := uuid.New().String()
+			appendOrFatal(t, store, domain.InteractionEvent{
+				UserId: tc.userId, Type: domain.EventTypePlay,
+				SearchId: tc.searchID, EventId: eventID, QueryNorm: "forged " + suffix,
+			})
+			got := storedQueryNorm(t, pool, tc.userId, eventID)
+			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+				t.Errorf("stored query_norm = %v, want %v", deref(got), deref(tc.want))
+			}
+		})
+	}
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return "<NULL>"
+	}
+	return *s
+}
+
 func appendOrFatal(t *testing.T, store *persistence.PostgresEventStore, ev domain.InteractionEvent) {
 	t.Helper()
 	if err := store.Append(context.Background(), ev); err != nil {
