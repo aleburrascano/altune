@@ -9,38 +9,6 @@ import (
 	"testing"
 )
 
-type memLyricsCache struct {
-	pos  map[string]domain.DeezerLyrics
-	neg  map[string]bool
-	sets int
-	negs int
-}
-
-func newMemLyricsCache() *memLyricsCache {
-	return &memLyricsCache{pos: map[string]domain.DeezerLyrics{}, neg: map[string]bool{}}
-}
-
-func (c *memLyricsCache) Get(_ context.Context, k string) (domain.DeezerLyrics, bool, error) {
-	l, ok := c.pos[k]
-	return l, ok, nil
-}
-
-func (c *memLyricsCache) Set(_ context.Context, k string, l domain.DeezerLyrics) error {
-	c.sets++
-	c.pos[k] = l
-	return nil
-}
-
-func (c *memLyricsCache) GetNegative(_ context.Context, k string) (bool, error) {
-	return c.neg[k], nil
-}
-
-func (c *memLyricsCache) SetNegative(_ context.Context, k string) error {
-	c.negs++
-	c.neg[k] = true
-	return nil
-}
-
 func sampleLyrics() domain.DeezerLyrics {
 	l := domain.EmptyDeezerLyrics()
 	l.Plain = "Hello, it's me"
@@ -51,7 +19,7 @@ func sampleLyrics() domain.DeezerLyrics {
 
 func TestLyricsService_TranslatesNames(t *testing.T) {
 	provider := &searchtest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
-	svc := details.NewLyricsService(provider, newMemLyricsCache())
+	svc := details.NewLyricsService(provider, searchtest.NewNameKeyedCache[domain.DeezerLyrics]())
 
 	_, err := svc.Execute(context.Background(), "Hello", "Adele")
 	if err != nil {
@@ -64,12 +32,12 @@ func TestLyricsService_TranslatesNames(t *testing.T) {
 
 func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
 	provider := &searchtest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
-	cache := newMemLyricsCache()
+	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
 	svc := details.NewLyricsService(provider, cache)
 
 	_, _ = svc.Execute(context.Background(), "Hello", "Adele")
-	if provider.Lookups != 1 || cache.sets != 1 {
-		t.Fatalf("setup: lookups=%d sets=%d", provider.Lookups, cache.sets)
+	if provider.Lookups != 1 || cache.Sets() != 1 {
+		t.Fatalf("setup: lookups=%d sets=%d", provider.Lookups, cache.Sets())
 	}
 	_, _ = svc.Execute(context.Background(), "Hello", "Adele")
 	if provider.Resolves != 1 || provider.Lookups != 1 {
@@ -80,7 +48,7 @@ func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
 
 func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
 	provider := &searchtest.LyricsProvider{ResolvedID: ""}
-	cache := newMemLyricsCache()
+	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
 	svc := details.NewLyricsService(provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Nonexistent", "Nobody")
@@ -90,8 +58,8 @@ func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
 	if !l.IsZero() {
 		t.Errorf("expected empty lyrics, got %+v", l)
 	}
-	if cache.negs != 1 {
-		t.Errorf("expected a negative cache write, got negs=%d", cache.negs)
+	if cache.Negatives() != 1 {
+		t.Errorf("expected a negative cache write, got negs=%d", cache.Negatives())
 	}
 	if provider.Lookups != 0 {
 		t.Errorf("an unresolved id should not be looked up, got lookups=%d", provider.Lookups)
@@ -100,7 +68,7 @@ func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
 
 func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
 	provider := &searchtest.LyricsProvider{ResolvedID: "1", Lyrics: domain.EmptyDeezerLyrics()}
-	cache := newMemLyricsCache()
+	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
 	svc := details.NewLyricsService(provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Instrumental", "Someone")
@@ -110,14 +78,14 @@ func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
 	if !l.IsZero() {
 		t.Errorf("expected empty lyrics, got %+v", l)
 	}
-	if cache.negs != 1 {
-		t.Errorf("a track with no lyrics should be negative-cached, got negs=%d", cache.negs)
+	if cache.Negatives() != 1 {
+		t.Errorf("a track with no lyrics should be negative-cached, got negs=%d", cache.Negatives())
 	}
 }
 
 func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
 	provider := &searchtest.LyricsProvider{ResolvedID: "1", LookupErr: errors.New("pipe 500")}
-	cache := newMemLyricsCache()
+	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
 	svc := details.NewLyricsService(provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Hello", "Adele")
@@ -127,8 +95,8 @@ func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
 	if !l.IsZero() {
 		t.Errorf("expected empty lyrics on error, got %+v", l)
 	}
-	if cache.negs != 0 {
-		t.Errorf("a transient lookup error must not poison the cache, got negs=%d", cache.negs)
+	if cache.Negatives() != 0 {
+		t.Errorf("a transient lookup error must not poison the cache, got negs=%d", cache.Negatives())
 	}
 }
 
