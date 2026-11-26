@@ -887,17 +887,17 @@ describe('Replacing the installed telemetry stops the instance it replaces', () 
     expect(sentEntries()).toHaveLength(0);
   });
 
-  it('stops answering sign-out, so only the new instance clears the outbox', async () => {
-    installBooted();
+  it('stops answering sign-out, so the old instance leaves its own outbox file alone', async () => {
+    const oldStore = createOutboxStore(createMemoryFileStore(), { warn });
+    telemetryDoor.installTelemetry(createAppTelemetry({ store: oldStore }));
     serverReplies(HTTP_UNAVAILABLE);
-    await enqueueCritical(event({ search_id: 'a' }));
-    const replacement = installBooted();
+    await telemetryDoor.enqueueCritical(event({ search_id: 'a' }));
+    installBooted();
 
     runSignOutCleanups();
-    resetServer();
-    await replacement.enqueueCritical(event({ search_id: 'b' }));
 
-    expect(sentEntries().map((e) => e.search_id)).toEqual(['b']);
+    expect(oldStore.load().map((e) => e.search_id)).toEqual(['a']);
+    expect(lastPersisted()).toEqual([]);
   });
 });
 

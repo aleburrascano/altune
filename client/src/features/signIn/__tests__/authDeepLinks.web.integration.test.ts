@@ -25,12 +25,12 @@ describe('auth deep links on web leave the page URL to the route (#2924)', () =>
     expect(verifyOtp).not.toHaveBeenCalled();
   });
 
-  it('hands no url event to the listener when the page URL changes', async () => {
+  it('hands no url event to the listener when the page posts a message', async () => {
     const listener = jest.fn();
     const stop = nativeLinkEvents.subscribeUrl(listener);
 
     window.history.pushState({}, '', WEB_CALLBACK_PATH);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.dispatchEvent(new MessageEvent('message'));
     await flushMacrotask();
     stop();
 

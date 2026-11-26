@@ -25,6 +25,7 @@ export function createEventSession({ clock, appState, onSignOut }: EventSessionD
   };
   let listening = false;
   const unsubscribes: (() => void)[] = [];
+  let disposed = false;
   let tickAnchor: number | null = null;
 
   function advance(current: SessionState, now: number): SessionState {
@@ -48,7 +49,7 @@ export function createEventSession({ clock, appState, onSignOut }: EventSessionD
   }
 
   function ensureForegroundRotation(): void {
-    if (listening) return;
+    if (listening || disposed) return;
     listening = true;
     unsubscribes.push(
       appState.subscribe((status) => {
@@ -73,6 +74,7 @@ export function createEventSession({ clock, appState, onSignOut }: EventSessionD
   }
 
   function dispose(): void {
+    disposed = true;
     unsubscribes.splice(0).forEach((unsubscribe) => unsubscribe());
   }
 

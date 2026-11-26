@@ -144,7 +144,7 @@ export function createOutbox(deps: OutboxDeps) {
   }
 
   function ensureFlushOnForeground(): void {
-    if (listening) return;
+    if (listening || disposed) return;
     listening = true;
     unsubscribes.push(
       appState.subscribe((status) => {
