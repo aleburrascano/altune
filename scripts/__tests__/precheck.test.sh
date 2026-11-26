@@ -497,6 +497,25 @@ add_go_fixture() {
     cat >"$WORK/bin/go" <<STUB
 #!/usr/bin/env bash
 printf "go %s\\n" "\$*" >>"$WORK/tools.log"
+if [ -n "\${GO_ORDER_LOG:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; then
+    echo "start \$1" >>"\$GO_ORDER_LOG"
+    sleep 1
+    echo "end \$1" >>"\$GO_ORDER_LOG"
+    exit 0
+fi
+if [ -n "\${GO_BLOCK:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; then
+    echo \$\$ >>"\$GO_BLOCK/pids"
+    exec sleep 300
+fi
+if [ -n "\${GO_RENDEZVOUS:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; then
+    : >"\$GO_RENDEZVOUS/\$1"
+    for _ in \$(seq 600); do
+        [ -e "\$GO_RENDEZVOUS/vet" ] && [ -e "\$GO_RENDEZVOUS/test" ] && exit 0
+        sleep 0.1
+    done
+    echo "the go \$1 step never ran side by side with the other"
+    exit 1
+fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
@@ -727,6 +746,103 @@ run_with_tools
 expect_log "govulncheck ./..."
 expect_log "vet ./..."
 expect_log "run ./cmd/acquisitioneval"
+
+CASE="a push runs go vet and the changed-package tests side by side"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+mkdir -p "$WORK/rendezvous"
+GO_RENDEZVOUS="$WORK/rendezvous" run_push_scoped
+expect_rc 0
+expect_out "ok    go-api vet"
+expect_out "ok    go-api tests (race, changed packages)"
+
+CASE="inside a held heavy slot the steps run one at a time, not all at once"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+: >"$WORK/order.log"
+HEAVY_HELD=1 GO_ORDER_LOG="$WORK/order.log" run_push_scoped
+expect_rc 0
+[ "$(tr '\n' ' ' <"$WORK/order.log")" = "start vet end vet start test end test " ] || fail "a held slot should run vet then the tests, one after the other: $(tr '\n' ' ' <"$WORK/order.log")"
+
+blocked_steps() {
+    if [ -f "$WORK/block/pids" ]; then wc -l <"$WORK/block/pids"; else echo 0; fi
+}
+
+CASE="stopping a push stops the steps it started, and says which were still running"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+mkdir -p "$WORK/block"
+(
+    cd "$WORK/repo" || exit 1
+    HOME="$WORK/home" PATH="$WORK/bin:$PATH" GO_BLOCK="$WORK/block" setsid env --default-signal=INT bash scripts/precheck.sh >"$WORK/out.log" 2>&1 &
+    echo $! >"$WORK/precheck.pid"
+    wait $!
+    echo $? >"$WORK/precheck.rc"
+) &
+for _ in $(seq 300); do
+    [ -s "$WORK/precheck.pid" ] && [ "$(blocked_steps)" -ge 2 ] && break
+    sleep 0.1
+done
+[ "$(blocked_steps)" -ge 2 ] || fail "both blocked steps should have started"
+kill -TERM "$(cat "$WORK/precheck.pid")"
+for _ in $(seq 100); do [ -s "$WORK/precheck.rc" ] && break; sleep 0.1; done
+[ "$(cat "$WORK/precheck.rc" 2>/dev/null)" = 143 ] || fail "a stopped precheck should exit 143, got '$(cat "$WORK/precheck.rc" 2>/dev/null)'"
+sleep 1
+while read -r blocked; do
+    ! kill -0 "$blocked" 2>/dev/null || fail "step process $blocked was left running"
+done <"$WORK/block/pids"
+grep -qF "still running when stopped: go-api vet" "$WORK/out.log" || fail "the output should name the steps still running: $(tail -5 "$WORK/out.log")"
+grep -qF "still running when stopped: go-api tests (race, changed packages)" "$WORK/out.log" || fail "the output should name the tests step: $(tail -5 "$WORK/out.log")"
+
+CASE="a failing step run side by side is reported last, after the ok lines"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+GO_TEST_STUB_OUT="--- FAIL: TestBoom (0.00s)\\nFAIL\\n" run_push_scoped
+expect_rc 1
+expect_out "ok    go-api vet"
+expect_out "FAIL  go-api tests (race, changed packages)"
+ok_line=$(grep -n '^ok    go-api vet' "$WORK/out.log" | head -1 | cut -d: -f1)
+summary_line=$(grep -n '^FAIL go-api tests' "$WORK/out.log" | tail -1 | cut -d: -f1)
+[ -n "$ok_line" ] && [ -n "$summary_line" ] && [ "$summary_line" -gt "$ok_line" ] || fail "the failing step's summary should come after the ok lines"
+
+CASE="the capability test is not run alone when the changed-package tests already include internal/app, and runs alone for a notes change"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/internal/app docs/features/f
+    printf 'package app\n' >services/go-api/internal/app/app.go
+    printf 'notes\n' >docs/features/f/notes.md
+    git add -A
+    git commit -qm "app package"
+    git update-ref refs/remotes/gitea/main HEAD
+)
+edit_go_file internal/app/app.go
+run_push_scoped
+expect_rc 0
+expect_out "ok    go-api tests (race, changed packages)"
+forbid_out "capability notes"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p docs/features/f services/go-api/internal/app
+    printf 'package app\n' >services/go-api/internal/app/app.go
+    printf 'notes\n' >docs/features/f/notes.md
+    git add -A
+    git commit -qm "notes"
+    git update-ref refs/remotes/gitea/main HEAD
+    printf 'more\n' >>docs/features/f/notes.md
+    git add -A
+    git commit -qm "edit notes"
+)
+run_push_scoped
+expect_rc 0
+expect_out "ok    capability notes name mounted routes"
 
 CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
 new_repo
