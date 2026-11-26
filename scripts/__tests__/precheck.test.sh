@@ -9,8 +9,22 @@ FIXTURES=()
 REPOS=0
 PRECHECK_ARGS=(--full)
 
+stop_started_steps() {
+    local fixture pid
+    for fixture in "${FIXTURES[@]}"; do
+        if [ -s "$fixture/precheck.pid" ]; then
+            pid=$(cat "$fixture/precheck.pid")
+            kill -TERM -- "-$pid" 2>/dev/null || true
+        fi
+        [ -f "$fixture/block/pids" ] || continue
+        while read -r pid; do
+            [ -z "$pid" ] || kill -KILL "$pid" 2>/dev/null || true
+        done <"$fixture/block/pids"
+    done
+}
+
 remove_fixtures() {
-    [ ${#FIXTURES[@]} -eq 0 ] || { chmod -R u+w "${FIXTURES[@]}" 2>/dev/null; rm -rf "${FIXTURES[@]}"; }
+    [ ${#FIXTURES[@]} -eq 0 ] || { stop_started_steps; chmod -R u+w "${FIXTURES[@]}" 2>/dev/null; rm -rf "${FIXTURES[@]}"; }
 }
 trap remove_fixtures EXIT
 
