@@ -29,4 +29,3 @@ export { FeaturingRoute } from '@/mobile/routes/FeaturingRoute';
 export { DiscoverRoute } from '@/mobile/routes/DiscoverRoute';
 export { SettingsRoute } from '@/mobile/routes/SettingsRoute';
 export { tabsTitleFor } from '@/mobile/frame/tabsTitle';
-export { navigationBarStyleFor } from '@/mobile/frame/navigationBarStyle';

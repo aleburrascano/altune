@@ -1,10 +1,8 @@
 import { NavigationBar } from 'expo-navigation-bar';
 import type { ReactElement } from 'react';
 
-import { navigationBarStyleFor } from '@/mobile/frame/navigationBarStyle';
-
 export function SystemNavigationBar({ scheme }: { scheme: 'light' | 'dark' }): ReactElement | null {
-  return <NavigationBar style={navigationBarStyleFor(scheme)} />;
+  return <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />;
 }
 
 export function PlaybackShortcuts(): null {

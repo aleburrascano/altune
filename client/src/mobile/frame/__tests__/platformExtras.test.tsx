@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import { PlaybackShortcuts, SystemNavigationBar, TabsTitle, navigationBarStyleFor } from '@/mobile';
+import { PlaybackShortcuts, SystemNavigationBar, TabsTitle } from '@/mobile';
 
 describe('platformExtras on native', () => {
   it('renders nothing for all three components', () => {
@@ -13,15 +13,5 @@ describe('platformExtras on native', () => {
     );
 
     expect(toJSON()).toBeNull();
-  });
-});
-
-describe('navigationBarStyleFor', () => {
-  it('uses light icons on a dark scheme', () => {
-    expect(navigationBarStyleFor('dark')).toBe('light');
-  });
-
-  it('uses dark icons on a light scheme', () => {
-    expect(navigationBarStyleFor('light')).toBe('dark');
   });
 });
