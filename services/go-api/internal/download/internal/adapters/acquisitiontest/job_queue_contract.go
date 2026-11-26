@@ -9,8 +9,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type JobQueueUnderTest interface {
@@ -63,7 +61,7 @@ func contractClaimOnAnEmptyQueueFindsNothing(t *testing.T, q JobQueueUnderTest) 
 }
 
 func contractAnEnqueuedJobIsClaimedOnceWithItsTrackUserAndKind(t *testing.T, q JobQueueUnderTest) {
-	userID := ids.NewUserId(uuid.New())
+	userID := contractIDs.NewUserId()
 	trackID := enqueued(t, q, userID)
 
 	job := claim(t, q)
@@ -76,7 +74,7 @@ func contractAnEnqueuedJobIsClaimedOnceWithItsTrackUserAndKind(t *testing.T, q J
 
 func contractAJobEnqueuedWithADelayIsNotClaimableYet(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	trackID := q.AddTrack(t, contractIDs.NewUserId())
 	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, time.Hour); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
@@ -85,7 +83,7 @@ func contractAJobEnqueuedWithADelayIsNotClaimableYet(t *testing.T, q JobQueueUnd
 }
 
 func contractALapsedLeaseIsReclaimedUnderANewFence(t *testing.T, q JobQueueUnderTest) {
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	first := claim(t, q)
 
 	q.ExpireLease(t, trackID)
@@ -98,7 +96,7 @@ func contractALapsedLeaseIsReclaimedUnderANewFence(t *testing.T, q JobQueueUnder
 
 func contractAZombiesHeartbeatReleaseAndSettleFailAndLeaveTheNewOwnerAlone(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	zombie := claim(t, q)
 	q.ExpireLease(t, trackID)
 	owner := claim(t, q)
@@ -117,7 +115,7 @@ func contractAZombiesHeartbeatReleaseAndSettleFailAndLeaveTheNewOwnerAlone(t *te
 
 func contractHeartbeatWithTheOwningFenceKeepsTheLeaseLive(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	job := claim(t, q)
 
 	if err := q.Heartbeat(ctx, trackID, job.ClaimNumber, time.Hour); err != nil {
@@ -129,7 +127,7 @@ func contractHeartbeatWithTheOwningFenceKeepsTheLeaseLive(t *testing.T, q JobQue
 
 func contractHeartbeatWithAnotherFenceIsLeaseLost(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	job := claim(t, q)
 
 	wantLeaseLost(t, "Heartbeat with a stale fence", q.Heartbeat(ctx, trackID, job.ClaimNumber+1, contractLease))
@@ -137,7 +135,7 @@ func contractHeartbeatWithAnotherFenceIsLeaseLost(t *testing.T, q JobQueueUnderT
 
 func contractHeartbeatAfterTheLeaseExpiredIsLeaseLostEvenWithTheOwningFence(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	job := claim(t, q)
 
 	q.ExpireLease(t, trackID)
@@ -147,7 +145,7 @@ func contractHeartbeatAfterTheLeaseExpiredIsLeaseLostEvenWithTheOwningFence(t *t
 
 func contractHeartbeatAfterSettleIsLeaseLost(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	job := claim(t, q)
 	if err := q.Settle(ctx, trackID, job.ClaimNumber); err != nil {
 		t.Fatalf("Settle: %v", err)
@@ -158,7 +156,7 @@ func contractHeartbeatAfterSettleIsLeaseLost(t *testing.T, q JobQueueUnderTest) 
 
 func contractReleaseWithADelayHidesTheJobAndReleaseWithoutOneReturnsIt(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	job := claim(t, q)
 
 	if err := q.Release(ctx, trackID, job.ClaimNumber, time.Hour); err != nil {
@@ -176,7 +174,7 @@ func contractReleaseWithADelayHidesTheJobAndReleaseWithoutOneReturnsIt(t *testin
 
 func contractAnEnqueueOverALiveLeaseKeepsTheOwnersLeaseAndFence(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	owner := claim(t, q)
 
 	enqueue(t, q, trackID, ports.JobKindAcquire)
@@ -189,7 +187,7 @@ func contractAnEnqueueOverALiveLeaseKeepsTheOwnersLeaseAndFence(t *testing.T, q 
 
 func contractSettleAfterAnEnqueueOverALiveLeaseLeavesTheJobClaimable(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	owner := claim(t, q)
 	enqueue(t, q, trackID, ports.JobKindAcquire)
 
@@ -204,7 +202,7 @@ func contractSettleAfterAnEnqueueOverALiveLeaseLeavesTheJobClaimable(t *testing.
 
 func contractAnEnqueueOfAnotherKindOverALiveLeaseConflicts(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	claim(t, q)
 
 	if err := q.Enqueue(ctx, trackID, ports.JobKindReplace, 0); !errors.Is(err, acqdomain.ErrJobKindConflict) {
@@ -214,7 +212,7 @@ func contractAnEnqueueOfAnotherKindOverALiveLeaseConflicts(t *testing.T, q JobQu
 
 func contractAnEnqueueOverALapsedLeaseFencesOutTheStaleWorkerAndKeepsTheNewJob(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	stale := claim(t, q)
 	q.ExpireLease(t, trackID)
 
@@ -231,7 +229,7 @@ func contractAnEnqueueOverALapsedLeaseFencesOutTheStaleWorkerAndKeepsTheNewJob(t
 
 func contractAStaleSettleAfterPriorClaimsAndAReenqueueIsLeaseLost(t *testing.T, q JobQueueUnderTest) {
 	ctx := context.Background()
-	trackID := enqueued(t, q, ids.NewUserId(uuid.New()))
+	trackID := enqueued(t, q, contractIDs.NewUserId())
 	var stale ports.Job
 	for range 3 {
 		stale = claim(t, q)
@@ -247,8 +245,8 @@ func contractAStaleSettleAfterPriorClaimsAndAReenqueueIsLeaseLost(t *testing.T, 
 }
 
 func contractClaimPrefersTheUserWithNoLiveLease(t *testing.T, q JobQueueUnderTest) {
-	busyUser := ids.NewUserId(uuid.New())
-	idleUser := ids.NewUserId(uuid.New())
+	busyUser := contractIDs.NewUserId()
+	idleUser := contractIDs.NewUserId()
 	busyFirst := enqueued(t, q, busyUser)
 	busySecond := enqueued(t, q, busyUser)
 	idleLast := enqueued(t, q, idleUser)
@@ -263,7 +261,7 @@ func contractClaimPrefersTheUserWithNoLiveLease(t *testing.T, q JobQueueUnderTes
 }
 
 func contractTheEnqueuingRequestsCorrelationIDTravelsWithEveryRunOfTheJob(t *testing.T, q JobQueueUnderTest) {
-	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	trackID := q.AddTrack(t, contractIDs.NewUserId())
 	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-contract")
 	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
@@ -281,7 +279,7 @@ func contractTheEnqueuingRequestsCorrelationIDTravelsWithEveryRunOfTheJob(t *tes
 }
 
 func contractAJobEnqueuedWithoutACorrelationIDClaimsWithNone(t *testing.T, q JobQueueUnderTest) {
-	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	trackID := q.AddTrack(t, contractIDs.NewUserId())
 	if err := q.Enqueue(logging.ContextWithCorrelationID(context.Background(), "corr-old"), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
@@ -297,7 +295,7 @@ func contractAJobEnqueuedWithoutACorrelationIDClaimsWithNone(t *testing.T, q Job
 }
 
 func contractAnAcceptedSecondEnqueueOfTheSameKindTakesTheLatestRequestsCorrelationID(t *testing.T, q JobQueueUnderTest) {
-	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	trackID := q.AddTrack(t, contractIDs.NewUserId())
 	for _, id := range []string{"corr-first", "corr-latest"} {
 		if err := q.Enqueue(logging.ContextWithCorrelationID(context.Background(), id), trackID, ports.JobKindAcquire, 0); err != nil {
 			t.Fatalf("Enqueue under %s: %v", id, err)
@@ -310,7 +308,7 @@ func contractAnAcceptedSecondEnqueueOfTheSameKindTakesTheLatestRequestsCorrelati
 }
 
 func contractARefusedEnqueueLeavesTheRunningJobsCorrelationIDAlone(t *testing.T, q JobQueueUnderTest) {
-	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	trackID := q.AddTrack(t, contractIDs.NewUserId())
 	if err := q.Enqueue(logging.ContextWithCorrelationID(context.Background(), "corr-running"), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}

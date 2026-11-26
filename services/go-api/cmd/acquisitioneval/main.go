@@ -3,6 +3,7 @@ package main
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"flag"
 	"fmt"
@@ -48,7 +49,7 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 		return fmt.Errorf("no golden cases found")
 	}
 
-	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), clock.Now, cases))
+	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), clock.Now, ids.Real, cases))
 	fmt.Print(report.Render())
 
 	if updateBaseline {

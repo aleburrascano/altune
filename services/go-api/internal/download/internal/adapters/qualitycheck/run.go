@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -43,9 +41,9 @@ type Outcome struct {
 	Saved            SavedTrack
 }
 
-func Run(ctx context.Context, now clock.Func, kase Case) Outcome {
+func Run(ctx context.Context, now clock.Func, newIDs ids.Source, kase Case) Outcome {
 	p := newCasePorts(kase)
-	track := seededTrack(kase)
+	track := seededTrack(newIDs, kase)
 	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 
 	var observed *service.AcquisitionContext
@@ -104,11 +102,11 @@ func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase
 	return svc.Execute(ctx, track.UserId, track.ID)
 }
 
-func seededTrack(kase Case) ports.TrackSnapshot {
+func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
 	t := kase.Track
 	track := ports.TrackSnapshot{
-		ID:                 ids.NewTrackId(),
-		UserId:             ids.NewUserId(uuid.New()),
+		ID:                 newIDs.NewTrackId(),
+		UserId:             newIDs.NewUserId(),
 		Title:              strings.TrimSpace(t.Title),
 		Artist:             catalogField(t.Artist),
 		Album:              t.Album,
@@ -233,10 +231,10 @@ func downloadSeconds(kase Case, attempted []service.AttemptedCandidate) float64 
 	return total
 }
 
-func RunAll(ctx context.Context, now clock.Func, cases []Case) []Outcome {
+func RunAll(ctx context.Context, now clock.Func, newIDs ids.Source, cases []Case) []Outcome {
 	outcomes := make([]Outcome, 0, len(cases))
 	for _, kase := range cases {
-		outcomes = append(outcomes, Run(ctx, now, kase))
+		outcomes = append(outcomes, Run(ctx, now, newIDs, kase))
 	}
 	return outcomes
 }
