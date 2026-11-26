@@ -35,11 +35,25 @@ func prefixColumns(columns, prefix string) string {
 }
 
 type PostgresTrackRepository struct {
-	pool *pgxpool.Pool
+	pool       *pgxpool.Pool
+	libraryCap int
 }
 
-func NewPostgresTrackRepository(pool *pgxpool.Pool) *PostgresTrackRepository {
-	return &PostgresTrackRepository{pool: pool}
+func NewPostgresTrackRepository(pool *pgxpool.Pool, opts ...func(*PostgresTrackRepository)) *PostgresTrackRepository {
+	r := &PostgresTrackRepository{pool: pool, libraryCap: domain.MaxTracksPerUser}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+func WithLibraryCap(libraryCap int) func(*PostgresTrackRepository) {
+	return func(r *PostgresTrackRepository) {
+		if libraryCap < 1 {
+			panic("persistence: WithLibraryCap requires a positive cap")
+		}
+		r.libraryCap = libraryCap
+	}
 }
 
 func (r *PostgresTrackRepository) Add(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
@@ -54,7 +68,13 @@ var errTrackAlreadyStored = errors.New("a track with the same identity is alread
 
 func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
 	err := database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, lockLibraryOfUserSQL, track.UserId.UUID()); err != nil {
+			return fmt.Errorf("lock the library of user %s: %w", track.UserId.UUID(), err)
+		}
 		if err := insertTrack(ctx, tx, track); err != nil {
+			return err
+		}
+		if err := requireWithinLibraryCap(ctx, tx, track.UserId, r.libraryCap); err != nil {
 			return err
 		}
 		return writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists)
@@ -70,6 +90,23 @@ func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Tra
 		return nil, false, err
 	}
 	return track, true, nil
+}
+
+const lockLibraryOfUserSQL = `SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text, 2))`
+
+func requireWithinLibraryCap(ctx context.Context, tx pgx.Tx, userId sharedids.UserId, libraryCap int) error {
+	var held int
+	err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM (SELECT 1 FROM tracks WHERE user_id = $1 LIMIT $2) capped`,
+		userId.UUID(), libraryCap+1,
+	).Scan(&held)
+	if err != nil {
+		return fmt.Errorf("count the library of user %s: %w", userId.UUID(), err)
+	}
+	if held > libraryCap {
+		return domain.ErrLibraryFull
+	}
+	return nil
 }
 
 const insertTrackSQL = `INSERT INTO tracks (

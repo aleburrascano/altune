@@ -17,6 +17,7 @@ type (
 
 var (
 	ErrIllegalAcquisitionTransition = domain.ErrIllegalAcquisitionTransition
+	ErrLibraryFull                  = domain.ErrLibraryFull
 	ErrPlaylistFull                 = domain.ErrPlaylistFull
 	ErrTrackAlreadyInPlaylist       = domain.ErrTrackAlreadyInPlaylist
 )

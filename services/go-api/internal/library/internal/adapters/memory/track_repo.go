@@ -13,7 +13,8 @@ import (
 type TrackRepo struct {
 	Tracks map[string]*domain.Track
 
-	claimable map[string]bool
+	claimable  map[string]bool
+	libraryCap int
 
 	ErrOnAdd    error
 	ErrOnCount  error
@@ -43,14 +44,32 @@ var (
 	_ ports.FeaturedArtistRepository = (*TrackRepo)(nil)
 )
 
-func NewTrackRepo() *TrackRepo {
-	return &TrackRepo{Tracks: make(map[string]*domain.Track), claimable: make(map[string]bool)}
+func NewTrackRepo(opts ...func(*TrackRepo)) *TrackRepo {
+	r := &TrackRepo{
+		Tracks:     make(map[string]*domain.Track),
+		claimable:  make(map[string]bool),
+		libraryCap: domain.MaxTracksPerUser,
+	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+func WithLibraryCap(libraryCap int) func(*TrackRepo) {
+	return func(r *TrackRepo) {
+		if libraryCap < 1 {
+			panic("memory: WithLibraryCap requires a positive cap")
+		}
+		r.libraryCap = libraryCap
+	}
 }
 
 func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, bool, error) {
 	if r.ErrOnAdd != nil {
 		return nil, false, r.ErrOnAdd
 	}
+	held := 0
 	for _, t := range r.Tracks {
 		if t.UserId != track.UserId {
 			continue
@@ -58,6 +77,10 @@ func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, 
 		if sameIdempotencyKey(t, track) || t.DedupKey == track.DedupKey {
 			return t, false, nil
 		}
+		held++
+	}
+	if held >= r.libraryCap {
+		return nil, false, domain.ErrLibraryFull
 	}
 	r.Tracks[track.ID.String()] = track
 	r.claimable[track.ID.String()] = track.DownloadStatus == domain.AcquisitionPending

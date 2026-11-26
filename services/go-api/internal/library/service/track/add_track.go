@@ -3,11 +3,11 @@ package track
 import (
 	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
-	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -18,10 +18,6 @@ const minPlausibleYear = 1860
 const maxTrackNumber = 2147483647
 
 const MaxFeaturedArtistsPerTrack = 100
-
-const MaxTracksPerUser = 50_000
-
-var ErrLibraryFull = apierror.NewError(apierror.CodeCatalogLibraryFull, "library is full")
 
 type AddTrackInput struct {
 	Title           string
@@ -72,9 +68,6 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	if err := validateAddTrackInput(input, s.now()); err != nil {
 		return nil, err
 	}
-	if err := s.requireLibrarySpace(ctx, userId); err != nil {
-		return nil, err
-	}
 	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
 	if err != nil {
 		return nil, err
@@ -104,6 +97,10 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if err != nil {
+		if errors.Is(err, domain.ErrLibraryFull) {
+			slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", domain.MaxTracksPerUser)
+			return nil, err
+		}
 		return nil, domain.WrapRepoError(ctx, "add track", err)
 	}
 	if stored != nil {
@@ -128,18 +125,6 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
-}
-
-func (s *AddTrackService) requireLibrarySpace(ctx context.Context, userId ids.UserId) error {
-	held, err := s.trackRepo.CountForUser(ctx, userId, MaxTracksPerUser)
-	if err != nil {
-		return domain.WrapRepoError(ctx, "count tracks", err)
-	}
-	if held >= MaxTracksPerUser {
-		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", MaxTracksPerUser)
-		return ErrLibraryFull
-	}
-	return nil
 }
 
 const ScheduleTimeout = 5 * time.Second

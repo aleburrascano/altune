@@ -12,8 +12,6 @@ type (
 	SetTrackNumberService = track.SetTrackNumberService
 )
 
-var ErrLibraryFull = track.ErrLibraryFull
-
 const MaxFeaturedArtistsPerTrack = track.MaxFeaturedArtistsPerTrack
 
 var (

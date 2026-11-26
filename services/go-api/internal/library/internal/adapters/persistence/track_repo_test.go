@@ -660,6 +660,52 @@ func TestPostgresTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	}
 }
 
+func TestPostgresTrackRepo_ConcurrentAddsNeverPassTheLibraryCap(t *testing.T) {
+	const libraryCap, concurrent = 3, 12
+	pool := testdb.Pool(t)
+	repo := library.NewPostgresTrackRepository(pool, library.WithLibraryCap(libraryCap))
+	ctx := context.Background()
+	userId := ids.NewUserId(uuid.New())
+	tracks := make([]*library.Track, concurrent)
+	for i := range tracks {
+		tracks[i] = newTestTrackForDB(t, userId)
+		cleanupTrack(t, pool, tracks[i].ID, userId)
+	}
+
+	start := make(chan struct{})
+	errs := make([]error, concurrent)
+	created := make([]bool, concurrent)
+	var wg sync.WaitGroup
+	for i, tr := range tracks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, created[i], errs[i] = repo.Add(ctx, tr)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	createdCount, fullCount := 0, 0
+	for i := range tracks {
+		switch {
+		case errs[i] == nil && created[i]:
+			createdCount++
+		case errors.Is(errs[i], library.ErrLibraryFull):
+			fullCount++
+		default:
+			t.Fatalf("Add %d: created=%v err=%v, want created or ErrLibraryFull", i, created[i], errs[i])
+		}
+	}
+	if createdCount != libraryCap || fullCount != concurrent-libraryCap {
+		t.Fatalf("created %d and refused %d, want %d created and %d refused", createdCount, fullCount, libraryCap, concurrent-libraryCap)
+	}
+	if got := countTracksForUser(ctx, t, pool, userId); got != libraryCap {
+		t.Fatalf("row count for user = %d, want %d", got, libraryCap)
+	}
+}
+
 func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 	pool := testdb.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)

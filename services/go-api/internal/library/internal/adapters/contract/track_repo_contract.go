@@ -344,3 +344,76 @@ func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepos
 		}
 	})
 }
+
+func TrackRepositoryLibraryCapContract(t *testing.T, newRepo func(t *testing.T, libraryCap int) TrackRepositoryUnderTest) {
+	ctx := context.Background()
+	const libraryCap = 3
+
+	t.Run("an add past the cap is ErrLibraryFull and stores nothing", func(t *testing.T) {
+		repo := newRepo(t, libraryCap)
+		userId := sharedids.NewUserId(uuid.New())
+		for range libraryCap {
+			contractAdd(t, repo, contractTrack(t, userId))
+		}
+
+		stored, created, err := repo.Add(ctx, contractTrack(t, userId))
+
+		if !errors.Is(err, domain.ErrLibraryFull) || created || stored != nil {
+			t.Fatalf("Add past the cap = %v/%v/%v, want nil/false/ErrLibraryFull", stored, created, err)
+		}
+		held, err := repo.CountForUser(ctx, userId, libraryCap+1)
+		if err != nil || held != libraryCap {
+			t.Errorf("CountForUser = %d/%v, want %d/nil", held, err, libraryCap)
+		}
+	})
+
+	t.Run("the cap is per user", func(t *testing.T) {
+		repo := newRepo(t, libraryCap)
+		full := sharedids.NewUserId(uuid.New())
+		for range libraryCap {
+			contractAdd(t, repo, contractTrack(t, full))
+		}
+
+		contractAdd(t, repo, contractTrack(t, sharedids.NewUserId(uuid.New())))
+	})
+
+	t.Run("a replay by idempotency key at the cap returns the stored track instead of refusing", func(t *testing.T) {
+		repo := newRepo(t, libraryCap)
+		userId := sharedids.NewUserId(uuid.New())
+		key := "idem-" + uuid.NewString()
+		first := contractTrack(t, userId)
+		first.IdempotencyKey = &key
+		contractAdd(t, repo, first)
+		for range libraryCap - 1 {
+			contractAdd(t, repo, contractTrack(t, userId))
+		}
+		replay := contractTrack(t, userId)
+		replay.IdempotencyKey = &key
+
+		stored, created, err := repo.Add(ctx, replay)
+
+		if err != nil || created || stored == nil || stored.ID != first.ID {
+			t.Fatalf("keyed replay at the cap = %v/%v/%v, want the first track, not created, no error", stored, created, err)
+		}
+	})
+
+	t.Run("a replay of a stored track at the cap returns it instead of refusing", func(t *testing.T) {
+		repo := newRepo(t, libraryCap)
+		userId := sharedids.NewUserId(uuid.New())
+		first := contractTrack(t, userId)
+		contractAdd(t, repo, first)
+		for range libraryCap - 1 {
+			contractAdd(t, repo, contractTrack(t, userId))
+		}
+		replay, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album)
+		if err != nil {
+			t.Fatalf("NewTrack: %v", err)
+		}
+
+		stored, created, err := repo.Add(ctx, replay)
+
+		if err != nil || created || stored == nil || stored.ID != first.ID {
+			t.Fatalf("replay at the cap = %v/%v/%v, want the first track, not created, no error", stored, created, err)
+		}
+	})
+}

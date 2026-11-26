@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
@@ -19,43 +18,30 @@ import (
 
 const (
 	addTrackScheduleBound = 5 * time.Second
-	libraryTrackCap       = 50_000
+	smallLibraryCap       = 2
 )
 
 func strptr(s string) *string { return &s }
 
-type fullLibraryRepo struct {
-	*library.InMemoryTrackRepo
-	fullFor     ids.UserId
-	askedAtMost []int
+func capInput(title string, key *string) library.AddTrackInput {
+	return library.AddTrackInput{Title: title, Artist: "Artist", Album: "Album", IdempotencyKey: key}
 }
 
-func newFullLibraryRepo(fullFor ids.UserId) *fullLibraryRepo {
-	return &fullLibraryRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), fullFor: fullFor}
-}
-
-func (r *fullLibraryRepo) CountForUser(ctx context.Context, userId ids.UserId, atMost int) (int, error) {
-	r.askedAtMost = append(r.askedAtMost, atMost)
-	if userId == r.fullFor {
-		return atMost, nil
-	}
-	return r.InMemoryTrackRepo.CountForUser(ctx, userId, atMost)
-}
-
-func (r *fullLibraryRepo) assertAskedForTheCap(t *testing.T) {
-	t.Helper()
-	if len(r.askedAtMost) != 1 || r.askedAtMost[0] != libraryTrackCap {
-		t.Errorf("CountForUser bounds = %v, want one count bounded at the %d-track cap", r.askedAtMost, libraryTrackCap)
-	}
+func newCappedService() (*library.AddTrackService, *library.InMemoryTrackRepo) {
+	repo := library.NewInMemoryTrackRepo(library.WithInMemoryLibraryCap(smallLibraryCap))
+	return library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now), repo
 }
 
 func TestAddTrack_RejectsPastUserCap(t *testing.T) {
-	ctx := context.Background()
 	userId := library.FixtureUserId()
-	repo := newFullLibraryRepo(userId)
-	svc := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
+	svc, repo := newCappedService()
+	for i := range smallLibraryCap {
+		if _, err := svc.Execute(context.Background(), userId, capInput(fmt.Sprintf("Track %d", i), nil)); err != nil {
+			t.Fatalf("save %d: %v", i, err)
+		}
+	}
 
-	out, err := svc.Execute(ctx, userId, library.AddTrackInput{Title: "One Too Many", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(context.Background(), userId, capInput("One Too Many", nil))
 
 	if !errors.Is(err, library.ErrLibraryFull) {
 		t.Fatalf("error = %v, want ErrLibraryFull", err)
@@ -63,25 +49,49 @@ func TestAddTrack_RejectsPastUserCap(t *testing.T) {
 	if out != nil {
 		t.Fatalf("output = %+v, want nil", out)
 	}
-	if len(repo.Tracks) != 0 {
-		t.Fatalf("stored tracks = %d, want 0: the refused save must not insert", len(repo.Tracks))
+	if len(repo.Tracks) != smallLibraryCap {
+		t.Fatalf("stored tracks = %d, want %d: the refused save must not insert", len(repo.Tracks), smallLibraryCap)
 	}
-	repo.assertAskedForTheCap(t)
 }
 
 func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
-	ctx := context.Background()
-	repo := newFullLibraryRepo(library.FixtureOtherUserId())
-	svc := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
+	svc, _ := newCappedService()
+	for i := range smallLibraryCap {
+		if _, err := svc.Execute(context.Background(), library.FixtureOtherUserId(), capInput(fmt.Sprintf("Theirs %d", i), nil)); err != nil {
+			t.Fatalf("other owner save %d: %v", i, err)
+		}
+	}
 
-	out, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "Mine", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(context.Background(), library.FixtureUserId(), capInput("Mine", nil))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if !out.Created {
 		t.Fatal("Created = false, want true: another owner's full library is not this caller's cap")
 	}
-	repo.assertAskedForTheCap(t)
+}
+
+func TestAddTrack_ReplayOfAKeyedSaveAtTheCapReturnsTheStoredTrack(t *testing.T) {
+	userId := library.FixtureUserId()
+	svc, repo := newCappedService()
+	first, err := svc.Execute(context.Background(), userId, capInput("Keyed", strptr("save-at-cap")))
+	if err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+	if _, err := svc.Execute(context.Background(), userId, capInput("Filler", nil)); err != nil {
+		t.Fatalf("filler save: %v", err)
+	}
+
+	replay, err := svc.Execute(context.Background(), userId, capInput("Keyed", strptr("save-at-cap")))
+	if err != nil {
+		t.Fatalf("replay at the cap: %v, want the stored track", err)
+	}
+	if replay.Created || replay.Track.ID != first.Track.ID {
+		t.Fatalf("replay = created %v id %s, want created false id %s", replay.Created, replay.Track.ID, first.Track.ID)
+	}
+	if len(repo.Tracks) != smallLibraryCap {
+		t.Fatalf("stored tracks = %d, want %d", len(repo.Tracks), smallLibraryCap)
+	}
 }
 
 func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
