@@ -35,13 +35,13 @@ func New(inner events.Publisher) *EventWatcher {
 	return &EventWatcher{inner: inner}
 }
 
-func (t *EventWatcher) Publish(ctx context.Context, userId ids.UserId, eventType events.EventType, payload map[string]any) {
-	t.inner.Publish(ctx, userId, eventType, payload)
+func (t *EventWatcher) Publish(ctx context.Context, userId ids.UserId, payload events.Payload) {
+	t.inner.Publish(ctx, userId, payload)
 
 	t.mu.Lock()
 	if t.ch != nil {
 		select {
-		case t.ch <- TapEvent{Type: string(eventType), Timestamp: time.Now().UTC(), User: userId.String(), Subject: tapSubject(payload), CorrID: logging.CorrelationIDFromContext(ctx)}:
+		case t.ch <- TapEvent{Type: string(payload.EventType()), Timestamp: time.Now().UTC(), User: userId.String(), Subject: tapSubject(payload), CorrID: logging.CorrelationIDFromContext(ctx)}:
 		default:
 			t.dropped.Add(1)
 		}
@@ -61,13 +61,9 @@ func (t *EventWatcher) EmitActivity(eventType string) {
 	t.mu.Unlock()
 }
 
-func tapSubject(payload map[string]any) string {
-	for _, key := range []string{"track_id", "entity_id", "result_signature"} {
-		if v, ok := payload[key]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
-			}
-		}
+func tapSubject(payload events.Payload) string {
+	if s, ok := payload.(events.Subjected); ok {
+		return s.Subject()
 	}
 	return ""
 }

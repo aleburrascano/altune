@@ -652,7 +652,7 @@ const breakerTripsAfter = 5
 func tripCircuit(t *testing.T, cb *search.CircuitBreaker, provider search.ProviderName) {
 	t.Helper()
 	for range breakerTripsAfter {
-		cb.RecordFailure(context.Background(), provider)
+		cb.RecordFailure(context.Background(), provider, search.CircuitAdmission{})
 	}
 	if cb.GetStatus(provider) != search.ProviderStatusCircuitOpen {
 		t.Fatalf("setup: %s circuit not open after %d failures", provider, breakerTripsAfter)
@@ -944,7 +944,7 @@ func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *te
 	leaky := &url.Error{Op: "Get", URL: "https://musicbrainz.org/ws/2/?api_key=" + secret, Err: errors.New("connection refused")}
 	openBreaker := search.NewCircuitBreaker()
 	for range breakerTripsAfter {
-		openBreaker.RecordFailure(context.Background(), search.ProviderMusicBrainz)
+		openBreaker.RecordFailure(context.Background(), search.ProviderMusicBrainz, search.CircuitAdmission{})
 	}
 	cases := map[string]*search.GetArtistContentService{
 		"anchor error": anchoredAlbumsService(stubMBAnchor{err: leaky}),
@@ -1108,7 +1108,7 @@ func TestGetAlbums_v2_openBreakerAndFailingAnchorWarnOnce(t *testing.T) {
 	buf := search.CaptureProductionLogs(t)
 	openBreaker := search.NewCircuitBreaker()
 	for range breakerTripsAfter {
-		openBreaker.RecordFailure(context.Background(), search.ProviderMusicBrainz)
+		openBreaker.RecordFailure(context.Background(), search.ProviderMusicBrainz, search.CircuitAdmission{})
 	}
 	svc := anchoredAlbumsServiceWith(funcMBAnchor(func(context.Context, string) ([]string, error) {
 		return nil, errors.New("mb unavailable")
@@ -1130,7 +1130,7 @@ func TestGetAlbums_v2_openBreakerAfterCallerLeftIsSilent(t *testing.T) {
 	buf := search.CaptureProductionLogs(t)
 	openBreaker := search.NewCircuitBreaker()
 	for range breakerTripsAfter {
-		openBreaker.RecordFailure(context.Background(), search.ProviderMusicBrainz)
+		openBreaker.RecordFailure(context.Background(), search.ProviderMusicBrainz, search.CircuitAdmission{})
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

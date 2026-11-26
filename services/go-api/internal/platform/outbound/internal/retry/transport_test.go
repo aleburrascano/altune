@@ -2,6 +2,7 @@ package retry_test
 
 import (
 	"altune/go-api/internal/platform/outbound/internal/retry"
+	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
 	"errors"
@@ -359,7 +360,7 @@ func TestTransport_RetriesNoBodyGet(t *testing.T) {
 
 func TestTransport_ResendsAReplayableBodyOnRetry(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://unlisted.example.com/x", bytes.NewReader([]byte("payload")))
+	req, err := http.NewRequestWithContext(retrysafe.Mark(context.Background()), http.MethodPost, "https://unlisted.example.com/x", bytes.NewReader([]byte("payload")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,9 +372,73 @@ func TestTransport_ResendsAReplayableBodyOnRetry(t *testing.T) {
 	}
 }
 
+func postReq(t *testing.T, ctx context.Context, method string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, method, "https://unlisted.example.com/x", bytes.NewReader([]byte("payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return req
+}
+
+func TestTransport_APostUnmarkedIsSentOnceOnA503(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
+
+	got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPost))
+
+	if got != 503 || f.calls != 1 {
+		t.Errorf("status = %d after %d calls, want the 503 returned after exactly one send", got, f.calls)
+	}
+}
+
+func TestTransport_APostUnmarkedIsSentOnceAfterATransportError(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{err: errors.New("connection reset")}, {status: 200}}}
+
+	resp, err := recordingDelays(f, &[]time.Duration{}).RoundTrip(postReq(t, context.Background(), http.MethodPost))
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("expected the transport error to be returned")
+	}
+	if f.calls != 1 {
+		t.Errorf("calls = %d, want 1", f.calls)
+	}
+}
+
+func TestTransport_APostMarkedIsRetriedOnA503(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
+
+	got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, retrysafe.Mark(context.Background()), http.MethodPost))
+
+	if got != 200 || f.calls != 2 {
+		t.Errorf("status = %d after %d calls, want 200 after 2", got, f.calls)
+	}
+}
+
+func TestTransport_IdempotentMethodsAreRetriedWithoutAMark(t *testing.T) {
+	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodDelete} {
+		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
+
+		got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), method))
+
+		if got != 200 || f.calls != 2 {
+			t.Errorf("%s: status = %d after %d calls, want 200 after 2", method, got, f.calls)
+		}
+	}
+}
+
+func TestTransport_APatchUnmarkedIsSentOnce(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
+
+	statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPatch))
+
+	if f.calls != 1 {
+		t.Errorf("calls = %d, want 1", f.calls)
+	}
+}
+
 func TestTransport_RetryRefusesUnreplayableBody(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://unlisted.example.com/x", io.NopCloser(strings.NewReader("payload")))
+	req, err := http.NewRequestWithContext(retrysafe.Mark(context.Background()), http.MethodPost, "https://unlisted.example.com/x", io.NopCloser(strings.NewReader("payload")))
 	if err != nil {
 		t.Fatal(err)
 	}

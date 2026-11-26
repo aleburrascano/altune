@@ -1622,8 +1622,10 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 			if entry.State != tc.wantState {
 				t.Errorf("state = %v, want %v", entry.State, tc.wantState)
 			}
-			if entry.State == search.CircuitHalfOpen && !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-				t.Error("probe slot still held: next request not admitted")
+			if entry.State == search.CircuitHalfOpen {
+				if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+					t.Error("probe slot still held: next request not admitted")
+				}
 			}
 		})
 	}

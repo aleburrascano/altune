@@ -1214,10 +1214,22 @@ type recordedProgress struct {
 	payload map[string]any
 }
 
-func (p *recordingProgressPublisher) Publish(_ context.Context, _ ids.UserId, eventType events.EventType, payload map[string]any) {
+func wireFields(payload events.Payload) map[string]any {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	fields := map[string]any{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		panic(err)
+	}
+	return fields
+}
+
+func (p *recordingProgressPublisher) Publish(_ context.Context, _ ids.UserId, payload events.Payload) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.events = append(p.events, recordedProgress{typ: string(eventType), payload: payload})
+	p.events = append(p.events, recordedProgress{typ: string(payload.EventType()), payload: wireFields(payload)})
 }
 
 func TestSchedulerJobReporter_PublishesProgressOnStage(t *testing.T) {
@@ -1349,11 +1361,11 @@ func newRecordingPublisher() *recordingPublisher {
 	return &recordingPublisher{byType: make(map[events.EventType]int), last: make(map[events.EventType]map[string]any)}
 }
 
-func (p *recordingPublisher) Publish(_ context.Context, _ ids.UserId, eventType events.EventType, payload map[string]any) {
+func (p *recordingPublisher) Publish(_ context.Context, _ ids.UserId, payload events.Payload) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.byType[eventType]++
-	p.last[eventType] = payload
+	p.byType[payload.EventType()]++
+	p.last[payload.EventType()] = wireFields(payload)
 }
 
 func (p *recordingPublisher) count(eventType events.EventType) int {

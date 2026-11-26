@@ -30,19 +30,19 @@ const (
 )
 
 type Event struct {
-	ID        uint64         `json:"id"`
-	Type      EventType      `json:"type"`
-	UserID    ids.UserId     `json:"-"`
-	Payload   map[string]any `json:"payload"`
-	Timestamp time.Time      `json:"timestamp"`
+	ID        uint64     `json:"id"`
+	Type      EventType  `json:"type"`
+	UserID    ids.UserId `json:"-"`
+	Payload   Payload    `json:"payload"`
+	Timestamp time.Time  `json:"timestamp"`
 }
 
 type Publisher interface {
-	Publish(ctx context.Context, userId ids.UserId, eventType EventType, payload map[string]any)
+	Publish(ctx context.Context, userId ids.UserId, payload Payload)
 }
 
 func NoopPublisher() Publisher { return noopPublisher{} }
 
 type noopPublisher struct{}
 
-func (noopPublisher) Publish(context.Context, ids.UserId, EventType, map[string]any) {}
+func (noopPublisher) Publish(context.Context, ids.UserId, Payload) {}

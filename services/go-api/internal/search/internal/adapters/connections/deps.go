@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,7 +19,7 @@ import (
 
 type Deps struct {
 	Lifecycle       context.Context
-	Background      *sync.WaitGroup
+	Background      *background.Tracker
 	Tracker         *background.Tracker
 	Logger          *slog.Logger
 	Transport       http.RoundTripper

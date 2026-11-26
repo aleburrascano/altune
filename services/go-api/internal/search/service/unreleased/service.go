@@ -3,6 +3,7 @@ package unreleased
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
@@ -37,7 +38,7 @@ type Service struct {
 	cfg      Config
 
 	lifecycle context.Context
-	jobs      *sync.WaitGroup
+	jobs      *background.Tracker
 	mu        sync.Mutex
 	inflight  map[string]*job
 }
@@ -87,7 +88,7 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 		cache:     cache,
 		cfg:       cfg,
 		lifecycle: context.Background(),
-		jobs:      &sync.WaitGroup{},
+		jobs:      &background.Tracker{},
 		inflight:  map[string]*job{},
 	}
 	for _, opt := range opts {

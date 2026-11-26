@@ -3,6 +3,7 @@ package search_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/testdb"
@@ -905,13 +906,13 @@ type harness struct {
 func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	background := &sync.WaitGroup{}
-	t.Cleanup(func() { cancel(); background.Wait() })
+	jobs := &background.Tracker{}
+	t.Cleanup(func() { cancel(); jobs.Wait() })
 	logs := &bytes.Buffer{}
 	transport := &recordingTransport{}
 	return &harness{t: t, transport: transport, logs: logs, deps: search.Deps{
 		Lifecycle:       ctx,
-		Background:      background,
+		Background:      jobs,
 		Tracker:         searchtest.NewTracker(t),
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{ReplaceAttr: dropTime})),
 		Transport:       transport,

@@ -2,6 +2,7 @@ package providertest
 
 import (
 	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/shared/parallel"
 	"bytes"
 	"context"
 	"io"
@@ -12,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -201,19 +201,19 @@ func FireBurst(t *testing.T, wait func(context.Context) error, n int, window tim
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	results := make(chan BurstResult, n)
-	var wg sync.WaitGroup
+	burst := parallel.New("providertest.burst_panic", n)
 	start := time.Now()
 	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		burst.Go(ctx, func() {
 			err := wait(ctx)
 			results <- BurstResult{Err: err, Elapsed: time.Since(start)}
-		}()
+		})
 	}
 	done := collectBurst(results, n, window)
 	cancel()
-	wg.Wait()
+	if err := burst.Wait(); err != nil {
+		t.Fatalf("a burst caller panicked: %v", err)
+	}
 	return done
 }
 

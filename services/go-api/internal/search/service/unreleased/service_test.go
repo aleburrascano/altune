@@ -3,6 +3,7 @@ package unreleased_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"errors"
 	"slices"
@@ -352,8 +353,8 @@ func (c *lockedCache) entries() int {
 	return len(c.inner.stored)
 }
 
-func backgroundService(ctx context.Context, genius *search.FakeGeniusSongCatalog, cache *lockedCache, wait time.Duration) (*search.UnreleasedService, *sync.WaitGroup) {
-	var jobs sync.WaitGroup
+func backgroundService(ctx context.Context, genius *search.FakeGeniusSongCatalog, cache *lockedCache, wait time.Duration) (*search.UnreleasedService, *background.Tracker) {
+	var jobs background.Tracker
 	cfg := search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, TTL: longTTL, EmptyTTL: shortTTL, Wait: wait}
 	return searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, cache, cfg, search.WithUnreleasedLifecycle(ctx, &jobs))), &jobs
 }
@@ -581,7 +582,7 @@ func TestService_Lookup_BuildVersionOlderStoredArtistIsServedAtOnceAndRebuiltOnc
 		drakeKey: {Songs: songs("Old"), Complete: true, Built: true, BuildVersion: 0},
 	}}
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("New"), Gate: make(chan struct{})}
-	var jobs sync.WaitGroup
+	var jobs background.Tracker
 	cfg := search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, cfg, search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
 	for range 2 {
@@ -607,7 +608,7 @@ func TestService_Lookup_BuildVersionCurrentStoredArtistStartsNoRebuild(t *testin
 		drakeKey: {Songs: songs("A"), Complete: true, Built: true, BuildVersion: writtenBuildVersion(t)},
 	}}
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Other")}
-	var jobs sync.WaitGroup
+	var jobs background.Tracker
 	cfg := search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, cfg, search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
 	got, err := svc.Lookup(context.Background(), search.ProviderDeezer, "27", "Drake", nil)

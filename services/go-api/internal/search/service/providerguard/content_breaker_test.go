@@ -22,7 +22,7 @@ func TestRunAdmitted_SettlesWithMappedOutcome(t *testing.T) {
 		t.Fatalf("err = %v, want the call's own error returned unmapped", err)
 	}
 	for i := 0; i < 10; i++ {
-		if !cb.AllowRequest(context.Background(), domain.ProviderDeezer) {
+		if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); !ok {
 			t.Fatal("mapper returned nil, so failures must not be recorded")
 		}
 	}

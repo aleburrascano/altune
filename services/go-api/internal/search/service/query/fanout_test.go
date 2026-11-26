@@ -142,7 +142,7 @@ func openBreaker(t *testing.T, cb *search.CircuitBreaker, provider search.Provid
 		if cb.GetStatus(provider) == search.ProviderStatusCircuitOpen {
 			t.Fatalf("%s breaker opened before %d failures", provider, breakerTripsAfter)
 		}
-		cb.RecordFailure(context.Background(), provider)
+		cb.RecordFailure(context.Background(), provider, search.CircuitAdmission{})
 	}
 	if cb.GetStatus(provider) != search.ProviderStatusCircuitOpen {
 		t.Fatalf("%s breaker still closed after %d failures", provider, breakerTripsAfter)
@@ -205,7 +205,7 @@ func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 	if statuses[0].Status == search.ProviderStatusCircuitOpen {
 		t.Fatalf("setup: probe not admitted")
 	}
-	if !cb.AllowRequest(context.Background(), search.ProviderITunes) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderITunes); !ok {
 		t.Errorf("next request refused: the shed probe held its slot or re-opened the circuit")
 	}
 }
@@ -441,7 +441,7 @@ func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 	cancel()
 	<-done
 
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
 		t.Fatal("provider blackholed: AllowRequest = false after the half-open probe was canceled, want a new probe admitted")
 	}
 	if got := cb.GetStatus(search.ProviderDeezer); got != search.ProviderStatusOK {

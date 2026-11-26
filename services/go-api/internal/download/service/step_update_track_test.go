@@ -86,14 +86,14 @@ type progressRecorder struct {
 	stages []string
 }
 
-func (p *progressRecorder) Publish(_ context.Context, _ ids.UserId, eventType events.EventType, payload map[string]any) {
-	if eventType != events.TypeTrackAcquisitionProgress {
+func (p *progressRecorder) Publish(_ context.Context, _ ids.UserId, payload events.Payload) {
+	progress, ok := payload.(events.TrackAcquisitionProgress)
+	if !ok {
 		return
 	}
-	stage, _ := payload["stage"].(string)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.stages = append(p.stages, stage)
+	p.stages = append(p.stages, progress.Stage)
 }
 
 func (p *progressRecorder) published() []string {

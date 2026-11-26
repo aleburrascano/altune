@@ -280,11 +280,12 @@ func TestWait_BlocksWhileAJobRunIsInFlight(t *testing.T) {
 
 func TestWait_BlocksWhileTheSharedBackgroundGroupIsRunning(t *testing.T) {
 	var r jobs.Runner
-	r.Background().Add(1)
+	release := make(chan struct{})
+	r.Background().Track(func() { <-release })
 	waited := waitAsync(&r)
 
 	assertStillWaiting(t, waited, "the shared background group was running")
-	r.Background().Done()
+	close(release)
 	assertWaitReturns(t, waited)
 }
 

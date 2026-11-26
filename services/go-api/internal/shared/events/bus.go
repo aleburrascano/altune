@@ -98,7 +98,7 @@ func (b *InProcessBus) lockLiveUser(userId ids.UserId) *userState {
 	}
 }
 
-func (b *InProcessBus) Publish(_ context.Context, userId ids.UserId, eventType EventType, payload map[string]any) {
+func (b *InProcessBus) Publish(_ context.Context, userId ids.UserId, payload Payload) {
 	us := b.lockLiveUser(userId)
 
 	us.lastActive = b.now()
@@ -106,7 +106,7 @@ func (b *InProcessBus) Publish(_ context.Context, userId ids.UserId, eventType E
 	b.recordIssuedID(us.nextID)
 	evt := Event{
 		ID:        us.nextID,
-		Type:      eventType,
+		Type:      payload.EventType(),
 		UserID:    userId,
 		Payload:   payload,
 		Timestamp: time.Now().UTC(),

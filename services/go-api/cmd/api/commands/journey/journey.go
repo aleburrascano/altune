@@ -2,6 +2,7 @@ package journey
 
 import (
 	"altune/go-api/internal/app"
+	"altune/go-api/internal/app/providertransport"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/config"
@@ -41,7 +42,7 @@ func RankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.
 	if err != nil {
 		return nil, err
 	}
-	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Tracker: tracker})
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: providertransport.Live(), Tracker: tracker})
 	if err != nil {
 		return nil, err
 	}

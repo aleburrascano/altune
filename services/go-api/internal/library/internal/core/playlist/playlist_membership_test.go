@@ -835,10 +835,26 @@ func (r ownerBlindReadRepo) GetTrackOrder(_ context.Context, id library.Playlist
 	return ids, true, nil
 }
 
+func wireStrings(v any) ([]string, bool) {
+	items, ok := v.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]string, len(items))
+	for i, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			return nil, false
+		}
+		out[i] = s
+	}
+	return out, true
+}
+
 type recordingPublisher struct{ types []string }
 
-func (p *recordingPublisher) Publish(_ context.Context, _ sharedids.UserId, eventType events.EventType, _ map[string]any) {
-	p.types = append(p.types, string(eventType))
+func (p *recordingPublisher) Publish(_ context.Context, _ sharedids.UserId, payload events.Payload) {
+	p.types = append(p.types, string(payload.EventType()))
 }
 
 func TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck(t *testing.T) {
@@ -969,7 +985,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		if err := svc.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("remove track: %v", err)
 		}
-		p := pub.Last("track_removed_from_playlist")
+		p := pub.LastFields("track_removed_from_playlist")
 		if p == nil || p["playlist_id"] != pl.ID.String() || p["track_id"] != track.ID.String() {
 			t.Fatalf("track_removed_from_playlist payload = %v", p)
 		}
@@ -989,11 +1005,11 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		if err := svc.Reorder(ctx, userId, pl.ID, []library.TrackId{t2.ID, t1.ID}); err != nil {
 			t.Fatalf("reorder: %v", err)
 		}
-		p := pub.Last("playlist_reordered")
+		p := pub.LastFields("playlist_reordered")
 		if p == nil || p["playlist_id"] != pl.ID.String() {
 			t.Fatalf("playlist_reordered payload = %v", p)
 		}
-		ids, ok := p["track_ids"].([]string)
+		ids, ok := wireStrings(p["track_ids"])
 		if !ok || len(ids) != 2 || ids[0] != t2.ID.String() || ids[1] != t1.ID.String() {
 			t.Fatalf("track_ids = %v, want [%s %s]", p["track_ids"], t2.ID.String(), t1.ID.String())
 		}
@@ -1013,8 +1029,8 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		if _, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{b.ID, member.ID, a.ID, b.ID}); err != nil {
 			t.Fatalf("add tracks: %v", err)
 		}
-		p := pub.Last("tracks_added_to_playlist")
-		ids, ok := p["track_ids"].([]string)
+		p := pub.LastFields("tracks_added_to_playlist")
+		ids, ok := wireStrings(p["track_ids"])
 		if !ok || len(ids) != 2 || ids[0] != b.ID.String() || ids[1] != a.ID.String() {
 			t.Fatalf("track_ids = %v, want [%s %s]", p["track_ids"], b.ID.String(), a.ID.String())
 		}
@@ -1033,8 +1049,8 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		if _, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{third, library.NewTrackId(), first, third}); err != nil {
 			t.Fatalf("remove tracks: %v", err)
 		}
-		p := pub.Last("tracks_removed_from_playlist")
-		ids, ok := p["track_ids"].([]string)
+		p := pub.LastFields("tracks_removed_from_playlist")
+		ids, ok := wireStrings(p["track_ids"])
 		if !ok || len(ids) != 2 || ids[0] != third.String() || ids[1] != first.String() {
 			t.Fatalf("track_ids = %v, want [%s %s]", p["track_ids"], third.String(), first.String())
 		}

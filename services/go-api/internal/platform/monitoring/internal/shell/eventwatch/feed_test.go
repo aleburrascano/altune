@@ -3,6 +3,7 @@ package eventwatch_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
@@ -35,7 +36,7 @@ func startFeed(t *testing.T) (*monitoring.EventFeed, *monitoring.EventTap, conte
 var publisher = ids.NewUserId(uuid.New())
 
 func publish(tp *monitoring.EventTap, eventType string) {
-	tp.Publish(context.Background(), publisher, events.EventType(eventType), nil)
+	tp.Publish(context.Background(), publisher, eventstest.Named(events.EventType(eventType)))
 }
 
 func awaitType[T any](t *testing.T, ch <-chan T) string {

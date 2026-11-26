@@ -371,10 +371,10 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 		"user_id", userId.String(),
 		"has_isrc", track.ISRC != nil,
 	)
-	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionStarted, map[string]any{
-		"track_id": trackId.String(),
-		"title":    track.Title,
-		"artist":   track.Artist,
+	s.events.Publish(ctx, userId, events.TrackAcquisitionStarted{
+		TrackID: trackId.String(),
+		Title:   track.Title,
+		Artist:  track.Artist,
 	})
 	return &AcquisitionContext{
 		Track:   buildTrackRef(track),
@@ -523,9 +523,9 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
-	s.events.Publish(settleCtx, userId, events.TypeTrackReplaceFailed, map[string]any{
-		"track_id": trackId.String(),
-		"reason":   reason,
+	s.events.Publish(settleCtx, userId, events.TrackReplaceFailed{
+		TrackID: trackId.String(),
+		Reason:  reason,
 	})
 	return err
 }
@@ -566,9 +566,9 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 	if persistErr := s.failTrack(settleCtx, trackId, userId, reason); errors.Is(persistErr, acqdomain.ErrLeaseLost) {
 		return errors.Join(err, persistErr)
 	}
-	s.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
-		"track_id": trackId.String(),
-		"reason":   reason,
+	s.events.Publish(settleCtx, userId, events.TrackAcquisitionFailed{
+		TrackID: trackId.String(),
+		Reason:  reason,
 	})
 	return err
 }
@@ -593,9 +593,9 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 		"user_id", userId.String(),
 		"audio_ref", audioRef,
 	)
-	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionCompleted, map[string]any{
-		"track_id":  trackId.String(),
-		"audio_ref": audioRef,
+	s.events.Publish(ctx, userId, events.TrackAcquisitionCompleted{
+		TrackID:  trackId.String(),
+		AudioRef: audioRef,
 	})
 }
 
@@ -629,9 +629,9 @@ func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, userId ids.
 	if !s.markFailed(settleCtx, trackId, userId, string(downloadfailure.FailureAcquisitionRefused)) {
 		return
 	}
-	s.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
-		"track_id": trackId.String(),
-		"reason":   string(downloadfailure.FailureAcquisitionRefused),
+	s.events.Publish(settleCtx, userId, events.TrackAcquisitionFailed{
+		TrackID: trackId.String(),
+		Reason:  string(downloadfailure.FailureAcquisitionRefused),
 	})
 }
 

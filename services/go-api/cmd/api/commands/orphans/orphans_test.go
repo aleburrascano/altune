@@ -130,3 +130,29 @@ func TestCheckTreatsASiblingUsersFileAsMissing(t *testing.T) {
 		t.Fatalf("got (%d, %d), want (1, 1)", len(orphaned), fixed)
 	}
 }
+
+func TestRepairOutcomeNamesHowManyTracksStayOrphaned(t *testing.T) {
+	cases := []struct {
+		name            string
+		orphaned, fixed int
+		wantErr         string
+	}{
+		{"everything repaired", 3, 3, ""},
+		{"nothing orphaned", 0, 0, ""},
+		{"one repair failed", 3, 2, "1 of 3 orphaned tracks could not be marked failed"},
+		{"every repair failed", 2, 0, "2 of 2 orphaned tracks could not be marked failed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := orphans.RepairOutcome(tc.orphaned, tc.fixed)
+
+			got := ""
+			if err != nil {
+				got = err.Error()
+			}
+			if got != tc.wantErr {
+				t.Errorf("RepairOutcome(%d, %d) = %q, want %q", tc.orphaned, tc.fixed, got, tc.wantErr)
+			}
+		})
+	}
+}

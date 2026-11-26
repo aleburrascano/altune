@@ -47,8 +47,11 @@ func healthy(context.Context) monitoring.DependencyHealth {
 
 func signedIn(context.Context) (time.Time, bool) { return time.Time{}, false }
 
+var testNow = time.Date(2026, 11, 25, 10, 30, 0, 0, time.FixedZone("UTC+2", 2*3600))
+
 func sources() alerts.Sources {
 	return alerts.Sources{
+		Clock:                 func() time.Time { return testNow },
 		DependencyHealth:      healthy,
 		Coverage:              &fakeCoverageEvents{},
 		YouTubeSignedOutSince: signedIn,
@@ -56,9 +59,17 @@ func sources() alerts.Sources {
 	}
 }
 
+func mustConditions(s alerts.Sources) []monitoring.Condition {
+	conditions, err := alerts.Conditions(s)
+	if err != nil {
+		panic(err)
+	}
+	return conditions
+}
+
 func conditionsByKey(s alerts.Sources) map[string]monitoring.Condition {
 	byKey := map[string]monitoring.Condition{}
-	for _, c := range alerts.Conditions(s) {
+	for _, c := range mustConditions(s) {
 		byKey[c.Key] = c
 	}
 	return byKey
@@ -91,7 +102,7 @@ func evalTick(ctx context.Context, conds ...monitoring.Condition) map[string]*mo
 }
 
 func TestConditions_WatchDependenciesCoverageCookiesAndEveryAlertableJob(t *testing.T) {
-	conditions := alerts.Conditions(sources())
+	conditions := mustConditions(sources())
 
 	want := []string{"dependency_down", "coverage_zero_result", "coverage_query_failing", "youtube_cookies_signed_out"}
 	for _, name := range jobs.Alertable() {
@@ -106,8 +117,19 @@ func TestConditions_WatchDependenciesCoverageCookiesAndEveryAlertableJob(t *test
 	}
 }
 
+func TestConditions_RefuseAMissingClockAtConstruction(t *testing.T) {
+	s := sources()
+	s.Clock = nil
+
+	conditions, err := alerts.Conditions(s)
+
+	if !errors.Is(err, alerts.ErrClockRequired) || conditions != nil {
+		t.Fatalf("Conditions = (%v, %v), want no conditions and ErrClockRequired", conditions, err)
+	}
+}
+
 func TestConditions_NothingFiresWhileAllIsWell(t *testing.T) {
-	if fired := evalTick(context.Background(), alerts.Conditions(sources())...); len(fired) != 0 {
+	if fired := evalTick(context.Background(), mustConditions(sources())...); len(fired) != 0 {
 		t.Fatalf("fired %v with every source healthy", fired)
 	}
 }
@@ -161,8 +183,8 @@ func TestCoverageCondition_CountsTheLast24Hours(t *testing.T) {
 
 	gap.Eval(context.Background())
 
-	if ago := time.Since(events.since); ago < 24*time.Hour-time.Minute || ago > 24*time.Hour+time.Minute {
-		t.Fatalf("zero-result total counted since %s ago, want the last 24h", ago)
+	if want := testNow.UTC().Add(-24 * time.Hour); !events.since.Equal(want) || events.since.Location() != time.UTC {
+		t.Fatalf("zero-result total counted since %v, want exactly %v (the last 24h in UTC)", events.since, want)
 	}
 }
 

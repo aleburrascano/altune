@@ -232,7 +232,7 @@ func addWithRecordedEvents(t *testing.T, input library.AddTrackInput) (*library.
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	payload := pub.Last(events.TypeTrackAddedToLibrary)
+	payload := pub.LastFields(events.TypeTrackAddedToLibrary)
 	if payload == nil {
 		t.Fatal("no track_added_to_library event published")
 	}
@@ -286,7 +286,7 @@ func TestTrackAddedPayload_MatchesRESTDTOByteForByte(t *testing.T) {
 		t.Fatalf("POST /tracks status = %d, body %s", status, restBody)
 	}
 
-	payload := pub.Last(events.TypeTrackAddedToLibrary)
+	payload := pub.LastFields(events.TypeTrackAddedToLibrary)
 	if payload == nil || payload["track_id"] != payload["id"] {
 		t.Fatalf("payload = %v, want track_id equal to id", payload)
 	}
@@ -325,7 +325,7 @@ func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	if stored.AcquisitionStartedAt != nil {
 		t.Error("in-flight marker left set on a track whose job was never queued")
 	}
-	if got := pub.Last(events.TypeTrackAcquisitionFailed); got == nil || got["reason"] != string(downloadfailure.FailureAcquisitionRefused) {
+	if got := pub.LastFields(events.TypeTrackAcquisitionFailed); got == nil || got["reason"] != string(downloadfailure.FailureAcquisitionRefused) {
 		t.Errorf("track_acquisition_failed payload = %v, want reason %q", got, downloadfailure.FailureAcquisitionRefused)
 	}
 }

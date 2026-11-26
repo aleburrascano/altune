@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 )
 
@@ -65,12 +66,13 @@ type catalogServicesStaging struct {
 
 func (a *App) wireCatalog(
 	ctx context.Context,
+	transport http.RoundTripper,
 	tap *monitoring.EventTap,
 	disc *search.Discovery,
 ) (catalogWiring, error) {
 	download.SweepStaleTempDirs(download.NewTempWorkspace())
 
-	audio, err := a.wireAudioSources(ctx, tap, disc)
+	audio, err := a.wireAudioSources(ctx, transport, tap, disc)
 	if err != nil {
 		return catalogWiring{}, err
 	}
@@ -87,6 +89,7 @@ func featuredBridge(disc *search.Discovery) library.FeaturedArtistResolver {
 
 func (a *App) wireAudioSources(
 	ctx context.Context,
+	transport http.RoundTripper,
 	tap *monitoring.EventTap,
 	disc *search.Discovery,
 ) (audioSourcesStaging, error) {
@@ -95,7 +98,7 @@ func (a *App) wireAudioSources(
 		return audioSourcesStaging{}, err
 	}
 	trackRepo := library.NewPostgresTrackRepository(a.pool)
-	sources, tools, err := a.liveTiers(ctx, audioStore)
+	sources, tools, err := a.liveTiers(ctx, transport, audioStore)
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}
@@ -118,11 +121,11 @@ func (a *App) wireAudioSources(
 	return staging, nil
 }
 
-func (a *App) liveTiers(ctx context.Context, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
+func (a *App) liveTiers(ctx context.Context, transport http.RoundTripper, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
 	if audioStore == nil {
 		return downloadsetup.SourceOrder{}, download.Verification{}, nil
 	}
-	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient)
+	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient, transport)
 }
 
 func (a *App) schedulerDeps(tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) downloadsetup.Deps {

@@ -86,9 +86,9 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId sharedi
 
 	slog.InfoContext(ctx, "track added to playlist",
 		"playlist_id", playlistId.String(), "track_id", trackId.String())
-	s.events.Publish(ctx, userId, events.TypeTrackAddedToPlaylist, map[string]any{
-		"playlist_id": playlistId.String(),
-		"track_id":    trackId.String(),
+	s.events.Publish(ctx, userId, events.TrackAddedToPlaylist{
+		PlaylistID: playlistId.String(),
+		TrackID:    trackId.String(),
 	})
 	return nil
 }
@@ -120,9 +120,9 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 
 	slog.InfoContext(ctx, "tracks added to playlist",
 		"playlist_id", playlistId.String(), "added", len(added), "requested", len(trackIds))
-	s.events.Publish(ctx, userId, events.TypeTracksAddedToPlaylist, map[string]any{
-		"playlist_id": playlistId.String(),
-		"track_ids":   trackIdStrings(added),
+	s.events.Publish(ctx, userId, events.TracksAddedToPlaylist{
+		PlaylistID: playlistId.String(),
+		TrackIDs:   trackIdStrings(added),
 	})
 	return len(added), nil
 }
@@ -156,9 +156,9 @@ func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shar
 	}
 	slog.InfoContext(ctx, "track removed from playlist",
 		"playlist_id", playlistId.String(), "track_id", trackId.String(), "user_id", userId.String())
-	s.events.Publish(ctx, userId, events.TypeTrackRemovedFromPlaylist, map[string]any{
-		"playlist_id": playlistId.String(),
-		"track_id":    trackId.String(),
+	s.events.Publish(ctx, userId, events.TrackRemovedFromPlaylist{
+		PlaylistID: playlistId.String(),
+		TrackID:    trackId.String(),
 	})
 	return nil
 }
@@ -180,9 +180,9 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 		"playlist_id", playlistId.String(), "user_id", userId.String(),
 		"track_ids", trackIdStrings(removed), "removed", len(removed), "requested", len(trackIds))
 
-	s.events.Publish(ctx, userId, events.TypeTracksRemovedFromPlaylist, map[string]any{
-		"playlist_id": playlistId.String(),
-		"track_ids":   trackIdStrings(removed),
+	s.events.Publish(ctx, userId, events.TracksRemovedFromPlaylist{
+		PlaylistID: playlistId.String(),
+		TrackIDs:   trackIdStrings(removed),
 	})
 	return len(removed), nil
 }
@@ -207,9 +207,9 @@ func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId sharedid
 	if err := s.playlistRepo.ReorderTracks(ctx, userId, playlistId, playlist.Tracks); err != nil {
 		return membershipWriteError(ctx, "reorder playlist", err)
 	}
-	s.events.Publish(ctx, userId, events.TypePlaylistReordered, map[string]any{
-		"playlist_id": playlistId.String(),
-		"track_ids":   trackIdStrings(trackIds),
+	s.events.Publish(ctx, userId, events.PlaylistReordered{
+		PlaylistID: playlistId.String(),
+		TrackIDs:   trackIdStrings(trackIds),
 	})
 	return nil
 }

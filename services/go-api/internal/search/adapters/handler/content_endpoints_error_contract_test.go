@@ -40,11 +40,15 @@ func (p timingOutContentProvider) GetRelatedTracks(context.Context, search.Provi
 func errorContractRouter(t *testing.T) chi.Router {
 	t.Helper()
 	breaker := search.NewCircuitBreaker()
-	for i := 0; breaker.AllowRequest(context.Background(), search.ProviderSoundCloud); i++ {
+	for i := 0; ; i++ {
+		adm, ok := breaker.AllowRequest(context.Background(), search.ProviderSoundCloud)
+		if !ok {
+			break
+		}
 		if i > 100 {
 			t.Fatal("circuit breaker never opened for soundcloud")
 		}
-		breaker.RecordFailure(context.Background(), search.ProviderSoundCloud)
+		breaker.RecordFailure(context.Background(), search.ProviderSoundCloud, adm)
 	}
 	timingOut := timingOutContentProvider{}
 	healthy := stubContentProvider{provider: search.ProviderSoundCloud}

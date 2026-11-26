@@ -51,6 +51,42 @@ func TestDetach_DeadlineIsTheBudgetNotTheRequests(t *testing.T) {
 	}
 }
 
+func TestDetachCancelable_KeepsTheRequestsValuesButNotItsCancellation(t *testing.T) {
+	request, cancelRequest := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-detach-2"))
+	detached, cancel := background.DetachCancelable(request)
+	defer cancel()
+
+	cancelRequest()
+
+	if err := detached.Err(); err != nil {
+		t.Fatalf("detached ctx err = %v after the request ended, want nil", err)
+	}
+	if got := logging.CorrelationIDFromContext(detached); got != "corr-detach-2" {
+		t.Errorf("corr id = %q, want the request's", got)
+	}
+}
+
+func TestDetachCancelable_EndsWhenItsOwnCancelIsCalled(t *testing.T) {
+	detached, cancel := background.DetachCancelable(context.Background())
+
+	cancel()
+
+	if !errors.Is(detached.Err(), context.Canceled) {
+		t.Errorf("err = %v, want Canceled", detached.Err())
+	}
+}
+
+func TestDetachCancelable_HasNoDeadline(t *testing.T) {
+	request, cancelRequest := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelRequest()
+	detached, cancel := background.DetachCancelable(request)
+	defer cancel()
+
+	if deadline, ok := detached.Deadline(); ok {
+		t.Errorf("deadline = %v, want none", deadline)
+	}
+}
+
 func TestWaitWithin_TrueWhenTheWaitEndsFirst(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

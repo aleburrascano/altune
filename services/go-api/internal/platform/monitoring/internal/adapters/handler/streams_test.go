@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -195,7 +196,7 @@ func TestStreamEvents_ForwardsEachPublishedEventAsADataFrame(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "event-" + uuid.NewString()
-	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), events.EventType(marker), map[string]any{"track_id": "trk-1"})
+	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.With(events.EventType(marker), map[string]any{"track_id": "trk-1"}))
 
 	fields := decodeFrame(t, conn.awaitData(t, marker))
 	if string(fields["type"]) != `"`+marker+`"` || string(fields["subject"]) != `"trk-1"` {
@@ -226,7 +227,7 @@ func TestStreamEvents_FrameCarriesTheUserDigestNeverTheRawID(t *testing.T) {
 	user := ids.NewUserId(uuid.New())
 
 	marker := "private-" + uuid.NewString()
-	fx.tap.Publish(context.Background(), user, events.EventType(marker), map[string]any{"query": "my private query"})
+	fx.tap.Publish(context.Background(), user, eventstest.With(events.EventType(marker), map[string]any{"query": "my private query"}))
 
 	frame := conn.awaitData(t, marker)
 	if strings.Contains(frame, user.String()) || strings.Contains(frame, "my private query") {
@@ -245,7 +246,7 @@ func TestStreamEvents_FrameCarriesTheOriginatingCorrID(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "corr-" + uuid.NewString()
-	fx.tap.Publish(withCorrelation("evt-corr-1"), ids.NewUserId(uuid.New()), events.EventType(marker), nil)
+	fx.tap.Publish(withCorrelation("evt-corr-1"), ids.NewUserId(uuid.New()), eventstest.Named(events.EventType(marker)))
 
 	if frame := conn.awaitData(t, marker); !strings.Contains(frame, `"corr_id":"evt-corr-1"`) {
 		t.Errorf("frame %s lacks the originating corr_id", frame)
@@ -435,9 +436,9 @@ func TestStreams_KeepForwardingAfterTheFirstFrame(t *testing.T) {
 	user := ids.NewUserId(uuid.New())
 
 	first, second := "first-"+uuid.NewString(), "second-"+uuid.NewString()
-	fx.tap.Publish(context.Background(), user, events.EventType(first), nil)
+	fx.tap.Publish(context.Background(), user, eventstest.Named(events.EventType(first)))
 	conn.awaitData(t, first)
-	fx.tap.Publish(context.Background(), user, events.EventType(second), nil)
+	fx.tap.Publish(context.Background(), user, eventstest.Named(events.EventType(second)))
 
 	conn.awaitData(t, second)
 }
@@ -627,7 +628,7 @@ func TestStreams_EndOnAWriteFailure(t *testing.T) {
 	}()
 	<-w.accepted
 
-	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), "after-reset", nil)
+	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Named("after-reset"))
 
 	assertEndsWithin(t, returned, 2*time.Second, "stream held its slot after every write failed")
 }
@@ -667,7 +668,7 @@ func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "bounded-" + uuid.NewString()
-	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), events.EventType(marker), nil)
+	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Named(events.EventType(marker)))
 
 	conn.awaitData(t, marker)
 	returned := serveStreamOn(t, boundedRouter(fx.deps, bounds), httptest.NewRequest(http.MethodGet, "/events/stream", nil))
@@ -681,7 +682,7 @@ func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
 	t.Cleanup(srv.Close)
 	emit := map[string]func(string){
 		"/events/stream": func(marker string) {
-			fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), events.EventType(marker), nil)
+			fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Named(events.EventType(marker)))
 		},
 		"/logs/stream": func(marker string) { slog.Error(marker) },
 	}
@@ -712,7 +713,7 @@ func stallClients(tap *monitoring.EventTap) {
 	user := ids.NewUserId(uuid.New())
 	payload := map[string]any{"track_id": strings.Repeat("x", 16<<10)}
 	for i := 0; i < 4*eventFeedCeiling; i++ {
-		tap.Publish(context.Background(), user, "stall.filler", payload)
+		tap.Publish(context.Background(), user, eventstest.With("stall.filler", payload))
 	}
 }
 
@@ -793,7 +794,7 @@ func TestStreamEvents_EndsWhenTheFeedStopsMidSend(t *testing.T) {
 			case <-quit:
 				return
 			default:
-				tap.Publish(context.Background(), user, "mid-send", nil)
+				tap.Publish(context.Background(), user, eventstest.Named("mid-send"))
 			}
 		}
 	}()

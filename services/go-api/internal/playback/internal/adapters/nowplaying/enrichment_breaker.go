@@ -2,140 +2,62 @@ package nowplaying
 
 import (
 	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/shared/breaker"
 	"context"
 	"log/slog"
-	"sync"
 	"time"
-)
-
-type breakerState int
-
-const (
-	breakerClosed breakerState = iota
-	breakerOpen
-	breakerHalfOpen
 )
 
 const (
 	enrichmentFailureThreshold = 5
 	enrichmentOpenDuration     = 30 * time.Second
+	enrichmentProbeLease       = 30 * time.Second
 )
 
 type enrichmentBreaker struct {
-	mu           sync.Mutex
-	state        breakerState
-	failures     int
-	lastFailedAt time.Time
-	probing      bool
-	generation   uint64
-	now          func() time.Time
-	metrics      ports.EnrichmentMetrics
+	b *breaker.Breaker
 }
 
 func newEnrichmentBreaker(metrics ports.EnrichmentMetrics, now func() time.Time) *enrichmentBreaker {
-	return &enrichmentBreaker{now: now, metrics: metrics}
+	return &enrichmentBreaker{b: breaker.New(breaker.Config{
+		Threshold:  enrichmentFailureThreshold,
+		OpenFor:    enrichmentOpenDuration,
+		ProbeLease: enrichmentProbeLease,
+		Now:        now,
+		OnChange:   observeEnrichmentBreaker(metrics),
+	})}
 }
 
-type admission struct {
-	generation uint64
-	probe      bool
-}
-
-func (b *enrichmentBreaker) allow(ctx context.Context) (bool, admission) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	switch b.state {
-	case breakerOpen:
-		if b.probing || !b.openWindowElapsed() {
-			return false, admission{}
+func observeEnrichmentBreaker(metrics ports.EnrichmentMetrics) func(context.Context, breaker.Change) {
+	return func(ctx context.Context, c breaker.Change) {
+		switch c.Kind {
+		case breaker.Tripped:
+			metrics.EnrichmentBreakerOpened()
+			slog.WarnContext(ctx, "now-playing enrichment breaker opened (catalog failing)", "failures", c.Failures)
+		case breaker.Probing:
+			slog.WarnContext(ctx, "now-playing enrichment breaker half-open (probing catalog recovery)")
+		case breaker.LeaseExpired:
+			slog.WarnContext(ctx, "now-playing enrichment breaker probe lease expired (re-probing)")
+		case breaker.Recovered:
+			metrics.EnrichmentBreakerClosed()
+			slog.InfoContext(ctx, "now-playing enrichment breaker closed (catalog recovered)")
 		}
-		b.state = breakerHalfOpen
-		slog.WarnContext(ctx, "now-playing enrichment breaker half-open (probing catalog recovery)")
-		return true, b.admitProbe()
-	case breakerHalfOpen:
-		if b.probing {
-			return false, admission{}
-		}
-		return true, b.admitProbe()
-	default:
-		return true, admission{generation: b.generation}
 	}
 }
 
-func (b *enrichmentBreaker) openWindowElapsed() bool {
-	return b.now().Sub(b.lastFailedAt) > enrichmentOpenDuration
+func (e *enrichmentBreaker) allow(ctx context.Context) (bool, breaker.Admission) {
+	adm, ok := e.b.Allow(ctx)
+	return ok, adm
 }
 
-func (b *enrichmentBreaker) admitProbe() admission {
-	b.probing = true
-	return admission{generation: b.generation, probe: true}
+func (e *enrichmentBreaker) release(adm breaker.Admission) {
+	e.b.Release(adm)
 }
 
-func (b *enrichmentBreaker) release(adm admission) {
-	if !adm.probe {
-		return
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.probing = false
+func (e *enrichmentBreaker) recordSuccess(ctx context.Context, adm breaker.Admission) {
+	e.b.Success(ctx, adm)
 }
 
-func (b *enrichmentBreaker) recordSuccess(ctx context.Context, adm admission) {
-	if !b.closeCircuit(adm) {
-		return
-	}
-	slog.InfoContext(ctx, "now-playing enrichment breaker closed (catalog recovered)")
-}
-
-func (b *enrichmentBreaker) closeCircuit(adm admission) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if adm.probe {
-		return b.closeAfterProbe()
-	}
-	if b.state == breakerClosed && adm.generation == b.generation {
-		b.failures = 0
-	}
-	return false
-}
-
-func (b *enrichmentBreaker) closeAfterProbe() bool {
-	if b.state != breakerHalfOpen {
-		return false
-	}
-	b.state = breakerClosed
-	b.failures = 0
-	b.metrics.EnrichmentBreakerClosed()
-	return true
-}
-
-func (b *enrichmentBreaker) recordFailure(ctx context.Context) {
-	failures, tripped := b.countFailure()
-	if !tripped {
-		return
-	}
-	slog.WarnContext(ctx, "now-playing enrichment breaker opened (catalog failing)", "failures", failures)
-}
-
-func (b *enrichmentBreaker) countFailure() (failures int, tripped bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.failures++
-	b.lastFailedAt = b.now()
-
-	if b.state == breakerOpen || !b.shouldTrip() {
-		return b.failures, false
-	}
-	b.state = breakerOpen
-	b.generation++
-	b.metrics.EnrichmentBreakerOpened()
-	return b.failures, true
-}
-
-func (b *enrichmentBreaker) shouldTrip() bool {
-	return b.state == breakerHalfOpen || b.failures >= enrichmentFailureThreshold
+func (e *enrichmentBreaker) recordFailure(ctx context.Context, adm breaker.Admission) {
+	e.b.Failure(ctx, adm)
 }

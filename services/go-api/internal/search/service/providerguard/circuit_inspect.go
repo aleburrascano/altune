@@ -2,27 +2,16 @@ package providerguard
 
 import (
 	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/shared/breaker"
 	"time"
 )
 
-type CircuitSnapshot struct {
-	State    CircuitState
-	Failures int
-	Probing  bool
-}
+type CircuitSnapshot = breaker.Snapshot
 
 func (cb *CircuitBreaker) Snapshot(provider domain.ProviderName) CircuitSnapshot {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	entry := cb.getOrCreate(provider)
-	return CircuitSnapshot{State: entry.state, Failures: entry.failures, Probing: entry.probing}
+	return cb.circuit(provider).Snapshot()
 }
 
 func (cb *CircuitBreaker) AdvanceClock(d time.Duration) {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	prev := cb.now
-	cb.now = func() time.Time { return prev().Add(d) }
+	cb.skew.Add(int64(d))
 }

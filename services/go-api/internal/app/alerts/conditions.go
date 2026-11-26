@@ -4,7 +4,9 @@ import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -20,10 +22,16 @@ type Sources struct {
 	Coverage              CoverageEvents
 	YouTubeSignedOutSince func(context.Context) (time.Time, bool)
 	Jobs                  *jobs.Runner
+	Clock                 clock.Func
 }
 
-func Conditions(s Sources) []monitoring.Condition {
-	gap, queryFailing := coverageConditions(s.Coverage)
+var ErrClockRequired = errors.New("alerts: Sources.Clock is required")
+
+func Conditions(s Sources) ([]monitoring.Condition, error) {
+	if s.Clock == nil {
+		return nil, ErrClockRequired
+	}
+	gap, queryFailing := coverageConditions(s.Coverage, s.Clock)
 	conditions := []monitoring.Condition{
 		dependencyCondition(s.DependencyHealth), gap, queryFailing,
 		youTubeCookiesCondition(s.YouTubeSignedOutSince),
@@ -31,7 +39,7 @@ func Conditions(s Sources) []monitoring.Condition {
 	for _, name := range jobs.Alertable() {
 		conditions = append(conditions, jobCondition(name, s.Jobs))
 	}
-	return conditions
+	return conditions, nil
 }
 
 func dependencyCondition(health func(context.Context) monitoring.DependencyHealth) monitoring.Condition {
@@ -93,19 +101,20 @@ const (
 
 type coverageCheck struct {
 	events   CoverageEvents
+	clock    clock.Func
 	failures int
 	last     *monitoring.Alert
 }
 
-func coverageConditions(events CoverageEvents) (gap, queryFailing monitoring.Condition) {
-	c := &coverageCheck{events: events}
+func coverageConditions(events CoverageEvents, clk clock.Func) (gap, queryFailing monitoring.Condition) {
+	c := &coverageCheck{events: events, clock: clk}
 	gap = monitoring.Condition{Key: "coverage_zero_result", Eval: c.evalGap}
 	queryFailing = monitoring.Condition{Key: "coverage_query_failing", Eval: c.evalQueryFailing}
 	return gap, queryFailing
 }
 
 func (c *coverageCheck) evalGap(ctx context.Context) *monitoring.Alert {
-	since := time.Now().UTC().Add(-coverageWindow)
+	since := c.clock.UTC().Add(-coverageWindow)
 	total, err := c.events.ZeroResultTotal(ctx, since)
 	if err != nil {
 		c.failures++

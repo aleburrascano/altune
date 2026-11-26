@@ -1,6 +1,7 @@
 package query
 
 import (
+	"altune/go-api/internal/shared/background"
 	"context"
 	"sync"
 )
@@ -40,7 +41,7 @@ func (s *sharedResolver) join(ctx context.Context, key string, run func(context.
 		f.waiters++
 		return f
 	}
-	flightCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	flightCtx, cancel := background.DetachCancelable(ctx)
 	f := &resolveFlight{cancel: cancel, done: make(chan struct{}), waiters: 1}
 	s.flights[key] = f
 	go func() {
