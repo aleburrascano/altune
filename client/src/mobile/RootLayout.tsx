@@ -36,7 +36,7 @@ import {
   installTelemetry,
 } from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
-import { OfflineReconcileBridge, provideOfflinePort } from '@shared/offline';
+import { OfflineReconcileBridge, provideOfflinePort, usePinnedStore } from '@shared/offline';
 import {
   useWideWebLayout,
   ScreenBoundary,
@@ -71,6 +71,11 @@ installGlobalErrorReporting(chainUncaughtErrorHandler);
 reportOtaLaunchFailures().catch((error: unknown) => {
   console.warn('[telemetry] reading update logs failed', error);
 });
+
+function ConnectedOfflineReconcile() {
+  const reconcile = usePinnedStore((state) => state.reconcile);
+  return <OfflineReconcileBridge reconcile={reconcile} />;
+}
 
 function AuthDeepLinkBridge() {
   const router = useNavigator();
@@ -131,7 +136,7 @@ export default function RootLayout() {
                     <ScreenViewsBridge />
                     <PlaybackProvider>
                       <SleepTimerBridge />
-                      <OfflineReconcileBridge />
+                      <ConnectedOfflineReconcile />
                       <PlaybackShortcuts />
                       <ScreenBoundary>
                         <AppChrome isWideWeb={isWideWeb}>

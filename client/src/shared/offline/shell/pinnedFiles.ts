@@ -10,6 +10,12 @@ import { NetworkError } from '@shared/failure';
 import { startDeadline } from '@shared/timing';
 import { isSafeId, type TrackId } from '@shared/catalog';
 import { warn } from '@shared/log';
+import {
+  baseName,
+  isUnfinishedUri,
+  trackIdOfUri,
+  unfinishedName,
+} from '@shared/offline/core/pinnedNames';
 
 const PINNED_SUBDIR = 'offline-audio';
 
@@ -28,32 +34,12 @@ function pinnedDir(): StoredDirectory {
   return fileStore.ensureDir(PINNED_SUBDIR);
 }
 
-function baseName(uri: string): string {
-  return uri.split('/').pop() ?? '';
-}
-
 function pinnedFilesOnDisk(): readonly StoredFile[] {
   try {
     return pinnedDir().list();
   } catch {
     return [];
   }
-}
-
-function trackIdOfFile(file: StoredFile): string | null {
-  const [trackId, extension, ...beyondOneExtension] = baseName(file.uri).split('.');
-  const isTrackIdWithOneExtension = extension !== undefined && beyondOneExtension.length === 0;
-  return isTrackIdWithOneExtension ? (trackId ?? null) : null;
-}
-
-const UNFINISHED_SUFFIX = '.tmp';
-
-function unfinishedName(pinnedName: string): string {
-  return `${pinnedName}${UNFINISHED_SUFFIX}`;
-}
-
-function isUnfinishedDownload(file: StoredFile): boolean {
-  return baseName(file.uri).endsWith(UNFINISHED_SUFFIX);
 }
 
 export function pinnedFilesByTrackId(): ReadonlyMap<string, StoredFile> | null {
@@ -65,7 +51,7 @@ export function pinnedFilesByTrackId(): ReadonlyMap<string, StoredFile> | null {
   }
   const byTrackId = new Map<string, StoredFile>();
   for (const file of files) {
-    const trackId = trackIdOfFile(file);
+    const trackId = trackIdOfUri(file.uri);
     if (trackId !== null && isSafeId(trackId) && !byTrackId.has(trackId)) {
       byTrackId.set(trackId, file);
     }
@@ -76,7 +62,7 @@ export function pinnedFilesByTrackId(): ReadonlyMap<string, StoredFile> | null {
 function findPinned(trackId: TrackId): StoredFile | null {
   if (!isSafeId(trackId)) return null;
   for (const file of pinnedFilesOnDisk()) {
-    if (trackIdOfFile(file) === trackId) return file;
+    if (trackIdOfUri(file.uri) === trackId) return file;
   }
   return null;
 }
@@ -154,7 +140,7 @@ export function deletePinnedMany(trackIds: readonly TrackId[]): ReadonlySet<Trac
 
 export function deleteAbandonedDownloads(): void {
   for (const file of pinnedFilesOnDisk()) {
-    if (isUnfinishedDownload(file)) tryDeleteCounted(file);
+    if (isUnfinishedUri(file.uri)) tryDeleteCounted(file);
   }
 }
 
@@ -174,10 +160,6 @@ function freeSpaceBelowReserve(): boolean {
 
 export function pinStorageFull(): boolean {
   return pinnedBytes() >= MAX_PINNED_BYTES || freeSpaceBelowReserve();
-}
-
-export function unsignedUrl(url: string | undefined): string | undefined {
-  return url?.split('?')[0];
 }
 
 function rejectOnAbort(signal: AbortSignal): Promise<never> {
@@ -214,16 +196,4 @@ export async function downloadPinned(trackId: TrackId, url: string): Promise<str
   } finally {
     deadline.release();
   }
-}
-
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }

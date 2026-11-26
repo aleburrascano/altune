@@ -11,6 +11,7 @@ import {
 } from '@testing/fakes/files/inMemoryFileStore';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import {
+  createOffline,
   setPinnedFileStore,
   flushIndex,
   loadIndex,
@@ -22,11 +23,13 @@ import {
   usePinnedStore,
   type PinnedEntry,
   type PinnedStatus,
+  type UnpinBatchResult,
   provideOfflinePort,
   resolvePinnedUri,
   repinIfPinned,
 } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';
+import { captureWarnings } from '@testing/fakes/log/inMemoryLogger';
 
 provideOfflinePort(apiClientOfflinePort);
 
@@ -36,8 +39,6 @@ const MIN_FREE_BYTES = 536_870_912;
 const INDEX_WRITE_DELAY_MS = 2_000;
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const AUDIO_URLS_PATH = '/v1/audio-urls';
 const AUDIO_URLS_ROUTE = `POST ${AUDIO_URLS_PATH}`;
@@ -645,7 +646,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
   describe('index write failure — logged with context, never a bare swallow, never a throw', () => {
     it('a failed saveIndex write logs and degrades to in-memory rather than throwing', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const warn = captureWarnings();
       __fs.failNext('write', new Error('disk full'));
 
       expect(() => usePinnedStore.getState().pin(asTrackId('t1'))).not.toThrow();
@@ -662,14 +663,13 @@ describe('the pinned index is written through to disk and loaded back on relaunc
         trackId: 't1',
         status: 'downloading',
       });
-      warn.mockRestore();
     });
   });
 
   describe('a store no app has handed an offline port', () => {
     it('refuses to start a download instead of reaching the API on its own', () => {
       jest.isolateModules(() => {
-        const fresh = require('@shared/offline/state/pinnedStore') as {
+        const fresh = require('@shared/offline') as {
           usePinnedStore: typeof usePinnedStore;
         };
 
@@ -688,7 +688,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/state/pinnedStore') as {
+        const mod = require('@shared/offline') as {
           usePinnedStore: typeof usePinnedStore;
         };
         reloadedEntries = mod.usePinnedStore.getState().entries;
@@ -703,7 +703,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/state/pinnedStore') as {
+        const mod = require('@shared/offline') as {
           usePinnedStore: typeof usePinnedStore;
         };
         reloadedEntries = mod.usePinnedStore.getState().entries;
@@ -720,7 +720,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/state/pinnedStore') as {
+        const mod = require('@shared/offline') as {
           usePinnedStore: typeof usePinnedStore;
         };
         reloadedEntries = mod.usePinnedStore.getState().entries;
@@ -760,7 +760,7 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
   function importFreshEntries(): unknown {
     let entries: unknown;
     jest.isolateModules(() => {
-      const mod = require('@shared/offline/state/pinnedStore') as {
+      const mod = require('@shared/offline') as {
         usePinnedStore: typeof usePinnedStore;
       };
       entries = mod.usePinnedStore.getState().entries;
@@ -1371,7 +1371,7 @@ describe('reconcile squares the index with the files on disk', () => {
             },
           }),
         );
-        freshStoreModule = require('@shared/offline/state/pinnedStore') as {
+        freshStoreModule = require('@shared/offline') as {
           usePinnedStore: typeof usePinnedStore;
         };
       });
@@ -2649,20 +2649,19 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
   }
 
   let store: MemoryFileStore;
-  let warn: jest.SpyInstance;
+  let warn: jest.Mock;
 
   beforeEach(() => {
     store = createMemoryFileStore();
     setPinnedFileStore(store);
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
     serveAudioUrls(async ([id]) => [resolved(id!)]);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    warn = captureWarnings();
   });
 
   afterEach(() => {
     jest.useRealTimers();
     setPinnedFileStore();
-    warn.mockRestore();
   });
 
   async function advanceThroughAttempts(): Promise<void> {
@@ -2839,7 +2838,7 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
   const AUDIO_DIR = 'memory://document/offline-audio';
 
   let memory: MemoryFileStore;
-  let warn: jest.SpyInstance;
+  let warn: jest.Mock;
 
   function audioUri(trackId: string): string {
     return `${AUDIO_DIR}/${trackId}.mp3`;
@@ -2869,7 +2868,7 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
     setPinnedFileStore(memory);
     setPinnedIndexFileStore(memory);
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    warn = captureWarnings();
   });
 
   afterEach(() => {
@@ -2962,19 +2961,25 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
     it('stops starting removals once the batch runs past its deadline, reporting the rest as left', async () => {
       const trackIds = seedDownloads(Array.from({ length: 400 }, (_, i) => `d${i}`));
       let elapsedMs = 0;
-      jest.spyOn(performance, 'now').mockImplementation(() => elapsedMs);
+      const offline = createOffline({ now: () => elapsedMs, random: Math.random });
+      offline.usePinnedStore.setState({ entries: usePinnedStore.getState().entries });
       const deleteFile = memory.files.delete.bind(memory.files);
       memory.files.delete = (uri) => {
         elapsedMs += 1_000;
         return deleteFile(uri);
       };
 
-      const result = await usePinnedStore.getState().unpinMany(trackIds);
+      let result: UnpinBatchResult;
+      try {
+        result = await offline.usePinnedStore.getState().unpinMany(trackIds);
+      } finally {
+        offline.dispose();
+      }
 
       expect(result.requested).toBe(400);
       expect(result.failed).toBeGreaterThan(0);
       expect(result.failed).toBeLessThan(400);
-      expect(Object.keys(usePinnedStore.getState().entries)).toHaveLength(result.failed);
+      expect(Object.keys(offline.usePinnedStore.getState().entries)).toHaveLength(result.failed);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('deadline'), {
         untried: result.failed,
@@ -3108,11 +3113,9 @@ describe('work stays bounded on a large pinned library', () => {
         if (uri.endsWith('/u7.mp3')) throw new Error('EBUSY: file is locked');
         return deleteFile(uri);
       };
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
 
       usePinnedStore.getState().unpinAll();
-
-      warn.mockRestore();
       expect(counts.audioLists).toBeLessThanOrEqual(2);
       expect(usePinnedStore.getState().entries).toEqual({
         u7: { trackId: 'u7', status: 'ready', uri: audioUri('u7') },
@@ -3144,11 +3147,9 @@ describe('work stays bounded on a large pinned library', () => {
           },
         };
       };
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
 
       usePinnedStore.getState().unpinAll();
-
-      warn.mockRestore();
       expect(usePinnedStore.getState().entries).toEqual({});
     });
   });
@@ -3211,12 +3212,16 @@ describe('work stays bounded on a large pinned library', () => {
   });
 });
 
+function readyForSignOut(): PinnedEntry {
+  return { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///missing.mp3' };
+}
+
 describe('downloads belong to one account and are cleared on sign-out', () => {
   const { __fs } = FileSystem as unknown as {
     __fs: {
       seedFile(uri: string, contents: string): void;
       readFile(uri: string): string | undefined;
-      failNext(kind: 'read' | 'delete', error?: Error): void;
+      failNext(kind: 'read' | 'write' | 'delete', error?: Error, uri?: string): void;
     };
   };
 
@@ -3259,7 +3264,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
     });
 
     it('keeps another account download whose file failed to delete tracked and does not switch the owner', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
@@ -3271,11 +3276,10 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       });
       expect(__fs.readFile(AUDIO_URI)).toBe('audio-bytes');
       expect(__fs.readFile(OWNER_URI)).toBe('user-a');
-      warn.mockRestore();
     });
 
     it('does not resolve a previous account download that survived a partial claim', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
@@ -3283,11 +3287,10 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       notifyIdentityChange('user-b');
 
       expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
-      warn.mockRestore();
     });
 
     it('resolves a download the new account made after a partial claim while a surviving previous account download stays hidden', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
@@ -3300,11 +3303,10 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
 
       expect(resolvePinnedUri(asTrackId('t2'))).toBe(freshUri);
       expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
-      warn.mockRestore();
     });
 
     it('clears a stale partial-removal outcome when a new account claims the downloads', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
@@ -3312,11 +3314,10 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       notifyIdentityChange('user-b');
 
       expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
-      warn.mockRestore();
     });
 
     it('clears a stale partial-removal outcome on the next pin', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
       usePinnedStore.getState().unpinAll();
@@ -3325,22 +3326,20 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       usePinnedStore.getState().pin(asTrackId('t2'));
 
       expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
-      warn.mockRestore();
     });
 
     it('clears a stale partial-removal outcome on sign-out', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
 
       runSignOutCleanups();
 
       expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
-      warn.mockRestore();
     });
 
     it('keeps tracking a previous account download whose file failed to delete, and retries the claim next launch', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureWarnings();
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
@@ -3356,7 +3355,6 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
       expect(usePinnedStore.getState().entries).toEqual({});
       expect(__fs.readFile(OWNER_URI)).toBe('user-b');
-      warn.mockRestore();
     });
 
     it('treats an unreadable owner record as foreign and deletes the downloads', () => {
@@ -3371,16 +3369,9 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
     });
 
     it('a failed owner write leaves no owner on disk, so the next claim clears again instead of adopting', () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const realWrite = FileSystem.File.prototype.write;
-      const write = jest.spyOn(FileSystem.File.prototype, 'write').mockImplementation(function (
-        this: FileSystem.File,
-        ...args
-      ) {
-        if (this.uri === OWNER_URI) throw new Error('ENOSPC');
-        return realWrite.apply(this, args);
-      });
+      const warn = captureWarnings();
       seedReadyDownload();
+      __fs.failNext('write', new Error('ENOSPC'), OWNER_URI);
 
       notifyIdentityChange('user-a');
 
@@ -3392,12 +3383,30 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
           error: expect.objectContaining({ message: 'ENOSPC' }),
         }),
       );
-      write.mockRestore();
-      warn.mockRestore();
     });
   });
 
   describe('sign-out cleanup registry', () => {
+    it('an offline instance that has not been disposed clears its downloads on sign-out', () => {
+      const offline = createOffline({ now: () => 0, random: Math.random });
+      offline.usePinnedStore.setState({ entries: { t1: readyForSignOut() } });
+
+      runSignOutCleanups();
+      offline.dispose();
+
+      expect(offline.usePinnedStore.getState().entries).toEqual({});
+    });
+
+    it('a disposed offline instance no longer reacts to sign-out', () => {
+      const offline = createOffline({ now: () => 0, random: Math.random });
+      offline.usePinnedStore.setState({ entries: { t1: readyForSignOut() } });
+      offline.dispose();
+
+      runSignOutCleanups();
+
+      expect(offline.usePinnedStore.getState().entries).toEqual({ t1: readyForSignOut() });
+    });
+
     it('removes every download when the signed-in identity changes', () => {
       seedReadyDownload();
 

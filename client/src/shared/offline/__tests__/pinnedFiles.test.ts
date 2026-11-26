@@ -1,6 +1,5 @@
 import * as FileSystem from 'expo-file-system';
 import { asTrackId, type TrackId } from '@shared/catalog';
-import * as pinnedFilesModule from '@shared/offline/state/pinnedFiles';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
@@ -566,24 +565,5 @@ describe('a pinned download in progress', () => {
     await outcome;
 
     expect(pinnedFilesByTrackId()?.has('t1')).toBe(false);
-  });
-});
-
-describe('pinnedFiles module surface', () => {
-  it('exposes the pinned-file API and keeps its directory, lookup, extension and limits private', () => {
-    expect(Object.keys(pinnedFilesModule).sort()).toEqual([
-      'deleteAbandonedDownloads',
-      'deleteAllPinned',
-      'deletePinned',
-      'deletePinnedMany',
-      'downloadPinned',
-      'formatBytes',
-      'pinStorageFull',
-      'pinnedBytes',
-      'pinnedFilesByTrackId',
-      'setPinnedFileStore',
-      'unsignedUrl',
-      'withPinnedBytesCached',
-    ]);
   });
 });

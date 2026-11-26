@@ -8,8 +8,6 @@ import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 provideOfflinePort(apiClientOfflinePort);
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
 const { __http } = require('@testing/doubles/fetch.js');
 
 beforeEach(async () => {

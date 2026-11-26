@@ -20,3 +20,9 @@ export function recordLogs(): RecordedLogs {
   });
   return { warnings, text: () => JSON.stringify(warnings, revealError) };
 }
+
+export function captureWarnings(): jest.Mock {
+  const warn = jest.fn();
+  setLogger({ warn });
+  return warn;
+}

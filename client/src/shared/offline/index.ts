@@ -1,7 +1,6 @@
 export { asTrackId } from '@shared/catalog';
 export { offlineDownloadsSupported } from '@shared/offline/core/offlineSupport';
 export {
-  formatBytes,
   deleteAllPinned,
   deletePinned,
   downloadPinned,
@@ -9,35 +8,39 @@ export {
   pinnedFilesByTrackId,
   setPinnedFileStore,
   withPinnedBytesCached,
-} from '@shared/offline/state/pinnedFiles';
-export type { PinnedEntry } from '@shared/offline/state/pinnedIndex';
+} from '@shared/offline/shell/pinnedFiles';
+export type { PinnedEntry } from '@shared/offline/core/pinnedEntry';
+export { formatBytes } from '@shared/offline/core/pinnedNames';
+export { pinnedBytes as pinnedByteTotal } from '@shared/offline/shell/pinnedFiles';
+export { createOffline, type OfflineDeps } from '@shared/offline/shell/pinnedStore';
 export {
-  pinnedByteTotal,
   provideOfflinePort,
   repinIfPinned,
   resolvePinnedUri,
   usePinnedStore,
-} from '@shared/offline/state/pinnedStore';
+} from '@shared/offline/shell/appOffline';
 export type {
   PinAdmission,
   PinBatchResult,
   PinnedStatus,
   UnpinAllOutcome,
   UnpinBatchResult,
-} from '@shared/offline/state/pinnedStore';
+} from '@shared/offline/shell/pinnedStore';
 export { OfflineReconcileBridge } from '@shared/offline/view/OfflineReconcileBridge';
 export type { OfflinePort } from '@shared/offline/ports/offlinePort';
 export { runDownloadQueue } from '@shared/offline/shell/pinnedDownloadWorker';
 export {
   downloadingEntry,
   failedEntry,
+  queuedEntry,
+  readyEntry,
+} from '@shared/offline/core/pinnedEntry';
+export {
   flushIndex,
   loadIndex,
-  queuedEntry,
   readOwner,
-  readyEntry,
   saveIndex,
   scheduleSaveIndex,
   setPinnedIndexFileStore,
   writeOwner,
-} from '@shared/offline/state/pinnedIndex';
+} from '@shared/offline/shell/pinnedIndex';
