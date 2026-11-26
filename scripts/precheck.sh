@@ -336,9 +336,9 @@ if touches '^services/go-api/'; then
       elif [ ${#affected[@]} -gt 0 ]; then
         par check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
       fi
-      par check "go-api strict linters (new code, whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners ./...
+      par check "go-api strict linters (whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./...
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
-      check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
+      check "go-api no vague names (whole tree)" $m sh -c '[ "$(git rev-parse --is-shallow-repository)" = false ] || { echo "this clone is shallow, so names added before its boundary would go unchecked; fetch the full history" >&2; exit 1; }; exec go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"'
       mapfile -t pkgs < <(go_pkgs $m)
       [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
@@ -503,6 +503,10 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
   if [ -f "$HOME/.claude/bin/vendor-test-home.sh" ]; then
     check "test-home in step with ~/.claude/bin" . bash "$HOME/.claude/bin/vendor-test-home.sh" "$root" --check
   fi
+fi
+
+if [ "$full" = 1 ] && [ $stage != commit ] && need node "test-home whole tree"; then
+  check "go-api and overseer test files live with their unit (whole tree)" . bash scripts/test-home-tree.sh services/go-api services/overseer
 fi
 
 if touches '^scripts/(__tests__/)?precheck(\.test)?\.sh$'; then
