@@ -15,12 +15,13 @@ export { primeSignedInUser } from '@shared/auth/shell/primeSignedInUser';
 export {
   markSessionExpired,
   stampCredentials,
-  useSessionExpired,
   clearSessionExpired,
   getSessionExpired,
   renewSessionCredentials,
-} from '@shared/auth/view/sessionExpired';
-export type { CredentialStamp } from '@shared/auth/view/sessionExpired';
+  subscribeSessionExpired,
+} from '@shared/auth/core/sessionExpired';
+export type { CredentialStamp } from '@shared/auth/core/sessionExpired';
+export { useSessionExpired } from '@shared/auth/view/sessionExpired';
 export { useSession } from '@shared/auth/useSession';
 export type { SessionState } from '@shared/auth/useSession';
 export { useSignOut } from '@shared/auth/useSignOut';

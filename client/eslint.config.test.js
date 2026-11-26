@@ -65,6 +65,79 @@ function diffScopedRuleIds(filePath, code, extraEnv = {}) {
   return JSON.parse(out);
 }
 
+async function restrictedImportMessages(filePath, code) {
+  const [result] = await eslint.lintText(code, { filePath });
+  return result.messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message);
+}
+
+describe('mobile eslint keeps view out of core', () => {
+  const corePath = 'src/shared/failure/core/errors.ts';
+
+  for (const source of ['@shared/auth/view/sessionExpired', '@features/library/view/Row']) {
+    it(`reports an import of ${source} from core/`, async () => {
+      const messages = await restrictedImportMessages(
+        corePath,
+        `import { x } from '${source}';\nexport const y = x;\n`,
+      );
+      assert.strictEqual(messages.length, 1);
+      assert.match(messages[0], /core\/ never imports view\//);
+      assert.match(messages[0], /client\/src\/README\.md/);
+    });
+  }
+
+  for (const source of ['./view/Row', '../view', '../../features/library/view/Row']) {
+    it(`reports the relative import ${source} from core/`, async () => {
+      const messages = await restrictedImportMessages(
+        corePath,
+        `import { x } from '${source}';\nexport const y = x;\n`,
+      );
+      assert.strictEqual(
+        messages.filter((message) => /never imports view/.test(message)).length,
+        1,
+      );
+    });
+  }
+
+  for (const source of [
+    '@shared/auth/viewModel',
+    '@shared/preview/core/x',
+    './viewHelpers',
+    '../core/review',
+  ]) {
+    it(`does not report ${source}, which only looks like view/`, async () => {
+      const messages = await restrictedImportMessages(
+        corePath,
+        `import { x } from '${source}';\nexport const y = x;\n`,
+      );
+      assert.ok(!messages.some((message) => /never imports view/.test(message)));
+    });
+  }
+
+  it('allows view/ to import core/', async () => {
+    const messages = await restrictedImportMessages(
+      'src/shared/failure/view/Banner.ts',
+      "import { x } from '@shared/failure/core/errors';\nexport const y = x;\n",
+    );
+    assert.strictEqual(messages.length, 0);
+  });
+
+  it('still reports a UI package imported from core/', async () => {
+    const messages = await restrictedImportMessages(
+      corePath,
+      "import { useState } from 'react';\nexport const y = useState;\n",
+    );
+    assert.strictEqual(messages.length, 1);
+  });
+
+  it('allows a core/ file to import another core/ file', async () => {
+    const messages = await restrictedImportMessages(
+      corePath,
+      "import { x } from '@shared/failure/core/other';\nexport const y = x;\n",
+    );
+    assert.strictEqual(messages.length, 0);
+  });
+});
+
 describe('mobile eslint without type info (commit stage)', () => {
   const path = 'src/shared/failure/core/errors.ts';
   const code = 'export const data = 1;\nPromise.resolve(data);\n';
