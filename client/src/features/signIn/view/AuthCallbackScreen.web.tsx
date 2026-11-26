@@ -13,18 +13,12 @@ import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseA
 
 import { AuthFullScreenNotice } from '@features/signIn/view/AuthNotices';
 import { BackToSignInLink } from '@features/signIn/view/BackToSignInLink';
-import { isPresent } from '@features/signIn/core/isPresent';
 
 type FailureState = 'refused' | 'unreachable';
 type Failure = (state: FailureState) => void;
 type ScreenState = 'pending' | FailureState;
 
-function currentUrl(): string | null {
-  return typeof window !== 'undefined' ? window.location.href : null;
-}
-
 function stripCredentialsFromUrl(): void {
-  if (typeof window === 'undefined') return;
   window.history.replaceState(null, '', window.location.pathname);
 }
 
@@ -67,11 +61,9 @@ async function completeCallback(
   intents: AuthIntents,
   router: AuthRouter,
 ): Promise<'ok' | 'refused'> {
-  const url = currentUrl();
+  const url = window.location.href;
   stripCredentialsFromUrl();
-  if (isPresent(url)) return exchangeUrl(intents, url, router);
-  warn('[auth] web callback has no url to read');
-  return 'refused';
+  return exchangeUrl(intents, url, router);
 }
 
 function failureStateFor(err: unknown): FailureState {
