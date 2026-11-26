@@ -25,10 +25,14 @@ func RunBudget(interval time.Duration) time.Duration {
 	return interval / runBudgetFraction
 }
 
+func BindRun(ctx context.Context, name string) context.Context {
+	return logging.WithJobRun(ctx, name, uuid.NewString())
+}
+
 func RunJob(parent context.Context, control *JobControl, name string, budget time.Duration, fn func(context.Context) error) {
 	jobCtx, cancel := context.WithTimeoutCause(parent, budget, ErrRunBudgetExceeded)
 	defer cancel()
-	jobCtx = logging.WithJobRun(jobCtx, name, uuid.NewString())
+	jobCtx = BindRun(jobCtx, name)
 	var err error
 	if panicked := SafeRun(jobCtx, backgroundJobPanic, func() { err = fn(jobCtx) }, "job", name); panicked != nil {
 		err = panicked

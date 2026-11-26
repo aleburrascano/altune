@@ -21,7 +21,7 @@ func (a *App) startAlertMonitor(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("alert monitor: %w", err)
 	}
-	a.alertMonitor = monitor.WithLeadership(a.jobs.LeaderContext)
+	a.alertMonitor = monitor.WithLeadership(a.jobs.LeaderContextFor(jobs.AlertMonitor))
 	a.jobs.WhenLeader(jobs.AlertMonitor, a.alertMonitor.Start)
 	return nil
 }
