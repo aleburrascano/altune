@@ -19,7 +19,9 @@ func ytMusicServer(t *testing.T, status int) (*httptest.Server, *ytMusicRequest)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got.method, got.path, got.key = r.Method, r.URL.Path, r.URL.Query().Get("key")
 		got.contentType, got.referer, got.userAgent = r.Header.Get("Content-Type"), r.Header.Get("Referer"), r.Header.Get("User-Agent")
-		_ = json.NewDecoder(r.Body).Decode(&got.body)
+		if err := json.NewDecoder(r.Body).Decode(&got.body); err != nil {
+			t.Errorf("the adapter sent a body that is not JSON: %v", err)
+		}
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(`{"contents":{}}`))
 	}))
