@@ -40,17 +40,12 @@ func newQueueService(
 	lookupTimeout time.Duration,
 ) *playback.QueueService {
 	nowPlayingReader := playback.NewNowPlayingReader(playbackfromlibrary.NewNowPlayingTracks(trackRepo),
-		playback.WithNowPlayingMetrics(metrics),
-		playback.WithNowPlayingLookupTimeout(lookupTimeout),
-		playback.WithNowPlayingClock(time.Now))
+		metrics, time.Now, lookupTimeout)
 	return playback.NewQueueService(queueStateRepo, nowPlayingReader, time.Now)
 }
 
 func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueSaveLimit) *playback.QueueHandler {
-	return playback.NewQueueHandler(queueSvc,
-		playback.WithQueueSaveLimit(limit),
-		playback.WithQueueStateRateLimitMetrics(metrics),
-		playback.WithQueueStateClock(time.Now))
+	return playback.NewQueueHandler(queueSvc, limit, time.Now, metrics)
 }
 
 func queueRateLimit(cfg *config.Config) playback.QueueSaveLimit {

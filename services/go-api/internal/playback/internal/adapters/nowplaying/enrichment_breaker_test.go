@@ -75,7 +75,7 @@ type scriptedReader struct {
 func newScriptedReader(clock func() time.Time) *scriptedReader {
 	gauge := &breakerGauge{}
 	return &scriptedReader{
-		reader: playback.NewNowPlayingReader(trackScript{}, playback.WithNowPlayingMetrics(gauge), playback.WithNowPlayingClock(clock)),
+		reader: playback.NewNowPlayingReader(trackScript{}, gauge, clock, defaultLookupTimeout),
 		gauge:  gauge,
 		user:   testUser(),
 	}
@@ -261,7 +261,7 @@ func TestEnrichmentBreaker_AFailureRecordedWhileOpenLogsNothing(t *testing.T) {
 			<-release
 		}
 		return nil, playback.ErrTrackSourceUnavailable
-	}))
+	}), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 	user := testUser()
 	firstDone := make(chan struct{})
 	go func() {

@@ -544,6 +544,19 @@ func TestQueueService_Resume_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
 	}
 }
 
+func TestQueueService_Resume_CorruptStoredRowIsStampedWithTheInjectedClock(t *testing.T) {
+	stamp := time.Date(2026, 11, 25, 9, 30, 0, 0, time.UTC)
+	svc := playback.NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, func() time.Time { return stamp })
+
+	state, err := svc.Resume(context.Background(), testUser())
+	if err != nil {
+		t.Fatalf("corrupt stored row must degrade to an empty queue, got error: %v", err)
+	}
+	if !state.UpdatedAt.Equal(stamp) {
+		t.Errorf("empty state UpdatedAt = %v, want the injected clock's %v", state.UpdatedAt, stamp)
+	}
+}
+
 func TestQueueService_ResumeView_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
 	svc := playback.NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, time.Now)
 
