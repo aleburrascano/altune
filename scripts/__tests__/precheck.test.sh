@@ -73,7 +73,7 @@ expect_rc() {
 }
 
 expect_out() {
-    grep -qF "$1" "$WORK/out.log" || fail "expected output to mention '$1'"
+    grep -qF -- "$1" "$WORK/out.log" || fail "expected output to mention '$1'"
 }
 
 CASE="default uses gitea/main when both gitea/main and origin/main exist, so a fresh base commit is green"
@@ -500,6 +500,7 @@ printf "go %s\\n" "\$*" >>"$WORK/tools.log"
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
+"test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi ;;
 esac
 exec "$REAL_GO" "\$@"
 STUB
@@ -774,6 +775,20 @@ run_with_tools --lint
 expect_log "./internal/search/adapters/y"
 forbid_log "adapters/x"
 expect_lint_args_exist
+
+CASE="a failing go test step names the failed test and prints its output, however many passing packages follow"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+passing=$(for i in $(seq 1 80); do printf 'ok  \\taltune/go-api/internal/p%s\\t0.1s\\n' "$i"; done)
+GO_TEST_STUB_OUT="--- FAIL: TestFlaky (0.01s)\\n    flaky_test.go:12: boom\\nFAIL\\nFAIL\\taltune/go-api/internal/shared/s\\t11.4s\\n$passing" run_push_scoped
+expect_rc 1
+expect_out "--- FAIL: TestFlaky (0.01s)"
+expect_out "flaky_test.go:12: boom"
+expect_out "FAIL	altune/go-api/internal/shared/s"
+last_lines=$(tail -n 8 "$WORK/out.log")
+grep -qF -- "--- FAIL: TestFlaky" <<<"$last_lines" || fail "the failed test is not among the last lines"
+! grep -qF "altune/go-api/internal/p1	" "$WORK/out.log" || fail "output of passing packages was printed"
 
 add_test_home_stub() {
     mkdir -p "$WORK/bin" "$WORK/home"
