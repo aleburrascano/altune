@@ -1984,6 +1984,12 @@ func captureJSONLogSync(t *testing.T) *syncLogBuffer {
 	return buf
 }
 
+func startVerifiedScheduler(t *testing.T, v acqports.Verification) {
+	t.Helper()
+	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now, service.WithVerificationStatus(v))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+}
+
 func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -1998,7 +2004,7 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logs := captureJSONLogSync(t)
 
-			service.WithVerificationStatus(tc.verification)(&service.BackgroundAcquisitionScheduler{})
+			startVerifiedScheduler(t, tc.verification)
 
 			var record struct {
 				Level string `json:"level"`
@@ -2017,7 +2023,7 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 func TestWithVerificationStatus_NamesFingerprintLookupsUnverified(t *testing.T) {
 	logs := captureJSONLogSync(t)
 
-	service.WithVerificationStatus(acqports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})(&service.BackgroundAcquisitionScheduler{})
+	startVerifiedScheduler(t, acqports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})
 
 	var record struct {
 		FingerprintLookup string `json:"fingerprint_lookup"`
@@ -3485,7 +3491,7 @@ func awaitIdle(t *testing.T, s *service.BackgroundAcquisitionScheduler) {
 }
 
 func TestNewBackgroundAcquisitionScheduler_RefusesAMissingClock(t *testing.T) {
-	_, err := service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, nil, testSchedulerPorts())
+	_, err := service.NewBackgroundAcquisitionScheduler(service.NewProcessRoot(context.Background()), outcomeAcquirer{}, 1, nil, testSchedulerPorts())
 
 	if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), "clock") {
 		t.Errorf("error = %v, want ErrMissingCollaborator naming the clock", err)
@@ -3527,7 +3533,7 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 			wiring := testSchedulerPorts()
 			drop(&wiring)
 
-			_, err := service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, time.Now, wiring)
+			_, err := service.NewBackgroundAcquisitionScheduler(service.NewProcessRoot(context.Background()), outcomeAcquirer{}, 1, time.Now, wiring)
 
 			if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), field) {
 				t.Errorf("error = %v, want ErrMissingCollaborator naming %s", err, field)

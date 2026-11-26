@@ -3192,8 +3192,8 @@ func (r *creationRecordingWorkspace) Remove(path string) error {
 	return r.inner.Remove(path)
 }
 
-func (r *creationRecordingWorkspace) SweepAbandoned(t time.Time) int {
-	return r.inner.SweepAbandoned(t)
+func (r *creationRecordingWorkspace) SweepAbandoned(ctx context.Context, t time.Time) int {
+	return r.inner.SweepAbandoned(ctx, t)
 }
 
 func (r *creationRecordingWorkspace) Size(path string) (int64, error) { return r.inner.Size(path) }

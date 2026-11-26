@@ -50,14 +50,7 @@ const fingerprintLookupUnverified = "unverified until the first successful looku
 func WithVerificationStatus(v ports.Verification) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) {
 		s.verification = v
-		if !v.ToolsPresent() {
-			slog.WarnContext(context.Background(), "acquisition.verification_degraded",
-				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp,
-				"fingerprint_lookup", fingerprintLookupUnverified)
-			return
-		}
-		slog.InfoContext(context.Background(), "acquisition.verification_armed",
-			"fpcalc", v.Fpcalc, "fingerprint_lookup", fingerprintLookupUnverified)
+		s.verificationGiven = true
 	}
 }
 
@@ -70,3 +63,14 @@ type VerifySkipCounter struct{ n atomic.Uint64 }
 func (c *VerifySkipCounter) RecordVerifySkip(string) { c.n.Add(1) }
 
 func (c *VerifySkipCounter) Count() uint64 { return c.n.Load() }
+
+func logVerification(ctx context.Context, v ports.Verification) {
+	if !v.ToolsPresent() {
+		slog.WarnContext(ctx, "acquisition.verification_degraded",
+			"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp,
+			"fingerprint_lookup", fingerprintLookupUnverified)
+		return
+	}
+	slog.InfoContext(ctx, "acquisition.verification_armed",
+		"fpcalc", v.Fpcalc, "fingerprint_lookup", fingerprintLookupUnverified)
+}

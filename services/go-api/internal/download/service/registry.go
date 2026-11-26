@@ -123,6 +123,7 @@ func mergeSlotsReportingOutage(
 	errs []error,
 ) (FindResult, error) {
 	candidates, outage, err := ports.CollectCandidatesReportingOutage(
+		ctx,
 		len(sources),
 		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
 		func(i int, candidates []ports.AudioCandidate) {

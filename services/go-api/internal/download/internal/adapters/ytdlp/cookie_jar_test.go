@@ -622,7 +622,7 @@ func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T)
 
 	go func() { done <- canaryWith(jar) }()
 	waitFor(t, "yt-dlp to start", done, func() bool { _, err := os.Stat(started); return err == nil })
-	swept := download.NewTempWorkspace().SweepAbandoned(time.Now().Add(time.Hour))
+	swept := download.NewTempWorkspace().SweepAbandoned(context.Background(), time.Now().Add(time.Hour))
 	if err := os.WriteFile(proceed, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}

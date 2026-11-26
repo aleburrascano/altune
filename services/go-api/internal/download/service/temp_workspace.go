@@ -15,8 +15,8 @@ func requireWorkspace(owner string, ws ports.ScratchFolder) error {
 	return missingPort(owner, "workspace", ws == nil)
 }
 
-func SweepStaleTempDirs(ws ports.ScratchFolder, now clock.Func) {
-	ws.SweepAbandoned(now().Add(-maxLiveTempAge))
+func SweepStaleTempDirs(ctx context.Context, ws ports.ScratchFolder, now clock.Func) {
+	ws.SweepAbandoned(ctx, now().Add(-maxLiveTempAge))
 }
 
 func CleanupTemp(ctx context.Context, ws ports.ScratchFolder, ac *AcquisitionContext) {

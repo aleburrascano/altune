@@ -27,7 +27,7 @@ import (
 
 func newIdentifier(t *testing.T, binDir, apiKey string) *chromaprint.Identifier {
 	t.Helper()
-	id, err := chromaprint.NewIdentifier(binDir, apiKey, &http.Client{})
+	id, err := chromaprint.NewIdentifier(context.Background(), binDir, apiKey, &http.Client{})
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -35,7 +35,7 @@ func newIdentifier(t *testing.T, binDir, apiKey string) *chromaprint.Identifier 
 }
 
 func TestNewIdentifier_RefusesANilClient(t *testing.T) {
-	id, err := chromaprint.NewIdentifier(t.TempDir(), "key", nil)
+	id, err := chromaprint.NewIdentifier(context.Background(), t.TempDir(), "key", nil)
 
 	if !errors.Is(err, chromaprint.ErrClientRequired) {
 		t.Fatalf("err = %v, want ErrChromaprintClientRequired", err)
@@ -53,7 +53,7 @@ func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
 		through++
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := chromaprint.NewIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	id, err := chromaprint.NewIdentifier(context.Background(), fakeFpcalcDir(t, 100), "real-key", client)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestIdentify_MarksTheLookupPostRetrySafeSoTheTransportMayRetryIt(t *testing
 		marked = retrysafe.Marked(r.Context())
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := chromaprint.NewIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	id, err := chromaprint.NewIdentifier(context.Background(), fakeFpcalcDir(t, 100), "real-key", client)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}

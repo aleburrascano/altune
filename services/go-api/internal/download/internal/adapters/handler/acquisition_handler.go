@@ -36,8 +36,9 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schedule := func() error { return c.schedule(r.Context(), userId, trackId) }
-	if err := c.admission.Admit(r.Context(), track, schedule); err != nil {
+	ctx := r.Context()
+	schedule := func() error { return c.schedule(ctx, userId, trackId) }
+	if err := c.admission.Admit(ctx, track, schedule); err != nil {
 		httpserver.HandleServiceError(w, r, err)
 		return
 	}
