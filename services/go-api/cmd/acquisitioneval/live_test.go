@@ -269,12 +269,15 @@ func TestBudgetedClient_LogsTheSharedPace(t *testing.T) {
 		return map[string]string{"REDIS_URL": "redis://" + server.Addr()}[key]
 	}
 	var out bytes.Buffer
-	client, err := budgetedClient(context.Background(), env, &out)
+	client, err := budgetedClient(context.Background(), env, 7*time.Second, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if client == nil {
 		t.Fatal("nil client without an error")
+	}
+	if client.Timeout != 7*time.Second {
+		t.Fatalf("client timeout = %v, want the configured 7s", client.Timeout)
 	}
 	if got := out.String(); !strings.HasPrefix(got, "shared InnerTube budget: one call per ") {
 		t.Fatalf("log = %q, want the shared pace line", got)

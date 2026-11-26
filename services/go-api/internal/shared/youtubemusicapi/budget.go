@@ -27,7 +27,6 @@ const (
 	unlimitedWaitMillis  = -1
 	refusedWaitMillis    = -1
 	redisCommandDeadline = 3 * time.Second
-	toolClientTimeout    = 30 * time.Second
 	minRequestTime       = 3 * time.Second
 )
 
@@ -89,7 +88,7 @@ func SettingsFromEnv(env func(string) string) (Settings, error) {
 	return settings, nil
 }
 
-func ToolClient(ctx context.Context, env func(string) string) (*http.Client, Settings, error) {
+func ToolClient(ctx context.Context, env func(string) string, timeout time.Duration) (*http.Client, Settings, error) {
 	settings, err := SettingsFromEnv(env)
 	if err != nil {
 		return nil, Settings{}, err
@@ -101,7 +100,11 @@ func ToolClient(ctx context.Context, env func(string) string) (*http.Client, Set
 	if err != nil {
 		return nil, Settings{}, err
 	}
-	return outbound.MustNewClient(toolClientTimeout, budget.Transport(nil)), settings, nil
+	client, err := outbound.NewClient(timeout, budget.Transport(nil))
+	if err != nil {
+		return nil, Settings{}, err
+	}
+	return client, settings, nil
 }
 
 func (s Settings) Describe() string {

@@ -1,6 +1,7 @@
 package youtubemusicapi_test
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
@@ -132,7 +133,7 @@ func TestSettingsFromEnv(t *testing.T) {
 }
 
 func TestToolClient_RefusesToRunWithoutRedis(t *testing.T) {
-	_, _, err := youtubemusicapi.ToolClient(context.Background(), func(string) string { return "" })
+	_, _, err := youtubemusicapi.ToolClient(context.Background(), func(string) string { return "" }, time.Second)
 	if !errors.Is(err, youtubemusicapi.ErrNoRedisForTool) {
 		t.Fatalf("got %v, want ErrNoRedisForTool", err)
 	}
@@ -143,7 +144,7 @@ func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
 	env := func(key string) string {
 		return map[string]string{redisURLVar: "redis://" + server.Addr(), minIntervalVar: "300ms"}[key]
 	}
-	client, settings, err := youtubemusicapi.ToolClient(context.Background(), env)
+	client, settings, err := youtubemusicapi.ToolClient(context.Background(), env, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,5 +322,16 @@ func TestBudget_CoolDownSucceedsOnALiveRedisAndNamesTheScriptWhenRedisIsDown(t *
 	err := budget.CoolDown(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "cooldown script") {
 		t.Fatalf("CoolDown with redis down = %v, want an error naming the cooldown script", err)
+	}
+}
+
+func TestToolClient_RefusesANonPositiveTimeout(t *testing.T) {
+	server := miniredis.RunT(t)
+	env := func(key string) string { return map[string]string{redisURLVar: "redis://" + server.Addr()}[key] }
+
+	_, _, err := youtubemusicapi.ToolClient(context.Background(), env, 0)
+
+	if !errors.Is(err, outbound.ErrClientTimeoutRequired) {
+		t.Fatalf("got %v, want ErrClientTimeoutRequired", err)
 	}
 }

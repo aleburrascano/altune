@@ -37,8 +37,15 @@ linters:
     - durationcheck
     - spancheck
     - depguard
+    - importas
 
   settings:
+    importas:
+      no-unaliased: false
+      no-extra-aliases: false
+      alias:
+        - pkg: net/http
+          alias: http
     exhaustive:
       default-signifies-exhaustive: true
     rowserrcheck:
