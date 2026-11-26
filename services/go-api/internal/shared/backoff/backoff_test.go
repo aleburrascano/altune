@@ -87,6 +87,16 @@ func TestPolicy_DelayAtWithASpreadIsSymmetricAroundTheCeiling(t *testing.T) {
 	}
 }
 
+func TestPolicy_ASpreadOnAnUncappedCeilingSaturatesInsteadOfWrappingNegative(t *testing.T) {
+	wide := backoff.MustUncapped(time.Second, backoff.WithSpread(0.5))
+
+	for _, unit := range []float64{0, 0.5, 0.99, 1} {
+		if got := wide.DelayAt(1000, unit); got <= 0 {
+			t.Errorf("DelayAt(1000, %v) = %v, want a positive wait", unit, got)
+		}
+	}
+}
+
 func TestUncapped_GrowsWithoutALimitAndSaturatesInsteadOfOverflowing(t *testing.T) {
 	uncapped := backoff.MustUncapped(time.Second)
 

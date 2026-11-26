@@ -104,7 +104,11 @@ func (p Policy) Ceiling(attempt int) time.Duration {
 func (p Policy) DelayAt(attempt int, unit float64) time.Duration {
 	ceiling := p.Ceiling(attempt)
 	if p.spread > 0 {
-		return ceiling + time.Duration((unit*2-1)*p.spread*float64(ceiling))
+		delta := time.Duration((unit*2 - 1) * p.spread * float64(ceiling))
+		if delta > 0 && ceiling > time.Duration(math.MaxInt64)-delta {
+			return time.Duration(math.MaxInt64)
+		}
+		return ceiling + delta
 	}
 	half := ceiling / 2
 	return half + time.Duration(unit*float64(ceiling-half))
