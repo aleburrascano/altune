@@ -1,10 +1,10 @@
 package providers
 
 import (
+	"altune/go-api/internal/shared/backoff"
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"sync"
 	"time"
 )
@@ -109,7 +109,7 @@ func (r *jwksRefresher) settle(call *jwksRefreshCall) {
 	}
 	r.failures++
 	r.lastErr = call.err
-	r.notBefore = r.now().Add(equalJitter(jwksRefreshBackoff(r.failures)))
+	r.notBefore = r.now().Add(jwksRefreshBackoff.Delay(r.failures))
 }
 
 func (r *jwksRefresher) recordKeySet() {
@@ -151,15 +151,4 @@ func (r *jwksRefresher) checkFresh() error {
 	return err
 }
 
-func jwksRefreshBackoff(failures int) time.Duration {
-	d := jwksRefreshBackoffBase
-	for i := 1; i < failures && d < jwksRefreshBackoffCap; i++ {
-		d *= 2
-	}
-	return min(d, jwksRefreshBackoffCap)
-}
-
-func equalJitter(d time.Duration) time.Duration {
-	half := d / 2
-	return half + rand.N(half+1)
-}
+var jwksRefreshBackoff = backoff.Policy{Base: jwksRefreshBackoffBase, Cap: jwksRefreshBackoffCap}

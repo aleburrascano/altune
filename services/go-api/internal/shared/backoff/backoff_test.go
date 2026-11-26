@@ -20,6 +20,35 @@ func TestPolicy_CeilingDoublesFromTheBaseAndStopsAtTheCap(t *testing.T) {
 	}
 }
 
+func TestPolicy_CeilingGrowsByTheFactorWhenOneIsSet(t *testing.T) {
+	quadrupling := backoff.Policy{Base: 30 * time.Second, Cap: 8 * time.Minute, Factor: 4}
+	want := []time.Duration{30 * time.Second, 2 * time.Minute, 8 * time.Minute, 8 * time.Minute}
+	for i, w := range want {
+		if got := quadrupling.Ceiling(i + 1); got != w {
+			t.Errorf("Ceiling(%d) = %v, want %v", i+1, got, w)
+		}
+	}
+}
+
+func TestPolicy_DelayAtWithASpreadIsSymmetricAroundTheCeiling(t *testing.T) {
+	spread := backoff.Policy{Base: 250 * time.Millisecond, Cap: time.Second, Spread: 0.2}
+	cases := []struct {
+		attempt int
+		unit    float64
+		want    time.Duration
+	}{
+		{1, 0.25, 225 * time.Millisecond},
+		{1, 0.5, 250 * time.Millisecond},
+		{1, 0.75, 275 * time.Millisecond},
+		{2, 0.5, 500 * time.Millisecond},
+	}
+	for _, tc := range cases {
+		if got := spread.DelayAt(tc.attempt, tc.unit); got != tc.want {
+			t.Errorf("DelayAt(%d, %v) = %v, want %v", tc.attempt, tc.unit, got, tc.want)
+		}
+	}
+}
+
 func TestPolicy_CeilingTreatsAnAttemptBelowOneAsTheFirst(t *testing.T) {
 	for _, attempt := range []int{0, -3} {
 		if got := policy.Ceiling(attempt); got != 100*time.Millisecond {

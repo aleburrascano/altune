@@ -3,6 +3,7 @@ package service
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/downloadfailure"
 	"context"
 	"errors"
@@ -19,8 +20,19 @@ var (
 	ErrAcquisitionTimedOut  = errors.New("acquisition exhausted its own time budget")
 )
 
+const (
+	jobRetryBase   = 30 * time.Second
+	jobRetryFactor = 4
+)
+
+var jobRetryBackoff = backoff.Policy{
+	Base:   jobRetryBase,
+	Cap:    jobRetryBase * jobRetryFactor * jobRetryFactor,
+	Factor: jobRetryFactor,
+}
+
 func retryBackoff(attempts int) time.Duration {
-	return 30 * time.Second << (2 * (min(max(attempts, 1), maxAcquisitionAttempts) - 1))
+	return jobRetryBackoff.Ceiling(attempts)
 }
 
 func isTransientFailure(err error) bool {

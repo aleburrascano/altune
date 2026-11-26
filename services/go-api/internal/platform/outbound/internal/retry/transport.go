@@ -2,6 +2,7 @@ package retry
 
 import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
+	"altune/go-api/internal/shared/backoff"
 	"context"
 	"errors"
 	"fmt"
@@ -154,14 +155,14 @@ func (t *Transport) retryDelay(attempt int, retryAfter time.Duration) time.Durat
 }
 
 const (
-	backoffBaseMillis = 250
-	backoffJitter     = 0.2
+	backoffBase   = 250 * time.Millisecond
+	backoffSpread = 0.2
 )
 
+var retryBackoff = backoff.Policy{Base: backoffBase, Cap: backoffBase << (maxAttempts - 2), Spread: backoffSpread}
+
 func (t *Transport) backoff(attempt int) time.Duration {
-	base := time.Duration(attempt*backoffBaseMillis) * time.Millisecond
-	delta := (t.jitter()*2 - 1) * backoffJitter * float64(base)
-	return base + time.Duration(delta)
+	return retryBackoff.DelayAt(attempt, t.jitter())
 }
 
 func sleepOnTimer(ctx context.Context, d time.Duration) error {
