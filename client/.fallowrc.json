@@ -1,17 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-  "entry": [
-    "src/app/**/*.{ts,tsx}",
-    "src/{features,shared}/*/index.ts",
-    "src/mobile/index.ts",
-    "doctor.config.ts",
-    "fingerprint.config.js",
-    "jest.mutate.config.js",
-    "scripts/**/*.mjs",
-    "eslint/rules/**/*.js",
-    "targets/*/expo-target.config.js",
-    "modules/*/index.ts"
-  ],
+  "extends": ["./knip.json"],
   "ignorePatterns": ["**/*.test.{ts,tsx}", "**/__tests__/**", "**/__mocks__/**", "jest/**"],
   "ignoreDependencies": [
     "react-doctor",
@@ -41,43 +30,5 @@
     "unused-exports": "error",
     "unused-types": "error",
     "unused-dependencies": "error"
-  },
-  "ignoreExports": [
-    {
-      "file": "src/mobile/frame/platformExtras.android.tsx",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/mobile/frame/platformExtras.tsx",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/shared/device/core/isWebPlatform.ts",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/shared/device/core/webOrigin.ts",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/shared/ui/view/dialog/dialog.ts",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/shared/ui/view/keyboard/keyboard.ios.tsx",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/shared/ui/view/keyboard/keyboard.tsx",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/shared/ui/view/keyboard/keyboardAreas.tsx",
-      "exports": ["*"]
-    },
-    {
-      "file": "src/shared/ui/view/primitives/HorizontalRail.tsx",
-      "exports": ["*"]
-    }
-  ]
+  }
 }

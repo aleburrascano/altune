@@ -133,27 +133,6 @@ export default {
   ignore: {
     overrides: [
       {
-        files: [
-          'src/mobile/frame/platformExtras.tsx',
-          'src/mobile/frame/platformExtras.android.tsx',
-          'src/mobile/deviceFileStore.ts',
-          'src/features/signIn/hooks/useOAuth.ts',
-          'src/features/signIn/ui/AuthCallbackScreen.tsx',
-          'src/features/player/adapters/PlaybackProvider.tsx',
-          'src/features/player/domain/playsThroughTrackPlayer.ts',
-          'src/mobile/authStorage.ts',
-          'src/shared/device/core/isWebPlatform.ts',
-          'src/shared/device/core/webOrigin.ts',
-          'src/shared/ui/view/a11y/announce.ts',
-          'src/shared/ui/view/dialog/dialog.ts',
-          'src/shared/ui/view/keyboard/keyboard.ios.tsx',
-          'src/shared/ui/view/keyboard/keyboard.tsx',
-          'src/shared/ui/view/keyboard/keyboardAreas.tsx',
-          'src/shared/ui/view/primitives/HorizontalRail.tsx',
-        ],
-        rules: ['deslop/unused-export'],
-      },
-      {
         files: ['eslint/**', 'jest/**', 'src/**/__tests__/**'],
         rules: [
           'react-doctor/js-combine-iterations',

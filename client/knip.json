@@ -1,0 +1,27 @@
+{
+  "entry": [
+    "src/app/**/*.{ts,tsx}",
+    "src/{features,shared}/*/index.ts",
+    "src/mobile/index.ts",
+    "doctor.config.ts",
+    "fingerprint.config.js",
+    "jest.mutate.config.js",
+    "scripts/**/*.mjs",
+    "eslint/rules/**/*.js",
+    "targets/*/expo-target.config.js",
+    "modules/*/index.ts",
+    "src/**/*.{android,ios,web,native}.{ts,tsx}",
+    "src/features/player/adapters/PlaybackProvider.tsx",
+    "src/features/player/domain/playsThroughTrackPlayer.ts",
+    "src/features/signIn/hooks/useOAuth.ts",
+    "src/features/signIn/ui/AuthCallbackScreen.tsx",
+    "src/mobile/authStorage.ts",
+    "src/mobile/frame/platformExtras.tsx",
+    "src/shared/device/core/isWebPlatform.ts",
+    "src/shared/device/core/webOrigin.ts",
+    "src/shared/ui/view/a11y/announce.ts",
+    "src/shared/ui/view/dialog/dialog.ts",
+    "src/shared/ui/view/keyboard/keyboard.tsx",
+    "src/shared/ui/view/primitives/HorizontalRail.tsx"
+  ]
+}
