@@ -261,3 +261,42 @@ func TestManual_IsSafeToAdvanceAndReadFromManyGoroutines(t *testing.T) {
 		t.Errorf("Now() = %v, want %v after 50 advances", got, want)
 	}
 }
+
+func TestManualBlockUntil_ReturnsOnceEnoughSleepsTimersAndTickersAreWaiting(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := clocktest.NewManual(start)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		returned := make(chan struct{})
+		go func() {
+			m.BlockUntil(3)
+			close(returned)
+		}()
+
+		sleepInBackground(ctx, m, time.Minute)
+		m.Timer()(time.Minute)
+		synctest.Wait()
+		select {
+		case <-returned:
+			t.Fatal("BlockUntil(3) returned with two waiters")
+		default:
+		}
+
+		m.Ticker()(time.Minute)
+		synctest.Wait()
+
+		select {
+		case <-returned:
+		default:
+			t.Fatal("BlockUntil(3) did not return with three waiters")
+		}
+	})
+}
+
+func TestManualBlockUntil_ReturnsAtOnceWhenEnoughAreAlreadyWaitingAndWorksOnAZeroValue(t *testing.T) {
+	var m clocktest.Manual
+	m.Ticker()(time.Second)
+
+	m.BlockUntil(1)
+	m.BlockUntil(0)
+}
