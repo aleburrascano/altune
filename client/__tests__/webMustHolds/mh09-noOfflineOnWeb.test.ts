@@ -24,9 +24,9 @@ function loadFresh<T>(load: () => T): T {
     ensureAppAuthClient();
     loaded = load();
     const { createAppTelemetry, installTelemetry } = require('@shared/telemetry');
-    const stopped = createAppTelemetry();
-    stopped.dispose();
-    installTelemetry(stopped);
+    const StoppedTelemetry = createAppTelemetry();
+    StoppedTelemetry.dispose();
+    installTelemetry(StoppedTelemetry);
   });
   return loaded;
 }

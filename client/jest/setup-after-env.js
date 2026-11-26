@@ -28,9 +28,9 @@ function installFreshTelemetry() {
 }
 
 function installStoppedTelemetry() {
-  const stopped = freshTelemetry();
-  stopped.dispose();
-  require('../src/shared/telemetry').installTelemetry(stopped);
+  const StoppedTelemetry = freshTelemetry();
+  StoppedTelemetry.dispose();
+  require('../src/shared/telemetry').installTelemetry(StoppedTelemetry);
 }
 
 function resetLogger() {
