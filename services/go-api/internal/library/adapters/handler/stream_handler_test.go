@@ -392,8 +392,10 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 
 	r := chi.NewRouter()
 	var finished atomic.Int32
+	var startedAt atomic.Int64
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			startedAt.CompareAndSwap(0, time.Now().UnixNano())
 			defer finished.Add(1)
 			next.ServeHTTP(w, req)
 		})
@@ -414,12 +416,20 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 		}
 		return resp
 	}
-	return audioServer{get: get, handled: func() bool { return finished.Load() > 0 }}
+	return audioServer{
+		get:     get,
+		handled: func() bool { return finished.Load() > 0 },
+		runningPastDeadline: func() bool {
+			began := startedAt.Load()
+			return began != 0 && finished.Load() == 0 && time.Since(time.Unix(0, began)) > routeDeadline
+		},
+	}
 }
 
 type audioServer struct {
-	get     func() *http.Response
-	handled func() bool
+	get                 func() *http.Response
+	handled             func() bool
+	runningPastDeadline func() bool
 }
 
 func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
@@ -427,7 +437,8 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
-	began := time.Now()
+	testpoll.Until(t, 10*time.Second, "the handler to still be streaming past the route deadline", srv.runningPastDeadline)
+
 	got := 0
 	buf := make([]byte, 32<<10)
 	for {
@@ -437,12 +448,8 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 			break
 		}
 	}
-	elapsed := time.Since(began)
 	if got != audioSize {
-		t.Fatalf("received %d of %d bytes after %s: slow download was cut off", got, audioSize, elapsed)
-	}
-	if elapsed <= 3*audioRouteDeadline {
-		t.Fatalf("download took %s, not well past the %s route deadline, so it proves nothing", elapsed, audioRouteDeadline)
+		t.Fatalf("received %d of %d bytes: the download was cut off at the route deadline", got, audioSize)
 	}
 }
 

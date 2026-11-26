@@ -2,6 +2,8 @@ package testpoll_test
 
 import (
 	"altune/go-api/internal/shared/testpoll"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -45,7 +47,7 @@ func (r *recorder) Helper() {}
 
 func (r *recorder) Fatalf(format string, args ...any) {
 	r.failed = true
-	r.message = format
+	r.message = fmt.Sprintf(format, args...)
 }
 
 func TestUntilFailsNamingWhatItWaitedFor(t *testing.T) {
@@ -55,6 +57,9 @@ func TestUntilFailsNamingWhatItWaitedFor(t *testing.T) {
 
 	if !r.failed {
 		t.Fatal("Until did not fail for a condition that never holds")
+	}
+	if !strings.Contains(r.message, "the queue row to be locked") {
+		t.Fatalf("failure message %q does not name what it waited for", r.message)
 	}
 }
 

@@ -238,7 +238,8 @@ func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 		t.Fatalf("acquire: %v", err)
 	}
 
-	older := stateAt(userId, 60000, time.Now())
+	olderAt := time.Now()
+	older := stateAt(userId, 60000, olderAt)
 	done := make(chan error, 1)
 	delayed := newStartSignalDB(narrow)
 	go func() {
@@ -246,7 +247,7 @@ func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 	}()
 
 	awaitWriteStarted(t, delayed)
-	newerErr := playback.NewPostgresQueueStateRepository(wide, playback.NoopQueueStateMetrics()).Upsert(ctx, stateAt(userId, 65000, time.Now()))
+	newerErr := playback.NewPostgresQueueStateRepository(wide, playback.NoopQueueStateMetrics()).Upsert(ctx, stateAt(userId, 65000, olderAt.Add(time.Millisecond)))
 	held.Release()
 	if newerErr != nil {
 		t.Fatalf("Upsert(newer): %v", newerErr)
