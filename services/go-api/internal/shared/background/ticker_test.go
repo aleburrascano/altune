@@ -2,7 +2,6 @@ package background_test
 
 import (
 	"altune/go-api/internal/shared/background"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -150,38 +149,39 @@ func TestRunJob_ParentCanceledIsNotAFailure(t *testing.T) {
 }
 
 func TestEvery_JobDisabledBetweenTicksIsSkipped(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var bg background.Tracker
-	var jobs background.JobRegistry
-	jc := jobs.Control("j")
-	var runs, ticks atomic.Int32
-	firstDone := make(chan struct{})
-	secondTick := make(chan struct{})
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var bg background.Tracker
+		var jobs background.JobRegistry
+		jc := jobs.Control("j")
+		var runs atomic.Int32
+		clk := clocktest.NewManual(time.Now())
 
-	background.Every(ctx, &bg, time.Millisecond, clock.NewTicker, func() {
-		n := ticks.Add(1)
-		if jc.Admit() {
-			runs.Add(1)
-			jc.DisableIfEnabled()
-			close(firstDone)
+		err := background.Every(ctx, &bg, time.Millisecond, clk.Ticker(), func() {
+			if jc.Admit() {
+				runs.Add(1)
+				jc.DisableIfEnabled()
+			}
+		})
+		synctest.Wait()
+		clk.Advance(time.Millisecond)
+		synctest.Wait()
+		clk.Advance(time.Millisecond)
+		synctest.Wait()
+		cancel()
+		bg.Wait()
+
+		if err != nil {
+			t.Fatalf("Every = %v, want nil", err)
 		}
-		if n == 3 {
-			close(secondTick)
+		if got := runs.Load(); got != 1 {
+			t.Errorf("runs = %d, want 1: later ticks must be skipped once disabled", got)
+		}
+		if got := healthOf(t, &jobs, "j").Skipped; got < 1 {
+			t.Errorf("Skipped = %d, want at least 1", got)
 		}
 	})
-
-	<-firstDone
-	<-secondTick
-	cancel()
-	bg.Wait()
-
-	if got := runs.Load(); got != 1 {
-		t.Errorf("runs = %d, want 1: later ticks must be skipped once disabled", got)
-	}
-	if got := healthOf(t, &jobs, "j").Skipped; got < 1 {
-		t.Errorf("Skipped = %d, want at least 1", got)
-	}
 }
 
 func TestStartWhenLeader_AwaitFalseStartsNothing(t *testing.T) {
