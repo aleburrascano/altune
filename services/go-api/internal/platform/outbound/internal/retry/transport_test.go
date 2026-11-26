@@ -57,6 +57,14 @@ func recordingSleep(rec *[]time.Duration) func(context.Context, time.Duration) e
 	}
 }
 
+func TestTransport_RefusesAMissingPacer(t *testing.T) {
+	rt, err := retry.New(http.DefaultTransport, nil, retry.Options{})
+
+	if rt != nil || !errors.Is(err, retry.ErrPacerRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrPacerRequired", rt, err)
+	}
+}
+
 func newTransport(t *testing.T, base http.RoundTripper, opts retry.Options) *retry.Transport {
 	t.Helper()
 	pacer, err := pacing.New(time.Now)
