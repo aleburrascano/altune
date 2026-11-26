@@ -1,10 +1,12 @@
 package pacing
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -57,18 +59,26 @@ var boundedQueueHosts = map[string]bool{
 var errQueueTimeout = fmt.Errorf("%w: %w", queuetimeout.Err, context.DeadlineExceeded)
 
 type hostLimiter struct {
+	mu           sync.Mutex
 	limiter      *rate.Limiter
+	now          clock.Func
 	boundedQueue bool
 	maxWait      time.Duration
 }
 
 type Pacer struct {
 	mu       sync.Mutex
+	now      clock.Func
 	limiters map[string]*hostLimiter
 }
 
-func New() *Pacer {
-	return &Pacer{limiters: map[string]*hostLimiter{}}
+var ErrClockRequired = errors.New("pacer needs a clock")
+
+func New(now clock.Func) (*Pacer, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
+	return &Pacer{now: now, limiters: map[string]*hostLimiter{}}, nil
 }
 
 func (p *Pacer) Wait(req *http.Request) error {
@@ -91,24 +101,24 @@ func (p *Pacer) pace(req *http.Request, wait func(*hostLimiter, context.Context)
 }
 
 func (l *hostLimiter) waitUncapped(ctx context.Context) error {
-	return l.limiter.Wait(ctx)
+	return l.await(ctx, noCap, errDeadlineShort)
 }
 
 func (l *hostLimiter) wait(ctx context.Context) error {
 	if !l.boundedQueue {
 		return l.waitUncapped(ctx)
 	}
-	if err := ctx.Err(); err != nil {
+	return l.await(ctx, l.maxWait, errQueueTimeout)
+}
+
+const noCap = time.Duration(math.MaxInt64)
+
+var errDeadlineShort = errors.New("pacing delay would exceed the context deadline")
+
+func (l *hostLimiter) await(ctx context.Context, limit time.Duration, shed error) error {
+	reservation, delay, err := l.admit(ctx, limit, shed)
+	if err != nil || delay == 0 {
 		return err
-	}
-	reservation := l.limiter.Reserve()
-	delay := reservation.Delay()
-	if delay == 0 {
-		return nil
-	}
-	if delay > l.maxWait || wouldPassDeadline(ctx, delay) {
-		reservation.Cancel()
-		return errQueueTimeout
 	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
@@ -116,17 +126,39 @@ func (l *hostLimiter) wait(ctx context.Context) error {
 	case <-timer.C:
 		return nil
 	case <-ctx.Done():
-		reservation.Cancel()
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		l.release(reservation)
+		if errors.Is(shed, errQueueTimeout) && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return errQueueTimeout
 		}
 		return ctx.Err()
 	}
 }
 
-func wouldPassDeadline(ctx context.Context, delay time.Duration) bool {
+func (l *hostLimiter) admit(ctx context.Context, limit time.Duration, shed error) (*rate.Reservation, time.Duration, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	now := l.now()
+	reservation := l.limiter.ReserveN(now, 1)
+	delay := reservation.DelayFrom(now)
+	if delay > limit || wouldPassDeadline(ctx, now, delay) {
+		reservation.CancelAt(now)
+		return nil, 0, shed
+	}
+	return reservation, delay, nil
+}
+
+func (l *hostLimiter) release(reservation *rate.Reservation) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	reservation.CancelAt(l.now())
+}
+
+func wouldPassDeadline(ctx context.Context, now time.Time, delay time.Duration) bool {
 	deadline, ok := ctx.Deadline()
-	return ok && time.Now().Add(delay).After(deadline)
+	return ok && delay > 0 && now.Add(delay).After(deadline)
 }
 
 func (p *Pacer) limiter(host string) *hostLimiter {
@@ -137,15 +169,15 @@ func (p *Pacer) limiter(host string) *hostLimiter {
 	}
 	var l *hostLimiter
 	if lim, ok := providerRateLimits[host]; ok {
-		l = newHostLimiter(lim, providerBurst(host), boundedQueueHosts[host])
+		l = newHostLimiter(lim, providerBurst(host), boundedQueueHosts[host], p.now)
 	}
 	p.limiters[host] = l
 	return l
 }
 
-func newHostLimiter(lim rate.Limit, burst int, boundedQueue bool) *hostLimiter {
+func newHostLimiter(lim rate.Limit, burst int, boundedQueue bool, now clock.Func) *hostLimiter {
 	interval := time.Duration(float64(time.Second) / float64(lim))
-	return &hostLimiter{limiter: rate.NewLimiter(lim, burst), boundedQueue: boundedQueue, maxWait: min(queueDepth*interval, queuetimeout.MaxWait)}
+	return &hostLimiter{limiter: rate.NewLimiter(lim, burst), now: now, boundedQueue: boundedQueue, maxWait: min(queueDepth*interval, queuetimeout.MaxWait)}
 }
 
 func providerBurst(host string) int {

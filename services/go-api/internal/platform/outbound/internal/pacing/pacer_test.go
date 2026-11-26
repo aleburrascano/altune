@@ -21,6 +21,23 @@ import (
 
 const shortDeadline = 50 * time.Millisecond
 
+func newPacer(t testing.TB) *pacing.Pacer {
+	t.Helper()
+	p, err := pacing.New(time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestPacer_RefusesAMissingClock(t *testing.T) {
+	p, err := pacing.New(nil)
+
+	if p != nil || !errors.Is(err, pacing.ErrClockRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrClockRequired", p, err)
+	}
+}
+
 func waitsWithin(t *testing.T, p *pacing.Pacer, host string, requests int) []error {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), shortDeadline)
@@ -50,15 +67,15 @@ func assertBurstThenRefusal(t *testing.T, p *pacing.Pacer, host string, burst in
 }
 
 func TestPacer_MusicBrainzAllowsNoBurst(t *testing.T) {
-	assertBurstThenRefusal(t, pacing.New(), "musicbrainz.org", 1)
+	assertBurstThenRefusal(t, newPacer(t), "musicbrainz.org", 1)
 }
 
 func TestPacer_OtherProvidersAllowABurstOfFour(t *testing.T) {
-	assertBurstThenRefusal(t, pacing.New(), "api.deezer.com", 4)
+	assertBurstThenRefusal(t, newPacer(t), "api.deezer.com", 4)
 }
 
 func TestPacer_LeavesUnlistedHostsUnpaced(t *testing.T) {
-	p := pacing.New()
+	p := newPacer(t)
 	for i, err := range waitsWithin(t, p, "unlisted.example.com", 100) {
 		if err != nil {
 			t.Fatalf("request %d to an unlisted host waited: %v", i+1, err)
@@ -67,7 +84,7 @@ func TestPacer_LeavesUnlistedHostsUnpaced(t *testing.T) {
 }
 
 func TestPacer_KeepsEachHostsBudgetApart(t *testing.T) {
-	p := pacing.New()
+	p := newPacer(t)
 	waitsWithin(t, p, "musicbrainz.org", 2)
 
 	assertBurstThenRefusal(t, p, "api.deezer.com", 4)
@@ -81,7 +98,7 @@ func TestPacer_StopsWaitingWhenTheRequestIsCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := pacing.New().Wait(req); err == nil {
+	if err := newPacer(t).Wait(req); err == nil {
 		t.Fatal("a cancelled request to a paced host was let through")
 	}
 }
@@ -123,7 +140,7 @@ func assertQueueTimeout(t *testing.T, err error) {
 func TestPacer_QueuesUpToThreeIntervalsThenFailsFastWithTheQueueTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const callers = 6
-		p := pacing.New()
+		p := newPacer(t)
 
 		results := waitTogether(t, p, "musicbrainz.org", callers)
 
@@ -156,7 +173,7 @@ func TestPacer_QueuesUpToThreeIntervalsThenFailsFastWithTheQueueTimeout(t *testi
 
 func TestPacer_ARetryWaitIsNeverShedByTheQueueCap(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		p := pacing.New()
+		p := newPacer(t)
 		var wg sync.WaitGroup
 		errs := make([]error, 8)
 		for i := range errs {
@@ -182,7 +199,7 @@ func TestPacer_ARetryWaitIsNeverShedByTheQueueCap(t *testing.T) {
 func TestPacer_AHostWithoutABoundedQueueKeepsQueueingEveryCaller(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const callers = 12
-		p := pacing.New()
+		p := newPacer(t)
 
 		results := waitTogether(t, p, "krakenfiles.com", callers)
 
@@ -196,7 +213,7 @@ func TestPacer_AHostWithoutABoundedQueueKeepsQueueingEveryCaller(t *testing.T) {
 
 func TestPacer_AnUnboundedHostsShortDeadlineIsNeverClassifiedAsAQueueTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		p := pacing.New()
+		p := newPacer(t)
 		waitTogether(t, p, "krakenfiles.com", 4)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 		defer cancel()
@@ -220,7 +237,7 @@ func (p pacedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func TestPacer_AWaitPastTheQueueCapThroughAClientWithATimeoutIsAQueueTimeoutNotAClientTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		client := &http.Client{Transport: pacedTransport{pacer: pacing.New()}, Timeout: 10 * time.Second}
+		client := &http.Client{Transport: pacedTransport{pacer: newPacer(t)}, Timeout: 10 * time.Second}
 		get := func() (time.Duration, error) {
 			start := time.Now()
 			resp, err := client.Get("https://itunes.apple.com/search")
@@ -254,7 +271,7 @@ func TestPacer_AWaitPastTheQueueCapThroughAClientWithATimeoutIsAQueueTimeoutNotA
 
 func TestPacer_TheQueueCapNeverPromisesMoreThanTheLongestWaitAClientAllows(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		p := pacing.New()
+		p := newPacer(t)
 		waitTogether(t, p, "itunes.apple.com", 4)
 
 		results := waitTogether(t, p, "itunes.apple.com", 5)
@@ -287,7 +304,7 @@ func TestPacer_HoldsEachHostToItsStrictestRate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.host, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				p := pacing.New()
+				p := newPacer(t)
 				for i := range tc.burst {
 					if r := waitOn(context.Background(), t, p, tc.host); r.err != nil || r.elapsed != 0 {
 						t.Fatalf("request %d of the burst waited %v (err %v), want none", i+1, r.elapsed, r.err)
@@ -304,7 +321,7 @@ func TestPacer_HoldsEachHostToItsStrictestRate(t *testing.T) {
 
 func TestPacer_FailsFastWhenTheDeadlineIsShorterThanTheWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		p := pacing.New()
+		p := newPacer(t)
 		waitOn(context.Background(), t, p, "musicbrainz.org")
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second/2)
 		defer cancel()
@@ -320,7 +337,7 @@ func TestPacer_FailsFastWhenTheDeadlineIsShorterThanTheWait(t *testing.T) {
 
 func TestPacer_WaitsWhenTheDeadlineCoversTheWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		p := pacing.New()
+		p := newPacer(t)
 		waitOn(context.Background(), t, p, "musicbrainz.org")
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -337,7 +354,7 @@ func TestPacer_AnExpiredCallerIsADeadlineErrorNotAQueueTimeout(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
 
-	err := waitOn(ctx, t, pacing.New(), "musicbrainz.org").err
+	err := waitOn(ctx, t, newPacer(t), "musicbrainz.org").err
 
 	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, queuetimeout.Err) {
 		t.Fatalf("err = %v, want a plain DeadlineExceeded", err)
@@ -346,7 +363,7 @@ func TestPacer_AnExpiredCallerIsADeadlineErrorNotAQueueTimeout(t *testing.T) {
 
 func TestPacer_ACancelledWaitIsCanceledNotAQueueTimeoutAndFreesItsSlot(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		p := pacing.New()
+		p := newPacer(t)
 		waitOn(context.Background(), t, p, "musicbrainz.org")
 		ctx, cancel := context.WithCancel(context.Background())
 		time.AfterFunc(time.Second/2, cancel)
@@ -406,7 +423,7 @@ func TestPacer_PacesEveryWiredProviderHost(t *testing.T) {
 	if len(hosts) == 0 {
 		t.Fatal("found no adapter URL hosts to check")
 	}
-	p := pacing.New()
+	p := newPacer(t)
 	for _, h := range hosts {
 		burst := 4
 		if h == "musicbrainz.org" || h == "api.discogs.com" {

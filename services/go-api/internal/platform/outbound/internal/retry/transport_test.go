@@ -1,6 +1,7 @@
 package retry_test
 
 import (
+	"altune/go-api/internal/platform/outbound/internal/pacing"
 	"altune/go-api/internal/platform/outbound/internal/retry"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
@@ -56,8 +57,29 @@ func recordingSleep(rec *[]time.Duration) func(context.Context, time.Duration) e
 	}
 }
 
-func recordingDelays(base http.RoundTripper, rec *[]time.Duration) *retry.Transport {
-	return retry.New(base, retry.Options{Sleep: recordingSleep(rec)})
+func TestTransport_RefusesAMissingPacer(t *testing.T) {
+	rt, err := retry.New(http.DefaultTransport, nil, retry.Options{})
+
+	if rt != nil || !errors.Is(err, retry.ErrPacerRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrPacerRequired", rt, err)
+	}
+}
+
+func newTransport(t *testing.T, base http.RoundTripper, opts retry.Options) *retry.Transport {
+	t.Helper()
+	pacer, err := pacing.New(time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt, err := retry.New(base, pacer, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rt
+}
+
+func recordingDelays(t *testing.T, base http.RoundTripper, rec *[]time.Duration) *retry.Transport {
+	return newTransport(t, base, retry.Options{Sleep: recordingSleep(rec)})
 }
 
 func getReq(t *testing.T) *http.Request {
@@ -82,7 +104,7 @@ func statusOf(t *testing.T, rt http.RoundTripper, req *http.Request) int {
 func TestTransport_RetriesOn503ThenSucceedsOnTheRealTimer(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
-	status := statusOf(t, retry.New(f, retry.Options{}), getReq(t))
+	status := statusOf(t, newTransport(t, f, retry.Options{}), getReq(t))
 
 	if status != 200 || f.calls != 2 {
 		t.Errorf("status=%d calls=%d, want 200 after one retry", status, f.calls)
@@ -94,7 +116,7 @@ func TestTransport_RetriesOn429And500(t *testing.T) {
 		f := &fakeRT{steps: []fakeStep{{status: first}, {status: 200}}}
 		var delays []time.Duration
 
-		status := statusOf(t, recordingDelays(f, &delays), getReq(t))
+		status := statusOf(t, recordingDelays(t, f, &delays), getReq(t))
 
 		if status != 200 || f.calls != 2 || len(delays) != 1 {
 			t.Errorf("%d: status=%d calls=%d waits=%d, want 200 after one retry", first, status, f.calls, len(delays))
@@ -106,7 +128,7 @@ func TestTransport_NoRetryOnClientErrors(t *testing.T) {
 	for _, clientError := range []int{404, 499} {
 		f := &fakeRT{steps: []fakeStep{{status: clientError}}}
 
-		status := statusOf(t, recordingDelays(f, &[]time.Duration{}), getReq(t))
+		status := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), getReq(t))
 
 		if status != clientError || f.calls != 1 {
 			t.Errorf("status=%d calls=%d, want %d and 1 (no retry on a client error)", status, f.calls, clientError)
@@ -118,7 +140,7 @@ func TestTransport_ExhaustsOnPersistent503(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}}}
 	var delays []time.Duration
 
-	status := statusOf(t, recordingDelays(f, &delays), getReq(t))
+	status := statusOf(t, recordingDelays(t, f, &delays), getReq(t))
 
 	if status != 503 {
 		t.Errorf("status = %d, want the final 503 surfaced", status)
@@ -133,7 +155,7 @@ func TestTransport_GivesUpAfterThreeTransportErrors(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{err: refused}}}
 	var delays []time.Duration
 
-	resp, err := recordingDelays(f, &delays).RoundTrip(getReq(t))
+	resp, err := recordingDelays(t, f, &delays).RoundTrip(getReq(t))
 	if resp != nil {
 		defer resp.Body.Close()
 	}
@@ -149,7 +171,7 @@ func TestTransport_GivesUpAfterThreeTransportErrors(t *testing.T) {
 func TestTransport_RecoversFromATransportError(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{err: errors.New("reset")}, {status: 200}}}
 
-	status := statusOf(t, recordingDelays(f, &[]time.Duration{}), getReq(t))
+	status := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), getReq(t))
 
 	if status != 200 || f.calls != 2 {
 		t.Errorf("status=%d calls=%d, want 200 after one retry", status, f.calls)
@@ -165,7 +187,7 @@ func TestTransport_BackoffGrowsWithEachAttemptAndItsJitter(t *testing.T) {
 	for draw, want := range cases {
 		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 503}, {status: 200}}}
 		var delays []time.Duration
-		rt := retry.New(f, retry.Options{Sleep: recordingSleep(&delays), Jitter: func() float64 { return draw }})
+		rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&delays), Jitter: func() float64 { return draw }})
 
 		statusOf(t, rt, getReq(t))
 
@@ -178,7 +200,7 @@ func TestTransport_BackoffGrowsWithEachAttemptAndItsJitter(t *testing.T) {
 func TestTransport_AnUpstreamThatNeverRecoversIsTriedThreeTimesWithEveryWaitPinned(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}}}
 	var delays []time.Duration
-	rt := retry.New(f, retry.Options{Sleep: recordingSleep(&delays), Jitter: func() float64 { return 0.5 }})
+	rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&delays), Jitter: func() float64 { return 0.5 }})
 
 	statusOf(t, rt, getReq(t))
 
@@ -196,7 +218,7 @@ func TestTransport_DefaultJitterVariesTheBackoffWithinItsBound(t *testing.T) {
 		var delays []time.Duration
 		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
-		statusOf(t, recordingDelays(f, &delays), getReq(t))
+		statusOf(t, recordingDelays(t, f, &delays), getReq(t))
 
 		if delays[0] < base-spread || delays[0] > base+spread {
 			t.Fatalf("backoff %v outside bound [%v,%v]", delays[0], base-spread, base+spread)
@@ -215,7 +237,7 @@ func TestTransport_SeededJitterStaysWithinItsBound(t *testing.T) {
 	for range 50 {
 		var delays []time.Duration
 		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
-		rt := retry.New(f, retry.Options{Sleep: recordingSleep(&delays), Jitter: rng.Float64})
+		rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&delays), Jitter: rng.Float64})
 
 		statusOf(t, rt, getReq(t))
 
@@ -229,7 +251,7 @@ func TestTransport_NoRetryOnContextDeadlineOrCancel(t *testing.T) {
 	for _, final := range []error{context.DeadlineExceeded, context.Canceled} {
 		f := &fakeRT{steps: []fakeStep{{err: final}}}
 
-		resp, err := recordingDelays(f, &[]time.Duration{}).RoundTrip(getReq(t))
+		resp, err := recordingDelays(t, f, &[]time.Duration{}).RoundTrip(getReq(t))
 		if resp != nil {
 			defer resp.Body.Close()
 		}
@@ -252,7 +274,7 @@ func TestTransport_TheRealTimerStopsWaitingWhenTheRequestIsCancelled(t *testing.
 		t.Fatal(err)
 	}
 
-	resp, err := retry.New(f, retry.Options{}).RoundTrip(req)
+	resp, err := newTransport(t, f, retry.Options{}).RoundTrip(req)
 	if resp != nil {
 		defer resp.Body.Close()
 	}
@@ -265,7 +287,7 @@ func TestTransport_TheRealTimerStopsWaitingWhenTheRequestIsCancelled(t *testing.
 func TestTransport_AFailedWaitEndsTheRoundTrip(t *testing.T) {
 	waitFailed := errors.New("wait failed")
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
-	rt := retry.New(f, retry.Options{Sleep: func(context.Context, time.Duration) error { return waitFailed }})
+	rt := newTransport(t, f, retry.Options{Sleep: func(context.Context, time.Duration) error { return waitFailed }})
 
 	resp, err := rt.RoundTrip(getReq(t))
 	if resp != nil {
@@ -281,7 +303,7 @@ func retryAfterDelays(t *testing.T, header http.Header) []time.Duration {
 	t.Helper()
 	f := &fakeRT{steps: []fakeStep{{status: 429, header: header}, {status: 200}}}
 	var delays []time.Duration
-	rt := retry.New(f, retry.Options{Sleep: recordingSleep(&delays), Jitter: func() float64 { return 0.5 }})
+	rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&delays), Jitter: func() float64 { return 0.5 }})
 	statusOf(t, rt, getReq(t))
 	return delays
 }
@@ -349,7 +371,7 @@ func TestTransport_RetriesNoBodyGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	statusOf(t, recordingDelays(f, &[]time.Duration{}), req)
+	statusOf(t, recordingDelays(t, f, &[]time.Duration{}), req)
 
 	if f.calls != 2 {
 		t.Errorf("calls = %d, want 2 (one retry)", f.calls)
@@ -366,7 +388,7 @@ func TestTransport_ResendsAReplayableBodyOnRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	statusOf(t, recordingDelays(f, &[]time.Duration{}), req)
+	statusOf(t, recordingDelays(t, f, &[]time.Duration{}), req)
 
 	if len(f.bodies) != 2 || f.bodies[0] != "payload" || f.bodies[1] != "payload" {
 		t.Errorf("bodies sent = %q, want the payload on both attempts", f.bodies)
@@ -385,7 +407,7 @@ func postReq(t *testing.T, ctx context.Context, method string) *http.Request {
 func TestTransport_APostUnmarkedIsSentOnceOnA503(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
-	got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPost))
+	got := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPost))
 
 	if got != 503 || f.calls != 1 {
 		t.Errorf("status = %d after %d calls, want the 503 returned after exactly one send", got, f.calls)
@@ -395,7 +417,7 @@ func TestTransport_APostUnmarkedIsSentOnceOnA503(t *testing.T) {
 func TestTransport_APostUnmarkedIsSentOnceAfterATransportError(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{err: errors.New("connection reset")}, {status: 200}}}
 
-	resp, err := recordingDelays(f, &[]time.Duration{}).RoundTrip(postReq(t, context.Background(), http.MethodPost))
+	resp, err := recordingDelays(t, f, &[]time.Duration{}).RoundTrip(postReq(t, context.Background(), http.MethodPost))
 	if err == nil {
 		resp.Body.Close()
 		t.Fatal("expected the transport error to be returned")
@@ -408,7 +430,7 @@ func TestTransport_APostUnmarkedIsSentOnceAfterATransportError(t *testing.T) {
 func TestTransport_APostMarkedIsRetriedOnA503(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
-	got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, retrysafe.Mark(context.Background()), http.MethodPost))
+	got := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), postReq(t, retrysafe.Mark(context.Background()), http.MethodPost))
 
 	if got != 200 || f.calls != 2 {
 		t.Errorf("status = %d after %d calls, want 200 after 2", got, f.calls)
@@ -419,7 +441,7 @@ func TestTransport_IdempotentMethodsAreRetriedWithoutAMark(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodDelete} {
 		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
-		got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), method))
+		got := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), postReq(t, context.Background(), method))
 
 		if got != 200 || f.calls != 2 {
 			t.Errorf("%s: status = %d after %d calls, want 200 after 2", method, got, f.calls)
@@ -430,7 +452,7 @@ func TestTransport_IdempotentMethodsAreRetriedWithoutAMark(t *testing.T) {
 func TestTransport_APatchUnmarkedIsSentOnce(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
-	statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPatch))
+	statusOf(t, recordingDelays(t, f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPatch))
 
 	if f.calls != 1 {
 		t.Errorf("calls = %d, want 1", f.calls)
@@ -444,7 +466,7 @@ func TestTransport_RetryRefusesUnreplayableBody(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := recordingDelays(f, &[]time.Duration{}).RoundTrip(req)
+	resp, err := recordingDelays(t, f, &[]time.Duration{}).RoundTrip(req)
 	if err == nil {
 		resp.Body.Close()
 		t.Fatal("expected an error for a body that cannot be replayed")
@@ -468,7 +490,7 @@ func musicBrainzReq(t *testing.T) *http.Request {
 func TestTransport_PacesAProviderHostBeforeEveryAttempt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
-		rt := retry.New(f, retry.Options{Sleep: recordingSleep(&[]time.Duration{})})
+		rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&[]time.Duration{})})
 		start := time.Now()
 
 		status := statusOf(t, rt, musicBrainzReq(t))
@@ -483,7 +505,7 @@ func TestTransport_APacingFailureIsFinal(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := &fakeRT{steps: []fakeStep{{status: 200}, {status: 200}}}
 		retried := 0
-		rt := retry.New(f, retry.Options{Sleep: recordingSleep(&[]time.Duration{}), OnRetry: func(string) { retried++ }})
+		rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&[]time.Duration{}), OnRetry: func(string) { retried++ }})
 		statusOf(t, rt, musicBrainzReq(t))
 		ctx, cancel := context.WithTimeout(context.Background(), musicBrainzPacingGap/2)
 		defer cancel()
@@ -502,7 +524,7 @@ func TestTransport_APacingFailureIsFinal(t *testing.T) {
 func TestTransport_RetriesA429OnAPacedProviderHost(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := &fakeRT{steps: []fakeStep{{status: 429}, {status: 200}}}
-		rt := retry.New(f, retry.Options{Sleep: recordingSleep(&[]time.Duration{})})
+		rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&[]time.Duration{})})
 
 		status := statusOf(t, rt, musicBrainzReq(t))
 
@@ -525,7 +547,7 @@ func (f *firstCallFailsRT) RoundTrip(r *http.Request) (*http.Response, error) {
 func TestTransport_ARetryOnABoundedQueueHostWaitsInsteadOfBeingShed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const callers = 4
-		rt := retry.New(&firstCallFailsRT{}, retry.Options{})
+		rt := newTransport(t, &firstCallFailsRT{}, retry.Options{})
 		statuses := make([]int, callers)
 		errs := make([]error, callers)
 		var wg sync.WaitGroup
@@ -552,7 +574,7 @@ func TestTransport_ARetryOnABoundedQueueHostWaitsInsteadOfBeingShed(t *testing.T
 func TestTransport_LeavesAnUnlistedHostUnpaced(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 503}, {status: 200}}}
-		rt := retry.New(f, retry.Options{Sleep: recordingSleep(&[]time.Duration{})})
+		rt := newTransport(t, f, retry.Options{Sleep: recordingSleep(&[]time.Duration{})})
 		start := time.Now()
 
 		statusOf(t, rt, getReq(t))
@@ -613,7 +635,7 @@ func secretReq(t *testing.T) *http.Request {
 func roundTripRecordingRetries(t *testing.T, steps []fakeStep) []string {
 	t.Helper()
 	var retried []string
-	rt := retry.New(&fakeRT{steps: steps}, retry.Options{
+	rt := newTransport(t, &fakeRT{steps: steps}, retry.Options{
 		Sleep:   recordingSleep(&[]time.Duration{}),
 		OnRetry: func(host string) { retried = append(retried, host) },
 	})
