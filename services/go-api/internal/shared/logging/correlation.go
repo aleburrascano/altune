@@ -18,6 +18,17 @@ func CorrelationIDFromContext(ctx context.Context) string {
 	return id
 }
 
+type jobRunKey struct{}
+
+type jobRun struct {
+	job   string
+	runID string
+}
+
+func WithJobRun(ctx context.Context, job, runID string) context.Context {
+	return context.WithValue(ctx, jobRunKey{}, jobRun{job: job, runID: runID})
+}
+
 func CorrelationAttr(ctx context.Context) slog.Attr {
 	return slog.String(KeyCorrelationID, CorrelationIDFromContext(ctx))
 }
@@ -38,6 +49,14 @@ func (h *correlationHandler) Handle(ctx context.Context, r slog.Record) error {
 	var stamps []slog.Attr
 	if id := CorrelationIDFromContext(ctx); id != "" && !recordHasKey(r, KeyCorrelationID) {
 		stamps = append(stamps, slog.String(KeyCorrelationID, id))
+	}
+	if run, ok := ctx.Value(jobRunKey{}).(jobRun); ok {
+		if !recordHasKey(r, KeyJob) {
+			stamps = append(stamps, slog.String(KeyJob, run.job))
+		}
+		if !recordHasKey(r, KeyRunID) {
+			stamps = append(stamps, slog.String(KeyRunID, run.runID))
+		}
 	}
 	if span := trace.SpanContextFromContext(ctx); span.HasTraceID() && !recordHasKey(r, KeyTraceID) {
 		stamps = append(stamps, slog.String(KeyTraceID, span.TraceID().String()))

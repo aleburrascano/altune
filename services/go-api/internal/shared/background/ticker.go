@@ -1,10 +1,13 @@
 package background
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const runBudgetFraction = 2
@@ -25,6 +28,7 @@ func RunBudget(interval time.Duration) time.Duration {
 func RunJob(parent context.Context, control *JobControl, name string, budget time.Duration, fn func(context.Context) error) {
 	jobCtx, cancel := context.WithTimeoutCause(parent, budget, ErrRunBudgetExceeded)
 	defer cancel()
+	jobCtx = logging.WithJobRun(jobCtx, name, uuid.NewString())
 	var err error
 	if panicked := SafeRun(jobCtx, backgroundJobPanic, func() { err = fn(jobCtx) }, "job", name); panicked != nil {
 		err = panicked
@@ -35,7 +39,7 @@ func RunJob(parent context.Context, control *JobControl, name string, budget tim
 			"job", name, "budget", budget.String(), "error", err)
 	}
 	if err != nil && !overBudget && parent.Err() != nil {
-		slog.InfoContext(parent, "background job run interrupted; not counted as a failure",
+		slog.InfoContext(jobCtx, "background job run interrupted; not counted as a failure",
 			"job", name, "cause", context.Cause(parent))
 		return
 	}

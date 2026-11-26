@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"log/slog"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -179,5 +180,46 @@ func TestRunJob_PanicIsOneFailureLoggedWithTheJobAndItsContext(t *testing.T) {
 	rec := onlyRecord(t, ring, "background_job.panic")
 	if rec.Attrs["job"] != "explode" || rec.Attrs["corr_id"] != "corr-job-5" {
 		t.Errorf("record attrs job=%q corr_id=%q, want the job name and the caller's corr_id", rec.Attrs["job"], rec.Attrs["corr_id"])
+	}
+}
+
+func TestRunJob_EveryLogInARunCarriesTheJobAndAFreshRunID(t *testing.T) {
+	ring := captureLogsAt(t, "info")
+	var jc background.JobControl
+	run := func(msg string) {
+		background.RunJob(context.Background(), &jc, "reconcile", time.Second, func(ctx context.Context) error {
+			slog.InfoContext(ctx, msg)
+			return nil
+		})
+	}
+
+	run("first run line")
+	run("second run line")
+
+	first, second := onlyRecord(t, ring, "first run line"), onlyRecord(t, ring, "second run line")
+	for _, rec := range []logging.CapturedRecord{first, second} {
+		if rec.Attrs["job"] != "reconcile" || rec.Attrs["run_id"] == "" {
+			t.Errorf("record %q attrs job=%q run_id=%q, want the job name and a run_id", rec.Message, rec.Attrs["job"], rec.Attrs["run_id"])
+		}
+	}
+	if first.Attrs["run_id"] == second.Attrs["run_id"] {
+		t.Errorf("both runs logged run_id %q, want a fresh id per run", first.Attrs["run_id"])
+	}
+}
+
+func TestRunJob_TheBudgetWarningCarriesTheSameRunIDAsTheRunsOwnLogs(t *testing.T) {
+	ring := captureLogsAt(t, "info")
+	var jc background.JobControl
+
+	background.RunJob(context.Background(), &jc, "wedged", 10*time.Millisecond, func(ctx context.Context) error {
+		slog.InfoContext(ctx, "run started")
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	started := onlyRecord(t, ring, "run started")
+	warned := onlyRecord(t, ring, "background job run exceeded its budget; canceled")
+	if started.Attrs["run_id"] == "" || started.Attrs["run_id"] != warned.Attrs["run_id"] {
+		t.Errorf("run_id on the run's log %q and on the budget warning %q, want the same non-empty id", started.Attrs["run_id"], warned.Attrs["run_id"])
 	}
 }

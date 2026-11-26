@@ -51,6 +51,25 @@ func TestCorrelationHandler_NoIDLeavesRecordUntagged(t *testing.T) {
 	t.Fatal("expected no.correlation captured")
 }
 
+func TestCorrelationHandler_StampsTheJobRunAndKeepsAnExplicitJob(t *testing.T) {
+	logger, _, out := setupLogger(t, "info", false)
+	ctx := logging.WithJobRun(context.Background(), "reconcile", "run-1")
+
+	logger.InfoContext(ctx, "stamped")
+	logger.InfoContext(ctx, "explicit", "job", "other")
+
+	lines := strings.Split(strings.TrimSpace(out()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("wrote %d lines, want 2: %v", len(lines), lines)
+	}
+	if !strings.Contains(lines[0], `"job":"reconcile"`) || !strings.Contains(lines[0], `"run_id":"run-1"`) {
+		t.Errorf("line carries no job and run_id from the context: %s", lines[0])
+	}
+	if got := strings.Count(lines[1], `"job"`); got != 1 || !strings.Contains(lines[1], `"job":"other"`) || !strings.Contains(lines[1], `"run_id":"run-1"`) {
+		t.Errorf("line has %d job keys, want one holding other beside run_id run-1: %s", got, lines[1])
+	}
+}
+
 func TestCorrelationHandler_DoesNotDuplicate(t *testing.T) {
 	logger, _, out := setupLogger(t, "info", false)
 	ctx := logging.WithCorrelationID(context.Background(), "from-ctx")
