@@ -285,7 +285,7 @@ type AcquisitionContext struct {
 	Relabel *ports.TrackLabel
 }
 
-func (ac *AcquisitionContext) snapshot() AcquisitionContext {
+func (ac *AcquisitionContext) Snapshot() AcquisitionContext {
 	copied := *ac
 	copied.Track.CatalogSources = slices.Clone(ac.Track.CatalogSources)
 	copied.Identity.Sources = slices.Clone(ac.Identity.Sources)

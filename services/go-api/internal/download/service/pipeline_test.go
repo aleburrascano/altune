@@ -613,3 +613,44 @@ func TestRunPipeline_APanicInsideTheShadowJudgeIsLoggedAndTheRunStillSucceeds(t 
 		}
 	}
 }
+
+func TestAcquisitionContext_ASnapshotSharesNoSliceOrPointerWithTheOriginal(t *testing.T) {
+	spare := func(values ...string) []string {
+		out := make([]string, len(values), len(values)+4)
+		copy(out, values)
+		return out
+	}
+	original := &service.AcquisitionContext{
+		Identity:   ports.RecordingIdentity{MBIDs: spare("mb-1", "mb-2")},
+		Candidates: append(make([]ports.AudioCandidate, 0, 4), ports.AudioCandidate{URL: "https://example.test/a"}),
+		Ranked:     append(make([]ports.AudioCandidate, 0, 4), ports.AudioCandidate{URL: "https://example.test/b"}),
+		Selected:   &ports.AudioCandidate{URL: "https://example.test/c"},
+		Attempted:  append(make([]service.AttemptedCandidate, 0, 4), service.AttemptedCandidate{URL: "https://example.test/d", Window: 1}),
+	}
+
+	pass := original.Snapshot()
+	pass.Identity.MBIDs[0] = "changed"
+	pass.Identity.MBIDs = append(pass.Identity.MBIDs, "extra")
+	pass.Candidates[0].URL = "changed"
+	pass.Candidates = append(pass.Candidates, ports.AudioCandidate{URL: "extra"})
+	pass.Ranked[0].URL = "changed"
+	pass.Selected.URL = "changed"
+	pass.Attempted[0].Window = 99
+	pass.Attempted = append(pass.Attempted, service.AttemptedCandidate{URL: "extra"})
+
+	if !slices.Equal(original.Identity.MBIDs, []string{"mb-1", "mb-2"}) {
+		t.Errorf("MBIDs = %v, want the original untouched", original.Identity.MBIDs)
+	}
+	if len(original.Candidates) != 1 || original.Candidates[0].URL != "https://example.test/a" {
+		t.Errorf("Candidates = %+v, want the original untouched", original.Candidates)
+	}
+	if original.Ranked[0].URL != "https://example.test/b" {
+		t.Errorf("Ranked = %+v, want the original untouched", original.Ranked)
+	}
+	if original.Selected.URL != "https://example.test/c" {
+		t.Errorf("Selected = %+v, want the original untouched", original.Selected)
+	}
+	if len(original.Attempted) != 1 || original.Attempted[0].Window != 1 {
+		t.Errorf("Attempted = %+v, want the original untouched", original.Attempted)
+	}
+}

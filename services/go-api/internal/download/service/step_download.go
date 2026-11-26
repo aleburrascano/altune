@@ -195,7 +195,7 @@ func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContex
 }
 
 func gradeOf(ctx context.Context, ac *AcquisitionContext, a attempt) audioquality.Grade {
-	scratch := ac.snapshot()
+	scratch := ac.Snapshot()
 	a.applyTo(ctx, &scratch)
 	return scratch.CollectEvidence().Grade
 }
