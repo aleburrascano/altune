@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/search/service/query"
 	"altune/go-api/internal/search/service/rank"
 	"altune/go-api/internal/search/service/related"
-	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/random"
 	"fmt"
 	"strings"
 )
@@ -81,10 +79,10 @@ func planRanking(p *searchPlan, settings connections.SearchSettings, s connectio
 
 func planExplorationAndDeadline(p *searchPlan, settings connections.SearchSettings) {
 	if settings.Exploration && settings.ExplorationRate > 0 {
-		p.option("exploration", query.WithExploration(settings.ExplorationRate, random.Real))
+		p.option("exploration", query.WithExploration(settings.ExplorationRate))
 	}
 	if settings.Deadline > 0 {
-		p.option("deadline", query.WithSearchDeadline(settings.Deadline, clock.NewTimer))
+		p.option("deadline", query.WithSearchDeadline(settings.Deadline))
 	}
 }
 

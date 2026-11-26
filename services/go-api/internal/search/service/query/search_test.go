@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/random/randomtest"
@@ -292,7 +291,7 @@ func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 		results = append(results, search.DeezerTrack("Humble Take "+string(rune('A'+i)), "Artist", float64(100-i)))
 	}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store }, search.WithExploration(1.0, random.Real))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store }, search.WithExploration(1.0))
 
 	user := search.NewUser()
 	out, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"))
@@ -432,7 +431,7 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 
 func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0, random.Real))
+	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0))
 	one := []search.SearchResult{{Title: "solo"}}
 	if _, explored := svc.MaybeExplore(one); explored {
 		t.Error("a single result cannot be reordered — must not count as explored")
@@ -462,7 +461,7 @@ func TestMaybeExplore_ShufflesByTheGivenDrawsAndStaysPutWhenTheDrawMissesTheRate
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(0.5, tc.draws))
+			svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ExplorationDraw = tc.draws }, search.WithExploration(0.5))
 
 			got, explored := svc.MaybeExplore(three)
 
@@ -475,12 +474,10 @@ func TestMaybeExplore_ShufflesByTheGivenDrawsAndStaysPutWhenTheDrawMissesTheRate
 
 func TestOptions_OutOfRangeValuesAreRefused(t *testing.T) {
 	for name, opt := range map[string]search.SearchOption{
-		"zero exploration rate":     search.WithExploration(0, random.Real),
-		"negative exploration rate": search.WithExploration(-0.5, random.Real),
-		"exploration without draws": search.WithExploration(0.5, nil),
-		"deadline without a timer":  search.WithSearchDeadline(time.Second, nil),
-		"zero deadline":             search.WithSearchDeadline(0, clock.NewTimer),
-		"negative deadline":         search.WithSearchDeadline(-time.Second, clock.NewTimer),
+		"zero exploration rate":     search.WithExploration(0),
+		"negative exploration rate": search.WithExploration(-0.5),
+		"zero deadline":             search.WithSearchDeadline(0),
+		"negative deadline":         search.WithSearchDeadline(-time.Second),
 	} {
 		_, err := search.NewSearchService(searchtest.NewTracker(t), nil, search.NewCircuitBreaker(), search.AbsentCollaborators(), opt)
 		if !errors.Is(err, search.ErrSearchInvalidOption) {
@@ -499,17 +496,19 @@ func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 		"circuitBreaker": func() (*search.SearchService, error) {
 			return search.NewSearchService(bg, nil, nil, search.AbsentCollaborators())
 		},
-		"artwork":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Artwork = nil }),
-		"related":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Related = nil }),
-		"history":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.History = nil }),
-		"vocabulary":    withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Vocabulary = nil }),
-		"events":        withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Events = nil }),
-		"activity":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Activity = nil }),
-		"favorites":     withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Favorites = nil }),
-		"resultCache":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ResultCache = nil }),
-		"providerCache": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ProviderCache = nil }),
-		"heldSlates":    withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.HeldSlates = nil }),
-		"behavior":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Behavior = nil }),
+		"artwork":         withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Artwork = nil }),
+		"related":         withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Related = nil }),
+		"history":         withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.History = nil }),
+		"vocabulary":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Vocabulary = nil }),
+		"events":          withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Events = nil }),
+		"activity":        withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Activity = nil }),
+		"favorites":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Favorites = nil }),
+		"resultCache":     withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ResultCache = nil }),
+		"providerCache":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ProviderCache = nil }),
+		"heldSlates":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.HeldSlates = nil }),
+		"behavior":        withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Behavior = nil }),
+		"explorationDraw": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ExplorationDraw = nil }),
+		"deadlineTimer":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.DeadlineTimer = nil }),
 	} {
 		svc, err := build()
 		if !errors.Is(err, search.ErrSearchCollaboratorRequired) || svc != nil {
@@ -843,7 +842,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 		exploredTerms := capture(exploredStore)
 
 		organicSvc := newSvc(organicStore)
-		exploredSvc := newSvc(exploredStore, search.WithExploration(1.0, random.Real))
+		exploredSvc := newSvc(exploredStore, search.WithExploration(1.0))
 
 		runSearch(t, organicSvc, "humble")
 		bg.Wait()
@@ -870,7 +869,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 
 func TestMaybeExplore_AlwaysExploresClonesAndKeepsMembers(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0, random.Real))
+	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0))
 	in := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
 	out, explored := svc.MaybeExplore(in)
 
