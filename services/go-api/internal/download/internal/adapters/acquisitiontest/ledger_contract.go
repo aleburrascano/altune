@@ -7,8 +7,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
 )
 
 type LedgerUnderTest interface {
@@ -20,7 +18,7 @@ const contractAudioRef = "audio/contract.opus"
 
 func contractTrack(status ports.TrackStatus) ports.TrackSnapshot {
 	track := ports.TrackSnapshot{
-		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
+		ID: contractIDs.NewTrackId(), UserId: contractIDs.NewUserId(),
 		Title: "Song", Artist: "Artist", Album: "Album", Status: status,
 	}
 	return withFileOnRecord(track, status == ports.TrackReady)
@@ -51,7 +49,7 @@ func ownersView(t *testing.T, l LedgerUnderTest, track ports.TrackSnapshot) port
 	return *got
 }
 
-func someoneElse() ids.UserId { return ids.NewUserId(uuid.New()) }
+func someoneElse() ids.UserId { return contractIDs.NewUserId() }
 
 func contractGetFindsATrackOnlyForItsOwner(t *testing.T, l LedgerUnderTest) {
 	track := added(t, l, ports.TrackPending)
@@ -62,7 +60,7 @@ func contractGetFindsATrackOnlyForItsOwner(t *testing.T, l LedgerUnderTest) {
 	if got, err := l.Get(context.Background(), track.ID, someoneElse()); got != nil || !errors.Is(err, ports.ErrTrackNotFound) {
 		t.Errorf("Get as another user = %+v, %v; want ErrTrackNotFound, exactly as for a missing track", got, err)
 	}
-	if got, err := l.Get(context.Background(), ids.NewTrackId(), track.UserId); got != nil || !errors.Is(err, ports.ErrTrackNotFound) {
+	if got, err := l.Get(context.Background(), contractIDs.NewTrackId(), track.UserId); got != nil || !errors.Is(err, ports.ErrTrackNotFound) {
 		t.Errorf("Get of a missing track = %+v, %v; want ErrTrackNotFound", got, err)
 	}
 }
