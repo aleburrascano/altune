@@ -1225,13 +1225,25 @@ func TestTrack_RecordAudioLengthLeavesTheFlagWhileEitherLengthIsUnknown(t *testi
 }
 
 func TestNewTrack_RefusesANilClock(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("NewTrack accepted a nil clock, want a panic")
-		}
-	}()
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", nil)
 
-	_, _ = library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", nil)
+	if !errors.Is(err, library.ErrTrackTimestampClockRequired) || track != nil {
+		t.Fatalf("NewTrack(nil clock) = (%v, %v), want ErrTrackTimestampClockRequired and no track", track, err)
+	}
+}
+
+func TestRevertToPending_RefusesANilClock(t *testing.T) {
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now)
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+	if err := track.MarkFailed("boom"); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+
+	if err := track.RevertToPending(nil); !errors.Is(err, library.ErrTrackTimestampClockRequired) {
+		t.Fatalf("RevertToPending(nil clock) = %v, want ErrTrackTimestampClockRequired", err)
+	}
 }
 
 func TestNewTrack_StampsAddedAtFromTheInjectedClock(t *testing.T) {

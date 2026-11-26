@@ -38,7 +38,7 @@ func (m *Manual) sleep(ctx context.Context, d time.Duration) error {
 		return ctx.Err()
 	}
 	m.mu.Lock()
-	if m.sleeps == nil {
+	if len(m.sleeps) == 0 {
 		m.sleeps = map[int]sleep{}
 	}
 	key := m.nextKey

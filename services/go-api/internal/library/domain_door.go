@@ -17,6 +17,7 @@ type (
 
 var (
 	ErrIllegalAcquisitionTransition = domain.ErrIllegalAcquisitionTransition
+	ErrTrackTimestampClockRequired  = domain.ErrTrackTimestampClockRequired
 	ErrLibraryFull                  = domain.ErrLibraryFull
 	ErrPlaylistFull                 = domain.ErrPlaylistFull
 	ErrStorageStalled               = domain.ErrStorageStalled

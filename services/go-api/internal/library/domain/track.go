@@ -130,7 +130,7 @@ func ValidateText(value, field string) error {
 
 func NewTrack(userId ids.UserId, title, artist, album string, wallClock clock.Func) (*Track, error) {
 	if wallClock == nil {
-		panic("domain: NewTrack requires a clock")
+		return nil, ErrTrackTimestampClockRequired
 	}
 	title = strings.TrimSpace(title)
 	if err := validateTrackText(title, "title"); err != nil {
@@ -213,6 +213,8 @@ const (
 	ProvenanceCorroborated = downloadprovenance.ProvenanceCorroborated
 	ProvenanceBestEffort   = downloadprovenance.ProvenanceBestEffort
 )
+
+var ErrTrackTimestampClockRequired = errors.New("domain: a track needs a clock")
 
 var ErrIllegalAcquisitionTransition = errors.New("illegal acquisition status transition")
 
@@ -450,7 +452,7 @@ func (t *Track) FailAcquisition(reason string) error {
 
 func (t *Track) RevertToPending(wallClock clock.Func) error {
 	if wallClock == nil {
-		panic("domain: RevertToPending requires a clock")
+		return ErrTrackTimestampClockRequired
 	}
 	if t.DownloadStatus == AcquisitionPending {
 		return illegalTransition("revert to pending", t.DownloadStatus)
