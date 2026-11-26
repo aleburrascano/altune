@@ -12,7 +12,7 @@ export {
   backfillDetail,
 } from '@features/settings/core/backfillStatus';
 export { downloadStats } from '@features/settings/core/downloadStatsModel';
-export type { RemoveDownloads } from '@features/settings/view/useDownloads';
+export type { RemoveDownloads } from '@features/settings/core/removeDownloads';
 export { buildDangerZoneActions } from '@features/settings/core/dangerZoneActions';
 export type {
   ClearHistoryState,

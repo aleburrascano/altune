@@ -69,7 +69,7 @@ function DangerZoneConfirm({ action, visible, onClose }: DangerZoneConfirmProps)
 export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
   const [confirming, setConfirming] = useState<DangerZoneActionKey | null>(null);
   const actions = buildDangerZoneActions(props);
-  const visibleRows = actions.filter(({ row }) => !row.hidden);
+  const visibleRows = actions.filter(({ row }) => row.hidden !== true);
   const close = (): void => setConfirming(null);
 
   return (
