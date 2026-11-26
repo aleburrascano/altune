@@ -748,12 +748,12 @@ new_repo
 add_go_fixture
 (
     cd "$WORK/repo" || exit 1
-    git mv services/go-api/internal/discovery/adapters/x services/go-api/internal/discovery/adapters/y
+    git mv services/go-api/internal/search/adapters/x services/go-api/internal/search/adapters/y
     git commit -qm "move x to y"
 )
 run_push_scoped
 expect_rc 0
-expect_log "./internal/discovery/adapters/y"
+expect_log "./internal/search/adapters/y"
 forbid_log "adapters/x"
 forbid_log "altune/go-api/"
 expect_lint_args_exist
@@ -763,10 +763,10 @@ new_repo
 add_go_fixture
 (
     cd "$WORK/repo" || exit 1
-    git mv services/go-api/internal/discovery/adapters/x services/go-api/internal/discovery/adapters/y
+    git mv services/go-api/internal/search/adapters/x services/go-api/internal/search/adapters/y
 )
 run_with_tools --lint
-expect_log "./internal/discovery/adapters/y"
+expect_log "./internal/search/adapters/y"
 forbid_log "adapters/x"
 expect_lint_args_exist
 
