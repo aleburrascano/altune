@@ -169,11 +169,85 @@ var ledgerContractCases = []struct {
 	{"complete on another owner's track is not found and writes nothing", contractCompleteOnAnotherOwnersTrackIsNotFoundAndWritesNothing},
 	{"fail on another owner's track is not found and writes nothing", contractFailOnAnotherOwnersTrackIsNotFoundAndWritesNothing},
 	{"get reports each status and whether the track is streamable", contractGetReportsEachStatusAndWhetherTheTrackIsStreamable},
+	{"the status rules answer the same table for every status and event", contractTheStatusRulesAnswerTheSameTableForEveryStatusAndEvent},
+	{"every write is legal exactly when the rules allow the event", contractEveryWriteIsLegalExactlyWhenTheRulesAllowTheEvent},
 	{"a completion stores a known length and keeps the old one over an unknown one", contractACompletionStoresAKnownLengthAndKeepsTheOldOneOverAnUnknownOne},
 }
 
 func LedgerContract(t *testing.T, newLedger func(t *testing.T) LedgerUnderTest) {
 	for _, c := range ledgerContractCases {
 		t.Run(c.name, func(t *testing.T) { c.run(t, newLedger(t)) })
+	}
+}
+
+func contractTheStatusRulesAnswerTheSameTableForEveryStatusAndEvent(t *testing.T, l LedgerUnderTest) {
+	p, r, f := ports.TrackPending, ports.TrackReady, ports.TrackFailed
+	legal := map[ports.TrackEvent]map[ports.TrackStatus]ports.TrackStatus{
+		ports.EventMarkReady:       {p: r, r: r, f: r},
+		ports.EventReplaceAudio:    {r: r},
+		ports.EventMarkFailed:      {p: f, r: f},
+		ports.EventFailPending:     {p: f},
+		ports.EventRevertToPending: {r: p, f: p},
+	}
+	for _, event := range ports.TrackEvents() {
+		for _, from := range ports.TrackStatuses() {
+			next, err := l.Next(from, event)
+			want, ok := legal[event][from]
+			switch {
+			case !ok && !errors.Is(err, ports.ErrIllegalTransition):
+				t.Errorf("event %d from %s: err = %v, want an illegal transition", event, from.Wire(), err)
+			case ok && (err != nil || next != want):
+				t.Errorf("event %d from %s: next = %s, %v; want %s", event, from.Wire(), next.Wire(), err, want.Wire())
+			}
+		}
+	}
+	for name, got := range map[string][]ports.TrackStatus{"claimable": l.Claimable(), "retryable": l.Retryable(), "upgradable": l.Upgradable()} {
+		want := map[string]ports.TrackStatus{"claimable": p, "retryable": f, "upgradable": r}[name]
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("%s = %v, want [%s]", name, ports.StatusWires(got), want.Wire())
+		}
+	}
+}
+
+func contractEveryWriteIsLegalExactlyWhenTheRulesAllowTheEvent(t *testing.T, l LedgerUnderTest) {
+	ctx := context.Background()
+	writes := []struct {
+		name  string
+		event ports.TrackEvent
+		do    func(track ports.TrackSnapshot) error
+	}{
+		{"fail", ports.EventFailPending, func(track ports.TrackSnapshot) error {
+			return l.Fail(ctx, track.ID, track.UserId, 0, "no_match_found")
+		}},
+		{"revert", ports.EventRevertToPending, func(track ports.TrackSnapshot) error { return l.RevertAt(ctx, track) }},
+		{"complete", ports.EventMarkReady, func(track ports.TrackSnapshot) error {
+			return l.Complete(ctx, track.ID, track.UserId, 0, ports.Completion{AudioRef: contractAudioRef})
+		}},
+		{"replace", ports.EventReplaceAudio, func(track ports.TrackSnapshot) error {
+			return l.Complete(ctx, track.ID, track.UserId, 0, ports.Completion{AudioRef: contractAudioRef + ".new", ReplaceAudio: true})
+		}},
+	}
+	for _, write := range writes {
+		for _, from := range ports.TrackStatuses() {
+			track := added(t, l, from)
+			snapshot := ownersView(t, l, track)
+
+			err := write.do(snapshot)
+
+			next, legal := l.Next(from, write.event)
+			if legal != nil {
+				if !errors.Is(err, ports.ErrIllegalTransition) {
+					t.Errorf("%s from %s: err = %v, want an illegal transition", write.name, from.Wire(), err)
+				}
+				continue
+			}
+			if err != nil {
+				t.Errorf("%s from %s: err = %v, want it applied", write.name, from.Wire(), err)
+				continue
+			}
+			if got := ownersView(t, l, track); got.Status != next {
+				t.Errorf("%s from %s: status = %s, want %s", write.name, from.Wire(), got.Status.Wire(), next.Wire())
+			}
+		}
 	}
 }

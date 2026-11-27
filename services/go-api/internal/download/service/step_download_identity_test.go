@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -21,6 +22,7 @@ import (
 const loggedCap = 5
 
 type pendingLedger struct {
+	acquisitiontest.Rules
 	track download.TrackSnapshot
 }
 

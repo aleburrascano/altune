@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ const claimRequeueRetryDelay = 5 * time.Second
 
 type PostgresJobQueue struct {
 	pool     *pgxpool.Pool
-	requeuer ports.TrackRequeuer
+	requeuer ports.QueueTracks
 }
 
 var (
@@ -34,14 +35,14 @@ var (
 
 var ErrJobQueueRequeuerRequired = errors.New("job queue needs a track requeuer")
 
-func NewPostgresJobQueue(pool *pgxpool.Pool, requeuer ports.TrackRequeuer) (*PostgresJobQueue, error) {
+func NewPostgresJobQueue(pool *pgxpool.Pool, requeuer ports.QueueTracks) (*PostgresJobQueue, error) {
 	if requeuer == nil {
 		return nil, fmt.Errorf("NewPostgresJobQueue: %w", ErrJobQueueRequeuerRequired)
 	}
 	return &PostgresJobQueue{pool: pool, requeuer: requeuer}, nil
 }
 
-func MustNewPostgresJobQueue(pool *pgxpool.Pool, requeuer ports.TrackRequeuer) *PostgresJobQueue {
+func MustNewPostgresJobQueue(pool *pgxpool.Pool, requeuer ports.QueueTracks) *PostgresJobQueue {
 	queue, err := NewPostgresJobQueue(pool, requeuer)
 	if err != nil {
 		panic(err)
@@ -51,7 +52,18 @@ func MustNewPostgresJobQueue(pool *pgxpool.Pool, requeuer ports.TrackRequeuer) *
 
 const ensureJobRowSQL = `INSERT INTO acquisition_jobs (track_id) SELECT id FROM tracks WHERE id = $1 FOR UPDATE ON CONFLICT (track_id) DO NOTHING`
 
-const claimableJobSQL = `(t.acquisition_status = 'pending' OR j.job_kind = 'replace' OR (t.acquisition_status = 'failed' AND j.needs_pending))`
+const (
+	claimableParam = 2
+	retryableParam = 3
+)
+
+func claimableJobSQL(claimable, retryable int) string {
+	return fmt.Sprintf(`(t.acquisition_status = ANY($%d) OR j.job_kind = 'replace' OR (t.acquisition_status = ANY($%d) AND j.needs_pending))`, claimable, retryable)
+}
+
+func (q *PostgresJobQueue) claimableArgs() []any {
+	return []any{ports.StatusWires(q.requeuer.Claimable()), ports.StatusWires(q.requeuer.Retryable())}
+}
 
 const clearNeedsPendingSQL = `
 UPDATE acquisition_jobs j SET needs_pending = false
@@ -64,7 +76,7 @@ SET job_kind = $2,
 	available_at = now() + make_interval(secs => $3),
 	lease_until = CASE
 		WHEN j.job_kind = 'upgrade' AND $2 <> 'upgrade' THEN NULL
-		WHEN (t.acquisition_status = 'pending' OR j.available_at IS NOT NULL)
+		WHEN (t.acquisition_status = ANY($5) OR j.available_at IS NOT NULL)
 			AND j.lease_until >= now() THEN j.lease_until
 	END,
 	attempts = j.attempts
@@ -75,17 +87,17 @@ SET job_kind = $2,
 		END,
 	run_attempts = 0,
 	correlation_id = NULLIF($4, ''),
-	needs_pending = (t.acquisition_status = 'failed')
+	needs_pending = (t.acquisition_status = ANY($6))
 FROM (SELECT id, acquisition_status FROM tracks WHERE id = $1 FOR UPDATE) t
 WHERE j.track_id = t.id
-	AND NOT ($2 = 'acquire' AND t.acquisition_status = 'ready')
+	AND NOT ($2 = 'acquire' AND t.acquisition_status = ANY($7))
 	AND (
 		$2 <> 'upgrade'
-		OR (t.acquisition_status = 'ready' AND (j.available_at IS NULL OR j.job_kind = 'upgrade'))
+		OR (t.acquisition_status = ANY($7) AND (j.available_at IS NULL OR j.job_kind = 'upgrade'))
 	)
 	AND (
 		(j.job_kind = 'upgrade' AND $2 <> 'upgrade')
-		OR (t.acquisition_status <> 'pending' AND j.available_at IS NULL)
+		OR (NOT t.acquisition_status = ANY($5) AND j.available_at IS NULL)
 		OR j.lease_until IS NULL
 		OR j.lease_until < now()
 		OR j.job_kind = $2
@@ -133,7 +145,8 @@ func (q *PostgresJobQueue) applyEnqueue(ctx context.Context, trackID ids.TrackId
 	if _, err := q.pool.Exec(ctx, ensureJobRowSQL, trackID.UUID()); err != nil {
 		return false, fmt.Errorf("enqueue acquisition job: %w", err)
 	}
-	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), delay.Seconds(), logging.CorrelationIDFromContext(ctx))
+	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), delay.Seconds(), logging.CorrelationIDFromContext(ctx),
+		ports.StatusWires(q.requeuer.Claimable()), ports.StatusWires(q.requeuer.Retryable()), ports.StatusWires(q.requeuer.Upgradable()))
 	if err != nil {
 		return false, fmt.Errorf("enqueue acquisition job: %w", err)
 	}
@@ -150,7 +163,7 @@ func (q *PostgresJobQueue) resolveRefusedEnqueue(ctx context.Context, trackID id
 	if err != nil {
 		return false, fmt.Errorf("enqueue acquisition job: %w", err)
 	}
-	if kind == ports.JobKindAcquire && status == "ready" {
+	if kind == ports.JobKindAcquire && slices.Contains(ports.StatusWires(q.requeuer.Upgradable()), status) {
 		return false, nil
 	}
 	if leaseIsLive {
@@ -170,12 +183,12 @@ func conflictUnlessSameKind(held, requested ports.JobKind) error {
 	return nil
 }
 
-const pendingDepthSQL = `
+var pendingDepthSQL = `
 SELECT count(*),
 	COALESCE(EXTRACT(EPOCH FROM now() - min(j.available_at) FILTER (WHERE j.available_at <= now())), 0)::float8
 FROM acquisition_jobs j JOIN tracks t ON t.id = j.track_id
 WHERE j.available_at IS NOT NULL
-	AND ` + claimableJobSQL + `
+	AND ` + claimableJobSQL(1, 2) + `
 	AND (j.lease_until IS NULL OR j.lease_until < now())`
 
 func (q *PostgresJobQueue) PendingDepth(ctx context.Context) (int, time.Duration, error) {
@@ -186,19 +199,19 @@ func (q *PostgresJobQueue) PendingDepth(ctx context.Context) (int, time.Duration
 		pending    int
 		oldestSecs float64
 	)
-	if err := q.pool.QueryRow(ctx, pendingDepthSQL).Scan(&pending, &oldestSecs); err != nil {
+	if err := q.pool.QueryRow(ctx, pendingDepthSQL, q.claimableArgs()...).Scan(&pending, &oldestSecs); err != nil {
 		return 0, 0, fmt.Errorf("read acquisition pending depth: %w", err)
 	}
 	return pending, time.Duration(oldestSecs * float64(time.Second)), nil
 }
 
-const claimJobSQL = `
+var claimJobSQL = `
 WITH candidate AS (
 	SELECT j.track_id AS id
 	FROM acquisition_jobs j JOIN tracks t ON t.id = j.track_id
 	WHERE j.available_at <= now()
 		AND j.job_kind <> 'upgrade'
-		AND ` + claimableJobSQL + `
+		AND ` + claimableJobSQL(claimableParam, retryableParam) + `
 		AND (j.lease_until IS NULL OR j.lease_until < now())
 	ORDER BY (
 			SELECT count(*) FROM acquisition_jobs u JOIN tracks ut ON ut.id = u.track_id
@@ -211,7 +224,7 @@ WITH candidate AS (
 )
 ` + leaseClaimedJobSQL
 
-const claimUpgradeJobSQL = `
+var claimUpgradeJobSQL = `
 WITH candidate AS (
 	SELECT j.track_id AS id
 	FROM acquisition_jobs j JOIN tracks t ON t.id = j.track_id
@@ -222,7 +235,7 @@ WITH candidate AS (
 			SELECT 1 FROM acquisition_jobs u JOIN tracks ut ON ut.id = u.track_id
 			WHERE u.available_at <= now()
 				AND u.job_kind <> 'upgrade'
-				AND (ut.acquisition_status = 'pending' OR u.job_kind = 'replace' OR (ut.acquisition_status = 'failed' AND u.needs_pending))
+				AND (ut.acquisition_status = ANY($2) OR u.job_kind = 'replace' OR (ut.acquisition_status = ANY($3) AND u.needs_pending))
 				AND (u.lease_until IS NULL OR u.lease_until < now())
 		)
 	ORDER BY j.available_at
@@ -255,7 +268,7 @@ func (q *PostgresJobQueue) claim(ctx context.Context, sql string, lease time.Dur
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	job, needsPending, err := scanClaimedJob(q.pool.QueryRow(ctx, sql, lease.Seconds()))
+	job, needsPending, err := scanClaimedJob(q.pool.QueryRow(ctx, sql, append([]any{lease.Seconds()}, q.claimableArgs()...)...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.Job{}, acqdomain.ErrNoJobAvailable
 	}
@@ -393,17 +406,17 @@ UPDATE acquisition_jobs j
 SET lease_until = NULL,
 	needs_pending = false,
 	available_at = CASE
-		WHEN t.acquisition_status = 'pending' THEN COALESCE(j.available_at, now())
+		WHEN t.acquisition_status = ANY($3) THEN COALESCE(j.available_at, now())
 	END,
 	job_kind = CASE
-		WHEN t.acquisition_status = 'pending' THEN j.job_kind
+		WHEN t.acquisition_status = ANY($3) THEN j.job_kind
 		ELSE 'acquire'
 	END
 FROM (SELECT id, acquisition_status FROM tracks WHERE id = $1 FOR UPDATE) t
 WHERE j.track_id = t.id AND j.attempts = $2`
 
 func (q *PostgresJobQueue) Settle(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber) error {
-	return q.execFenced(ctx, trackID, "settle", settleJobSQL, trackID.UUID(), int(fence))
+	return q.execFenced(ctx, trackID, "settle", settleJobSQL, trackID.UUID(), int(fence), ports.StatusWires(q.requeuer.Claimable()))
 }
 
 const notifierReconnectDelay = time.Second

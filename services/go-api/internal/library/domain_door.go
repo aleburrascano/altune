@@ -8,6 +8,16 @@ type (
 	NewTrackInput = domain.NewTrackInput
 )
 
+type AcquisitionEvent = domain.AcquisitionEvent
+
+const (
+	EventFailPending     = domain.EventFailPending
+	EventMarkFailed      = domain.EventMarkFailed
+	EventMarkReady       = domain.EventMarkReady
+	EventReplaceAudio    = domain.EventReplaceAudio
+	EventRevertToPending = domain.EventRevertToPending
+)
+
 type (
 	Playlist        = domain.Playlist
 	PlaylistId      = domain.PlaylistId
@@ -26,6 +36,11 @@ var (
 )
 
 var (
+	AcquisitionStatuses       = domain.AcquisitionStatuses
+	ClaimableStatuses         = domain.ClaimableStatuses
+	RetryableStatuses         = domain.RetryableStatuses
+	Transition                = domain.Transition
+	UpgradableStatuses        = domain.UpgradableStatuses
 	PlausibleYear             = domain.PlausibleYear
 	FailureMessage            = domain.FailureMessage
 	JoinFailureReason         = domain.JoinFailureReason

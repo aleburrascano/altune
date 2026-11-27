@@ -29,6 +29,7 @@ type LedgerTrack struct {
 }
 
 type Ledger struct {
+	rules    ports.StatusRules
 	mu       sync.Mutex
 	tracks   map[ids.TrackId]LedgerTrack
 	writeErr error
@@ -37,12 +38,27 @@ type Ledger struct {
 var _ ports.LibraryTracks = (*Ledger)(nil)
 
 func NewLedger(tracks ...LedgerTrack) *Ledger {
-	l := &Ledger{tracks: make(map[ids.TrackId]LedgerTrack)}
+	l := &Ledger{tracks: make(map[ids.TrackId]LedgerTrack), rules: Rules{}}
 	for _, track := range tracks {
 		l.Seed(track)
 	}
 	return l
 }
+
+func (l *Ledger) UsingRules(rules ports.StatusRules) *Ledger {
+	l.rules = rules
+	return l
+}
+
+func (l *Ledger) Next(from ports.TrackStatus, event ports.TrackEvent) (ports.TrackStatus, error) {
+	return l.rules.Next(from, event)
+}
+
+func (l *Ledger) Claimable() []ports.TrackStatus { return l.rules.Claimable() }
+
+func (l *Ledger) Retryable() []ports.TrackStatus { return l.rules.Retryable() }
+
+func (l *Ledger) Upgradable() []ports.TrackStatus { return l.rules.Upgradable() }
 
 func (l *Ledger) Seed(track LedgerTrack) {
 	l.mu.Lock()
@@ -90,7 +106,7 @@ func (l *Ledger) AudioRefInUse(_ context.Context, audioRef string, excludeTrackI
 
 func (l *Ledger) Complete(_ context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, c ports.Completion) error {
 	return l.update(id, userId, fence, func(track *LedgerTrack) error {
-		if err := settleAudio(track, c); err != nil {
+		if err := settleAudio(l.rules, track, c); err != nil {
 			return err
 		}
 		recordCompletion(track, c)
@@ -104,13 +120,14 @@ func (l *Ledger) Complete(_ context.Context, id ids.TrackId, userId ids.UserId, 
 
 func (l *Ledger) Fail(_ context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, reason string) error {
 	return l.update(id, userId, fence, func(track *LedgerTrack) error {
-		if track.Status != ports.TrackPending {
+		next, err := l.rules.Next(track.Status, ports.EventFailPending)
+		if err != nil {
 			return illegalTransition("fail acquisition", track.Status)
 		}
 		if reason == "" {
 			return errors.New("failure reason required for failed status")
 		}
-		track.Status, track.FailureReason, track.AudioRef, track.Streamable = ports.TrackFailed, reason, nil, false
+		track.Status, track.FailureReason, track.AudioRef, track.Streamable = next, reason, nil, false
 		return nil
 	})
 }
@@ -125,10 +142,11 @@ func (l *Ledger) RevertAt(_ context.Context, snapshot ports.TrackSnapshot) error
 	if track.Version != snapshot.Version {
 		return fmt.Errorf("revert to pending at version %d, track is at %d: %w", snapshot.Version, track.Version, ErrVersionConflict)
 	}
-	if track.Status == ports.TrackPending {
+	next, err := l.rules.Next(track.Status, ports.EventRevertToPending)
+	if err != nil {
 		return illegalTransition("revert to pending", track.Status)
 	}
-	track.Status, track.AudioRef, track.FailureReason, track.Streamable = ports.TrackPending, nil, "", false
+	track.Status, track.AudioRef, track.FailureReason, track.Streamable = next, nil, "", false
 	return l.write(track)
 }
 
@@ -136,11 +154,16 @@ func (l *Ledger) Requeue(_ context.Context, id ids.TrackId) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	track, ok := l.tracks[id]
-	if !ok || (track.Status != ports.TrackFailed && track.FailureReason == "") {
+	retryable := ok && slices.Contains(l.rules.Retryable(), track.Status)
+	if !ok || (!retryable && track.FailureReason == "") {
 		return nil
 	}
-	if track.Status == ports.TrackFailed {
-		track.Status = ports.TrackPending
+	if retryable {
+		next, err := l.rules.Next(track.Status, ports.EventRevertToPending)
+		if err != nil {
+			return illegalTransition("revert to pending", track.Status)
+		}
+		track.Status = next
 	}
 	track.FailureReason = ""
 	return l.write(track)
@@ -172,18 +195,20 @@ func (l *Ledger) write(track LedgerTrack) error {
 	return nil
 }
 
-func settleAudio(track *LedgerTrack, c ports.Completion) error {
+func settleAudio(rules ports.StatusRules, track *LedgerTrack, c ports.Completion) error {
 	if c.AudioRef == "" {
 		return errors.New("audio_ref required for ready status")
 	}
-	if c.ReplaceAudio && !track.Streamable {
-		return illegalTransition("replace audio", track.Status)
+	event, op := ports.EventMarkReady, "mark ready"
+	if c.ReplaceAudio {
+		event, op = ports.EventReplaceAudio, "replace audio"
 	}
-	if !c.ReplaceAudio && track.Streamable && *track.AudioRef != c.AudioRef {
-		return illegalTransition("mark ready", track.Status)
+	next, err := rules.Next(track.Status, event)
+	if err != nil || (c.ReplaceAudio && !track.Streamable) || (!c.ReplaceAudio && track.Streamable && *track.AudioRef != c.AudioRef) {
+		return illegalTransition(op, track.Status)
 	}
 	ref := c.AudioRef
-	track.Status, track.AudioRef, track.FailureReason, track.Streamable = ports.TrackReady, &ref, "", true
+	track.Status, track.AudioRef, track.FailureReason, track.Streamable = next, &ref, "", true
 	return nil
 }
 

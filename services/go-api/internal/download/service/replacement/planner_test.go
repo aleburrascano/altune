@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -49,8 +50,24 @@ func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 		t.Errorf("scheduled = %v, want the picked track", scheduler.scheduled)
 	}
 	want := ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2}
-	if store.selection != want {
+	if !reflect.DeepEqual(store.selection, want) {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
+	}
+}
+
+type upgradableOnly struct{ ports.StatusRules }
+
+func (upgradableOnly) Upgradable() []ports.TrackStatus { return []ports.TrackStatus{ports.TrackReady} }
+
+func TestPlanner_AsksTheStoreForTheStatusesTheRulesCallUpgradable(t *testing.T) {
+	store := &pickingStore{}
+
+	if err := download.NewReplacementPlanner(store, &recordingScheduler{}, 2, time.Hour).UpgradingFrom(upgradableOnly{}).PlanNext(context.Background()); err != nil {
+		t.Fatalf("PlanNext: %v", err)
+	}
+
+	if want := []ports.TrackStatus{ports.TrackReady}; !reflect.DeepEqual(store.selection.Upgradable, want) {
+		t.Errorf("Upgradable = %v, want %v", store.selection.Upgradable, want)
 	}
 }
 
@@ -62,7 +79,7 @@ func TestPlanner_CheckingUploadsAsksTheStoreForUnverifiedUserUploadsToo(t *testi
 	}
 
 	want := ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, CheckInPlace: true}
-	if store.selection != want {
+	if !reflect.DeepEqual(store.selection, want) {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}
 }
@@ -127,7 +144,7 @@ func TestPlanner_RescuingLowBitrateAsksTheStoreForTheFloor(t *testing.T) {
 	}
 
 	want := ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, LowBitrateFloorKbps: 112}
-	if store.selection != want {
+	if !reflect.DeepEqual(store.selection, want) {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}
 }

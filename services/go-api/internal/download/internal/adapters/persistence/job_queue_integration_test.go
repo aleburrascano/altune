@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -1241,6 +1242,7 @@ func integrationSchedulerPorts(queue ports.DownloadQueue) download.SchedulerPort
 }
 
 type tracksRequeuer struct {
+	acquisitiontest.Rules
 	pool *pgxpool.Pool
 }
 

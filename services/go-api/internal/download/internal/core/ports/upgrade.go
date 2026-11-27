@@ -23,6 +23,8 @@ type UpgradeSelection struct {
 	CheckInPlace bool
 
 	LowBitrateFloorKbps int
+
+	Upgradable []TrackStatus
 }
 
 type UpgradeAttempt struct {

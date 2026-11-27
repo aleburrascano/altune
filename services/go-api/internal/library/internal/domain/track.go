@@ -257,9 +257,13 @@ func (t *Track) MarkReady(audioRef string, source ids.Source) error {
 		return ErrIDSourceRequired
 	}
 	if t.downloadStatus == AcquisitionReady && t.audioRef != nil && *t.audioRef != audioRef {
-		return illegalTransition("mark ready", t.downloadStatus)
+		return illegalTransition(EventMarkReady.String(), t.downloadStatus)
 	}
-	t.setReadyAudio(audioRef, source)
+	next, err := Transition(t.downloadStatus, EventMarkReady)
+	if err != nil {
+		return err
+	}
+	t.setReadyAudio(next, audioRef, source)
 	return nil
 }
 
@@ -270,15 +274,19 @@ func (t *Track) ReplaceAudio(audioRef string, source ids.Source) error {
 	if source == nil {
 		return ErrIDSourceRequired
 	}
-	if !t.IsStreamable() {
-		return illegalTransition("replace audio", t.downloadStatus)
+	next, err := Transition(t.downloadStatus, EventReplaceAudio)
+	if err != nil {
+		return err
 	}
-	t.setReadyAudio(audioRef, source)
+	if !t.IsStreamable() {
+		return illegalTransition(EventReplaceAudio.String(), t.downloadStatus)
+	}
+	t.setReadyAudio(next, audioRef, source)
 	return nil
 }
 
-func (t *Track) setReadyAudio(audioRef string, source ids.Source) {
-	t.downloadStatus = AcquisitionReady
+func (t *Track) setReadyAudio(next DownloadStatus, audioRef string, source ids.Source) {
+	t.downloadStatus = next
 	t.audioRef = &audioRef
 	t.audioVersion = source.NewString()
 	t.failureReason = nil
@@ -480,10 +488,11 @@ func (t *Track) MarkFailed(reason string) error {
 	if reason == "" {
 		return errors.New("failure_reason required for failed status")
 	}
-	if t.downloadStatus == AcquisitionFailed {
-		return illegalTransition("mark failed", t.downloadStatus)
+	next, err := Transition(t.downloadStatus, EventMarkFailed)
+	if err != nil {
+		return err
 	}
-	t.downloadStatus = AcquisitionFailed
+	t.downloadStatus = next
 	t.failureReason = &reason
 	t.audioRef = nil
 	t.acquisitionStartedAt = nil
@@ -491,8 +500,8 @@ func (t *Track) MarkFailed(reason string) error {
 }
 
 func (t *Track) FailAcquisition(reason string) error {
-	if t.downloadStatus != AcquisitionPending {
-		return illegalTransition("fail acquisition", t.downloadStatus)
+	if _, err := Transition(t.downloadStatus, EventFailPending); err != nil {
+		return err
 	}
 	return t.MarkFailed(reason)
 }
@@ -501,11 +510,12 @@ func (t *Track) RevertToPending(wallClock clock.Func) error {
 	if wallClock == nil {
 		return ErrTrackTimestampClockRequired
 	}
-	if t.downloadStatus == AcquisitionPending {
-		return illegalTransition("revert to pending", t.downloadStatus)
+	next, err := Transition(t.downloadStatus, EventRevertToPending)
+	if err != nil {
+		return err
 	}
 	now := wallClock.UTC()
-	t.downloadStatus = AcquisitionPending
+	t.downloadStatus = next
 	t.audioRef = nil
 	t.failureReason = nil
 	t.acquisitionStartedAt = &now

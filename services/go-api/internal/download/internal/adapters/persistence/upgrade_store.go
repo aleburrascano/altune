@@ -29,20 +29,20 @@ func NewPostgresUpgradeStore(pool *pgxpool.Pool) *PostgresUpgradeStore {
 }
 
 const upgradeCandidatesSQL = `
-SELECT t.id, t.user_id, COALESCE(t.acquisition_evidence->>'grade', 'D')
+SELECT t.id, t.user_id, COALESCE(t.acquisition_evidence->>'grade', $9::text)
 FROM tracks t
 LEFT JOIN acquisition_upgrade_state s ON s.track_id = t.id
 LEFT JOIN acquisition_jobs j ON j.track_id = t.id
-WHERE t.acquisition_status = 'ready'
+WHERE t.acquisition_status = ANY($8::text[])
 	AND t.audio_ref IS NOT NULL
 	AND (COALESCE(t.audio_source_url, '') <> '' OR ($5::boolean AND COALESCE((s.evidence->>'in_place_generation')::int, 0) < $2))
 	AND j.available_at IS NULL
-	AND COALESCE(t.acquisition_evidence->>'grade', 'D') NOT IN ('A_user', 'best_available')
+	AND COALESCE(t.acquisition_evidence->>'grade', $9::text) <> ALL($10::text[])
 	AND (
-		COALESCE(t.acquisition_evidence->>'grade', 'D') <> 'A'
+		COALESCE(t.acquisition_evidence->>'grade', $9::text) <> $11::text
 		OR ($5::boolean AND COALESCE((s.evidence->>'in_place_generation')::int, 0) < $2)
 		OR ($6::int > 0 AND (
-			t.acquisition_evidence->>'source_format_id' = '18'
+			t.acquisition_evidence->>'source_format_id' = $12::text
 			OR COALESCE(NULLIF(t.acquisition_evidence->>'source_kbps', '')::int, 0) BETWEEN 1 AND $6::int - 1))
 	)
 	AND COALESCE((s.evidence->>'best_available_generation')::int, 0) < $2
@@ -51,7 +51,7 @@ WHERE t.acquisition_status = 'ready'
 		SELECT count(*) FROM acquisition_jobs q
 		WHERE q.job_kind = 'upgrade' AND q.available_at IS NOT NULL
 	) < $4
-ORDER BY array_position($7::text[], COALESCE(t.acquisition_evidence->>'grade', 'D')) ASC NULLS FIRST,
+ORDER BY array_position($7::text[], COALESCE(t.acquisition_evidence->>'grade', $9::text)) ASC NULLS FIRST,
 	(s.evidence->>'upgrade_tried_at')::timestamptz ASC NULLS FIRST,
 	t.id
 LIMIT $1`
@@ -65,13 +65,23 @@ func worstFirstGrades() []string {
 	return names
 }
 
+func settledGrades() []string {
+	grades := acqdomain.SettledGrades()
+	names := make([]string, len(grades))
+	for i, g := range grades {
+		names[i] = string(g)
+	}
+	return names
+}
+
 func (s *PostgresUpgradeStore) Candidates(ctx context.Context, selection ports.UpgradeSelection) ([]ports.UpgradeCandidate, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
 	rows, err := s.pool.Query(ctx, upgradeCandidatesSQL,
 		selection.Limit, selection.Generation, selection.RetryAfter.Seconds(), selection.MaxQueued, selection.CheckInPlace,
-		selection.LowBitrateFloorKbps, worstFirstGrades())
+		selection.LowBitrateFloorKbps, worstFirstGrades(),
+		ports.StatusWires(selection.Upgradable), string(audioquality.Ungraded), settledGrades(), string(audioquality.A), acqdomain.LowBitrateSourceFormatID)
 	if err != nil {
 		return nil, fmt.Errorf("select upgrade candidates: %w", err)
 	}

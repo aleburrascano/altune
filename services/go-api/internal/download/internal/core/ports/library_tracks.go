@@ -79,9 +79,14 @@ type TrackRequeuer interface {
 	Requeue(ctx context.Context, id ids.TrackId) error
 }
 
+type QueueTracks interface {
+	TrackRequeuer
+	StatusRules
+}
+
 type LibraryTracks interface {
 	AudioRefLookup
-	TrackRequeuer
+	QueueTracks
 	Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*TrackSnapshot, error)
 	Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ClaimNumber, c Completion) error
 	Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ClaimNumber, reason string) error

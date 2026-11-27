@@ -411,6 +411,7 @@ func TestPostgresJobQueue_ClaimRacingACatalogWriteCannotTouchTheStartTime(t *tes
 }
 
 type flakyRequeuer struct {
+	downloadfromlibrary.Rules
 	inner download.TrackLedgerPort
 	fail  atomic.Bool
 }

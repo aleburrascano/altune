@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/domain"
@@ -89,7 +90,7 @@ func sourceURL(id string) *string {
 func evidenceOf(g string) string { return fmt.Sprintf(`{"grade":%q}`, g) }
 
 func selectionOf(limit int) ports.UpgradeSelection {
-	return ports.UpgradeSelection{Limit: limit, Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 10}
+	return ports.UpgradeSelection{Limit: limit, Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 10, Upgradable: acquisitiontest.Rules{}.Upgradable()}
 }
 
 func candidatesAmong(t *testing.T, store *persistence.PostgresUpgradeStore, selection ports.UpgradeSelection, mine ...sharedids.TrackId) []sharedids.TrackId {
@@ -720,11 +721,11 @@ func TestPostgresUpgradeStore_CandidatesAgreeWithTheGoSpecification(t *testing.T
 	}
 
 	selections := map[string]ports.UpgradeSelection{
-		"defaults":           {Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000},
-		"in place and floor": {Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, CheckInPlace: true, LowBitrateFloorKbps: 112},
-		"floor only":         {Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, LowBitrateFloorKbps: 112},
-		"long retry wait":    {Generation: audioquality.PipelineGeneration, RetryAfter: 72 * time.Hour, MaxQueued: 1_000_000, CheckInPlace: true},
-		"no queue room":      {Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 0, CheckInPlace: true},
+		"defaults":           {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000},
+		"in place and floor": {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, CheckInPlace: true, LowBitrateFloorKbps: 112},
+		"floor only":         {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, LowBitrateFloorKbps: 112},
+		"long retry wait":    {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: 72 * time.Hour, MaxQueued: 1_000_000, CheckInPlace: true},
+		"no queue room":      {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 0, CheckInPlace: true},
 	}
 	for selectionName, selection := range selections {
 		t.Run(selectionName, func(t *testing.T) {

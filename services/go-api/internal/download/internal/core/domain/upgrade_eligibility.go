@@ -2,10 +2,15 @@ package domain
 
 import (
 	"altune/go-api/internal/download/internal/core/audioquality"
+	"slices"
 	"time"
 )
 
-const lowBitrateSourceFormatID = "18"
+const LowBitrateSourceFormatID = "18"
+
+func SettledGrades() []audioquality.Grade {
+	return []audioquality.Grade{audioquality.AUser, audioquality.BestAvailable}
+}
 
 type UpgradeRow struct {
 	Ready                   bool
@@ -40,7 +45,7 @@ func UpgradeEligible(row UpgradeRow, rules UpgradeRules) bool {
 		row.HasAudio &&
 		(row.SourceURL != "" || inPlaceDue) &&
 		!row.JobQueued &&
-		grade != audioquality.AUser && !grade.IsBestAvailable() &&
+		!slices.Contains(SettledGrades(), grade) &&
 		(grade != audioquality.A || inPlaceDue || lowBitrate(row, rules)) &&
 		row.BestAvailableGeneration < rules.Generation &&
 		(row.UpgradeTriedAt == nil || row.UpgradeTriedAt.Before(rules.Now.Add(-rules.RetryAfter))) &&
@@ -49,6 +54,6 @@ func UpgradeEligible(row UpgradeRow, rules UpgradeRules) bool {
 
 func lowBitrate(row UpgradeRow, rules UpgradeRules) bool {
 	return rules.LowBitrateFloorKbps > 0 &&
-		(row.SourceFormatID == lowBitrateSourceFormatID ||
+		(row.SourceFormatID == LowBitrateSourceFormatID ||
 			(row.SourceKbps >= 1 && row.SourceKbps < rules.LowBitrateFloorKbps))
 }
