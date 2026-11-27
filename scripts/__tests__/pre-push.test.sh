@@ -161,6 +161,7 @@ run_linked_hook
 [ "$(git -C "$L" branch --show-current)" = linked ] || fail "pushing from a linked worktree must leave it on its branch"
 [ -z "$(git -C "$L" status --porcelain)" ] || fail "pushing from a linked worktree must leave it clean: $(git -C "$L" status --porcelain)"
 linked_src=$(grep -lx "$L" "$WORK"/cache/altune/prepush-merge/*.src | head -n 1)
+[ -n "$linked_src" ] || fail "the hook must record the linked worktree as the source of its scratch worktree"
 linked_cache=${linked_src%.src}
 grep -qF "$(git -C "$linked_cache" rev-parse HEAD | cut -c1-12)" "$WORK/out.log" || fail "the scratch worktree must sit on the merge result the hook names: $(cat "$WORK/out.log")"
 
