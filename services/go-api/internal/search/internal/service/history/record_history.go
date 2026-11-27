@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -79,7 +80,7 @@ func (s *RecordSearchHistoryService) Record(
 func (s *RecordSearchHistoryService) RecordSubmitted(ctx context.Context, userId ids.UserId, raw string) error {
 	query, err := domain.NewSearchQuery(strings.TrimSpace(raw), domain.AllKinds(), 1)
 	if err != nil {
-		return err
+		return fmt.Errorf("new search query: %w", err)
 	}
 	queryNorm := textnorm.NormalizeForMatch(domain.SearchText(query.Raw))
 	s.Record(ctx, userId, query, queryNorm, s.now())

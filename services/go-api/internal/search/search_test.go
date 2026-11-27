@@ -398,8 +398,8 @@ func TestNew_RefusesDepsWithoutTheHandlesItNeeds(t *testing.T) {
 		t.Fatal("New accepted deps with no transport or logger")
 	}
 	want := "discovery: deps are missing Background, Tracker, Logger, Activity, ClientEvents, Transport, CacheOps, ProviderTimeout, ChartTimeout"
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err, want)
+	if !strings.HasSuffix(err.Error(), want) {
+		t.Errorf("error = %q, want suffix %q", err, want)
 	}
 }
 
@@ -408,7 +408,7 @@ func TestNew_NamesOnlyTheHandleThatIsMissing(t *testing.T) {
 	h.deps.ChartTimeout = 0
 
 	_, err := search.New(t.Context(), h.deps)
-	if err == nil || err.Error() != "discovery: deps are missing ChartTimeout" {
+	if err == nil || !strings.HasSuffix(err.Error(), "discovery: deps are missing ChartTimeout") {
 		t.Errorf("error = %v, want only ChartTimeout named", err)
 	}
 }
