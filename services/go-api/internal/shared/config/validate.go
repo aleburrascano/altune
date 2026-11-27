@@ -16,7 +16,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func (c *Config) validate() error {
+type validator struct{ *Config }
+
+func (c validator) validate() error {
 	if err := c.validateSupabase(); err != nil {
 		return err
 	}
@@ -50,7 +52,7 @@ func (c *Config) validate() error {
 	return c.validateRedis()
 }
 
-func (c *Config) validateUnreleasedSource() error {
+func (c validator) validateUnreleasedSource() error {
 	if c.UnreleasedSource != "store" && c.UnreleasedSource != "cache" {
 		return fmt.Errorf("UNRELEASED_SOURCE must be store or cache, got %q", c.UnreleasedSource)
 	}
@@ -61,7 +63,7 @@ var discoverySearchProviderNames = []string{
 	"deezer", "applemusic", "musicbrainz", "lastfm", "soundcloud", "youtube", "amazonmusic", "spotify",
 }
 
-func (c *Config) validateDiscoverySearch() error {
+func (c validator) validateDiscoverySearch() error {
 	if c.DiscoverySearchDeadline < 0 {
 		return fmt.Errorf("DISCOVERY_SEARCH_DEADLINE must not be negative, got %s", c.DiscoverySearchDeadline)
 	}
@@ -76,7 +78,7 @@ func (c *Config) validateDiscoverySearch() error {
 	return c.validateDiscoverySearchProviders()
 }
 
-func (c *Config) validateDiscoverySearchProviders() error {
+func (c validator) validateDiscoverySearchProviders() error {
 	for _, name := range c.DiscoverySearchProviders {
 		if !slices.Contains(discoverySearchProviderNames, name) {
 			return fmt.Errorf("DISCOVERY_SEARCH_PROVIDERS: unknown provider %q (known: %s)",
@@ -86,7 +88,7 @@ func (c *Config) validateDiscoverySearchProviders() error {
 	return nil
 }
 
-func (c *Config) validateAlerting() error {
+func (c validator) validateAlerting() error {
 	if c.AlertZeroResultThreshold < 0 {
 		return fmt.Errorf("ALERT_ZERO_RESULT_THRESHOLD must be >= 0, got %d", c.AlertZeroResultThreshold)
 	}
@@ -104,7 +106,7 @@ func (c *Config) validateAlerting() error {
 
 var alertEmailPattern = regexp.MustCompile(`^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$`)
 
-func (c *Config) validateAlertEmail() error {
+func (c validator) validateAlertEmail() error {
 	if c.ResendAPIKey != "" && c.AlertEmailTo == "" {
 		return errors.New("ALERT_EMAIL_TO must be set when RESEND_API_KEY is set")
 	}
@@ -120,7 +122,7 @@ func (c *Config) validateAlertEmail() error {
 	return nil
 }
 
-func (c *Config) validateTransportSecurity() error {
+func (c validator) validateTransportSecurity() error {
 	if c.isKnownNonProductionEnv() {
 		return nil
 	}
@@ -159,7 +161,7 @@ func validateObjectStorageEndpoint(endpoint string) error {
 
 var audioKeyPrefixPattern = regexp.MustCompile(`^[a-z0-9-]+/$`)
 
-func (c *Config) validateAudioKeyPrefix() error {
+func (c validator) validateAudioKeyPrefix() error {
 	if c.AudioKeyPrefix == "" {
 		return nil
 	}
@@ -178,7 +180,7 @@ const (
 	maxAcquisitionUpgradeRetryAfter = 30 * 24 * time.Hour
 )
 
-func (c *Config) validateAcquisitionUpgrade() error {
+func (c validator) validateAcquisitionUpgrade() error {
 	if c.AcquisitionUpgradePerHour < 1 || c.AcquisitionUpgradePerHour > maxAcquisitionUpgradePerHour {
 		return fmt.Errorf("ACQUISITION_UPGRADE_PER_HOUR must be between 1 and %d, got %d", maxAcquisitionUpgradePerHour, c.AcquisitionUpgradePerHour)
 	}
@@ -207,7 +209,7 @@ func (c *Config) validateAcquisitionUpgrade() error {
 	return nil
 }
 
-func (c *Config) validateRedis() error {
+func (c validator) validateRedis() error {
 	if c.RedisURL == "" {
 		return nil
 	}
@@ -217,7 +219,7 @@ func (c *Config) validateRedis() error {
 	return nil
 }
 
-func (c *Config) validateTuning() error {
+func (c validator) validateTuning() error {
 	if c.MusicBrainzUserAgent == "" && !c.isKnownNonProductionEnv() {
 		return fmt.Errorf("MUSICBRAINZ_USER_AGENT must be set unless ENV is development, test or staging, got ENV=%q", c.Env)
 	}
@@ -289,14 +291,14 @@ func (c *Config) validateTuning() error {
 	return c.validateGeniusUnreleased()
 }
 
-func (c *Config) validateTrackers() error {
+func (c validator) validateTrackers() error {
 	if c.HasTrackers() && strings.TrimSpace(c.TrackerHubSheetID) == "" {
 		return errors.New("TRACKER_HUB_SHEET_ID must be set when GOOGLE_SHEETS_API_KEY is set")
 	}
 	return nil
 }
 
-func (c *Config) validateGeniusUnreleased() error {
+func (c validator) validateGeniusUnreleased() error {
 	if c.GeniusUnreleasedMaxPages < 1 {
 		return fmt.Errorf("GENIUS_UNRELEASED_MAX_PAGES must be >= 1, got %d", c.GeniusUnreleasedMaxPages)
 	}
@@ -321,7 +323,7 @@ func (c *Config) validateGeniusUnreleased() error {
 	return nil
 }
 
-func (c *Config) validateAudioSources() error {
+func (c validator) validateAudioSources() error {
 	if c.YtMusicEnabled || c.YtDLPEnabled {
 		return nil
 	}
@@ -331,7 +333,7 @@ func (c *Config) validateAudioSources() error {
 	return errors.New("no audio source enabled: enable YTMUSIC_ENABLED or YTDLP_ENABLED (or set ACQUISITION_PAUSED=true)")
 }
 
-func (c *Config) validateCookieFile() error {
+func (c validator) validateCookieFile() error {
 	if c.YtDLPCookieFile == "" {
 		return nil
 	}
@@ -347,7 +349,7 @@ var potURLPattern = regexp.MustCompile(`^https?://[A-Za-z0-9.-]+(:\d+)?/?$`)
 
 var remoteComponentsPattern = regexp.MustCompile(`^[A-Za-z0-9_.:@/-]+(,[A-Za-z0-9_.:@/-]+)*$`)
 
-func (c *Config) validateYtDLPRuntime() error {
+func (c validator) validateYtDLPRuntime() error {
 	if c.YtDLPJSRuntime != "" && !allowedJSRuntimes[c.YtDLPJSRuntime] {
 		return fmt.Errorf("YTDLP_JS_RUNTIME must be one of node, deno (or empty), got %q", c.YtDLPJSRuntime)
 	}
@@ -362,7 +364,7 @@ func (c *Config) validateYtDLPRuntime() error {
 
 var knownLogLevels = map[string]bool{"DEBUG": true, "INFO": true, "WARN": true, "WARNING": true, "ERROR": true}
 
-func (c *Config) validateSilentDefaults() error {
+func (c validator) validateSilentDefaults() error {
 	for _, p := range []struct {
 		name  string
 		value int
@@ -388,7 +390,7 @@ func isUnitFraction(v float64) bool {
 	return v >= 0 && v <= 1
 }
 
-func (c *Config) validateCORSOrigins() error {
+func (c validator) validateCORSOrigins() error {
 	for _, origin := range c.CORSOrigins {
 		if err := validateCORSOrigin(origin); err != nil {
 			return err
@@ -412,7 +414,7 @@ func isBareOrigin(u *url.URL) bool {
 	return u.Path == "" && u.RawQuery == "" && u.Fragment == "" && u.User == nil
 }
 
-func (c *Config) validateOverseerPrincipal() error {
+func (c validator) validateOverseerPrincipal() error {
 	id, err := canonicalUserID("OVERSEER_PRINCIPAL_ID", c.OverseerPrincipalID)
 	if err != nil {
 		return err
@@ -441,7 +443,7 @@ func parseAbsoluteURL(field, value string) (*url.URL, error) {
 	return u, nil
 }
 
-func (c *Config) validateSupabase() error {
+func (c validator) validateSupabase() error {
 	if c.SupabaseJWTJWKSURL == "" {
 		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be set (HS256 mode is not supported)")
 	}
