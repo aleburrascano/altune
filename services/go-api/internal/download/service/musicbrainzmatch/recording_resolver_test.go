@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service/musicbrainzmatch"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"errors"
 	"log/slog"
@@ -71,10 +72,10 @@ func TestNewRecordingResolver_RefusesEachMissingPort(t *testing.T) {
 }
 
 type stubSearcher struct {
-	results []download.SearchedRecording
+	results []songfields.RecordingIdentity
 }
 
-func (s stubSearcher) SearchRecordings(context.Context, string, int) ([]download.SearchedRecording, error) {
+func (s stubSearcher) SearchRecordings(context.Context, string, int) ([]songfields.RecordingIdentity, error) {
 	return s.results, nil
 }
 
@@ -91,21 +92,21 @@ func (s *stubISRCLookup) RecordingsByISRC(context.Context, string) ([]download.I
 
 type failingSearcher struct{}
 
-func (failingSearcher) SearchRecordings(context.Context, string, int) ([]download.SearchedRecording, error) {
+func (failingSearcher) SearchRecordings(context.Context, string, int) ([]songfields.RecordingIdentity, error) {
 	return nil, errors.New("search down")
 }
 
 func drinkingInLA() stubSearcher {
-	return stubSearcher{results: []download.SearchedRecording{{
-		Title:    "Drinking in L.A.",
-		Artist:   "Bran Van 3000",
-		ISRC:     "CAA509814003",
-		MBID:     "remix-mbid",
-		Duration: 236,
+	return stubSearcher{results: []songfields.RecordingIdentity{{
+		Title:           "Drinking in L.A.",
+		Artist:          "Bran Van 3000",
+		ISRC:            "CAA509814003",
+		RecordingMBID:   "remix-mbid",
+		DurationSeconds: 236,
 	}}}
 }
 
-var drinkingQuery = download.RecordingQuery{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003"}
+var drinkingQuery = songfields.RecordingIdentity{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003"}
 
 func TestResolve_ISRCRecordingReplacesMismatchedSearchMBID(t *testing.T) {
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{
@@ -225,7 +226,7 @@ func TestResolve_ISRCAnchor_DurationEdges(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			search := drinkingInLA()
-			search.results[0].Duration = tc.searchLength
+			search.results[0].DurationSeconds = tc.searchLength
 			resolver := newResolver(t, search, lookups{isrc: &stubISRCLookup{recordings: tc.recordings}})
 
 			identity, err := resolver.Resolve(context.Background(), drinkingQuery)
@@ -349,7 +350,7 @@ func TestResolve_SearchDurationDisagreementDoubtsTheReferenceWithNoISRC(t *testi
 	search := drinkingInLA()
 	q := drinkingQuery
 	q.ISRC = ""
-	q.Duration = 300
+	q.DurationSeconds = 300
 
 	resolver := newResolver(t, search, lookups{isrc: &stubISRCLookup{}})
 	identity, err := resolver.Resolve(context.Background(), q)
@@ -368,7 +369,7 @@ func TestResolve_SearchDurationWithinToleranceIsNotDoubted(t *testing.T) {
 	search := drinkingInLA()
 	q := drinkingQuery
 	q.ISRC = ""
-	q.Duration = 238
+	q.DurationSeconds = 238
 
 	resolver := newResolver(t, search, lookups{isrc: &stubISRCLookup{}})
 	identity, err := resolver.Resolve(context.Background(), q)
@@ -397,10 +398,10 @@ func TestResolve_ReferenceIsDoubtedOnlyPastTheLengthTolerance(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			search := drinkingInLA()
-			search.results[0].Duration = tc.searched
+			search.results[0].DurationSeconds = tc.searched
 			q := drinkingQuery
 			q.ISRC = ""
-			q.Duration = tc.catalog
+			q.DurationSeconds = tc.catalog
 
 			identity, err := newResolver(t, search, lookups{isrc: &stubISRCLookup{}}).Resolve(context.Background(), q)
 
@@ -469,7 +470,7 @@ func TestResolve_AnchoredReferenceSetListsAnchorFirstAndDropsTheSearchMBID(t *te
 
 func TestResolve_AmbiguousAnchorStillDoubtsTheUnregisteredSearchMBID(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 0
+	search.results[0].DurationSeconds = 0
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{
 		{MBID: "a", Duration: 236},
 		{MBID: "b", Duration: 237},
@@ -519,9 +520,9 @@ func TestResolve_ISRCRecordingWithoutAnMBIDIsNotAReference(t *testing.T) {
 
 func TestResolve_SearchLengthOffByMoreThanFiveSecondsIsLoggedNotDoubtedWhenISRCAgrees(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 100
+	search.results[0].DurationSeconds = 100
 	q := drinkingQuery
-	q.Duration = 106
+	q.DurationSeconds = 106
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 100}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -547,10 +548,10 @@ func TestResolve_SearchLengthOffByMoreThanFiveSecondsIsLoggedNotDoubtedWhenISRCA
 
 func TestResolve_SearchLengthExactlyFiveSecondsOffIsNotDoubted(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 100
+	search.results[0].DurationSeconds = 100
 	q := drinkingQuery
 	q.ISRC = ""
-	q.Duration = 105
+	q.DurationSeconds = 105
 	resolver := newResolver(t, search, lookups{isrc: &stubISRCLookup{}})
 
 	identity, err := resolver.Resolve(context.Background(), q)
@@ -564,10 +565,10 @@ func TestResolve_SearchLengthExactlyFiveSecondsOffIsNotDoubted(t *testing.T) {
 
 func TestResolve_SearchLengthWithinThreePercentOfALongTrackIsNotDoubted(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 600
+	search.results[0].DurationSeconds = 600
 	q := drinkingQuery
 	q.ISRC = ""
-	q.Duration = 612
+	q.DurationSeconds = 612
 	resolver := newResolver(t, search, lookups{isrc: &stubISRCLookup{}})
 
 	identity, err := resolver.Resolve(context.Background(), q)
@@ -582,7 +583,7 @@ func TestResolve_SearchLengthWithinThreePercentOfALongTrackIsNotDoubted(t *testi
 func TestResolve_UnknownTrackLengthNeverDoubtsTheReference(t *testing.T) {
 	q := drinkingQuery
 	q.ISRC = ""
-	q.Duration = 0
+	q.DurationSeconds = 0
 	resolver := newResolver(t, drinkingInLA(), lookups{isrc: &stubISRCLookup{}})
 
 	identity, err := resolver.Resolve(context.Background(), q)
@@ -607,10 +608,10 @@ func TestResolve_ISRCAnchoredAfterSearchFailureReferencesTheISRCRecording(t *tes
 }
 
 func TestResolve_AnotherVersionIsNotTheSavedSong(t *testing.T) {
-	acoustic := download.SearchedRecording{Title: "Take On Me (2017 Acoustic)", Artist: "a-ha", ISRC: "DEUM71724939", MBID: "acoustic-mbid"}
-	studio := download.SearchedRecording{Title: "Take on Me", Artist: "a-ha", ISRC: "USWB19901214", MBID: "studio-mbid"}
-	takeOnMe := download.RecordingQuery{Title: "Take on Me", Artist: "a-ha"}
-	resolve := func(results ...download.SearchedRecording) ports.RecordingIdentity {
+	acoustic := songfields.RecordingIdentity{Title: "Take On Me (2017 Acoustic)", Artist: "a-ha", ISRC: "DEUM71724939", RecordingMBID: "acoustic-mbid"}
+	studio := songfields.RecordingIdentity{Title: "Take on Me", Artist: "a-ha", ISRC: "USWB19901214", RecordingMBID: "studio-mbid"}
+	takeOnMe := songfields.RecordingIdentity{Title: "Take on Me", Artist: "a-ha"}
+	resolve := func(results ...songfields.RecordingIdentity) ports.RecordingIdentity {
 		t.Helper()
 		identity, err := newResolver(t, stubSearcher{results: results}, lookups{}).Resolve(context.Background(), takeOnMe)
 		if err != nil {
@@ -619,7 +620,7 @@ func TestResolve_AnotherVersionIsNotTheSavedSong(t *testing.T) {
 		return identity
 	}
 
-	if got := resolve(acoustic, studio); got.ISRC != studio.ISRC || got.MBID != studio.MBID {
+	if got := resolve(acoustic, studio); got.ISRC != studio.ISRC || got.MBID != studio.RecordingMBID {
 		t.Fatalf("resolved %+v, want the studio recording", got)
 	}
 	if got := resolve(acoustic); got.MBID != "" || got.ISRC != "" {
@@ -629,11 +630,11 @@ func TestResolve_AnotherVersionIsNotTheSavedSong(t *testing.T) {
 
 func TestResolve_ISRCAnchorPicksTheRecordingNearestTheCatalogLength(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 167
+	search.results[0].DurationSeconds = 167
 	recordings := []download.ISRCRecording{{MBID: "long", Duration: 167}, {MBID: "catalog", Duration: 139}}
 	resolver := newResolver(t, search, lookups{isrc: &stubISRCLookup{recordings: recordings}})
 	query := drinkingQuery
-	query.Duration = 139
+	query.DurationSeconds = 139
 
 	identity, err := resolver.Resolve(context.Background(), query)
 	if err != nil {
@@ -669,13 +670,17 @@ var (
 		MBID: cureLiveMBID, Title: "Boys Don\u2019t Cry", Artists: []string{"The Cure"}, Duration: 187,
 		Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
 	}
-	pinnedCureQuery = download.RecordingQuery{Title: "Boys Don't Cry", Artist: "The Cure", Duration: 157.07, MBID: cureStudioMBID}
+	pinnedCureQuery = songfields.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure", DurationSeconds: 157.07, RecordingMBID: cureStudioMBID}
 )
 
 func searchRanking(mbid string, duration float64, sources ...download.ProviderRef) stubSearcher {
-	return stubSearcher{results: []download.SearchedRecording{{
+	refs := make([]songfields.ProviderRef, len(sources))
+	for i, src := range sources {
+		refs[i] = songfields.ProviderRef{Provider: string(src.Provider), ExternalID: src.ExternalID, URL: src.URL}
+	}
+	return stubSearcher{results: []songfields.RecordingIdentity{{
 		Title: "Boys Don't Cry", Artist: "The Cure",
-		MBID: mbid, Duration: duration, Sources: sources,
+		RecordingMBID: mbid, DurationSeconds: duration, Sources: refs,
 	}}}
 }
 
@@ -827,7 +832,7 @@ func TestResolve_UnpinnedQueryNeverAsksTheRecordingLookup(t *testing.T) {
 	lookup := cureLookup()
 	resolver := newResolver(t, searchRanking(cureLiveMBID, 187), lookups{recording: lookup})
 	query := pinnedCureQuery
-	query.MBID = ""
+	query.RecordingMBID = ""
 
 	identity, _ := resolver.Resolve(context.Background(), query)
 
@@ -838,9 +843,9 @@ func TestResolve_UnpinnedQueryNeverAsksTheRecordingLookup(t *testing.T) {
 
 func TestResolve_CatalogLengthConflictWithISRCRegisteredReferenceIsNotDoubted(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 197
+	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
-	q.Duration = 300
+	q.DurationSeconds = 300
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -866,7 +871,7 @@ func TestResolve_CatalogLengthConflictWithISRCRegisteredReferenceIsNotDoubted(t 
 func TestResolve_CatalogLengthAgreeingWithISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
 	search := drinkingInLA()
 	q := drinkingQuery
-	q.Duration = 237
+	q.DurationSeconds = 237
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 236}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -881,9 +886,9 @@ func TestResolve_CatalogLengthAgreeingWithISRCRegisteredReferenceLogsNoConflict(
 
 func TestResolve_CatalogLengthConflictWithOtherISRCRecordingsStillDoubts(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 197
+	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
-	q.Duration = 300
+	q.DurationSeconds = 300
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "other-mbid", Duration: 300}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -902,9 +907,9 @@ func TestResolve_CatalogLengthConflictWithOtherISRCRecordingsStillDoubts(t *test
 
 func TestResolve_CatalogLengthConflictStillDoubtsWhenTheISRCLookupFails(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 197
+	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
-	q.Duration = 300
+	q.DurationSeconds = 300
 	authority := &stubISRCLookup{err: errors.New("503")}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -923,9 +928,9 @@ func TestResolve_CatalogLengthConflictStillDoubtsWhenTheISRCLookupFails(t *testi
 
 func TestResolve_CatalogLengthConflictIsNotDoubtedWhenTheISRCRegistersTheReferenceAmongSeveral(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 197
+	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
-	q.Duration = 300
+	q.DurationSeconds = 300
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{
 		{MBID: "other-mbid", Duration: 300},
 		{MBID: "remix-mbid", Duration: 197},
@@ -959,9 +964,9 @@ func TestResolve_CatalogLengthConflictIsNotDoubtedWhenTheISRCRegistersTheReferen
 
 func TestResolve_UnknownCatalogLengthWithISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 197
+	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
-	q.Duration = 0
+	q.DurationSeconds = 0
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -980,9 +985,9 @@ func TestResolve_UnknownCatalogLengthWithISRCRegisteredReferenceLogsNoConflict(t
 
 func TestResolve_UnknownReferenceLengthWithISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 0
+	search.results[0].DurationSeconds = 0
 	q := drinkingQuery
-	q.Duration = 300
+	q.DurationSeconds = 300
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 0}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -1001,9 +1006,9 @@ func TestResolve_UnknownReferenceLengthWithISRCRegisteredReferenceLogsNoConflict
 
 func TestResolve_CatalogLengthExactlyFiveSecondsOffISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
 	search := drinkingInLA()
-	search.results[0].Duration = 197
+	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
-	q.Duration = 202
+	q.DurationSeconds = 202
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
@@ -1022,7 +1027,7 @@ func TestResolve_CatalogLengthExactlyFiveSecondsOffISRCRegisteredReferenceLogsNo
 
 func TestResolve_PinnedReferenceIsNotDoubtedByAWrongCatalogLength(t *testing.T) {
 	q := pinnedCureQuery
-	q.Duration = 300
+	q.DurationSeconds = 300
 	resolver := newResolver(t, searchRanking(cureStudioMBID, 157), lookups{recording: cureLookup()})
 
 	identity, err := resolver.Resolve(context.Background(), q)
@@ -1035,10 +1040,10 @@ func TestResolve_PinnedReferenceIsNotDoubtedByAWrongCatalogLength(t *testing.T) 
 }
 
 func TestResolve_AnArtistOfSymbolsAloneMatchesTheTitleWhoeverIsCredited(t *testing.T) {
-	search := stubSearcher{results: []download.SearchedRecording{{Title: "Me and Giuliani Down by the School Yard", Artist: "Chk Chk Chk", MBID: "chk-mbid"}}}
+	search := stubSearcher{results: []songfields.RecordingIdentity{{Title: "Me and Giuliani Down by the School Yard", Artist: "Chk Chk Chk", RecordingMBID: "chk-mbid"}}}
 
 	identity, err := newResolver(t, search, lookups{}).Resolve(context.Background(),
-		download.RecordingQuery{Title: "Me and Giuliani Down by the School Yard", Artist: "!!!"})
+		songfields.RecordingIdentity{Title: "Me and Giuliani Down by the School Yard", Artist: "!!!"})
 
 	if err != nil || identity.MBID != "chk-mbid" {
 		t.Errorf("identity %+v, err %v; want the title match, since the artist normalizes to nothing", identity, err)
@@ -1046,13 +1051,13 @@ func TestResolve_AnArtistOfSymbolsAloneMatchesTheTitleWhoeverIsCredited(t *testi
 }
 
 func TestResolve_AQueryWithoutAnISRCNeverMatchesAHitThatAlsoLacksOne(t *testing.T) {
-	search := stubSearcher{results: []download.SearchedRecording{
-		{Title: "Another Song", Artist: "Someone Else", MBID: "wrong-mbid"},
-		{Title: "Drinking in L.A.", Artist: "Bran Van 3000", MBID: "right-mbid"},
+	search := stubSearcher{results: []songfields.RecordingIdentity{
+		{Title: "Another Song", Artist: "Someone Else", RecordingMBID: "wrong-mbid"},
+		{Title: "Drinking in L.A.", Artist: "Bran Van 3000", RecordingMBID: "right-mbid"},
 	}}
 
 	identity, err := newResolver(t, search, lookups{}).Resolve(context.Background(),
-		download.RecordingQuery{Title: "Drinking in L.A.", Artist: "Bran Van 3000"})
+		songfields.RecordingIdentity{Title: "Drinking in L.A.", Artist: "Bran Van 3000"})
 
 	if err != nil || identity.MBID != "right-mbid" {
 		t.Errorf("identity %+v, err %v; want the title and artist match, not the first hit that has no ISRC", identity, err)
@@ -1063,9 +1068,58 @@ func TestResolve_DropsASearchedSourceWithNoExternalID(t *testing.T) {
 	keep := download.ProviderRef{Provider: download.ProviderDeezer, ExternalID: "3135556"}
 	resolver := newResolver(t, searchRanking(cureStudioMBID, 157, download.ProviderRef{Provider: download.ProviderYouTube}, keep), lookups{})
 
-	identity, err := resolver.Resolve(context.Background(), download.RecordingQuery{Title: "Boys Don't Cry", Artist: "The Cure"})
+	identity, err := resolver.Resolve(context.Background(), songfields.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure"})
 
 	if err != nil || !slices.Equal(identity.Sources, []download.ProviderRef{keep}) {
 		t.Errorf("sources %+v, err %v; want only the source that names its external id", identity.Sources, err)
+	}
+}
+
+func TestResolve_TheAlbumOfTheSavedTrackPicksBetweenEqualTitleAndArtistHits(t *testing.T) {
+	single := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Circles", RecordingMBID: "single-mbid"}
+	album := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", RecordingMBID: "album-mbid"}
+	want := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"}
+
+	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{single, album}}, lookups{}).Resolve(context.Background(), want)
+
+	if err != nil || got.MBID != "album-mbid" {
+		t.Errorf("identity %+v, err %v; want the album recording, not the first equal hit", got, err)
+	}
+}
+
+func TestResolve_TheExplicitFlagOfTheSavedTrackPicksBetweenEqualTitleAndArtistHits(t *testing.T) {
+	yes, no := true, false
+	clean := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &no, RecordingMBID: "clean-mbid"}
+	explicit := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &yes, RecordingMBID: "explicit-mbid"}
+
+	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{clean, explicit}}, lookups{}).
+		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &yes})
+
+	if err != nil || got.MBID != "explicit-mbid" {
+		t.Errorf("identity %+v, err %v; want the explicit recording, not the first equal hit", got, err)
+	}
+}
+
+func TestResolve_ASavedTrackThatKnowsNothingExtraTakesTheFirstEqualHit(t *testing.T) {
+	first := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "A", RecordingMBID: "first-mbid"}
+	second := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "B", RecordingMBID: "second-mbid"}
+
+	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{first, second}}, lookups{}).
+		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist"})
+
+	if err != nil || got.MBID != "first-mbid" {
+		t.Errorf("identity %+v, err %v; want the first hit when nothing else tells them apart", got, err)
+	}
+}
+
+func TestResolve_TheISRCStillBeatsAnAlbumMatch(t *testing.T) {
+	byISRC := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Other", ISRC: "USUM71915000", RecordingMBID: "isrc-mbid"}
+	byAlbum := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", RecordingMBID: "album-mbid"}
+
+	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{byAlbum, byISRC}}, lookups{}).
+		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "USUM71915000"})
+
+	if err != nil || got.MBID != "isrc-mbid" {
+		t.Errorf("identity %+v, err %v; want the ISRC match to win over an album match", got, err)
 	}
 }

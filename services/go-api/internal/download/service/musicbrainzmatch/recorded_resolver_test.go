@@ -3,6 +3,7 @@ package musicbrainzmatch_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/service/musicbrainzmatch"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"slices"
 	"testing"
@@ -24,7 +25,7 @@ func TestNewRecorded_ServesThePinnedFactsForThePinnedMBIDAlone(t *testing.T) {
 }
 
 func TestNewRecorded_ResolvesFromTheRecordedSearchAndISRCAnswers(t *testing.T) {
-	hits := []download.SearchedRecording{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003", MBID: "remix-mbid", Duration: 236}}
+	hits := []songfields.RecordingIdentity{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003", RecordingMBID: "remix-mbid", DurationSeconds: 236}}
 	isrc := []download.ISRCRecording{{MBID: "album-version", Duration: 237}}
 
 	identity, err := musicbrainzmatch.NewRecorded(hits, isrc, nil).Resolve(context.Background(), drinkingQuery)
@@ -32,7 +33,7 @@ func TestNewRecorded_ResolvesFromTheRecordedSearchAndISRCAnswers(t *testing.T) {
 	if err != nil || identity.MBID != "album-version" || !slices.Equal(identity.MBIDs, []string{"album-version"}) {
 		t.Errorf("identity %+v, err %v; want the recorded ISRC recording to anchor the recorded search hit", identity, err)
 	}
-	if hits[0].MBID != "remix-mbid" || isrc[0].MBID != "album-version" {
+	if hits[0].RecordingMBID != "remix-mbid" || isrc[0].MBID != "album-version" {
 		t.Errorf("recorded answers changed under the resolver: %+v %+v", hits, isrc)
 	}
 }

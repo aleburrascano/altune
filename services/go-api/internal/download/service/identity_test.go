@@ -199,7 +199,7 @@ func TestCheckInPlace_TheResolverIsAskedForTheCatalogPin(t *testing.T) {
 
 	checkInPlace(t, inPlaceWiring{identifier: &identifier{}, resolver: asked}, pinnedInPlaceTrack())
 
-	if len(asked.queries) != 1 || asked.queries[0].MBID != pinnedBoysDontCry {
+	if len(asked.queries) != 1 || asked.queries[0].RecordingMBID != pinnedBoysDontCry {
 		t.Errorf("queries = %+v, want one carrying the catalog pin", asked.queries)
 	}
 }

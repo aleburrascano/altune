@@ -12,7 +12,6 @@ type (
 	JobRecord            = ports.JobRecord
 	PreviewMatcher       = ports.PreviewMatcher
 	RecordingMatch       = ports.RecordingMatch
-	RecordingQuery       = ports.RecordingQuery
 	TrackLedgerPort      = ports.LibraryTracks
 	TrackSnapshot        = ports.TrackSnapshot
 	TrackStatus          = ports.TrackStatus

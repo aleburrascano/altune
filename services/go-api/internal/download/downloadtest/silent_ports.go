@@ -3,6 +3,7 @@ package downloadtest
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 )
 
@@ -28,6 +29,6 @@ type silentRecordingSearch struct{}
 
 func SilentRecordingSearch() ports.RecordingSearch { return silentRecordingSearch{} }
 
-func (silentRecordingSearch) SearchRecordings(context.Context, string, int) ([]ports.SearchedRecording, error) {
+func (silentRecordingSearch) SearchRecordings(context.Context, string, int) ([]songfields.RecordingIdentity, error) {
 	return nil, nil
 }

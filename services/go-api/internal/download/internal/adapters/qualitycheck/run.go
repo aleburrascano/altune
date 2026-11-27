@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/songfields"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
@@ -181,15 +182,16 @@ func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
 	return &facts
 }
 
-func searchHitsFor(res *Resolution) []ports.SearchedRecording {
-	hits := make([]ports.SearchedRecording, 0, len(res.Search))
+func searchHitsFor(res *Resolution) []songfields.RecordingIdentity {
+	hits := make([]songfields.RecordingIdentity, 0, len(res.Search))
 	for _, hit := range res.Search {
-		hits = append(hits, ports.SearchedRecording{
-			Title:    hit.Title,
-			Artist:   hit.Artist,
-			ISRC:     hit.ISRC,
-			MBID:     hit.MBID,
-			Duration: float64(hit.Duration),
+		hits = append(hits, songfields.RecordingIdentity{
+			Title:           hit.Title,
+			Artist:          hit.Artist,
+			Album:           hit.Album,
+			ISRC:            hit.ISRC,
+			RecordingMBID:   hit.MBID,
+			DurationSeconds: float64(hit.Duration),
 		})
 	}
 	return hits

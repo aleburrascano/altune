@@ -2,11 +2,12 @@ package musicbrainzmatch
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"slices"
 )
 
-func NewRecorded(hits []ports.SearchedRecording, isrcRecordings []ports.ISRCRecording, pinned *ports.RecordingFacts) *Resolver {
+func NewRecorded(hits []songfields.RecordingIdentity, isrcRecordings []ports.ISRCRecording, pinned *ports.RecordingFacts) *Resolver {
 	return MustNew(Ports{
 		Search:      recordedSearch(hits),
 		ISRC:        recordedISRCLookup(isrcRecordings),
@@ -34,9 +35,9 @@ func (l recordedLookup) RecordingByMBID(_ context.Context, mbid string) (ports.R
 	return l.facts, true, nil
 }
 
-type recordedSearch []ports.SearchedRecording
+type recordedSearch []songfields.RecordingIdentity
 
-func (s recordedSearch) SearchRecordings(context.Context, string, int) ([]ports.SearchedRecording, error) {
+func (s recordedSearch) SearchRecordings(context.Context, string, int) ([]songfields.RecordingIdentity, error) {
 	return slices.Clone(s), nil
 }
 
