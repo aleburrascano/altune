@@ -52,13 +52,13 @@ func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]boo
 }
 
 func deezerResult(kind search.ResultKind, title, subtitle string, popularity float64) search.SearchResult {
-	return search.SearchResult{
-		Kind:       kind,
-		Title:      title,
-		Subtitle:   subtitle,
-		Popularity: popularity,
-		Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: title, URL: "https://x/" + title}},
-	}
+	return memory.NewResult(
+		kind,
+		title,
+		memory.WithSubtitle(subtitle),
+		memory.WithPopularity(popularity),
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: title, URL: "https://x/" + title}}),
+	)
 }
 
 func allKinds() map[search.ResultKind]bool {
@@ -140,10 +140,11 @@ func TestSearchIngest_IngestsOnlyTheTopShownResults(t *testing.T) {
 }
 
 func TestSearchIngest_AnEmptyTitleIsIngestedAsAnEmptyTerm(t *testing.T) {
-	untitled := search.SearchResult{
-		Kind:    search.ResultKindTrack,
-		Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "untitled", URL: "https://x/untitled"}},
-	}
+	untitled := memory.NewResult(
+		search.ResultKindTrack,
+		"",
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "untitled", URL: "https://x/untitled"}}),
+	)
 	queryWithNoRankableWord := "a"
 
 	got := searchAndIngest(t, queryWithNoRankableWord, allKinds(), untitled)

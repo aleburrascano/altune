@@ -23,10 +23,14 @@ func blindingLightsRef() service.TrackRef {
 }
 
 func TestSelectStep_Execute(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
-		Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200,
-		URL: "https://youtube.com/watch?v=topic111111", Categories: []string{"Music"}, ViewCount: 10_000_000,
-	}}}
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(
+		"https://youtube.com/watch?v=topic111111",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithDuration(200),
+		downloadtest.WithCategories([]string{"Music"}),
+		downloadtest.WithViewCount(10_000_000),
+	)}}
 	ac := &service.AcquisitionContext{Track: blindingLightsRef()}
 
 	err := runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
@@ -40,10 +44,14 @@ func TestSelectStep_Execute(t *testing.T) {
 }
 
 func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
-		Title: "Cooking Tutorial Episode 47", Channel: "CookingChannel", Duration: 200,
-		URL: "https://youtube.com/watch?v=cook1111111", Categories: []string{"Howto & Style"}, ViewCount: 50_000,
-	}}}
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(
+		"https://youtube.com/watch?v=cook1111111",
+		downloadtest.WithTitle("Cooking Tutorial Episode 47"),
+		downloadtest.WithChannel("CookingChannel"),
+		downloadtest.WithDuration(200),
+		downloadtest.WithCategories([]string{"Howto & Style"}),
+		downloadtest.WithViewCount(50_000),
+	)}}
 
 	err := runPipeline(context.Background(), service.NewSourceRegistry(source), &service.AcquisitionContext{Track: blindingLightsRef()})
 
@@ -60,8 +68,18 @@ func TestSelectStep_Name(t *testing.T) {
 }
 
 var (
-	rejectedCandidate = ports.AudioCandidate{Title: "Cooking Tutorial Episode 47", Channel: "CookingChannel", Duration: 20, URL: "https://example.com/cook"}
-	matchingCandidate = ports.AudioCandidate{Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200, URL: "https://example.com/match"}
+	rejectedCandidate = downloadtest.Candidate(
+		"https://example.com/cook",
+		downloadtest.WithTitle("Cooking Tutorial Episode 47"),
+		downloadtest.WithChannel("CookingChannel"),
+		downloadtest.WithDuration(20),
+	)
+	matchingCandidate = downloadtest.Candidate(
+		"https://example.com/match",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithDuration(200),
+	)
 )
 
 func searchOutageThenSelect(t *testing.T, down, healthy *searchSource) error {
@@ -130,14 +148,23 @@ func TestSelectStep_OutageDoesNotLeakIntoTheNextRun(t *testing.T) {
 
 func TestSelectStep_LogsOneEvaluationPerScoredCandidate(t *testing.T) {
 	buf := logging.CaptureJSON(t, slog.LevelInfo)
-	scored := ports.AudioCandidate{
-		Source: "youtube", Title: "Song", Channel: "Artist", Duration: 200, ViewCount: 50,
-		URL: "https://youtube.com/watch?v=scored11111", Categories: []string{"Music"},
-	}
+	scored := downloadtest.Candidate(
+		"https://youtube.com/watch?v=scored11111",
+		downloadtest.WithSource("youtube"),
+		downloadtest.WithTitle("Song"),
+		downloadtest.WithChannel("Artist"),
+		downloadtest.WithDuration(200),
+		downloadtest.WithViewCount(50),
+		downloadtest.WithCategories([]string{"Music"}),
+	)
 	topic := scored
 	topic.Channel = "Artist - Topic"
 	topic.URL = "https://youtube.com/watch?v=topic111111"
-	drm := ports.AudioCandidate{Title: "Song", URL: "sc:drm", Unplayable: ports.UnplayableDRM}
+	drm := downloadtest.Candidate(
+		"sc:drm",
+		downloadtest.WithTitle("Song"),
+		downloadtest.WithUnplayable(ports.UnplayableDRM),
+	)
 	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Song (feat. Guest)", Artist: "Artist", CatalogDuration: 200}}
 	searched, err := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{scored, topic, drm}})).Execute(context.Background(), ac, service.PipelineStart{})
 	if err != nil {
@@ -189,10 +216,13 @@ func TestSelectStep_LogsOneEvaluationPerScoredCandidate(t *testing.T) {
 }
 
 func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t *testing.T) {
-	storedArtTrack := ports.AudioCandidate{
-		Title: "Phone (Interlude)", URL: "https://music.youtube.com/watch?v=TB0z2HVFxEE",
-		Duration: 112, Kind: ports.KindArtTrack, Artists: []string{"SLAYR"},
-	}
+	storedArtTrack := downloadtest.Candidate(
+		"https://music.youtube.com/watch?v=TB0z2HVFxEE",
+		downloadtest.WithTitle("Phone (Interlude)"),
+		downloadtest.WithDuration(112),
+		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithArtists([]string{"SLAYR"}),
+	)
 	first := &searchSource{name: "ytmsearch", found: []ports.AudioCandidate{storedArtTrack}}
 	fallback := &searchSource{name: "ytdlp"}
 	ac := &service.AcquisitionContext{

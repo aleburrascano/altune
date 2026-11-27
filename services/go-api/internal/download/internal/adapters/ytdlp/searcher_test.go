@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
@@ -488,7 +489,11 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			installYtDlp(t, inspectedAs(tc.inspection))
-			candidates := []download.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
+			candidates := []download.AudioCandidate{downloadtest.Candidate(
+				soundCloudTrackURL,
+				downloadtest.WithTitle("Drinking in L.A."),
+				downloadtest.WithDuration(240),
+			)}
 
 			download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(context.Background(), candidates)
 
@@ -516,7 +521,11 @@ func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAn
 }
 
 func TestYtDlpAudioSearcher_MarkUnplayable_APanicInsideAnInspectionLeavesTheCandidatePlayable(t *testing.T) {
-	candidates := []download.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
+	candidates := []download.AudioCandidate{downloadtest.Candidate(
+		soundCloudTrackURL,
+		downloadtest.WithTitle("Drinking in L.A."),
+		downloadtest.WithDuration(240),
+	)}
 
 	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(panickingContext{}, candidates)
 
@@ -567,7 +576,7 @@ func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
 func TestYtDlpAudioSearcher_InspectFailureLogCapsStderr(t *testing.T) {
 	installYtDlp(t, leakyStderr)
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
-	candidates := []download.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}}
+	candidates := []download.AudioCandidate{downloadtest.Candidate(soundCloudTrackURL, downloadtest.WithDuration(240))}
 
 	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(context.Background(), candidates)
 
@@ -616,7 +625,7 @@ var ytDlpCallers = map[string]ytDlpCaller{
 		_, _ = s.Download(ctx, youTubeWatchURL, outDir)
 	}},
 	"inspect": {"-J", func(ctx context.Context, s *download.YouTubeAudioSearcher, _ string) {
-		s.MarkUnplayable(ctx, []download.AudioCandidate{{URL: "https://soundcloud.com/a/b"}})
+		s.MarkUnplayable(ctx, []download.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/a/b")})
 	}},
 	"canary": {"--simulate", func(ctx context.Context, s *download.YouTubeAudioSearcher, _ string) {
 		_ = s.Canary(ctx, download.YouTubeCanary)
@@ -818,10 +827,15 @@ func TestSearch_ASearchResultIsAnUpload(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Search = %+v, %v, want the one entry", got, err)
 	}
-	want := download.AudioCandidate{
-		Title: "Bruno Mars - Finesse", Duration: 185, URL: "https://www.youtube.com/watch?v=aaaaaaaaaaa",
-		Channel: "Bruno Mars", Categories: []string{"Music"}, ViewCount: 42, Kind: ports.KindUpload,
-	}
+	want := downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=aaaaaaaaaaa",
+		downloadtest.WithTitle("Bruno Mars - Finesse"),
+		downloadtest.WithDuration(185),
+		downloadtest.WithChannel("Bruno Mars"),
+		downloadtest.WithCategories([]string{"Music"}),
+		downloadtest.WithViewCount(42),
+		downloadtest.WithKind(ports.KindUpload),
+	)
 	if c := got[0]; c.Title != want.Title || c.Duration != want.Duration || c.URL != want.URL || c.Channel != want.Channel ||
 		!slices.Equal(c.Categories, want.Categories) || c.ViewCount != want.ViewCount || c.Kind != want.Kind {
 		t.Errorf("candidate = %+v, want %+v", c, want)
@@ -925,7 +939,7 @@ func TestMarkUnplayable_InspectionUsesATempCopyOfTheCookieJarAndCleansItUp(t *te
 	capture := captureCookieJar(t, "echo '{\"duration\":240}'")
 
 	download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).MarkUnplayable(context.Background(),
-		[]download.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}})
+		[]download.AudioCandidate{downloadtest.Candidate(soundCloudTrackURL, downloadtest.WithDuration(240))})
 
 	capture.assertTempCopyUsedAndRemoved(t, jar)
 }

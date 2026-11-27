@@ -15,8 +15,16 @@ import (
 func TestGetArtistContentService_CatalogTitles_CoversTopTracksAndAlbums(t *testing.T) {
 	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
 		search.ProviderDeezer: &memory.ArtistContentProvider{
-			TopTracks: []search.SearchResult{{Kind: search.ResultKindTrack, Title: "Magnolia", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}}},
-			Albums:    []search.SearchResult{{Kind: search.ResultKindAlbum, Title: "Whole Lotta Red", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}}},
+			TopTracks: []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"Magnolia",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}),
+			)},
+			Albums: []search.SearchResult{memory.NewResult(
+				search.ResultKindAlbum,
+				"Whole Lotta Red",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+			)},
 		},
 	})
 
@@ -56,13 +64,21 @@ func newTracklistProvider(failing map[string]bool) *tracklistProvider {
 	return &tracklistProvider{
 		ArtistContentProvider: &memory.ArtistContentProvider{
 			Albums: []search.SearchResult{
-				{Kind: search.ResultKindAlbum, Title: "Heaven or Hell", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}},
-				{Kind: search.ResultKindAlbum, Title: "Life of a Don", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}},
+				memory.NewResult(
+					search.ResultKindAlbum,
+					"Heaven or Hell",
+					memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+				),
+				memory.NewResult(
+					search.ResultKindAlbum,
+					"Life of a Don",
+					memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}),
+				),
 			},
 		},
 		tracklists: map[string][]search.SearchResult{
-			"a1": {{Kind: search.ResultKindTrack, Title: "Deep Cut One"}},
-			"a2": {{Kind: search.ResultKindTrack, Title: "Deep Cut Two"}},
+			"a1": {memory.NewResult(search.ResultKindTrack, "Deep Cut One")},
+			"a2": {memory.NewResult(search.ResultKindTrack, "Deep Cut Two")},
 		},
 		failing: failing,
 	}

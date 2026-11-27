@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
@@ -147,12 +148,12 @@ func (p scriptedArtistProvider) answer(kind search.ResultKind, id string, err er
 	if err != nil && !errors.As(err, &partial) {
 		return nil, err
 	}
-	return []search.SearchResult{{
-		Kind:    kind,
-		Title:   "Real Song",
-		Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}},
-		Extras:  map[string]any{},
-	}}, err
+	return []search.SearchResult{memory.NewResult(
+		kind,
+		"Real Song",
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}}),
+		memory.WithExtras(map[string]any{}),
+	)}, err
 }
 
 func (p scriptedArtistProvider) GetArtistTopTracks(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {

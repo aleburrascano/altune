@@ -1,6 +1,7 @@
 package albumgrouping_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/albumgrouping"
 	"altune/go-api/internal/search/internal/domain"
 	"testing"
@@ -11,7 +12,7 @@ func cohesionRelease(title string, providers ...domain.ProviderName) albumgroupi
 	for _, p := range providers {
 		ps[p] = true
 	}
-	return albumgrouping.MergedRelease{Result: domain.SearchResult{Title: title}, Providers: ps}
+	return albumgrouping.MergedRelease{Result: memory.NewResult(0, title), Providers: ps}
 }
 
 func hasTitle(rs []albumgrouping.MergedRelease, title string) bool {

@@ -1,6 +1,7 @@
 package tracklength_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/tracklength"
 	"math"
@@ -8,11 +9,11 @@ import (
 )
 
 func upload(seconds float64) ports.AudioCandidate {
-	return ports.AudioCandidate{Duration: seconds, Kind: ports.KindUpload}
+	return downloadtest.Candidate("", downloadtest.WithDuration(seconds), downloadtest.WithKind(ports.KindUpload))
 }
 
 func artTrack(seconds float64) ports.AudioCandidate {
-	return ports.AudioCandidate{Duration: seconds, Kind: ports.KindArtTrack}
+	return downloadtest.Candidate("", downloadtest.WithDuration(seconds), downloadtest.WithKind(ports.KindArtTrack))
 }
 
 func fileAccepted(t *testing.T, p tracklength.Policy, actual float64) bool {

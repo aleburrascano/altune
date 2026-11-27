@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -60,12 +61,12 @@ func (s *offeringSource) tried(url string) bool {
 func blindingLightsAt(urls ...string) []ports.AudioCandidate {
 	out := make([]ports.AudioCandidate, 0, len(urls))
 	for _, url := range urls {
-		out = append(out, ports.AudioCandidate{
-			Title:      "Blinding Lights",
-			URL:        url,
-			Channel:    "The Weeknd - Topic",
-			Categories: []string{"Music"},
-		})
+		out = append(out, downloadtest.Candidate(
+			url,
+			downloadtest.WithTitle("Blinding Lights"),
+			downloadtest.WithChannel("The Weeknd - Topic"),
+			downloadtest.WithCategories([]string{"Music"}),
+		))
 	}
 	return out
 }
@@ -155,11 +156,11 @@ func cuttingCrewRunOffered(t *testing.T, candidate ports.AudioCandidate) *servic
 func TestSelect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
 	master := "https://www.youtube.com/watch?v=masterAAAAA"
 
-	ac := cuttingCrewRunOffered(t, ports.AudioCandidate{
-		Title:   "I've Been In Love Before HQ Stereo Remaster Full Length Version 1986 Special",
-		URL:     master,
-		Channel: "Cutting Crew - Topic",
-	})
+	ac := cuttingCrewRunOffered(t, downloadtest.Candidate(
+		master,
+		downloadtest.WithTitle("I've Been In Love Before HQ Stereo Remaster Full Length Version 1986 Special"),
+		downloadtest.WithChannel("Cutting Crew - Topic"),
+	))
 
 	if len(ac.Ranked) != 1 || ac.Ranked[0].URL != master {
 		t.Fatalf("artist-channel candidate was dropped by the identity gate: ranked=%v", ac.Ranked)
@@ -174,11 +175,11 @@ func TestSelect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
 func TestSelect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
 	cooking := "https://www.youtube.com/watch?v=cookingAAAA"
 
-	ac := cuttingCrewRunOffered(t, ports.AudioCandidate{
-		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
-		URL:     cooking,
-		Channel: "CookingChannel",
-	})
+	ac := cuttingCrewRunOffered(t, downloadtest.Candidate(
+		cooking,
+		downloadtest.WithTitle("Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense"),
+		downloadtest.WithChannel("CookingChannel"),
+	))
 
 	if len(ac.Ranked) != 0 {
 		t.Fatalf("an unrelated candidate must stay gated: ranked=%v", ac.Ranked)
@@ -194,11 +195,11 @@ func TestSelect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
 func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	song := pendingSongBy("Cutting Crew", "I've Been in Love Before")
 	ledger := inmemoryledger.NewLedger(song)
-	source := &answeringSource{name: "ytdlp", found: []ports.AudioCandidate{{
-		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
-		URL:     "https://www.youtube.com/watch?v=cookingAAAA",
-		Channel: "CookingChannel",
-	}}}
+	source := &answeringSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=cookingAAAA",
+		downloadtest.WithTitle("Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense"),
+		downloadtest.WithChannel("CookingChannel"),
+	)}}
 
 	_ = acquireService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}).
 		Execute(context.Background(), ports.AcquisitionJob{UserID: song.UserId, TrackID: song.ID})
@@ -217,11 +218,11 @@ func TestExecute_AttemptCapReportsUntriedCandidatesApart(t *testing.T) {
 	ledger := inmemoryledger.NewLedger(song)
 	source := &offeringSource{fetchErr: errors.New("boom")}
 	for i := range attemptCap + untried {
-		source.found = append(source.found, ports.AudioCandidate{
-			Title:   "Cutting Crew - I've Been in Love Before",
-			URL:     fmt.Sprintf("https://www.youtube.com/watch?v=cuttingcr%02d", i),
-			Channel: "Cutting Crew",
-		})
+		source.found = append(source.found, downloadtest.Candidate(
+			fmt.Sprintf("https://www.youtube.com/watch?v=cuttingcr%02d", i),
+			downloadtest.WithTitle("Cutting Crew - I've Been in Love Before"),
+			downloadtest.WithChannel("Cutting Crew"),
+		))
 	}
 
 	_ = acquireService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}).

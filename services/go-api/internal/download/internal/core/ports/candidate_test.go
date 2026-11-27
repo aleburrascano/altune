@@ -2,6 +2,7 @@ package ports_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/domain"
 	"context"
 	"errors"
@@ -58,7 +59,7 @@ func TestFind_EmptyMergeBesidePlainFailureIsDegraded(t *testing.T) {
 }
 
 func TestFindReportingOutage_KeepsCandidatesBesideAnUnavailableFailure(t *testing.T) {
-	want := download.AudioCandidate{URL: "https://example.com/a"}
+	want := downloadtest.Candidate("https://example.com/a")
 	registry := download.NewSourceRegistry(
 		stubSource{name: "a", err: unavailable()},
 		stubSource{name: "b", candidates: []download.AudioCandidate{want}})
@@ -75,7 +76,7 @@ func TestFindReportingOutage_MergesEverySource(t *testing.T) {
 	for i := range 3 {
 		out := make([]download.AudioCandidate, 0, 5)
 		for j := range 5 {
-			out = append(out, download.AudioCandidate{URL: fmt.Sprintf("https://example.com/%d/%d", i, j)})
+			out = append(out, downloadtest.Candidate(fmt.Sprintf("https://example.com/%d/%d", i, j)))
 		}
 		sources = append(sources, stubSource{name: download.SourceName(fmt.Sprint(i)), candidates: out})
 	}

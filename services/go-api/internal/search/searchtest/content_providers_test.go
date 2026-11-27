@@ -18,7 +18,7 @@ func TestAlbumContentProvider_ZeroValueReturnsNothing(t *testing.T) {
 }
 
 func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
-	want := []search.SearchResult{{Title: "a"}}
+	want := []search.SearchResult{memory.NewResult(0, "a")}
 	p := &memory.AlbumContentProvider{Results: want}
 
 	got, err := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
@@ -30,9 +30,9 @@ func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
 
 func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
 	p := &memory.AlbumContentProvider{
-		Results: []search.SearchResult{{Title: "canned"}},
+		Results: []search.SearchResult{memory.NewResult(0, "canned")},
 		GetAlbumTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{{Title: "override"}}, nil
+			return []search.SearchResult{memory.NewResult(0, "override")}, nil
 		},
 	}
 
@@ -45,7 +45,7 @@ func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
 
 func TestAlbumContentProvider_ErrorSetBetweenCallsFailsOnlyTheSecond(t *testing.T) {
 	boom := errors.New("boom")
-	p := &memory.AlbumContentProvider{Results: []search.SearchResult{{Title: "a"}}}
+	p := &memory.AlbumContentProvider{Results: []search.SearchResult{memory.NewResult(0, "a")}}
 
 	_, first := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
 	p.Err = boom

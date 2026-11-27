@@ -2,6 +2,7 @@ package youtubemusic_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -189,7 +190,7 @@ func TestFetch_DelegatesToTheDownloader(t *testing.T) {
 	src := youtubemusic.NewSource(fetcher, stubLookup{})
 
 	fetched, err := src.Fetch(context.Background(),
-		download.AudioCandidate{URL: "https://music.youtube.com/watch?v=xyz"}, "/tmp/out")
+		downloadtest.Candidate("https://music.youtube.com/watch?v=xyz"), "/tmp/out")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}

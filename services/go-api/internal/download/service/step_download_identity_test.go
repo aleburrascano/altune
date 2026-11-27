@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -51,9 +52,12 @@ type topicUpload struct{}
 func (topicUpload) Name() download.SourceName { return "topic-upload" }
 
 func (topicUpload) Find(context.Context, download.FindRequest) ([]download.AudioCandidate, error) {
-	return []download.AudioCandidate{{
-		Title: "Boys Don't Cry", URL: "https://www.youtube.com/watch?v=boysdontcry", Channel: "The Cure - Topic", Categories: []string{"Music"},
-	}}, nil
+	return []download.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=boysdontcry",
+		downloadtest.WithTitle("Boys Don't Cry"),
+		downloadtest.WithChannel("The Cure - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+	)}, nil
 }
 
 func (topicUpload) Fetch(_ context.Context, _ download.AudioCandidate, outDir string) (download.FetchedAudio, error) {

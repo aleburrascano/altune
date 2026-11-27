@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"testing"
 )
@@ -8,7 +9,7 @@ import (
 func TestSearchResult_WithExtraLeavesTheOriginalUntouched(t *testing.T) {
 	for name, extras := range map[string]map[string]any{"no extras": nil, "some extras": {"kept": 1}} {
 		t.Run(name, func(t *testing.T) {
-			original := domain.SearchResult{Extras: extras}
+			original := memory.NewResult(0, "", memory.WithExtras(extras))
 
 			changed := original.WithExtra("added", true)
 
@@ -67,32 +68,32 @@ func TestResultSignature(t *testing.T) {
 	}{
 		{
 			name: "track with subtitle",
-			r:    domain.SearchResult{Kind: domain.ResultKindTrack, Title: "HUMBLE.", Subtitle: "Kendrick Lamar"},
+			r:    memory.NewResult(domain.ResultKindTrack, "HUMBLE.", memory.WithSubtitle("Kendrick Lamar")),
 			want: "track|humble|kendrick lamar",
 		},
 		{
 			name: "artist with empty subtitle keeps trailing separator",
-			r:    domain.SearchResult{Kind: domain.ResultKindArtist, Title: "Drake"},
+			r:    memory.NewResult(domain.ResultKindArtist, "Drake"),
 			want: "artist|drake|",
 		},
 		{
 			name: "unicode normalization strips diacritics",
-			r:    domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Déjà Vu", Subtitle: "Beyoncé"},
+			r:    memory.NewResult(domain.ResultKindTrack, "Déjà Vu", memory.WithSubtitle("Beyoncé")),
 			want: "track|deja vu|beyonce",
 		},
 		{
 			name: "bracketed feat segment dropped, ampersand expanded",
-			r:    domain.SearchResult{Kind: domain.ResultKindTrack, Title: "One Dance (feat. Wizkid & Kyla)", Subtitle: "Drake"},
+			r:    memory.NewResult(domain.ResultKindTrack, "One Dance (feat. Wizkid & Kyla)", memory.WithSubtitle("Drake")),
 			want: "track|one dance|drake",
 		},
 		{
 			name: "zero-value kind uses the unknown prefix",
-			r:    domain.SearchResult{Title: "X"},
+			r:    memory.NewResult(0, "X"),
 			want: "unknown|x|",
 		},
 		{
 			name: "fully empty result",
-			r:    domain.SearchResult{},
+			r:    memory.NewResult(0, ""),
 			want: "unknown||",
 		},
 	}
@@ -109,23 +110,23 @@ func TestResultSignature(t *testing.T) {
 }
 
 func TestResultSignature_KindDisambiguates(t *testing.T) {
-	album := domain.SearchResult{Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
-	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
+	album := memory.NewResult(domain.ResultKindAlbum, "DAMN.", memory.WithSubtitle("Kendrick Lamar"))
+	track := memory.NewResult(domain.ResultKindTrack, "DAMN.", memory.WithSubtitle("Kendrick Lamar"))
 	if domain.ResultSignature(album) == domain.ResultSignature(track) {
 		t.Errorf("album and track signatures must differ, both = %q", domain.ResultSignature(album))
 	}
 }
 
 func TestResultSignature_CaseAndSpacingStable(t *testing.T) {
-	a := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Sicko  Mode", Subtitle: "TRAVIS SCOTT"}
-	b := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "SICKO MODE", Subtitle: "Travis Scott"}
+	a := memory.NewResult(domain.ResultKindTrack, "Sicko  Mode", memory.WithSubtitle("TRAVIS SCOTT"))
+	b := memory.NewResult(domain.ResultKindTrack, "SICKO MODE", memory.WithSubtitle("Travis Scott"))
 	if domain.ResultSignature(a) != domain.ResultSignature(b) {
 		t.Errorf("signatures must match: %q vs %q", domain.ResultSignature(a), domain.ResultSignature(b))
 	}
 }
 
 func TestSignatureOf(t *testing.T) {
-	derived := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}
+	derived := memory.NewResult(domain.ResultKindTrack, "Hello", memory.WithSubtitle("Adele"))
 	stamped := derived
 	stamped.Signature = "stamped-wins"
 	if got := domain.SignatureOf(stamped); got != "stamped-wins" {
@@ -217,7 +218,7 @@ func TestPutTypedExtras_CarriesAKnownNotExplicit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			extras := map[string]any{}
-			domain.PutTypedExtras(extras, domain.SearchResult{Explicit: tt.explicit})
+			domain.PutTypedExtras(extras, memory.NewResult(0, "", memory.WithExplicit(tt.explicit)))
 
 			got, present := extras["explicit"]
 			if present != tt.present || got != tt.want {

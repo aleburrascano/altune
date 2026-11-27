@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/audioquality"
@@ -122,10 +123,14 @@ func TestScheduledRun_TellsTheClientWhenItReachesTheUpdateTrackStage(t *testing.
 func TestReplaceGated_AnUnprobedFileGetsNoLengthRescue(t *testing.T) {
 	const recording = "mb-blinding"
 	served := seedReadyTrack(t)
-	source := &offeringSource{found: []ports.AudioCandidate{{
-		Title: "The Weeknd - Blinding Lights", URL: "https://www.youtube.com/watch?v=fanUploadAA",
-		Channel: "Some Fan", Kind: ports.KindUpload, Duration: 285, Categories: []string{"Music"},
-	}}}
+	source := &offeringSource{found: []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=fanUploadAA",
+		downloadtest.WithTitle("The Weeknd - Blinding Lights"),
+		downloadtest.WithChannel("Some Fan"),
+		downloadtest.WithKind(ports.KindUpload),
+		downloadtest.WithDuration(285),
+		downloadtest.WithCategories([]string{"Music"}),
+	)}}
 	svc := mustAcquisitionServices(served.ledger, service.NewSourceRegistry(source), served.store,
 		scratchfiles.New(), resolving(&resolver{identity: ports.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}},
 			verifiedBy(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
@@ -191,10 +196,13 @@ func acquireStoringVerified(t *testing.T, candidate ports.AudioCandidate, wiring
 }
 
 func blindingLightsBy(channel string, kind ports.CandidateKind) ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "The Weeknd - Blinding Lights", URL: "https://www.youtube.com/watch?v=blindingAAA",
-		Channel: channel, Kind: kind, Categories: []string{"Music"},
-	}
+	return downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=blindingAAA",
+		downloadtest.WithTitle("The Weeknd - Blinding Lights"),
+		downloadtest.WithChannel(channel),
+		downloadtest.WithKind(kind),
+		downloadtest.WithCategories([]string{"Music"}),
+	)
 }
 
 func TestExecute_StoresTheVerdictScoreSourceTitleAndTheirConfidence(t *testing.T) {

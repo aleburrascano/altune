@@ -1,6 +1,7 @@
 package qualitycheck_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/qualitycheck"
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
@@ -1665,10 +1666,15 @@ func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 
 		got := factsOf(loadedCandidate(t, `{"observed":{"ytdlp_entry":`+line+`}}`))
 
-		want := emitted(ports.AudioCandidate{
-			Title: "Halo", Duration: 201.5, URL: "https://soundcloud.com/nova/halo",
-			Channel: "Nova", Categories: []string{"Music"}, ViewCount: 7, Kind: ports.KindUpload,
-		})
+		want := emitted(downloadtest.Candidate(
+			"https://soundcloud.com/nova/halo",
+			downloadtest.WithTitle("Halo"),
+			downloadtest.WithDuration(201.5),
+			downloadtest.WithChannel("Nova"),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithViewCount(7),
+			downloadtest.WithKind(ports.KindUpload),
+		))
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("golden candidate = %+v, want every yt-dlp entry field carried over as an unresolved upload: %+v", got, want)
 		}

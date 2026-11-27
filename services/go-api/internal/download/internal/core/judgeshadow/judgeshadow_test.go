@@ -1,6 +1,7 @@
 package judgeshadow_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/judgeshadow"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/titlematch"
@@ -10,7 +11,13 @@ import (
 var finesse = titlematch.Target{Title: "Finesse", Artist: "Bruno Mars"}
 
 func finesseCandidate(url string, kind ports.CandidateKind, seconds float64) ports.AudioCandidate {
-	return ports.AudioCandidate{URL: url, Title: "Finesse", Artists: []string{"Bruno Mars"}, Kind: kind, Duration: seconds}
+	return downloadtest.Candidate(
+		url,
+		downloadtest.WithTitle("Finesse"),
+		downloadtest.WithArtists([]string{"Bruno Mars"}),
+		downloadtest.WithKind(kind),
+		downloadtest.WithDuration(seconds),
+	)
 }
 
 func wantComparison(t *testing.T, got judgeshadow.Comparison, pipelineURL, judgeURL string, verdict judgeshadow.Verdict) {

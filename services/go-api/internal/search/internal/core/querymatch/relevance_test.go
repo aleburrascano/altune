@@ -1,6 +1,7 @@
 package querymatch_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/querymatch"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/textnorm"
@@ -9,7 +10,7 @@ import (
 )
 
 func track(title, subtitle string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindTrack, Title: title, Subtitle: subtitle}
+	return memory.NewResult(domain.ResultKindTrack, title, memory.WithSubtitle(subtitle))
 }
 
 func scoreOf(query string, candidates []domain.SearchResult, target domain.SearchResult) float64 {

@@ -192,13 +192,13 @@ func (p partialContentProvider) result(kind search.ResultKind, id string) ([]sea
 	if p.down {
 		return nil, errors.New("upstream unavailable")
 	}
-	return []search.SearchResult{{
-		Kind:     kind,
-		Title:    "Real Song",
-		Subtitle: "Artist",
-		Sources:  []search.ProviderLink{{Provider: p.provider, ExternalID: id}},
-		Extras:   map[string]any{},
-	}}, nil
+	return []search.SearchResult{memory.NewResult(
+		kind,
+		"Real Song",
+		memory.WithSubtitle("Artist"),
+		memory.WithSources([]search.ProviderLink{{Provider: p.provider, ExternalID: id}}),
+		memory.WithExtras(map[string]any{}),
+	)}, nil
 }
 
 func (p partialContentProvider) GetArtistTopTracks(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {

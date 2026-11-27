@@ -201,16 +201,13 @@ func TestHandleRecordEvent_AcceptsEveryRealClientShape(t *testing.T) {
 }
 
 func TestSearchResultToDTO_PrefersStampedSignature(t *testing.T) {
-	preFill := domain.ResultSignature(search.SearchResult{
-		Kind:  search.ResultKindArtist,
-		Title: "Nas",
-	})
-	sr := search.SearchResult{
-		Kind:      search.ResultKindArtist,
-		Title:     "Nas",
-		Subtitle:  "American rapper",
-		Signature: preFill,
-	}
+	preFill := domain.ResultSignature(memory.NewResult(search.ResultKindArtist, "Nas"))
+	sr := memory.NewResult(
+		search.ResultKindArtist,
+		"Nas",
+		memory.WithSubtitle("American rapper"),
+		memory.WithSignature(preFill),
+	)
 
 	dto := servedItem(t, sr)
 
@@ -223,11 +220,7 @@ func TestSearchResultToDTO_PrefersStampedSignature(t *testing.T) {
 }
 
 func TestSearchResultToDTO_ComputesSignatureFallback(t *testing.T) {
-	sr := search.SearchResult{
-		Kind:     search.ResultKindTrack,
-		Title:    "Hello",
-		Subtitle: "Adele",
-	}
+	sr := memory.NewResult(search.ResultKindTrack, "Hello", memory.WithSubtitle("Adele"))
 	dto := servedItem(t, sr)
 	if want := domain.ResultSignature(sr); dto.ResultSignature != want {
 		t.Errorf("ResultSignature = %q, want computed fallback %q", dto.ResultSignature, want)
@@ -235,24 +228,24 @@ func TestSearchResultToDTO_ComputesSignatureFallback(t *testing.T) {
 }
 
 func TestSearchResultToDTO_ProjectsMetadataIntoExtras(t *testing.T) {
-	sr := search.SearchResult{
-		Kind:             search.ResultKindAlbum,
-		Title:            "Illmatic",
-		Subtitle:         "Nas",
-		Album:            "Illmatic",
-		ISRC:             "USIR19400001",
-		UPC:              "074643991124",
-		ReleaseGroupMBID: "abc-123",
-		Year:             1994,
-		ReleaseDate:      "1994-04-19",
-		TrackCount:       10,
-		ProviderRank:     3,
-		FanCount:         42,
-		Extras:           map[string]any{"custom": "keep"},
-		Sources: []search.ProviderLink{
+	sr := memory.NewResult(
+		search.ResultKindAlbum,
+		"Illmatic",
+		memory.WithSubtitle("Nas"),
+		memory.WithAlbum("Illmatic"),
+		memory.WithISRCCode("USIR19400001"),
+		memory.WithUPC("074643991124"),
+		memory.WithReleaseGroupMBID("abc-123"),
+		memory.WithYear(1994),
+		memory.WithReleaseDate("1994-04-19"),
+		memory.WithTrackCount(10),
+		memory.WithProviderRank(3),
+		memory.WithFanCount(42),
+		memory.WithExtras(map[string]any{"custom": "keep"}),
+		memory.WithSources([]search.ProviderLink{
 			{Provider: search.ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/album/123"},
-		},
-	}
+		}),
+	)
 
 	dto := servedItem(t, sr)
 
@@ -282,10 +275,7 @@ func TestSearchResultToDTO_ProjectsMetadataIntoExtras(t *testing.T) {
 }
 
 func TestSearchResultToDTO_ZeroValuedMetadataOmittedFromExtras(t *testing.T) {
-	sr := search.SearchResult{
-		Kind:  search.ResultKindArtist,
-		Title: "Nas",
-	}
+	sr := memory.NewResult(search.ResultKindArtist, "Nas")
 
 	dto := servedItem(t, sr)
 
@@ -786,26 +776,26 @@ func TestHandleRecordEvent_IgnoresClientQueryNorm(t *testing.T) {
 }
 
 func TestSearchResultToDTO_TypedFieldsMirroredIntoExtras(t *testing.T) {
-	sr := search.SearchResult{
-		Kind:             search.ResultKindAlbum,
-		Title:            "DAMN.",
-		Subtitle:         "Kendrick Lamar",
-		ImageURL:         "https://img.example.com/damn.jpg",
-		ArtworkSource:    "deezer",
-		Confidence:       domain.ConfidenceHigh,
-		ISRC:             "USUM71703085",
-		UPC:              "00602557618280",
-		ReleaseGroupMBID: "mbid-1",
-		Year:             2017,
-		ReleaseDate:      "2017-04-14",
-		TrackCount:       14,
-		ProviderRank:     3,
-		FanCount:         1_000_000,
-		Extras:           map[string]any{"duration": 180},
-		Sources: []search.ProviderLink{
+	sr := memory.NewResult(
+		search.ResultKindAlbum,
+		"DAMN.",
+		memory.WithSubtitle("Kendrick Lamar"),
+		memory.WithImageURL("https://img.example.com/damn.jpg"),
+		memory.WithArtworkSource("deezer"),
+		memory.WithConfidence(domain.ConfidenceHigh),
+		memory.WithISRCCode("USUM71703085"),
+		memory.WithUPC("00602557618280"),
+		memory.WithReleaseGroupMBID("mbid-1"),
+		memory.WithYear(2017),
+		memory.WithReleaseDate("2017-04-14"),
+		memory.WithTrackCount(14),
+		memory.WithProviderRank(3),
+		memory.WithFanCount(1_000_000),
+		memory.WithExtras(map[string]any{"duration": 180}),
+		memory.WithSources([]search.ProviderLink{
 			{Provider: search.ProviderDeezer, ExternalID: "1", URL: "https://deezer.com/1"},
-		},
-	}
+		}),
+	)
 
 	dto := servedItem(t, sr)
 
@@ -835,10 +825,7 @@ func TestSearchResultToDTO_TypedFieldsMirroredIntoExtras(t *testing.T) {
 }
 
 func TestSearchResultToDTO_ZeroTypedFieldsOmitted(t *testing.T) {
-	dto := servedItem(t, search.SearchResult{
-		Kind:  search.ResultKindTrack,
-		Title: "Bare",
-	})
+	dto := servedItem(t, memory.NewResult(search.ResultKindTrack, "Bare"))
 	for _, key := range []string{"isrc", "upc", "mbid", "year", "release_date", "track_count", "rank", "nb_fan"} {
 		if _, ok := dto.Extras[key]; ok {
 			t.Errorf("extras[%q] present for a zero-valued field", key)
@@ -847,10 +834,7 @@ func TestSearchResultToDTO_ZeroTypedFieldsOmitted(t *testing.T) {
 }
 
 func TestSearchResultDTO_JSONNeverNullCollections(t *testing.T) {
-	s := string(servedItems(t, search.SearchResult{
-		Kind:  search.ResultKindTrack,
-		Title: "Bare",
-	})[0])
+	s := string(servedItems(t, memory.NewResult(search.ResultKindTrack, "Bare"))[0])
 	if !strings.Contains(s, `"sources":[]`) {
 		t.Errorf("sources must serialize as [], got %s", s)
 	}
@@ -869,11 +853,11 @@ func searchOnlyRouter(t *testing.T, svc *search.SearchService) chi.Router {
 
 func TestSearch_RelatedGroupsReachTheWire(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	artist := search.SearchResult{
-		Kind:    search.ResultKindArtist,
-		Title:   "Nas",
-		Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "27"}},
-	}
+	artist := memory.NewResult(
+		search.ResultKindArtist,
+		"Nas",
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "27"}}),
+	)
 	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: []search.SearchResult{artist}}
 
 	t.Run("no related groups leaves the key absent", func(t *testing.T) {
@@ -913,11 +897,11 @@ func TestSearch_RelatedGroupsReachTheWire(t *testing.T) {
 
 func TestSearch_OutcomeFollowsTheProviders(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	served := &fakeSearchProvider{name: search.ProviderDeezer, results: []search.SearchResult{{
-		Kind:    search.ResultKindTrack,
-		Title:   "Hello",
-		Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "1"}},
-	}}}
+	served := &fakeSearchProvider{name: search.ProviderDeezer, results: []search.SearchResult{memory.NewResult(
+		search.ResultKindTrack,
+		"Hello",
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "1"}}),
+	)}}
 	failing := &fakeSearchProvider{name: domain.ProviderITunes, err: errors.New("upstream down")}
 	cases := []struct {
 		name       string
@@ -1017,13 +1001,15 @@ func buildQueryCapRouter(t *testing.T, p search.SearchProvider, vocab search.Spe
 func newQueryCapFixture(t *testing.T) (*countingSearchProvider, *recordingVocabStore, chi.Router, *background.Tracker) {
 	p := &countingSearchProvider{fakeSearchProvider: fakeSearchProvider{
 		name: search.ProviderDeezer,
-		results: []search.SearchResult{{
-			Kind: search.ResultKindTrack, Title: "Song", Subtitle: "Artist",
-			Confidence: domain.ConfidenceLow,
-			Sources: []search.ProviderLink{
+		results: []search.SearchResult{memory.NewResult(
+			search.ResultKindTrack,
+			"Song",
+			memory.WithSubtitle("Artist"),
+			memory.WithConfidence(domain.ConfidenceLow),
+			memory.WithSources([]search.ProviderLink{
 				{Provider: search.ProviderDeezer, ExternalID: "1", URL: "https://deezer.com/1"},
-			},
-		}},
+			}),
+		)},
 	}}
 	vocab := &recordingVocabStore{}
 	router, bg := buildQueryCapRouter(t, p, vocab)
@@ -1086,13 +1072,15 @@ func buildQueryNormRouter(t *testing.T, history *fakeSearchHistoryRepo) chi.Rout
 	bg := searchtest.NewTracker(t)
 	p := &fakeSearchProvider{
 		name: search.ProviderDeezer,
-		results: []search.SearchResult{{
-			Kind: search.ResultKindTrack, Title: "Song", Subtitle: "Artist",
-			Confidence: domain.ConfidenceLow,
-			Sources: []search.ProviderLink{
+		results: []search.SearchResult{memory.NewResult(
+			search.ResultKindTrack,
+			"Song",
+			memory.WithSubtitle("Artist"),
+			memory.WithConfidence(domain.ConfidenceLow),
+			memory.WithSources([]search.ProviderLink{
 				{Provider: search.ProviderDeezer, ExternalID: "1", URL: "https://deezer.com/1"},
-			},
-		}},
+			}),
+		)},
 	}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.History = history })
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Search: svc}), time.Now)
@@ -1816,13 +1804,13 @@ func (p stubContentProvider) answer(kind search.ResultKind, id string) ([]search
 	if p.down {
 		return nil, errors.New("upstream unavailable")
 	}
-	return []search.SearchResult{{
-		Kind:     kind,
-		Title:    "Real Song",
-		Subtitle: "Artist",
-		Sources:  []search.ProviderLink{{Provider: p.provider, ExternalID: id}},
-		Extras:   map[string]any{},
-	}}, nil
+	return []search.SearchResult{memory.NewResult(
+		kind,
+		"Real Song",
+		memory.WithSubtitle("Artist"),
+		memory.WithSources([]search.ProviderLink{{Provider: p.provider, ExternalID: id}}),
+		memory.WithExtras(map[string]any{}),
+	)}, nil
 }
 
 func (p stubContentProvider) GetAlbumTracks(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {

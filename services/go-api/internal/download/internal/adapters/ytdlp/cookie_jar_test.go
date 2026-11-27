@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/polltest"
@@ -130,7 +131,7 @@ var everyRunKind = []runKind{
 		_, _ = s.DownloadPreview(context.Background(), youTubeWatchURL, t.TempDir(), 30)
 	}},
 	{"inspect", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-		s.MarkUnplayable(context.Background(), []download.AudioCandidate{{URL: "https://soundcloud.com/artist/track"}})
+		s.MarkUnplayable(context.Background(), []download.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/artist/track")})
 	}},
 	{"canary", func(t *testing.T, s *download.YouTubeAudioSearcher) {
 		_ = s.Canary(context.Background(), download.YouTubeCanary)
@@ -741,7 +742,7 @@ func TestCookieJar_ARunThatSucceedsOffYouTubeLeavesTheJarSignedOut(t *testing.T)
 			_, _ = s.Download(context.Background(), "https://soundcloud.com/artist/track", t.TempDir())
 		}},
 		{"soundcloud inspect", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-			s.MarkUnplayable(context.Background(), []download.AudioCandidate{{URL: "https://soundcloud.com/artist/track"}})
+			s.MarkUnplayable(context.Background(), []download.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/artist/track")})
 		}},
 		{"lookalike host", func(t *testing.T, s *download.YouTubeAudioSearcher) {
 			_, _ = s.Download(context.Background(), "https://notyoutube.com/watch?v=jNQXAC9IVRw", t.TempDir())

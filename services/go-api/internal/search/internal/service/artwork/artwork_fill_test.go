@@ -1,6 +1,7 @@
 package artwork_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/artwork"
@@ -71,7 +72,7 @@ func TestArtworkFiller_RefusesEveryMissingCollaborator(t *testing.T) {
 }
 
 func TestNoFill_ReturnsTheResultsUntouched(t *testing.T) {
-	in := []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "Humble"}}
+	in := []domain.SearchResult{memory.NewResult(domain.ResultKindTrack, "Humble")}
 	got := artwork.NoFill{}.Fill(context.Background(), in)
 	if len(got) != 1 || got[0].ArtworkPath != "" {
 		t.Fatalf("NoFill = %+v, want the input untouched", got)
@@ -79,7 +80,7 @@ func TestNoFill_ReturnsTheResultsUntouched(t *testing.T) {
 }
 
 func TestPendingFiller_MarksArtworkPendingAndNeverResolvesLive(t *testing.T) {
-	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
+	track := memory.NewResult(domain.ResultKindTrack, "Humble", memory.WithSubtitle("Kendrick Lamar"))
 	liveRan := func(build func(*background.Tracker) *artwork.ArtworkFiller) (domain.ArtworkPath, bool) {
 		logs := logging.CaptureText(t, slog.LevelDebug)
 		bg := searchtest.NewTracker(t)
@@ -103,7 +104,7 @@ func TestPendingFiller_MarksArtworkPendingAndNeverResolvesLive(t *testing.T) {
 }
 
 func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
-	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
+	track := memory.NewResult(domain.ResultKindTrack, "Humble", memory.WithSubtitle("Kendrick Lamar"))
 	cache := &searchtest.FakeArtworkCache{Store: map[string]string{}}
 	outage := &scriptedResolver{log: &stageLog{}, outage: errors.New("coverartarchive 503")}
 
@@ -134,7 +135,7 @@ func (failingArtworkCache) Set(context.Context, domain.ResultKind, string, strin
 
 func TestArtworkFiller_AFailedCacheWriteIsLogged(t *testing.T) {
 	logs := logging.CaptureText(t, slog.LevelInfo)
-	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
+	track := memory.NewResult(domain.ResultKindTrack, "Humble", memory.WithSubtitle("Kendrick Lamar"))
 	cache := &failingArtworkCache{scriptedArtworkCache{log: &stageLog{}}}
 	resolver := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
 
@@ -402,8 +403,14 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		wantCalls  []string
 	}{
 		{
-			name:       "provider art present skips every stage and defaults source",
-			in:         domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", ImageURL: "https://p/a.jpg", Sources: deezerSrc},
+			name: "provider art present skips every stage and defaults source",
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithImageURL("https://p/a.jpg"),
+				memory.WithSources(deezerSrc),
+			),
 			st:         stages{durable: &scriptedIdentityStore{ok: true, mbid: "d"}, cache: &scriptedArtworkCache{found: true, url: "https://c"}},
 			wantPath:   "provider",
 			wantURL:    "https://p/a.jpg",
@@ -411,15 +418,27 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 			wantCalls:  nil,
 		},
 		{
-			name:       "provider art keeps an explicit artwork source",
-			in:         domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", ImageURL: "https://p/a.jpg", ArtworkSource: "itunes", Sources: deezerSrc},
+			name: "provider art keeps an explicit artwork source",
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithImageURL("https://p/a.jpg"),
+				memory.WithArtworkSource("itunes"),
+				memory.WithSources(deezerSrc),
+			),
 			wantPath:   "provider",
 			wantURL:    "https://p/a.jpg",
 			wantSource: "itunes",
 		},
 		{
-			name:      "empty-art hash placeholder counts as missing",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", ImageURL: "https://p/" + placeholderArtHash + ".jpg", Sources: deezerSrc},
+			name: "empty-art hash placeholder counts as missing",
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithImageURL("https://p/"+placeholderArtHash+".jpg"),
+				memory.WithSources(deezerSrc),
+			),
 			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true,
 			wantPath:  "pending",
@@ -427,7 +446,12 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name: "durable hit supplies mbid and xref, skips index, cache hit wins",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc},
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithSources(deezerSrc),
+			),
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur", xref: map[domain.ProviderKey]string{"discogs": "1"}},
 				index:   &scriptedMBIDIndex{ok: true, mbid: "idx"},
@@ -441,7 +465,13 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name: "result mbid beats durable mbid",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own", Sources: deezerSrc},
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithRecordingMBID("own"),
+				memory.WithSources(deezerSrc),
+			),
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur"},
 				index:   &scriptedMBIDIndex{ok: true, mbid: "idx"},
@@ -453,7 +483,12 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name: "durable hit with empty mbid falls through to index",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc},
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithSources(deezerSrc),
+			),
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true},
 				index:   &scriptedMBIDIndex{ok: true, mbid: "idx"},
@@ -465,7 +500,13 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name: "existing xref skips the durable store",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc, Xref: map[domain.ProviderKey]string{"spotify": "s"}},
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithSources(deezerSrc),
+				memory.WithXref(map[domain.ProviderKey]string{"spotify": "s"}),
+			),
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur"},
 				index:   &scriptedMBIDIndex{},
@@ -478,7 +519,7 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name: "no sources skips the durable store",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"},
+			in:   memory.NewResult(domain.ResultKindTrack, "Humble", memory.WithSubtitle("Kendrick Lamar")),
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur"},
 				index:   &scriptedMBIDIndex{ok: true, mbid: "idx"},
@@ -490,7 +531,12 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name: "durable miss then index miss leaves mbid empty",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc},
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithSources(deezerSrc),
+			),
 			st: stages{
 				durable: &scriptedIdentityStore{},
 				index:   &scriptedMBIDIndex{},
@@ -502,7 +548,7 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name:      "cached miss settles a non-artist as none",
-			in:        domain.SearchResult{Kind: domain.ResultKindAlbum, Title: "Humble", Subtitle: "Kendrick Lamar"},
+			in:        memory.NewResult(domain.ResultKindAlbum, "Humble", memory.WithSubtitle("Kendrick Lamar")),
 			st:        stages{cache: &scriptedArtworkCache{found: true}, live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true,
 			wantPath:  "none",
@@ -510,7 +556,7 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name:      "cached empty-art hash settles a non-artist as none",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"},
+			in:        memory.NewResult(domain.ResultKindTrack, "Humble", memory.WithSubtitle("Kendrick Lamar")),
 			st:        stages{cache: &scriptedArtworkCache{found: true, url: "https://c/" + placeholderArtHash, source: "caa"}, live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true,
 			wantPath:  "none",
@@ -518,39 +564,59 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 		},
 		{
 			name:      "cached miss for an artist falls through to the live resolver",
-			in:        domain.SearchResult{Kind: domain.ResultKindArtist, Title: "Kendrick Lamar"},
+			in:        memory.NewResult(domain.ResultKindArtist, "Kendrick Lamar"),
 			st:        stages{cache: &scriptedArtworkCache{found: true}, live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true,
 			wantPath:  "pending",
 			wantCalls: []string{"cache.get:", "resolve.name:", "cache.set:|https://n.jpg|name-src|name"},
 		},
 		{
-			name:      "live resolver miss caches the miss",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
+			name: "live resolver miss caches the miss",
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithRecordingMBID("own"),
+			),
 			st:        stages{cache: &scriptedArtworkCache{}},
 			noDurable: true, noIndex: true,
 			wantPath:  "pending",
 			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own", "cache.set:own|||none"},
 		},
 		{
-			name:      "a miss from failing resolvers is never cached",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
+			name: "a miss from failing resolvers is never cached",
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithRecordingMBID("own"),
+			),
 			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{outage: errors.New("coverartarchive 503")}},
 			noDurable: true, noIndex: true,
 			wantPath:  "pending",
 			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own"},
 		},
 		{
-			name:      "identity miss falls back to name lookup",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
+			name: "identity miss falls back to name lookup",
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithRecordingMBID("own"),
+			),
 			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true,
 			wantPath:  "pending",
 			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own", "cache.set:own|https://n.jpg|name-src|name"},
 		},
 		{
-			name:      "without an artwork cache the live stage never runs",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
+			name: "without an artwork cache the live stage never runs",
+			in: memory.NewResult(
+				domain.ResultKindTrack,
+				"Humble",
+				memory.WithSubtitle("Kendrick Lamar"),
+				memory.WithRecordingMBID("own"),
+			),
 			st:        stages{live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true, noCache: true,
 			wantPath:  "pending",

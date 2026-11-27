@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -35,10 +36,14 @@ func (s *artTracks) Fetch(_ context.Context, c download.AudioCandidate, outDir s
 
 func TestSelect_RanksArtTracksByTheResolvedLengthWhenTheTrackHasNone(t *testing.T) {
 	artTrack := func(url string, duration float64) download.AudioCandidate {
-		return download.AudioCandidate{
-			Title: "Phone (Interlude)", URL: url, Duration: duration,
-			Artists: []string{"SLAYR"}, Album: "Phone", Kind: ports.KindArtTrack,
-		}
+		return downloadtest.Candidate(
+			url,
+			downloadtest.WithTitle("Phone (Interlude)"),
+			downloadtest.WithDuration(duration),
+			downloadtest.WithArtists([]string{"SLAYR"}),
+			downloadtest.WithAlbum("Phone"),
+			downloadtest.WithKind(ports.KindArtTrack),
+		)
 	}
 	source := &artTracks{found: []download.AudioCandidate{
 		artTrack("https://music.youtube.com/watch?v=aaaaaaaaaaa", 112),

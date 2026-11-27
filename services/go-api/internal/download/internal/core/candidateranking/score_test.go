@@ -2,6 +2,7 @@ package candidateranking_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/candidateranking"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -35,8 +36,20 @@ func near(got, want, precision float64) bool {
 
 func TestRank_MetadataRankWeighsChannelLengthCategoryAndViews(t *testing.T) {
 	track := song("Song", "Someone", 200)
-	vevo := download.AudioCandidate{Title: "Someone - Song", Channel: "LabelVEVO", Duration: 210, Categories: []string{"Comedy"}, ViewCount: 500, URL: "a"}
-	popular := download.AudioCandidate{Title: "Someone - Song", Channel: "x", ViewCount: 1000, URL: "b"}
+	vevo := downloadtest.Candidate(
+		"a",
+		downloadtest.WithTitle("Someone - Song"),
+		downloadtest.WithChannel("LabelVEVO"),
+		downloadtest.WithDuration(210),
+		downloadtest.WithCategories([]string{"Comedy"}),
+		downloadtest.WithViewCount(500),
+	)
+	popular := downloadtest.Candidate(
+		"b",
+		downloadtest.WithTitle("Someone - Song"),
+		downloadtest.WithChannel("x"),
+		downloadtest.WithViewCount(1000),
+	)
 
 	records := evaluations(t, track, vevo, popular)
 
@@ -64,7 +77,12 @@ func TestRank_LengthScoreFollowsTheTightAndLooseWindows(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := download.AudioCandidate{Title: "Someone - Song", Channel: "x", Duration: tt.actual}
+			c := downloadtest.Candidate(
+				"",
+				downloadtest.WithTitle("Someone - Song"),
+				downloadtest.WithChannel("x"),
+				downloadtest.WithDuration(tt.actual),
+			)
 			got := (metadataRank(t, song("Song", "Someone", tt.expected), c) - channelWeight*otherChannel - categoryWeight*noMusic - viewsWeight*unknownViews) / lengthWeight
 			if !near(got, tt.want, scorePrecision) {
 				t.Errorf("length score for %vs against %vs = %v, want %v", tt.actual, tt.expected, got, tt.want)
@@ -95,7 +113,12 @@ func TestRank_LengthScoreUsesTheConfidenceWindows(t *testing.T) {
 			if !known {
 				t.Fatalf("ScoreConfidence = %v, not a length bonus this test knows", confidence)
 			}
-			c := download.AudioCandidate{Title: "Someone - Song", Channel: "x", Duration: tt.expected + tt.delta}
+			c := downloadtest.Candidate(
+				"",
+				downloadtest.WithTitle("Someone - Song"),
+				downloadtest.WithChannel("x"),
+				downloadtest.WithDuration(tt.expected+tt.delta),
+			)
 			got := (metadataRank(t, song("Song", "Someone", tt.expected), c) - channelWeight*otherChannel - categoryWeight*noMusic - viewsWeight*unknownViews) / lengthWeight
 			if !near(got, want, scorePrecision) {
 				t.Errorf("length score %v, the confidence window implies %v", got, want)
@@ -111,13 +134,17 @@ func TestRank_ChannelScoreTrustsTopicAndArtistThenVevo(t *testing.T) {
 		candidate download.AudioCandidate
 		want      float64
 	}{
-		{"topic class", "The Weeknd", download.AudioCandidate{Channel: "The Weeknd - Topic"}, 1.0},
-		{"topic class without a channel", "The Weeknd", download.AudioCandidate{Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}}, 1.0},
-		{"artist class", "The Weeknd", download.AudioCandidate{Channel: "TheWeeknd"}, 1.0},
-		{"vevo channel", "Someone Else", download.AudioCandidate{Channel: "TheWeekndVEVO"}, 0.8},
-		{"vevo mixed case", "Someone Else", download.AudioCandidate{Channel: "SomeArtistVevo"}, 0.8},
-		{"regular channel", "Someone Else", download.AudioCandidate{Channel: "RandomUploader"}, otherChannel},
-		{"empty channel", "Someone Else", download.AudioCandidate{}, otherChannel},
+		{"topic class", "The Weeknd", downloadtest.Candidate("", downloadtest.WithChannel("The Weeknd - Topic")), 1.0},
+		{"topic class without a channel", "The Weeknd", downloadtest.Candidate(
+			"",
+			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithArtists([]string{"The Weeknd"}),
+		), 1.0},
+		{"artist class", "The Weeknd", downloadtest.Candidate("", downloadtest.WithChannel("TheWeeknd")), 1.0},
+		{"vevo channel", "Someone Else", downloadtest.Candidate("", downloadtest.WithChannel("TheWeekndVEVO")), 0.8},
+		{"vevo mixed case", "Someone Else", downloadtest.Candidate("", downloadtest.WithChannel("SomeArtistVevo")), 0.8},
+		{"regular channel", "Someone Else", downloadtest.Candidate("", downloadtest.WithChannel("RandomUploader")), otherChannel},
+		{"empty channel", "Someone Else", downloadtest.Candidate(""), otherChannel},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,7 +171,12 @@ func TestRank_CategoryScoreRewardsTheMusicCategory(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := download.AudioCandidate{Title: "Someone - Song", Channel: "x", Categories: tt.categories}
+			c := downloadtest.Candidate(
+				"",
+				downloadtest.WithTitle("Someone - Song"),
+				downloadtest.WithChannel("x"),
+				downloadtest.WithCategories(tt.categories),
+			)
 			got := (metadataRank(t, song("Song", "Someone", 0), c) - channelWeight*otherChannel - lengthWeight*unknownLength - viewsWeight*unknownViews) / categoryWeight
 			if !near(got, tt.want, scorePrecision) {
 				t.Errorf("category score for %v = %v, want %v", tt.categories, got, tt.want)
@@ -167,7 +199,12 @@ func TestRank_ViewScoreIsAShareOfTheMostViewedCandidate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var candidates []download.AudioCandidate
 			for i, views := range tt.views {
-				candidates = append(candidates, download.AudioCandidate{Title: "Someone - Song", Channel: "x", ViewCount: views, URL: string(rune('a' + i))})
+				candidates = append(candidates, downloadtest.Candidate(
+					string(rune('a'+i)),
+					downloadtest.WithTitle("Someone - Song"),
+					downloadtest.WithChannel("x"),
+					downloadtest.WithViewCount(views),
+				))
 			}
 			records := evaluations(t, song("Song", "Someone", 0), candidates...)
 			got := (number(t, records[0], "metadata_rank") - channelWeight*otherChannel - lengthWeight*unknownLength - categoryWeight*noMusic) / viewsWeight
@@ -194,7 +231,7 @@ func TestRank_IdentityScoreRewardsArtistAndTitleAndDiscountsTitleOnly(t *testing
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			score := number(t, evaluation(t, song(tt.title, tt.artist, 0), download.AudioCandidate{Title: tt.candidate}), "identity_score")
+			score := number(t, evaluation(t, song(tt.title, tt.artist, 0), downloadtest.Candidate("", downloadtest.WithTitle(tt.candidate))), "identity_score")
 			if tt.wantAbove > 0 && score < tt.wantAbove {
 				t.Errorf("identity_score = %.1f, want >= %.1f", score, tt.wantAbove)
 			}
@@ -207,7 +244,11 @@ func TestRank_IdentityScoreRewardsArtistAndTitleAndDiscountsTitleOnly(t *testing
 
 func TestRank_AnExactTitleWithoutTheArtistSitsOnTheIdentityGateAndPasses(t *testing.T) {
 	track := song("Song", "Someone With A Long Name", 200)
-	c := download.AudioCandidate{Title: "Song", Channel: "RandomUploader", URL: "https://x.example/song"}
+	c := downloadtest.Candidate(
+		"https://x.example/song",
+		downloadtest.WithTitle("Song"),
+		downloadtest.WithChannel("RandomUploader"),
+	)
 
 	if got := number(t, evaluation(t, track, c), "identity_score"); got != 60 {
 		t.Fatalf("identity_score = %v, want exactly the 60 gate: a full title-only match scores 100 times 0.6", got)
@@ -219,7 +260,11 @@ func TestRank_AnExactTitleWithoutTheArtistSitsOnTheIdentityGateAndPasses(t *test
 }
 
 func TestRank_BelowTheIdentityGateTheRefusalNamesTheScore(t *testing.T) {
-	c := download.AudioCandidate{Title: "Cooking Tutorial Episode 47", Channel: "CookingChannel", URL: "yt:cooking"}
+	c := downloadtest.Candidate(
+		"yt:cooking",
+		downloadtest.WithTitle("Cooking Tutorial Episode 47"),
+		downloadtest.WithChannel("CookingChannel"),
+	)
 
 	track := song("Save Your Tears", "The Weeknd", 215)
 	_, refused := rank(track, c)
@@ -235,7 +280,15 @@ func TestRank_BelowTheIdentityGateTheRefusalNamesTheScore(t *testing.T) {
 
 func TestRank_EvaluationCarriesScoresAndTheCandidate(t *testing.T) {
 	track := candidateranking.Track{ID: "t1", Title: "Song", Artist: "Artist", ExpectedLength: 200}
-	c := download.AudioCandidate{Source: "youtube", Title: "Song", Channel: "Artist - Topic", Duration: 200, ViewCount: 50, Categories: []string{"Music"}}
+	c := downloadtest.Candidate(
+		"",
+		downloadtest.WithSource("youtube"),
+		downloadtest.WithTitle("Song"),
+		downloadtest.WithChannel("Artist - Topic"),
+		downloadtest.WithDuration(200),
+		downloadtest.WithViewCount(50),
+		downloadtest.WithCategories([]string{"Music"}),
+	)
 
 	_, _, evaluated := candidateranking.Rank(track, []download.AudioCandidate{c})
 
@@ -256,7 +309,7 @@ func TestRank_EvaluationCarriesScoresAndTheCandidate(t *testing.T) {
 
 func TestRank_UnplayableCandidatesAreNotEvaluated(t *testing.T) {
 	track := song("Song", "Artist", 200)
-	drm := download.AudioCandidate{Title: "Song", Unplayable: "drm"}
+	drm := downloadtest.Candidate("", downloadtest.WithTitle("Song"), downloadtest.WithUnplayable("drm"))
 
 	_, refused, evaluated := candidateranking.Rank(track, []download.AudioCandidate{drm})
 
@@ -267,7 +320,14 @@ func TestRank_UnplayableCandidatesAreNotEvaluated(t *testing.T) {
 
 func TestRank_EvaluationRoundsScores(t *testing.T) {
 	track := song("Blinding Lights", "The Weeknd", 200)
-	c := download.AudioCandidate{Title: "The Weeknd - Blinding Light", Channel: "LabelVEVO", Duration: 210, Categories: []string{"Comedy"}, ViewCount: 1}
+	c := downloadtest.Candidate(
+		"",
+		downloadtest.WithTitle("The Weeknd - Blinding Light"),
+		downloadtest.WithChannel("LabelVEVO"),
+		downloadtest.WithDuration(210),
+		downloadtest.WithCategories([]string{"Comedy"}),
+		downloadtest.WithViewCount(1),
+	)
 
 	record := evaluation(t, track, c)
 

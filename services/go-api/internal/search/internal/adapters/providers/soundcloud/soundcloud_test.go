@@ -510,7 +510,7 @@ func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
 
 func TestSoundCloudAPIAdapter_FallsBackOnResolveFailure(t *testing.T) {
 	fb := &recordingFallback{results: []search.SearchResult{
-		{Kind: search.ResultKindTrack, Title: "from yt-dlp"},
+		memory.NewResult(search.ResultKindTrack, "from yt-dlp"),
 	}}
 	a := newSoundCloudAdapter(t, scHomeDown, fb)
 

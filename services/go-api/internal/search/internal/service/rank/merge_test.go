@@ -1,6 +1,7 @@
 package rank_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/search/searchtest"
@@ -512,13 +513,13 @@ func TestMerge_ExplicitTrueWinsThenFalse(t *testing.T) {
 }
 
 func artistWithID(name string, provider domain.ProviderName, id string, fans int64, image string) domain.SearchResult {
-	return domain.SearchResult{
-		Kind:     domain.ResultKindArtist,
-		Title:    name,
-		ImageURL: image,
-		FanCount: fans,
-		Sources:  []domain.ProviderLink{{Provider: provider, ExternalID: id}},
-	}
+	return memory.NewResult(
+		domain.ResultKindArtist,
+		name,
+		memory.WithImageURL(image),
+		memory.WithFanCount(fans),
+		memory.WithSources([]domain.ProviderLink{{Provider: provider, ExternalID: id}}),
+	)
 }
 
 func entityWithSource(t *testing.T, entities []rank.Entity, provider domain.ProviderName, id string) rank.Entity {
