@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/random/randomtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1957,11 +1958,11 @@ func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *tes
 
 func startVerifiedScheduler(t *testing.T, v acqports.Verification) {
 	t.Helper()
-	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now, service.WithVerificationStatus(v))
+	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now, withTestToolsPresent(v))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 }
 
-func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
+func TestNewBackgroundAcquisitionScheduler_LogsVerificationDegradedOrArmed(t *testing.T) {
 	cases := []struct {
 		name         string
 		verification acqports.Verification
@@ -1991,7 +1992,7 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 	}
 }
 
-func TestWithVerificationStatus_NamesFingerprintLookupsUnverified(t *testing.T) {
+func TestNewBackgroundAcquisitionScheduler_NamesFingerprintLookupsUnverified(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	startVerifiedScheduler(t, acqports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})
@@ -3126,6 +3127,35 @@ func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(
 	}
 }
 
+func TestBackgroundScheduler_APanickedJobsRetryDelayIsSpreadByTheInjectedUnit(t *testing.T) {
+	cases := []struct {
+		name string
+		unit float64
+		want time.Duration
+	}{
+		{"unit at the low end", 0, 24 * time.Second},
+		{"unit in the middle", 0.5, 30 * time.Second},
+		{"unit above the middle", 0.75, 33 * time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			job := acqports.Job{Kind: acqports.JobKindAcquire, Run: 1, TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New())}
+			queue := newScriptedClaimQueue(job)
+			scheduler := newTestScheduler(panicsAfterClaim{jobRunner: &panickingAcquirer{}}, 1, time.Now,
+				withTestQueue(queue),
+				service.WithPollInterval(time.Millisecond),
+				withTestUpgrades(panickingUpgrader{}, 1),
+				withTestUnit(randomtest.Fixed(tc.unit)))
+			t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+			queue.awaitLeaving(t)
+
+			if got := queue.releaseDelays(); len(got) != 1 || got[0] != tc.want {
+				t.Errorf("release delays = %v, want exactly [%v]", got, tc.want)
+			}
+		})
+	}
+}
+
 type retryableAcquirer struct{}
 
 func (retryableAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
@@ -3498,6 +3528,7 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 		"FingerprintVerified": func(p *service.SchedulerPorts) { p.FingerprintVerified = nil },
 		"Timer":               func(p *service.SchedulerPorts) { p.Timer = nil },
 		"Ticker":              func(p *service.SchedulerPorts) { p.Ticker = nil },
+		"Unit":                func(p *service.SchedulerPorts) { p.Unit = nil },
 	}
 	for field, drop := range cases {
 		t.Run(field, func(t *testing.T) {
