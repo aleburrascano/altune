@@ -107,15 +107,15 @@ func findHealth(t *testing.T, r *jobs.Runner, name string) background.JobHealth 
 	return background.JobHealth{}
 }
 
-func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int32) {
+func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int32, advance func(time.Duration)) {
 	t.Helper()
 	waitForAtLeast(t, passes, 3)
 
 	e.lose()
-	_ = clock.Sleep(t.Context(), 30*leaderLoopTick)
+	advance(30 * leaderLoopTick)
 	stopped := passes.Load()
 
-	_ = clock.Sleep(t.Context(), 60*leaderLoopTick)
+	advance(60 * leaderLoopTick)
 	if extra := passes.Load() - stopped; extra > 1 {
 		t.Fatalf("job made %d more passes after the term ended, want none", extra)
 	}
@@ -511,7 +511,7 @@ func TestTicker_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 		r.Ticker(jobs.AlertMonitor, leaderLoopTick, monitor.Pass)
 		lead(t, &r, e)
 
-		assertPassesFollowTheTerm(t, e, &evaluations)
+		assertPassesFollowTheTerm(t, e, &evaluations, time.Sleep)
 	})
 }
 
@@ -531,7 +531,7 @@ func TestTicker_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
 		r.Ticker(jobs.EvalMeter, leaderLoopTick, meter.Pass)
 		lead(t, &r, e)
 
-		assertPassesFollowTheTerm(t, e, &runs)
+		assertPassesFollowTheTerm(t, e, &runs, time.Sleep)
 	})
 }
 

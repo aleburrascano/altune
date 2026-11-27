@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/random/randomtest"
 	"context"
 	"errors"
@@ -612,11 +613,7 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 		scheduler.Shutdown(context.Background())
 	})
 
-	deadline := time.Now().Add(5 * time.Second)
-	for acq.runs.Load() == 0 && time.Now().Before(deadline) {
-		_ = clock.Sleep(context.Background(), 5*time.Millisecond)
-	}
-	_ = clock.Sleep(context.Background(), 300*time.Millisecond)
+	awaitPanicBackoff(t, pool, acq, track.ID)
 
 	if got := acq.runs.Load(); got != 1 {
 		t.Errorf("runs = %d, want 1 (a panicked job must back off, not be re-claimed)", got)
@@ -624,6 +621,14 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 	if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
 		t.Errorf("status = %q, want pending until the attempt cap", got)
 	}
+}
+
+func awaitPanicBackoff(t *testing.T, pool *pgxpool.Pool, acq *panickingAcquirer, id ids.TrackId) {
+	t.Helper()
+	polltest.Until(t, 5*time.Second, "the panicked job to be run once and pushed out by its backoff", func() bool {
+		at := scheduledAvailableAt(t, pool, id)
+		return acq.runs.Load() > 0 && at != nil && time.Until(*at) > 10*time.Second
+	})
 }
 
 type recordedQueries struct {
@@ -1106,10 +1111,9 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 		scheduler.Shutdown(context.Background())
 	})
 
-	deadline := time.Now().Add(5 * time.Second)
-	for scheduledAvailableAt(t, pool, track.ID) != nil && time.Now().Before(deadline) {
-		_ = clock.Sleep(context.Background(), 10*time.Millisecond)
-	}
+	polltest.Until(t, 5*time.Second, "the capped panic to take the job out of the queue", func() bool {
+		return scheduledAvailableAt(t, pool, track.ID) == nil
+	})
 
 	if at := scheduledAvailableAt(t, pool, track.ID); at != nil {
 		t.Errorf("available_at = %v after the panic at the run cap, want NULL: the job must leave the queue", at)
@@ -1139,11 +1143,7 @@ func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackof
 		scheduler.Shutdown(context.Background())
 	})
 
-	deadline := time.Now().Add(5 * time.Second)
-	for acq.runs.Load() == 0 && time.Now().Before(deadline) {
-		_ = clock.Sleep(context.Background(), 5*time.Millisecond)
-	}
-	_ = clock.Sleep(context.Background(), 300*time.Millisecond)
+	awaitPanicBackoff(t, pool, acq, track.ID)
 	scheduler.Shutdown(context.Background())
 
 	at := scheduledAvailableAt(t, pool, track.ID)

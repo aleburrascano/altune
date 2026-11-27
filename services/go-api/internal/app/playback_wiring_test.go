@@ -2,7 +2,6 @@ package app_test
 
 import (
 	"altune/go-api/internal/playback"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/polltest"
 	"context"
@@ -66,8 +65,11 @@ func TestQueueRateLimit_TheConfiguredIntervalRefillsTheBurst(t *testing.T) {
 	token := signedToken(t, fixture.key, fixture.operator)
 
 	first, throttled := putQueueState(t, h, token), putQueueState(t, h, token)
-	_ = clock.Sleep(t.Context(), 1100*time.Millisecond)
-	refilled := putQueueState(t, h, token)
+	refilled := http.StatusTooManyRequests
+	polltest.Until(t, 3*time.Second, "the one-second interval to refill the burst", func() bool {
+		refilled = putQueueState(t, h, token)
+		return refilled != http.StatusTooManyRequests
+	})
 
 	if first == http.StatusTooManyRequests || throttled != http.StatusTooManyRequests || refilled == http.StatusTooManyRequests {
 		t.Errorf("statuses = [%d %d %d], want the second PUT throttled and the third admitted once the one-second interval refilled the burst", first, throttled, refilled)

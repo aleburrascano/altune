@@ -137,7 +137,8 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	}
 	body := bufio.NewReader(resp.Body)
 
-	_ = clock.Sleep(t.Context(), 4*routeWriteDeadline)
+	began := time.Now()
+	readUntil(t, body, func(string) bool { return time.Since(began) > 4*routeWriteDeadline })
 	bus.Publish(context.Background(), uid, eventstest.Fielded("late.event", map[string]any{"k": "v"}))
 	readUntil(t, body, func(l string) bool { return strings.HasPrefix(l, "event: late.event") })
 }
