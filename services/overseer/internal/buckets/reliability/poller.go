@@ -109,20 +109,24 @@ func (p *reachPoller) pollOnce(ctx context.Context) {
 	p.outcome.Store(int32(outcome))
 	status := outcome.status()
 	p.samples.Add(core.Signal{At: finished.UTC(), Kind: "reach", Text: status.String()})
-	p.recordProbe(status, err == nil, finished, finished.Sub(started))
+	p.recordUp(status, finished)
+	if err == nil {
+		p.recordLatency(finished, finished.Sub(started))
+	}
 }
 
 func (p *reachPoller) currentOutcome() reachOutcome {
 	return reachOutcome(p.outcome.Load())
 }
 
-func (p *reachPoller) recordProbe(status goapi.Status, answered bool, at time.Time, latency time.Duration) {
+func (p *reachPoller) recordUp(status goapi.Status, at time.Time) {
 	up := 0.0
 	if status == goapi.StatusUp {
 		up = 1
 	}
 	p.series.Record(bucketID, seriesUp, core.Point{At: at, Value: up})
-	if answered {
-		p.series.Record(bucketID, seriesLatencyMS, core.Point{At: at, Value: float64(latency.Microseconds()) / 1000})
-	}
+}
+
+func (p *reachPoller) recordLatency(at time.Time, latency time.Duration) {
+	p.series.Record(bucketID, seriesLatencyMS, core.Point{At: at, Value: float64(latency.Microseconds()) / 1000})
 }

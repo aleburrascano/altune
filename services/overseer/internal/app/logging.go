@@ -6,15 +6,16 @@ import (
 	"strings"
 )
 
-func SetupLogging(level string, development bool) {
-	opts := &slog.HandlerOptions{Level: parseLevel(level), AddSource: true}
-	var h slog.Handler
-	if development {
-		h = slog.NewTextHandler(os.Stdout, opts)
-	} else {
-		h = slog.NewJSONHandler(os.Stdout, opts)
-	}
-	slog.SetDefault(slog.New(h))
+func SetupTextLogging(level string) {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, handlerOptions(level))))
+}
+
+func SetupJSONLogging(level string) {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, handlerOptions(level))))
+}
+
+func handlerOptions(level string) *slog.HandlerOptions {
+	return &slog.HandlerOptions{Level: parseLevel(level), AddSource: true}
 }
 
 func parseLevel(s string) slog.Level {
