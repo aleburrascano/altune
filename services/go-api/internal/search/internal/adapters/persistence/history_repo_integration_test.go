@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"strings"
 	"sync"
@@ -332,7 +333,10 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		})
 	}()
 
-	dbtest.AwaitBlockedBy(t, pool, int(gate.backend.Load()), 2, "both racing writes to queue behind the open erase")
+	eraserPID := int(gate.backend.Load())
+	polltest.Until(t, 10*time.Second, "both racing writes to queue behind the open erase", func() bool {
+		return dbtest.BlockedBy(t, pool, eraserPID) >= 2
+	})
 	select {
 	case err := <-written:
 		t.Fatalf("a write finished while the erase was still open (err %v), want it held until the erase commits", err)

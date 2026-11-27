@@ -2,6 +2,7 @@ package dbtest_test
 
 import (
 	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/polltest"
 	"fmt"
 	"runtime"
 	"sync"
@@ -31,15 +32,15 @@ func (r *cleanupRecorder) finish() {
 func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing.T) {
 	pool := dbtest.Pool(t)
 	holder := &cleanupRecorder{TB: t}
-	dbtest.ExclusiveAcquisitionQueue(holder, pool)
+	holderPID := dbtest.ExclusiveAcquisitionQueue(holder, pool)
 	releaseHolder := sync.OnceFunc(holder.finish)
+	alreadyBlocked := dbtest.BlockedBy(t, pool, holderPID)
 
 	waiter := &cleanupRecorder{TB: t}
 	acquired := make(chan struct{})
-	waiterBackend := make(chan int, 1)
 	go func() {
 		defer close(acquired)
-		dbtest.ExclusiveAcquisitionQueueReportingBackend(waiter, pool, func(pid int) { waiterBackend <- pid })
+		dbtest.ExclusiveAcquisitionQueue(waiter, pool)
 	}()
 	t.Cleanup(func() {
 		releaseHolder()
@@ -51,12 +52,9 @@ func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing
 		}
 	})
 
-	select {
-	case pid := <-waiterBackend:
-		dbtest.AwaitBackendBlocked(t, pool, pid, "the second test to queue behind the holder")
-	case <-acquired:
-		t.Fatalf("the second test never reached the lock: %s", waiter.failure)
-	}
+	polltest.Until(t, 10*time.Second, "the second test to queue behind the holder", func() bool {
+		return dbtest.BlockedBy(t, pool, holderPID) > alreadyBlocked
+	})
 	select {
 	case <-acquired:
 		t.Fatal("a second test got the acquisition queue while the first still held it")
