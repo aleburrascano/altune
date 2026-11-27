@@ -1,6 +1,7 @@
 package discogs
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
@@ -250,9 +251,9 @@ func (a *DiscogsAdapter) fetchArtistReleases(ctx context.Context, artistID, perP
 }
 
 func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, error) {
-	status, body, err := providerrequests.GetBytes(ctx, a.client, rawURL,
-		providerrequests.WithHeader("Authorization", "Discogs token="+a.token),
-		providerrequests.WithHeader("User-Agent", a.userAgent))
+	status, body, err := outbound.GetBytes(ctx, a.client, rawURL,
+		outbound.WithHeader("Authorization", "Discogs token="+a.token),
+		outbound.WithHeader("User-Agent", a.userAgent))
 	if status == http.StatusTooManyRequests {
 		slog.WarnContext(ctx, "discogs.rate_limited", "path", urlPathOnly(rawURL))
 		return nil, fmt.Errorf("discogs rate limited")

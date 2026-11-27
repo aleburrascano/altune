@@ -358,7 +358,7 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 	var requests []recordedRequest
 	srv := fixtureServer(t, &requests)
 	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{
-		HTTP:      &http.Client{Transport: budget.Transport(nil)},
+		HTTP:      &http.Client{Transport: budget.Transport(http.DefaultTransport)},
 		MusicURL:  srv.URL,
 		OEmbedURL: srv.URL + "/oembed",
 		Timeout:   timeout,

@@ -2,13 +2,13 @@ package ytmsearch
 
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -64,6 +64,13 @@ func New(cfg Config) (*Client, error) {
 	return c, nil
 }
 
+func ForClient(client *http.Client) (*Client, error) {
+	if client == nil {
+		return nil, ErrHTTPRequired
+	}
+	return New(Config{HTTP: client, Timeout: client.Timeout})
+}
+
 func (c *Client) Timeout() time.Duration { return c.timeout }
 
 func (c *Client) Watch(ctx context.Context, videoID string) (Watch, error) {
@@ -102,11 +109,10 @@ func (c *Client) outage(ctx context.Context, err error) error {
 
 func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {
 	query := url.Values{"url": {watchURLPrefix + videoID}, "format": {"json"}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.oembedURL+"?"+query.Encode(), http.NoBody)
-	if err != nil {
-		return OEmbed{}, fmt.Errorf("ytmsearch: build oembed request: %w", err)
-	}
-	raw, err := c.do(ctx, req)
+	target := c.oembedURL + "?" + query.Encode()
+	raw, err := c.call(ctx, "/oembed", func(ctx context.Context) (int, []byte, error) {
+		return outbound.GetBytesCapped(ctx, c.http, target, responseBodyCap, outbound.WithHeader("User-Agent", youtubemusicapi.UserAgent))
+	})
 	if err != nil {
 		return OEmbed{}, err
 	}
@@ -119,43 +125,36 @@ func (c *Client) postInnerTube(ctx context.Context, endpoint string, fields map[
 		return nil, fmt.Errorf("ytmsearch: marshal %s: %w", endpoint, err)
 	}
 	target := youtubemusicapi.URL(c.musicURL, endpoint)
+	return c.call(ctx, endpoint, func(ctx context.Context) (int, []byte, error) {
+		return c.postOnce(ctx, target, payload)
+	})
+}
+
+func (c *Client) postOnce(ctx context.Context, target string, payload []byte) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("ytmsearch: build %s request: %w", endpoint, err)
+		return 0, nil, fmt.Errorf("build the request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Referer", DefaultMusicURL+"/")
-	return c.do(ctx, req)
+	req.Header.Set("User-Agent", youtubemusicapi.UserAgent)
+	status, raw, err := outbound.DoCapped(c.http, req, responseBodyCap)
+	if err == nil && status != http.StatusOK {
+		err = outbound.StatusError{Status: status}
+	}
+	return status, raw, err
 }
 
-func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
+func (c *Client) call(ctx context.Context, label string, fetch func(context.Context) (int, []byte, error)) ([]byte, error) {
 	ctx, err := youtubemusicapi.ReserveSlot(ctx, c.http)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.boundedContext(ctx)
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	req = req.WithContext(ctx)
-	req.Header.Set("User-Agent", youtubemusicapi.UserAgent)
-	return c.send(req)
-}
-
-func (c *Client) boundedContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, c.timeout)
-}
-
-func (c *Client) send(req *http.Request) ([]byte, error) {
-	resp, err := c.http.Do(req)
+	_, raw, err := fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("ytmsearch: %s: %w", req.URL.Path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ytmsearch: %s: status %d", req.URL.Path, resp.StatusCode)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, responseBodyCap))
-	if err != nil {
-		return nil, fmt.Errorf("ytmsearch: %s: read body: %w", req.URL.Path, err)
+		return nil, fmt.Errorf("ytmsearch: %s: %w", label, err)
 	}
 	return raw, nil
 }

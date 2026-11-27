@@ -1,7 +1,7 @@
 package itunes
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -159,5 +159,5 @@ type itunesItem struct {
 }
 
 func (a *ITunesAdapter) getJSON(ctx context.Context, u string, dst any) error {
-	return providerrequests.GetJSON(ctx, a.client, u, dst, providerrequests.WithHeader("User-Agent", itunesUserAgent))
+	return outbound.GetJSON(ctx, a.client, u, dst, outbound.WithHeader("User-Agent", itunesUserAgent))
 }

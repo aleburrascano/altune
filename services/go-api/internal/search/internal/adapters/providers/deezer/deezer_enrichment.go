@@ -1,7 +1,7 @@
 package deezer
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -101,7 +101,7 @@ func (a *DeezerAdapter) lookupAlbumDetail(ctx context.Context, id string) (domai
 
 func (a *DeezerAdapter) getJSON(ctx context.Context, u string, dst any) error {
 	var raw json.RawMessage
-	if err := providerrequests.GetJSON(ctx, a.client, u, &raw); err != nil {
+	if err := outbound.GetJSON(ctx, a.client, u, &raw); err != nil {
 		return err
 	}
 	var envelope struct {

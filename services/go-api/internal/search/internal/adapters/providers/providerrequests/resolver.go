@@ -1,6 +1,7 @@
 package providerrequests
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -104,7 +105,7 @@ func WithAuthRetry[T comparable, R any](
 		return zero, err
 	}
 	res, status, err := do(ctx, cred)
-	if err != nil && IsAuthStatus(status) {
+	if err != nil && outbound.IsAuthStatus(status) {
 		r.Invalidate(cred)
 		return retryWithFreshCredential(ctx, r, do)
 	}
@@ -122,8 +123,8 @@ func retryWithFreshCredential[T comparable, R any](
 		return zero, err
 	}
 	res, status, err := do(ctx, cred)
-	if err != nil && IsAuthStatus(status) {
-		err = PersistentAuthError{Cause: err}
+	if err != nil && outbound.IsAuthStatus(status) {
+		err = outbound.PersistentAuthError{Cause: err}
 	}
 	return res, err
 }

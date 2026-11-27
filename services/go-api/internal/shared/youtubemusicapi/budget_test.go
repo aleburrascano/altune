@@ -69,7 +69,7 @@ func TestBudgetTransport_A403MakesTheNextCallWaitForTheCooldown(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	cooldown := 400 * time.Millisecond
 	budget := budgetOn(t, miniredis.RunT(t), youtubemusicapi.Settings{Cooldown: cooldown})
-	client := &http.Client{Transport: budget.Transport(nil)}
+	client := &http.Client{Transport: budget.Transport(http.DefaultTransport)}
 
 	get := func() int {
 		resp, err := client.Get(upstream.URL)
@@ -169,13 +169,12 @@ func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
 	}
 	start := time.Now()
 	resp, err := client.Get(upstream.URL)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		_ = resp.Body.Close()
 	}
-	if resp == nil {
-		t.Fatal("nil response without an error")
+	if !errors.Is(err, outbound.ErrNonPublicAddr) {
+		t.Fatalf("err = %v, want the tool client to refuse a loopback dial", err)
 	}
-	_ = resp.Body.Close()
 	if elapsed := time.Since(start); elapsed < 250*time.Millisecond {
 		t.Fatalf("tool call went out %v after the app's, want the shared 300ms spacing", elapsed)
 	}
@@ -280,7 +279,7 @@ func TestBudgetTransport_TakesOneSlotWhenTheCallerReservedFirst(t *testing.T) {
 			budget := budgetOn(t, server, youtubemusicapi.Settings{MinInterval: interval})
 			upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 			t.Cleanup(upstream.Close)
-			client := &http.Client{Transport: budget.Transport(nil)}
+			client := &http.Client{Transport: budget.Transport(http.DefaultTransport)}
 			if err := budget.Wait(context.Background()); err != nil {
 				t.Fatal(err)
 			}

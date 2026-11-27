@@ -1,9 +1,9 @@
 package handler_test
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/details"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
@@ -394,7 +394,7 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 }
 
 func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
-	upstream := providerrequests.StatusError{Status: http.StatusNotFound}
+	upstream := outbound.StatusError{Status: http.StatusNotFound}
 	router, _ := deezerRouter(t, &scriptedDeezerEnricher{resolveErr: upstream})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas", nil)

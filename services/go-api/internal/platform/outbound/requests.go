@@ -1,8 +1,6 @@
-package providerrequests
+package outbound
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
@@ -55,37 +53,27 @@ func WithHeader(key, value string) ReqOption {
 	}
 }
 
-func NewGetRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
+func newRequest(ctx context.Context, method, rawURL string, body io.Reader, opts []ReqOption) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, body)
 	if err != nil {
-		return nil, fmt.Errorf("build the GET request: %w", err)
+		return nil, fmt.Errorf("build the %s request: %w", method, err)
 	}
 	for _, opt := range opts {
 		opt(req)
 	}
 	return req, nil
+}
+
+func NewGetRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http.Request, error) {
+	return newRequest(ctx, http.MethodGet, rawURL, http.NoBody, opts)
 }
 
 func NewHeadRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, http.NoBody)
-	if err != nil {
-		return nil, fmt.Errorf("build the HEAD request: %w", err)
-	}
-	for _, opt := range opts {
-		opt(req)
-	}
-	return req, nil
+	return newRequest(ctx, http.MethodHead, rawURL, http.NoBody, opts)
 }
 
 func NewPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...ReqOption) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(retrysafe.Mark(ctx), http.MethodPost, rawURL, body)
-	if err != nil {
-		return nil, fmt.Errorf("build the POST request: %w", err)
-	}
-	for _, opt := range opts {
-		opt(req)
-	}
-	return req, nil
+	return newRequest(retrysafe.Mark(ctx), http.MethodPost, rawURL, body, opts)
 }
 
 func Send(client *http.Client, req *http.Request) (*http.Response, error) {
@@ -111,6 +99,19 @@ func withoutQuery(rawURL string) string {
 	return rawURL
 }
 
+func DoCapped(client *http.Client, req *http.Request, limit int64) (int, []byte, error) {
+	resp, err := Send(client, req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, limit))
+	if readErr != nil {
+		return resp.StatusCode, nil, fmt.Errorf("read the response body: %w", readErr)
+	}
+	return resp.StatusCode, payload, nil
+}
+
 func GetJSON(ctx context.Context, client *http.Client, rawURL string, dst any, opts ...ReqOption) error {
 	_, err := GetJSONWithStatus(ctx, client, rawURL, dst, opts...)
 	return err
@@ -121,6 +122,18 @@ func GetJSONWithStatus(ctx context.Context, client *http.Client, rawURL string, 
 	if err != nil {
 		return 0, err
 	}
+	return doJSON(client, req, dst)
+}
+
+func PostJSON(ctx context.Context, client *http.Client, rawURL string, body []byte, dst any, opts ...ReqOption) (int, error) {
+	req, err := NewPostRequest(ctx, rawURL, bytes.NewReader(body), opts...)
+	if err != nil {
+		return 0, err
+	}
+	return doJSON(client, req, dst)
+}
+
+func doJSON(client *http.Client, req *http.Request, dst any) (int, error) {
 	resp, err := Send(client, req)
 	if err != nil {
 		return 0, err
@@ -170,25 +183,6 @@ func GetText(ctx context.Context, client *http.Client, rawURL string, limit int6
 	return string(body), nil
 }
 
-func PostJSON(ctx context.Context, client *http.Client, rawURL string, body []byte, dst any, opts ...ReqOption) (int, error) {
-	req, err := NewPostRequest(ctx, rawURL, bytes.NewReader(body), opts...)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := Send(client, req)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, StatusError{Status: resp.StatusCode}
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, BodyCap)).Decode(dst); err != nil {
-		return resp.StatusCode, BadPayloadError{Cause: err}
-	}
-	return resp.StatusCode, nil
-}
-
 func PostBytesCappedOK(ctx context.Context, client *http.Client, rawURL string, body io.Reader, limit int64, opts ...ReqOption) (int, []byte, error) {
 	status, payload, err := PostBytesCapped(ctx, client, rawURL, body, limit, opts...)
 	if err != nil {
@@ -205,24 +199,5 @@ func PostBytesCapped(ctx context.Context, client *http.Client, rawURL string, bo
 	if err != nil {
 		return 0, nil, err
 	}
-	resp, err := Send(client, req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, limit))
-	if readErr != nil {
-		return resp.StatusCode, nil, fmt.Errorf("read the response body: %w", readErr)
-	}
-	return resp.StatusCode, payload, nil
-}
-
-func ArtworkFailure(source domain.ProviderKey, err error) (string, error) {
-	var statusErr StatusError
-	if errors.As(err, &statusErr) {
-		if statusErr.UpstreamStatus() == http.StatusNotFound || statusErr.UpstreamStatus() == http.StatusBadRequest {
-			return "", nil
-		}
-	}
-	return "", fmt.Errorf("%w: %s: %w", ports.ErrArtworkUnavailable, source, err)
+	return DoCapped(client, req, limit)
 }

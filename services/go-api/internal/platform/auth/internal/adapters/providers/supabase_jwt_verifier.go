@@ -142,7 +142,7 @@ func (v *SupabaseJWTVerifier) registerJWKS(ctx context.Context) error {
 		jwk.WithRefreshWindow(v.schedule.refreshWindow),
 		jwk.WithErrSink(jwksErrSink(func(err error) { v.onBackgroundRefreshError(ctx, err) })),
 	)
-	httpClient, err := outbound.NewClient(v.schedule.fetchTimeout, cappedJWKSBodyTransport{base: outbound.DefaultTransport()})
+	httpClient, err := outbound.NewClient(v.schedule.fetchTimeout, nil, outbound.WithBodyCap(maxJWKSBodyBytes))
 	if err != nil {
 		return fmt.Errorf("build JWKS client: %w", err)
 	}
