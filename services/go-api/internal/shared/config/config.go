@@ -168,7 +168,7 @@ func Load() (*Config, error) {
 		cfg.YtDLPRemoteComponents = defaultYtDLPRemoteComponents
 	}
 	cfg.normalize()
-	if err := cfg.validate(); err != nil {
+	if err := (validator{cfg}).validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	return cfg, nil
