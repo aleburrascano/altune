@@ -125,6 +125,25 @@ func TestObserveRoutes_EveryJSONRouteSendsNoStoreAndNosniff(t *testing.T) {
 	}
 }
 
+func TestObserveRoutes_EveryStreamSendsNosniff(t *testing.T) {
+	f := newObserveFixture(t, true)
+
+	streams := 0
+	for _, route := range observeRoutes(t, f.tree) {
+		if !strings.HasSuffix(route.path, "/stream") {
+			continue
+		}
+		streams++
+		rec := callObserve(t, f.tree, route.method, route.path, f.principal)
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s %s: X-Content-Type-Options = %q, want nosniff", route.method, route.path, got)
+		}
+	}
+	if streams == 0 {
+		t.Fatal("no observe stream routes found")
+	}
+}
+
 func TestObserveRoutes_DenialStillSendsNosniff(t *testing.T) {
 	f := newObserveFixture(t, true)
 

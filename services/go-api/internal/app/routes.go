@@ -27,6 +27,8 @@ func (a *application) mountRoutes(
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
+	requireAuth := authMiddleware(verifier, a.metrics)
+
 	r.Method(http.MethodGet, "/health", health.NewEndpoint(a.dependencyHealth, buildCommit, clock.Now))
 
 	router.MountV1(r, apiRequestTimeout, router.V1{
@@ -34,7 +36,7 @@ func (a *application) mountRoutes(
 			discoveryH.PublicRoutes(r, search.DefaultAuthFailureLimit)
 
 			r.Group(func(r chi.Router) {
-				r.Use(authMiddleware(verifier, a.metrics))
+				r.Use(requireAuth)
 
 				r.Route("/tracks", func(r chi.Router) {
 					r.Mount("/", cat.trackHandler.Routes())
@@ -52,7 +54,7 @@ func (a *application) mountRoutes(
 			})
 		},
 		LongLived: func(r chi.Router) {
-			r.Use(authMiddleware(verifier, a.metrics))
+			r.Use(requireAuth)
 
 			cat.streamHandler.StreamRoute(r)
 			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))

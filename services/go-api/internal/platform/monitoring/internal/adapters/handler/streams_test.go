@@ -300,7 +300,7 @@ func TestStreamLogs_AbsentRingIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestStreams_SendEventStreamNoCacheAndNosniffHeaders(t *testing.T) {
+func TestStreams_SendEventStreamNoCacheHeaders(t *testing.T) {
 	fx := newStreamFixture(t)
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
