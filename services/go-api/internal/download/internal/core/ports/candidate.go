@@ -46,10 +46,10 @@ func (c AudioCandidate) HasSourceKey() bool {
 
 func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {
 	for _, c := range results {
-		key := sourcekey.SourceKey(c.URL)
-		if key == "" {
+		if !c.HasSourceKey() {
 			continue
 		}
+		key := sourcekey.SourceKey(c.URL)
 		merged = mergeCandidate(merged, c, key, positionByKey)
 	}
 	return merged

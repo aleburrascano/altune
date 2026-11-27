@@ -53,7 +53,7 @@ func evaluation(t *testing.T, track candidateranking.Track, c download.AudioCand
 	t.Helper()
 	records := evaluations(t, track, c)
 	if len(records) != 1 {
-		t.Fatalf("logged %d candidate_evaluated records for %q, want 1", len(records), c.Title)
+		t.Fatalf("evaluated %d candidates for %q, want 1", len(records), c.Title)
 	}
 	return records[0]
 }

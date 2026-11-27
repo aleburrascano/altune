@@ -6,8 +6,10 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -479,5 +481,29 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 				t.Errorf("FallbackSkipped = %v, want %v", res.FallbackSkipped, tt.want)
 			}
 		})
+	}
+}
+
+func TestFindReportingOutage_LogsEachCandidateDroppedForNoSourceKey(t *testing.T) {
+	logs := logging.CaptureJSON(t, slog.LevelWarn)
+	keyless := ports.AudioCandidate{URL: "https://www.youtube.com/", Source: "stub"}
+	reg := service.NewSourceRegistry(&stubSource{name: "stub", found: []ports.AudioCandidate{candidate("u1"), keyless}})
+
+	res, err := reg.FindReportingOutage(context.Background(), ports.FindRequest{})
+	if err != nil {
+		t.Fatalf("FindReportingOutage: %v", err)
+	}
+
+	if len(res.Candidates) != 1 {
+		t.Fatalf("candidates = %d, want only the keyed one", len(res.Candidates))
+	}
+	dropped := 0
+	for line := range strings.Lines(logs.String()) {
+		if strings.Contains(line, "acquisition.candidate_dropped_no_source_key") && strings.Contains(line, keyless.URL) {
+			dropped++
+		}
+	}
+	if dropped != 1 {
+		t.Fatalf("drop log lines = %d, want 1 for the keyless candidate in %q", dropped, logs.String())
 	}
 }
