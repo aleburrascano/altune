@@ -187,7 +187,7 @@ func TestStoreRollback_SharedRefIsNeverQueued(t *testing.T) {
 		userID, own := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		sharedRef := "u/shared.mp3"
 		refs := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
-			ID: ids.NewTrackId(), UserId: userID, Status: ports.TrackReady, AudioRef: &sharedRef,
+			ID: ids.NewTrackId(), UserId: userID, Status: ports.TrackReady, Streamable: true, AudioRef: &sharedRef,
 		}})
 		queue := &recordingOrphanQueue{}
 		store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}

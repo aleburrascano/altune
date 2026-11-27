@@ -119,6 +119,7 @@ func contractGetReportsEachStatusAndWhetherTheTrackIsStreamable(t *testing.T, l 
 		if tt.withFile {
 			track = withFileOnRecord(track)
 		}
+		track.Streamable = tt.streamable
 		l.AddTrack(t, track)
 
 		if got := ownersView(t, l, track); got.Status != tt.status || got.Streamable != tt.streamable {

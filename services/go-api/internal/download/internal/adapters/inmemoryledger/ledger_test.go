@@ -34,7 +34,7 @@ func pendingTrack() inmemoryledger.LedgerTrack {
 func readyTrack() inmemoryledger.LedgerTrack {
 	track := pendingTrack()
 	ref := servingRef
-	track.Status, track.AudioRef = ports.TrackReady, &ref
+	track.Status, track.AudioRef, track.Streamable = ports.TrackReady, &ref, true
 	return track
 }
 

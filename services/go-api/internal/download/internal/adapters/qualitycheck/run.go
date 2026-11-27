@@ -125,7 +125,7 @@ func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
 		return track
 	}
 	ref := storedAudioRef
-	track.Status, track.AudioRef = ports.TrackReady, &ref
+	track.Status, track.AudioRef, track.Streamable = ports.TrackReady, &ref, true
 	if length := kase.Stored.Duration; length > 0 {
 		track.StoredDurationSeconds = &length
 	}
