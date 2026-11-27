@@ -55,6 +55,26 @@ const COPY_BY_CODE: Readonly<Partial<Record<ApiErrorCode, ErrorCopy>>> = {
     title: 'Favorites are full',
     body: 'Remove a favorite to add another.',
   },
+  'catalog.batch_too_large': {
+    title: 'Too many tracks at once',
+    body: 'Pick fewer tracks and try again.',
+  },
+  'playback.queue_too_long': {
+    title: 'Queue is too long',
+    body: 'Remove some tracks from the queue, then try again.',
+  },
+  'acquisition.retry_not_failed': {
+    title: 'Nothing to retry',
+    body: 'This track has not failed, so there is nothing to retry.',
+  },
+  'acquisition.reacquire_not_ready': {
+    title: 'Not ready yet',
+    body: "This track isn't ready to re-download yet. Try again in a minute.",
+  },
+  'discovery.provider_rate_limited': {
+    title: 'Music source is busy',
+    body: 'The music source is busy. Try again in a minute.',
+  },
 };
 
 function copyForCode(code: ApiErrorCode): ErrorCopy | undefined {

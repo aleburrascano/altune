@@ -61,6 +61,7 @@ else
   changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
   deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
 fi
+client_codes_file=../../client/src/shared/failure/core/apiErrorCodes.generated.ts
 touches() { grep -qE "$1" <<<"$changed"$'\n'"$deleted"; }
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
@@ -343,6 +344,13 @@ go_affected() {
       }
     }'
 }
+
+if touches '^services/go-api/internal/shared/apierror/|^services/go-api/scripts/genclientcodes/|^client/src/shared/failure/core/apiErrorCodes\.generated\.ts$' || [ $full = 1 ]; then
+  go_pin services/go-api
+  if [ -d services/go-api/scripts/genclientcodes ] && need go "client error codes"; then
+    check "client error codes match the go-api catalog (genclientcodes --check)" services/go-api go run ./scripts/genclientcodes --check "$client_codes_file"
+  fi
+fi
 
 if touches '^services/go-api/'; then
   m=services/go-api

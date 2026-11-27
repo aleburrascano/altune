@@ -145,7 +145,7 @@ export function logFailure(
   warn('[api] request failed', {
     method,
     path: path.split('?')[0],
-    ...(correlationId === undefined ? {} : { correlationId }),
+    corr_id: correlationId,
     ...failureFields(error),
   });
 }

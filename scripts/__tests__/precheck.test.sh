@@ -680,6 +680,7 @@ fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
 "run ./scripts/lintdoors"*) exit "\${GO_LINTDOORS_STUB_RC:-0}" ;;
+"run ./scripts/genclientcodes"*) exit "\${GO_GENCLIENTCODES_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
 "test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi; [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 "mod tidy"*) exit "\${GO_MOD_TIDY_STUB_RC:-0}" ;;
@@ -1065,6 +1066,22 @@ expect_log "go run ./scripts/lintdoors --exports ."
 GO_LINTDOORS_STUB_RC=1 run_with_tools
 expect_rc 1
 expect_out "FAIL  go-api module doors"
+
+CASE="an edit to only the generated client codes file runs the genclientcodes check, and a stale file turns a push red"
+new_repo
+add_go_fixture
+mkdir -p "$WORK/repo/services/go-api/scripts/genclientcodes" "$WORK/repo/client/src/shared/failure/core"
+(
+    cd "$WORK/repo" || exit 1
+    printf 'export const API_ERROR_CODES = [] as const;\n' >client/src/shared/failure/core/apiErrorCodes.generated.ts
+    git add -A
+    git commit -qm "edit generated codes"
+)
+run_push_scoped
+expect_log "go run ./scripts/genclientcodes --check"
+GO_GENCLIENTCODES_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  client error codes match the go-api catalog"
 
 CASE="a change to go.sum is checked for tidiness and a dirty go.sum turns a push red"
 new_repo

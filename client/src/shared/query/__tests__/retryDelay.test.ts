@@ -124,19 +124,38 @@ describe('the app-wide QueryClient retries only transient failures, at most five
 const TOO_MANY_REQUESTS = 429;
 const ASKED_MS = 4_000;
 const AN_HOUR_MS = 3_600_000;
+const FLOOR_MS = 1_000;
+const SPREAD = 0.25;
+const ALMOST_ONE = 0.999999;
+
+function askedBy(retryAfterMs: number): ApiError {
+  return new ApiError(TOO_MANY_REQUESTS, 'x', undefined, undefined, { retryAfterMs });
+}
+
+function delayWith(random: number, error: ApiError): number {
+  return createTransientRetryOptions({ random: () => random }).retryDelay(0, error);
+}
 
 describe('a server-asked delay', () => {
-  it('replaces the backoff when the error carries Retry-After', () => {
-    const error = new ApiError(TOO_MANY_REQUESTS, 'x', undefined, undefined, {
-      retryAfterMs: ASKED_MS,
-    });
-    expect(transientRetryOptions.retryDelay(0, error)).toBe(ASKED_MS);
+  it('replaces the backoff and is never earlier than the server asked', () => {
+    expect(delayWith(0, askedBy(ASKED_MS))).toBe(ASKED_MS);
+  });
+
+  it('spreads clients told the same delay over a quarter more, so they do not retry together', () => {
+    const latest = delayWith(ALMOST_ONE, askedBy(ASKED_MS));
+
+    expect(latest).toBeGreaterThan(ASKED_MS);
+    expect(latest).toBeLessThanOrEqual(ASKED_MS * (1 + SPREAD));
+  });
+
+  it('never retries at once when the server asks for zero seconds', () => {
+    expect(delayWith(0, askedBy(0))).toBe(FLOOR_MS);
   });
 
   it('is capped so a hostile header cannot park the client', () => {
-    const error = new ApiError(TOO_MANY_REQUESTS, 'x', undefined, undefined, {
-      retryAfterMs: AN_HOUR_MS,
-    });
-    expect(transientRetryOptions.retryDelay(0, error)).toBe(RETRY_BACKOFF_CAP_MS);
+    expect(delayWith(0, askedBy(AN_HOUR_MS))).toBe(RETRY_BACKOFF_CAP_MS);
+    expect(delayWith(ALMOST_ONE, askedBy(AN_HOUR_MS))).toBeLessThanOrEqual(
+      RETRY_BACKOFF_CAP_MS * (1 + SPREAD),
+    );
   });
 });

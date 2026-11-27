@@ -161,6 +161,21 @@ const syntaxBannedEverywhere = [
     message: HTTP_STATUS_BY_NAME,
   },
   {
+    selector:
+      'BinaryExpression:matches([right.property.name=/[sS]tatus$/], [right.name=/[sS]tatus$/]) > Literal.left[value>=100][value<600]',
+    message: HTTP_STATUS_BY_NAME,
+  },
+  {
+    selector:
+      'SwitchStatement:matches([discriminant.property.name=/[sS]tatus$/], [discriminant.name=/[sS]tatus$/]) > SwitchCase > Literal.test[value>=100][value<600]',
+    message: HTTP_STATUS_BY_NAME,
+  },
+  {
+    selector:
+      'VariableDeclarator[id.name=/(STATUSES|[sS]tatuses)$/] Literal[value>=100][value<600]',
+    message: HTTP_STATUS_BY_NAME,
+  },
+  {
     selector: "CallExpression[callee.object.name='Promise'][callee.property.name='race']",
     message: DEADLINES_GO_THROUGH_WITH_DEADLINE,
   },
