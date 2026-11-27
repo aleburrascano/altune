@@ -52,22 +52,6 @@ type audioSourcesStaging struct {
 	ytmCanary      *download.YouTubeMusicSearchClient
 }
 
-type catalogServicesStaging struct {
-	catalogTrackRepo      *library.PostgresCatalogTrackRepository
-	orphanedAudio         *library.PostgresOrphanedAudioRepository
-	addTrackSvc           *library.AddTrackService
-	listTracksSvc         *library.ListTracksService
-	deleteTrackSvc        *library.DeleteTrackService
-	setTrackNumberSvc     *library.SetTrackNumberService
-	playlistLifecycleSvc  *library.PlaylistLifecycleService
-	playlistMembershipSvc *library.PlaylistMembershipService
-	backfillFeaturedSvc   *library.FillFeaturedArtistsService
-	listFeaturingSvc      *library.ListFeaturingService
-	getTrackStatusSvc     *library.GetTrackStatusService
-	streamTrackSvc        *library.StreamTrackService
-	audioURLSvc           *library.AudioLinkService
-}
-
 func (a *application) wireCatalog(
 	ctx context.Context,
 	transport http.RoundTripper,
@@ -80,11 +64,24 @@ func (a *application) wireCatalog(
 	if err != nil {
 		return catalogWiring{}, err
 	}
-	services, err := a.wireCatalogServices(tap, featuredBridge(disc), audio)
+	dbMetrics := library.NewDBCallMetrics(a.metrics)
+	module, err := library.New(library.Deps{
+		CatalogTracks:   library.NewPostgresCatalogTrackRepository(a.pool, dbMetrics),
+		Playlists:       library.NewPostgresPlaylistRepository(a.pool, dbMetrics),
+		OrphanedAudio:   library.NewPostgresOrphanedAudioRepository(a.pool, dbMetrics),
+		Events:          tap,
+		Scheduler:       audio.scheduler,
+		AudioStore:      audio.audioStore,
+		AudioLinks:      audio.audioLinks,
+		AudioMetrics:    library.NewAudioStoreMetrics(a.metrics),
+		Featured:        featuredBridge(disc),
+		StreamRecovery:  a.jobs.Switch(jobs.StreamRecovery),
+		PrefetchEnabled: a.cfg.AudioPrefetchEnabled,
+	})
 	if err != nil {
-		return catalogWiring{}, err
+		return catalogWiring{}, fmt.Errorf("build the library: %w", err)
 	}
-	return a.wireCatalogHandlers(audio, services), nil
+	return a.wireCatalogHandlers(audio, module), nil
 }
 
 func featuredBridge(disc *search.Discovery) library.FeaturedArtistResolver {
@@ -105,7 +102,8 @@ func (a *application) wireAudioSources(
 		return audioSourcesStaging{}, fmt.Errorf("call failed: %w", err)
 	}
 	audioStore := backend.AudioStore
-	trackRepo := library.NewPostgresTrackRepository(a.pool, library.NewDBCallMetrics(a.metrics))
+	dbMetrics := library.NewDBCallMetrics(a.metrics)
+	trackRepo := library.NewPostgresTrackRepository(a.pool, dbMetrics)
 	sources, tools, err := a.liveTiers(ctx, transport, audioStore)
 	if err != nil {
 		return audioSourcesStaging{}, err
@@ -159,50 +157,7 @@ func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring
 	}, nil
 }
 
-func (a *application) wireCatalogServices(
-	tap *monitoring.EventTap,
-	featuredBridge library.FeaturedArtistResolver,
-	audio audioSourcesStaging,
-) (catalogServicesStaging, error) {
-	dbMetrics := library.NewDBCallMetrics(a.metrics)
-	catalogTrackRepo := library.NewPostgresCatalogTrackRepository(a.pool, dbMetrics)
-	playlistRepo := library.NewPostgresPlaylistRepository(a.pool, dbMetrics)
-	orphanedAudio := library.NewPostgresOrphanedAudioRepository(a.pool, dbMetrics)
-	audioStoreMetrics := library.NewAudioStoreMetrics(a.metrics)
-
-	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, audio.scheduler, clock.Now, ids.Real)
-	if err != nil {
-		return catalogServicesStaging{}, fmt.Errorf("build the add-track service: %w", err)
-	}
-	playlistLifecycleSvc, err := library.NewPlaylistLifecycleService(playlistRepo, tap, clock.Now, ids.Real)
-	if err != nil {
-		return catalogServicesStaging{}, fmt.Errorf("build the playlist lifecycle service: %w", err)
-	}
-	playlistMembershipSvc, err := library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, tap, clock.Now)
-	if err != nil {
-		return catalogServicesStaging{}, fmt.Errorf("build the playlist membership service: %w", err)
-	}
-
-	return catalogServicesStaging{
-		catalogTrackRepo:      catalogTrackRepo,
-		orphanedAudio:         orphanedAudio,
-		addTrackSvc:           addTrackSvc,
-		listTracksSvc:         library.NewListTracksService(catalogTrackRepo),
-		deleteTrackSvc:        library.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, tap, audioStoreMetrics, orphanedAudio),
-		setTrackNumberSvc:     library.NewSetTrackNumberService(catalogTrackRepo),
-		playlistLifecycleSvc:  playlistLifecycleSvc,
-		playlistMembershipSvc: playlistMembershipSvc,
-		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, clock.Now),
-		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
-		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, audio.scheduler, audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
-		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioLinks, clock.Now, audioStoreMetrics),
-	}, nil
-}
-
-func (a *application) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
-	featuredArtistHandler := library.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
-
+func (a *application) wireCatalogHandlers(audio audioSourcesStaging, module *library.Module) catalogWiring {
 	var retryH *download.RetryHandler
 	var reacquireH *download.ReacquireHandler
 	if audio.acquisitionOn {
@@ -214,13 +169,13 @@ func (a *application) wireCatalogHandlers(audio audioSourcesStaging, svc catalog
 	return catalogWiring{
 		trackRepo:         audio.trackRepo,
 		audioStore:        audio.audioStore,
-		orphanedAudio:     svc.orphanedAudio,
-		setTrackNumberSvc: svc.setTrackNumberSvc,
-		trackHandler:      library.MustNewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler, clock.Now),
-		libraryHandler:    library.NewLibraryHandler(library.NewLibraryLensService(svc.catalogTrackRepo)),
-		playlistHandler:   library.MustNewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc, clock.Now),
-		streamHandler:     library.MustNewStreamHandler(svc.streamTrackSvc, clock.Now),
-		audioURLHandler:   library.MustNewAudioURLHandler(svc.audioURLSvc, clock.Now, library.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled)),
+		orphanedAudio:     module.OrphanedAudio,
+		setTrackNumberSvc: module.SetTrackNumber,
+		trackHandler:      module.TrackHandler,
+		libraryHandler:    module.LibraryHandler,
+		playlistHandler:   module.PlaylistHandler,
+		streamHandler:     module.StreamHandler,
+		audioURLHandler:   module.AudioURLHandler,
 		retryH:            retryH,
 		reacquireH:        reacquireH,
 		acquisitionOn:     audio.acquisitionOn,
