@@ -47,10 +47,8 @@ not_logged() {
 }
 
 ARGS=()
-t 2 "a missing osv-scanner.toml is refused" "osv-scanner.toml is missing"
-printf '' >"$work/osv-scanner.toml"
 t 0 "clean scans pass" ""
-logged "--config $(cd "$work" && pwd -P)/osv-scanner.toml" "the ignore list is passed to osv-scanner"
+not_logged "--config" "no ignore list is passed to osv-scanner"
 logged "/services/go-api govulncheck ./..." "go-api is scanned from its own module"
 logged "/services/overseer govulncheck ./..." "overseer is scanned from its own module"
 logged "--lockfile pnpm-lock.yaml" "the pnpm lockfile is scanned"

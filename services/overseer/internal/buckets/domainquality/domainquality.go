@@ -82,7 +82,7 @@ func New(deps Deps) *Bucket {
 		reader:     deps.Reader,
 		discoTrend: core.NewRingStore(discoTrendCapacity),
 		series:     core.DiscardSeries{},
-		acqSLO:     core.NewSLOWindow(core.SLO{Journey: "get a song", Name: "a requested song is acquired", Target: 0.9}),
+		acqSLO:     core.NewSLOWindow(core.SongAcquiredSLO),
 		now:        deps.Now,
 	}
 	if b.reader == nil {

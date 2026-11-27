@@ -15,6 +15,8 @@ type SLO struct {
 	Journey string
 	Name    string
 	Target  float64
+
+	MinTotal uint64
 }
 
 type SLOStatus struct {
@@ -88,7 +90,7 @@ func (w *SLOWindow) Status(now time.Time) SLOStatus {
 		Total:           total,
 		BudgetRemaining: 1,
 	}
-	if total == 0 {
+	if total == 0 || total < w.slo.MinTotal {
 		return status
 	}
 	status.Measured = true

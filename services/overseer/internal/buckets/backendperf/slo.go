@@ -18,8 +18,8 @@ type searchSLOs struct {
 
 func newSearchSLOs() searchSLOs {
 	return searchSLOs{
-		availability: core.NewSLOWindow(core.SLO{Journey: "find music", Name: "search answers without a server error", Target: 0.995}),
-		latency:      core.NewSLOWindow(core.SLO{Journey: "find music", Name: "search answers within 1 s", Target: 0.95}),
+		availability: core.NewSLOWindow(core.SearchAvailabilitySLO),
+		latency:      core.NewSLOWindow(core.SearchLatencySLO),
 	}
 }
 

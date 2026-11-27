@@ -10,7 +10,6 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 failed=0
 broken=0
-[ -f "$root/osv-scanner.toml" ] || { echo "vuln-scan: $root/osv-scanner.toml is missing, so the ignore list for known unfixable advisories cannot be read" >&2; exit 2; }
 tools=${VULN_SCAN_TOOLS:-${XDG_CACHE_HOME:-$HOME/.cache}/altune-vuln-scan}
 
 tool() {
@@ -50,7 +49,6 @@ scan_lockfiles() {
   for attempt in 1 2 3; do
     rc=0
     "$bin" scan source \
-      --config "$root/osv-scanner.toml" \
       --lockfile services/go-api/go.mod \
       --lockfile services/overseer/go.mod \
       --lockfile pnpm-lock.yaml \
@@ -61,7 +59,7 @@ scan_lockfiles() {
   done
   case $rc in
     0) ;;
-    1) echo "vuln-scan: osv-scanner found a known vulnerability in the files above; an advisory with no fix can be ignored in osv-scanner.toml until a date" >&2; failed=1 ;;
+    1) echo "vuln-scan: osv-scanner found a known vulnerability in the files above; upgrade the package, there is no ignore list" >&2; failed=1 ;;
     *) echo "vuln-scan: osv-scanner could not run (exit $rc), so the lockfiles were not checked" >&2; broken=1 ;;
   esac
 }
