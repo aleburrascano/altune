@@ -6,15 +6,8 @@ import (
 	"log/slog"
 )
 
-func (s *BackgroundAcquisitionScheduler) closeAdmission() {
-	s.admitMu.Lock()
-	defer s.admitMu.Unlock()
-	s.closed.Store(true)
-	s.closeOnce.Do(func() { close(s.stop) })
-}
-
 func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
-	s.closeAdmission()
+	s.gate.close()
 
 	drained := s.drainWithinBudget(ctx)
 
@@ -32,7 +25,7 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 }
 
 func (s *BackgroundAcquisitionScheduler) drainCancelledJobs(ctx context.Context) bool {
-	if s.jobs.Drain(ctx) {
+	if s.claimer.jobs.Drain(ctx) {
 		return true
 	}
 	slog.WarnContext(ctx, "acquisition scheduler drain timed out waiting for cancelled jobs to release")
@@ -42,7 +35,7 @@ func (s *BackgroundAcquisitionScheduler) drainCancelledJobs(ctx context.Context)
 func (s *BackgroundAcquisitionScheduler) drainWithinBudget(ctx context.Context) bool {
 	budget, cancel := context.WithTimeout(ctx, s.drainBudget)
 	defer cancel()
-	if s.jobs.Drain(budget) {
+	if s.claimer.jobs.Drain(budget) {
 		slog.InfoContext(ctx, "acquisition scheduler drained")
 		return true
 	}

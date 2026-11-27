@@ -24,12 +24,12 @@ func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId id
 
 func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId ids.UserId, trackId ids.TrackId, kind ports.JobKind) error {
 	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
-	if s.closed.Load() {
+	if s.gate.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", logging.KeyTrackID, trackId.String())
 		return acqdomain.ErrSchedulerShutdown
 	}
-	if s.paused.Load() {
+	if s.gate.paused.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.schedule_while_paused", logging.KeyTrackID, trackId.String())
 		return acqdomain.ErrAcquisitionPaused
@@ -59,7 +59,7 @@ func (s *BackgroundAcquisitionScheduler) primeEnqueue(trackId ids.TrackId, userI
 }
 
 func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trackId ids.TrackId, userId ids.UserId, kind ports.JobKind) error {
-	if s.closed.Load() {
+	if s.gate.closed.Load() {
 		s.pending.untrack(trackId.String())
 	}
 	slog.InfoContext(ctx, "acquisition.scheduling", logging.KeyTrackID, trackId.String(), "kind", string(kind))

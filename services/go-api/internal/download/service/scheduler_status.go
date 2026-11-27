@@ -23,7 +23,7 @@ func (s *BackgroundAcquisitionScheduler) Status(ctx context.Context) ports.Statu
 		Failed:           failed,
 		Rejected:         s.rejected.Load(),
 		VerifySkipped:    s.verifySkipped(),
-		Paused:           s.paused.Load(),
+		Paused:           s.gate.paused.Load(),
 		QueueDepth:       pending,
 		OldestPendingAge: oldestAge,
 		QueueDepthKnown:  depthKnown,
