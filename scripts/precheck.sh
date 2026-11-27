@@ -378,7 +378,7 @@ if touches '^services/go-api/'; then
       fi
     else
       affected=()
-      if touches "^$m/(go\.(mod|sum)|\.golangci[^/]*|_rules/.*|tools\.go)\$" || ! affected_out=$(go_affected $m); then
+      if [ "${PRECHECK_WHOLE_MODULE:-}" = 1 ] || touches "^$m/(go\.(mod|sum)|\.golangci[^/]*|_rules/.*|tools\.go)\$" || ! affected_out=$(go_affected $m); then
         whole_module=1
       else
         whole_module=0

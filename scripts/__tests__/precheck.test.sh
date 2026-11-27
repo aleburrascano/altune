@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_NO_CACHE HEAVY_HELD
+unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_NO_CACHE PRECHECK_WHOLE_MODULE HEAVY_HELD
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FAILURES=0
@@ -1283,6 +1283,26 @@ add_go_fixture
     git commit -qm "lint config"
 )
 run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints the whole module when a rule file changes"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/_rules
+    printf 'package gorules\n' >services/go-api/_rules/x.rules
+    git add -A
+    git commit -qm "rule"
+)
+run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints the whole module when the caller says so, as CI does on a push to main"
+new_repo
+add_go_fixture
+edit_go_file internal/search/adapters/x/x.go
+PRECHECK_WHOLE_MODULE=1 run_with_tools
 expect_log "--allow-serial-runners ./..."
 
 CASE="--full lints and tests a one-package change with its importers and still runs govulncheck over the module"

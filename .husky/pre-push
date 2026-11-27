@@ -13,17 +13,28 @@ clean_env() { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE "$@"; }
 dir=.
 base=
 if [ -f scripts/ci/merge-result.sh ] && git rev-parse --git-dir >/dev/null 2>&1; then
-  if git remote get-url gitea >/dev/null 2>&1 && git rev-parse --verify --quiet gitea/main >/dev/null; then base=gitea/main; else base=origin/main; fi
+  if git remote get-url gitea >/dev/null 2>&1 && git rev-parse --verify --quiet gitea/main >/dev/null; then remote=gitea; else remote=origin; fi
+  base=$remote/main
+  git fetch -q "$remote" main 2>/dev/null || echo "pre-push: could not fetch $remote main, so $base is as of the last fetch"
   if git rev-parse --verify --quiet "$base" >/dev/null && ! git merge-base --is-ancestor "$base" HEAD; then
-    merged=$(clean_env bash scripts/ci/merge-result.sh "$(pwd)" "$base" HEAD) || {
-      echo "❌ pre-push: this branch does not merge with $base, which is the tree CI checks. Rebase onto it (git fetch gitea main, then git rebase gitea/main), fix what conflicts, and push again."
-      exit 1
-    }
-    wt="$(git rev-parse --path-format=absolute --git-common-dir)/prepush-merge"
+    mrc=0
+    merged=$(clean_env bash scripts/ci/merge-result.sh "$(pwd)" "$base" HEAD) || mrc=$?
+    case $mrc in
+      0) ;;
+      1) echo "❌ pre-push: this branch conflicts with $base, which is the tree CI checks. Rebase onto it (git rebase $base), fix what conflicts, and push again."; exit 1 ;;
+      *) echo "❌ pre-push: could not build the merge of this branch with $base (see the line above), so the tree CI checks was not tested. Fix that and push again."; exit 1 ;;
+    esac
+    cache=${XDG_CACHE_HOME:-$HOME/.cache}/altune/prepush-merge
+    wt=$cache/$(pwd | cksum | cut -d' ' -f1)
+    mkdir -p "$cache" || exit 1
+    exec 9>"$wt.lock"
+    flock -w 900 9 || { echo "❌ pre-push: another push from this checkout holds the merge check for over 15 minutes; try again."; exit 1; }
     if [ -e "$wt/.git" ]; then
       git -C "$wt" checkout -q --detach -f "$merged" && git -C "$wt" clean -qfd || exit 1
     else
-      git worktree add -q --detach "$wt" "$merged" || exit 1
+      rm -rf "$wt"
+      git worktree prune
+      git worktree add -q --detach "$wt" "$merged" || { echo "❌ pre-push: could not make the merge check worktree $wt."; exit 1; }
     fi
     dir=$wt
     echo "pre-push: $base has moved on, so checking the merge result $(printf %.12s "$merged"), the tree CI checks, not this branch alone"
