@@ -52,8 +52,7 @@ type BackgroundAcquisitionScheduler struct {
 
 	workers int
 
-	cancel  context.CancelFunc
-	baseCtx context.Context
+	cancel context.CancelFunc
 
 	closed    atomic.Bool
 	paused    atomic.Bool
@@ -161,12 +160,8 @@ func (p SchedulerPorts) validate(owner string) error {
 	)
 }
 
-type ProcessRoot struct{ ctx context.Context }
-
-func NewProcessRoot(ctx context.Context) ProcessRoot { return ProcessRoot{ctx: ctx} }
-
 func NewBackgroundAcquisitionScheduler(
-	processRoot ProcessRoot,
+	parent context.Context,
 	svc acquirer,
 	workers int,
 	now clock.Func,
@@ -177,13 +172,12 @@ func NewBackgroundAcquisitionScheduler(
 	if err := errors.Join(missingPort(owner, "clock", now), wiring.validate(owner)); err != nil {
 		return nil, err
 	}
-	ctx, cancel := background.DetachCancelable(processRoot.ctx)
+	ctx, cancel := background.DetachCancelable(parent)
 	s := &BackgroundAcquisitionScheduler{
 		svc:                 svc,
 		pending:             newPendingTracker(),
 		workers:             max(workers, 1),
 		cancel:              cancel,
-		baseCtx:             ctx,
 		stop:                make(chan struct{}),
 		wake:                make(chan struct{}, 1),
 		lanes:               newLaneWakes(),
@@ -209,43 +203,43 @@ func NewBackgroundAcquisitionScheduler(
 	}
 	logVerification(ctx, s.verification)
 	s.queue = wiring.Queue(s.wake, s.now)
-	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
+	s.runners.Track(func() { s.notifier.Listen(ctx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
 
 	for range s.workers {
-		s.runners.Track(func() { s.runWorker(s.claimJob, s.lanes.acquire) })
+		s.runners.Track(func() { s.runWorker(ctx, s.claimJob, s.lanes.acquire) })
 	}
-	s.startUpgradeWorkers()
+	s.startUpgradeWorkers(ctx)
 	return s, nil
 }
 
 func MustNewBackgroundAcquisitionScheduler(
-	processRoot ProcessRoot,
+	parent context.Context,
 	svc acquirer,
 	workers int,
 	now clock.Func,
 	wiring SchedulerPorts,
 	opts ...func(*BackgroundAcquisitionScheduler),
 ) *BackgroundAcquisitionScheduler {
-	s, err := NewBackgroundAcquisitionScheduler(processRoot, svc, workers, now, wiring, opts...)
+	s, err := NewBackgroundAcquisitionScheduler(parent, svc, workers, now, wiring, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return s
 }
 
-func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
+func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers(ctx context.Context) {
 	if s.upgrades.none {
 		return
 	}
 	queue, ok := s.queue.(ports.UpgradeJobQueue)
 	if !ok {
-		slog.ErrorContext(s.baseCtx, "acquisition.upgrade_lane_unavailable", "reason", "the job queue cannot claim upgrade jobs")
+		slog.ErrorContext(ctx, "acquisition.upgrade_lane_unavailable", "reason", "the job queue cannot claim upgrade jobs")
 		return
 	}
-	claim := func() (<-chan struct{}, bool) { return s.claimFrom(queue.ClaimUpgrade) }
+	claim := func(ctx context.Context) (<-chan struct{}, bool) { return s.claimFrom(ctx, queue.ClaimUpgrade) }
 	for range s.upgrades.workers {
-		s.runners.Track(func() { s.runWorker(claim, s.lanes.upgrade) })
+		s.runners.Track(func() { s.runWorker(ctx, claim, s.lanes.upgrade) })
 	}
 }
 
@@ -283,12 +277,12 @@ func (s *BackgroundAcquisitionScheduler) Resume() {
 	notifyWake(s.wake)
 }
 
-func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (<-chan struct{}, bool), wake chan struct{}) {
+func (s *BackgroundAcquisitionScheduler) runWorker(ctx context.Context, claim func(context.Context) (<-chan struct{}, bool), wake chan struct{}) {
 	for {
 		if s.closed.Load() {
 			return
 		}
-		done, ok := s.nextJob(claim)
+		done, ok := s.nextJob(ctx, claim)
 		if !ok && !s.idleWait(wake) {
 			return
 		}
@@ -300,44 +294,44 @@ func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (<-chan struct{}
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) nextJob(claim func() (<-chan struct{}, bool)) (<-chan struct{}, bool) {
+func (s *BackgroundAcquisitionScheduler) nextJob(ctx context.Context, claim func(context.Context) (<-chan struct{}, bool)) (<-chan struct{}, bool) {
 	if s.paused.Load() {
 		return nil, false
 	}
-	return claim()
+	return claim(ctx)
 }
 
-func (s *BackgroundAcquisitionScheduler) claimJob() (<-chan struct{}, bool) {
-	return s.claimFrom(s.queue.Claim)
+func (s *BackgroundAcquisitionScheduler) claimJob(ctx context.Context) (<-chan struct{}, bool) {
+	return s.claimFrom(ctx, s.queue.Claim)
 }
 
 type claimFunc func(ctx context.Context, lease time.Duration) (ports.Job, error)
 
-func (s *BackgroundAcquisitionScheduler) claimFrom(claim claimFunc) (<-chan struct{}, bool) {
+func (s *BackgroundAcquisitionScheduler) claimFrom(ctx context.Context, claim claimFunc) (<-chan struct{}, bool) {
 	s.admitMu.RLock()
 	defer s.admitMu.RUnlock()
 	if s.closed.Load() {
 		return nil, false
 	}
-	job, ok := s.claimNext(claim)
+	job, ok := s.claimNext(ctx, claim)
 	if !ok {
 		return nil, false
 	}
 	done := make(chan struct{})
 	s.jobs.Track(func() {
 		defer close(done)
-		s.runClaimedJob(s.baseCtx, job)
+		s.runClaimedJob(ctx, job)
 	})
 	return done, true
 }
 
-func (s *BackgroundAcquisitionScheduler) claimNext(claim claimFunc) (ports.Job, bool) {
-	job, err := claim(s.baseCtx, s.leaseDuration)
+func (s *BackgroundAcquisitionScheduler) claimNext(ctx context.Context, claim claimFunc) (ports.Job, bool) {
+	job, err := claim(ctx, s.leaseDuration)
 	if errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		return ports.Job{}, false
 	}
 	if err != nil {
-		slog.ErrorContext(s.baseCtx, "acquisition.claim_failed", logging.KeyError, err)
+		slog.ErrorContext(ctx, "acquisition.claim_failed", logging.KeyError, err)
 		return ports.Job{}, false
 	}
 	return job, true
@@ -395,16 +389,12 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(ctx context.Context, job 
 
 	work := s.startClaimedJob(job)
 	jobErr := s.execClaimedJob(jobCtx, run, work)
+	s.completeClaimedJob(jobCtx, job.TrackID, jobEnd{err: jobErr, shutdown: ctx.Err() != nil})
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
-	finishCtx, cancelFinish := s.finishContextOf(jobCtx)
+	finishCtx, cancelFinish := background.DetachCancelable(jobCtx)
 	defer cancelFinish()
-	s.finishJob(finishCtx, job, jobErr)
-}
-
-func (s *BackgroundAcquisitionScheduler) finishContextOf(jobCtx context.Context) (context.Context, context.CancelFunc) {
-	ctx, cancel := background.DetachCancelable(s.baseCtx)
-	return logging.ContextWithCorrelationID(ctx, logging.CorrelationIDFromContext(jobCtx)), cancel
+	s.finishJob(finishCtx, job, jobEnd{err: jobErr, shutdown: ctx.Err() != nil})
 }
 
 func (s *BackgroundAcquisitionScheduler) releaseWithin(ctx context.Context, job ports.Job, delay time.Duration) error {
@@ -473,8 +463,12 @@ func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, run
 	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job) }, logging.KeyTrackID, trackId.String()); panicked != nil {
 		err = errJobPanicked
 	}
-	s.completeClaimedJob(ctx, trackId, err)
 	return err
+}
+
+type jobEnd struct {
+	err      error
+	shutdown bool
 }
 
 const LeaseLostReason = "lease_lost"
@@ -487,9 +481,9 @@ type jobCompletion struct {
 	attrs   []any
 }
 
-func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, trackId ids.TrackId, err error) {
+func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, trackId ids.TrackId, end jobEnd) {
 	defer background.RecoverContext(ctx, "acquisition.job_completion_panic", logging.KeyTrackID, trackId.String())
-	done := s.classifyJob(ctx, err)
+	done := s.classifyJob(ctx, end)
 	record := s.log.complete(trackId, done.state, done.reason)
 	if done.state != ports.JobRetrying {
 		s.recordOutcome(ctx, record)
@@ -501,11 +495,12 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 
 var leaseLost = jobCompletion{state: ports.JobCancelled, reason: LeaseLostReason, level: slog.LevelWarn, message: "background acquisition cancelled after lease loss"}
 
-func (s *BackgroundAcquisitionScheduler) classifyJob(ctx context.Context, err error) jobCompletion {
+func (s *BackgroundAcquisitionScheduler) classifyJob(ctx context.Context, end jobEnd) jobCompletion {
+	err := end.err
 	switch {
 	case errors.Is(err, errJobPanicked):
 		return jobCompletion{state: ports.JobFailed, reason: "panic"}
-	case err != nil && s.baseCtx.Err() != nil:
+	case err != nil && end.shutdown:
 		return jobCompletion{state: ports.JobCancelled, reason: "shutdown", level: slog.LevelWarn, message: "background acquisition cancelled for shutdown"}
 	case errors.Is(err, replacement.ErrKept):
 		return jobCompletion{state: ports.JobKept}
@@ -564,18 +559,18 @@ var errJobPanicked = errors.New("acquisition job panicked")
 
 type acquisitionRun func(ctx context.Context, job ports.AcquisitionJob) error
 
-func (s *BackgroundAcquisitionScheduler) finishJob(ctx context.Context, job ports.Job, jobErr error) {
+func (s *BackgroundAcquisitionScheduler) finishJob(ctx context.Context, job ports.Job, end jobEnd) {
 	defer s.pending.untrack(job.TrackID.String())
 
-	if s.baseCtx.Err() != nil {
+	if end.shutdown {
 		s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, 0))
 		return
 	}
-	if errors.Is(jobErr, errJobPanicked) {
+	if errors.Is(end.err, errJobPanicked) {
 		s.releasePanickedJob(ctx, job)
 		return
 	}
-	if errors.Is(jobErr, ErrAcquisitionRetryable) {
+	if errors.Is(end.err, ErrAcquisitionRetryable) {
 		s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, retryBackoff(job.Run, s.unit)))
 		return
 	}

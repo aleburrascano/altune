@@ -1,6 +1,9 @@
 package ports
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type AcquisitionTools struct {
 	Ffprobe bool
@@ -40,5 +43,5 @@ type DownloadStatusReport struct {
 }
 
 type AcquisitionReader interface {
-	Status() DownloadStatusReport
+	Status(_ context.Context) DownloadStatusReport
 }

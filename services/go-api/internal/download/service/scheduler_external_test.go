@@ -266,7 +266,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 	<-queue.outcome
 
 	var records []ports.JobRecord
-	for _, r := range scheduler.Status().Recent {
+	for _, r := range scheduler.Status(t.Context()).Recent {
 		if r.TrackID == trackID.String() {
 			records = append(records, r)
 		}
@@ -379,7 +379,7 @@ func TestScheduler_ShutdownWaitsForAnInFlightJobToFinishAndDoesNotCancelIt(t *te
 		default:
 			t.Fatal("Shutdown did not return after the in-flight job finished")
 		}
-		if status := scheduler.Status(); status.Succeeded != 1 || status.Failed != 0 {
+		if status := scheduler.Status(t.Context()); status.Succeeded != 1 || status.Failed != 0 {
 			t.Errorf("succeeded = %d, failed = %d, want the job to finish normally (1, 0), not be cancelled", status.Succeeded, status.Failed)
 		}
 	})

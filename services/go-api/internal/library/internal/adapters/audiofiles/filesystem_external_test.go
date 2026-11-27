@@ -367,14 +367,14 @@ type contextRecordingHandler struct {
 
 type contextRecord struct {
 	message string
-	ctx     context.Context
+	marker  any
 }
 
 func (h contextRecordingHandler) Enabled(context.Context, slog.Level) bool { return true }
 
 func (h contextRecordingHandler) Handle(ctx context.Context, r slog.Record) error {
 	select {
-	case h.records <- contextRecord{message: r.Message, ctx: ctx}:
+	case h.records <- contextRecord{message: r.Message, marker: ctx.Value(recordedContextKey{})}:
 	default:
 	}
 	return nil
@@ -425,7 +425,7 @@ func assertRemoveFailureLoggedWithContext(t *testing.T, records chan contextReco
 		if record.message != "audio_temp_source_remove_failed" {
 			t.Fatalf("logged %q, want audio_temp_source_remove_failed", record.message)
 		}
-		if record.ctx.Value(recordedContextKey{}) != "marker" {
+		if record.marker != "marker" {
 			t.Fatal("log record did not carry the caller's context")
 		}
 	default:

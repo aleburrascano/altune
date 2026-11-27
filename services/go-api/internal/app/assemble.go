@@ -135,7 +135,7 @@ type features struct {
 }
 
 func (a *application) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
-	disc, err := search.New(a.discoveryDeps(ctx, transport))
+	disc, err := search.New(ctx, a.discoveryDeps(ctx, transport))
 	if err != nil {
 		return features{}, fmt.Errorf("discovery: %w", err)
 	}

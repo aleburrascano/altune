@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/bridges/monitoringfromdownload"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/platform/monitoring"
+	"context"
 	"reflect"
 	"testing"
 	"time"
@@ -14,7 +15,7 @@ type countingStatusSource struct {
 	status func(call int) download.Status
 }
 
-func (s *countingStatusSource) Status() download.Status {
+func (s *countingStatusSource) Status(_ context.Context) download.Status {
 	s.calls++
 	return s.status(s.calls)
 }
@@ -77,7 +78,7 @@ func TestAcquisitionReader_CarriesEveryFieldObserveShows(t *testing.T) {
 		Recent:           []download.JobRecord{jobRecord("recent-1", scheduledAt), jobRecord("recent-2", scheduledAt)},
 	})
 
-	got := monitoringfromdownload.NewAcquisitionReader(source).Status()
+	got := monitoringfromdownload.NewAcquisitionReader(source).Status(t.Context())
 
 	want := monitoring.DownloadStatusReport{
 		InFlight:         1,
@@ -110,7 +111,7 @@ func TestAcquisitionReader_EachToolIsCarriedOnItsOwn(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := monitoringfromdownload.NewAcquisitionReader(fixedStatus(download.Status{Verification: tc.verification})).Status()
+			got := monitoringfromdownload.NewAcquisitionReader(fixedStatus(download.Status{Verification: tc.verification})).Status(t.Context())
 			if got.Tools != tc.want {
 				t.Fatalf("tools = %+v, want %+v", got.Tools, tc.want)
 			}
@@ -119,7 +120,7 @@ func TestAcquisitionReader_EachToolIsCarriedOnItsOwn(t *testing.T) {
 }
 
 func TestAcquisitionReader_NoJobsGiveEmptyListsNeverNil(t *testing.T) {
-	got := monitoringfromdownload.NewAcquisitionReader(fixedStatus(download.Status{})).Status()
+	got := monitoringfromdownload.NewAcquisitionReader(fixedStatus(download.Status{})).Status(t.Context())
 
 	if got.ActiveJobs == nil || len(got.ActiveJobs) != 0 || got.Recent == nil || len(got.Recent) != 0 {
 		t.Fatalf("jobs %#v recent %#v, want empty non-nil lists", got.ActiveJobs, got.Recent)
@@ -132,7 +133,7 @@ func TestAcquisitionReader_EveryReadAsksTheSourceAgain(t *testing.T) {
 	}}
 	reader := monitoringfromdownload.NewAcquisitionReader(source)
 
-	first, second := reader.Status(), reader.Status()
+	first, second := reader.Status(t.Context()), reader.Status(t.Context())
 
 	if first.InFlight != 1 || second.InFlight != 2 {
 		t.Fatalf("in flight = %d then %d, want 1 then 2", first.InFlight, second.InFlight)

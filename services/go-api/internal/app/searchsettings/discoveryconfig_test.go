@@ -106,7 +106,7 @@ func TestDeps_CarriesTheLifecycleTransportTimeoutsAndCacheCounters(t *testing.T)
 
 	deps := searchsettings.Deps(ctx, &config.Config{}, transport, reg)
 
-	if deps.Lifecycle != ctx || deps.Transport != transport {
+	if deps.Shutdown != ctx.Done() || deps.Transport != transport {
 		t.Error("deps do not carry the given lifecycle and transport")
 	}
 	if deps.ProviderTimeout != 10*time.Second || deps.ChartTimeout != 15*time.Second {

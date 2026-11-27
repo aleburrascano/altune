@@ -107,7 +107,7 @@ func newTestScheduler(acquirer jobRunner, workers int, now func() time.Time, opt
 			panic(fmt.Sprintf("newTestScheduler: unsupported option %T", opt))
 		}
 	}
-	return service.MustNewBackgroundAcquisitionScheduler(service.NewProcessRoot(context.Background()), acquirer, workers, now, wiring, public...)
+	return service.MustNewBackgroundAcquisitionScheduler(context.Background(), acquirer, workers, now, wiring, public...)
 }
 
 func withTestOutcomes(r ports.OutcomeRecorder) schedulerPortsOption {

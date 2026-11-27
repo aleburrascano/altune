@@ -239,7 +239,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 		scheduler.Schedule(context.Background(), userId, trackId, "")
 
 		awaitIdle(t, scheduler)
-		if inFlight := scheduler.Status().InFlight; inFlight != 0 {
+		if inFlight := scheduler.Status(t.Context()).InFlight; inFlight != 0 {
 			t.Errorf("in flight = %d after the job completed, want 0", inFlight)
 		}
 	})
@@ -268,7 +268,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 		awaitIdle(t, scheduler)
 		_ = completedCount.Load()
 
-		if inFlight := scheduler.Status().InFlight; inFlight != 0 {
+		if inFlight := scheduler.Status(t.Context()).InFlight; inFlight != 0 {
 			t.Errorf("in flight = %d after every job completed, want 0", inFlight)
 		}
 	})
@@ -346,7 +346,7 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 		}
 		awaitIdle(t, scheduler)
 
-		recent := scheduler.Status().Recent
+		recent := scheduler.Status(t.Context()).Recent
 		if len(recent) != 1 || recent[0].State != acqports.JobFailed {
 			t.Fatalf("recent jobs = %+v, want exactly one %s job", recent, acqports.JobFailed)
 		}
@@ -356,7 +356,7 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 		if strings.Contains(logs.String(), cookieJarPath) {
 			t.Errorf("scheduler log names the cookie file %q:\n%s", cookieJarPath, logs.String())
 		}
-		if failed := scheduler.Status().Failed; failed != 1 {
+		if failed := scheduler.Status(t.Context()).Failed; failed != 1 {
 			t.Errorf("failed count = %d, want 1 (redaction must not change failure counting)", failed)
 		}
 	})
@@ -414,7 +414,7 @@ func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[str
 		defer close(drained)
 		<-start
 		scheduler.Shutdown(context.Background())
-		recent = scheduler.Status().Recent
+		recent = scheduler.Status(t.Context()).Recent
 	}()
 
 	close(start)
@@ -496,7 +496,7 @@ func awaitSettledJob(t *testing.T, s *service.BackgroundAcquisitionScheduler, tr
 }
 
 func settledJob(s *service.BackgroundAcquisitionScheduler, trackID string) (acqports.JobRecord, bool) {
-	recent := s.Status().Recent
+	recent := s.Status(context.Background()).Recent
 	for _, job := range recent {
 		if job.TrackID == trackID {
 			return job, true
@@ -695,7 +695,7 @@ func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 
 		<-ledger.started
 
-		active := len(scheduler.Status().ActiveJobs)
+		active := len(scheduler.Status(t.Context()).ActiveJobs)
 		maxAllowed := workers * 8
 		if active > maxAllowed {
 			t.Errorf("active job-log entries = %d under burst of %d; want bounded <= %d (arrivals must not spawn unbounded work)",
@@ -721,7 +721,7 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 		}
 		awaitIdle(t, scheduler)
 
-		status := scheduler.Status()
+		status := scheduler.Status(t.Context())
 		if status.QueueDepth != 0 {
 			t.Errorf("queue depth after drain = %d, want 0", status.QueueDepth)
 		}
@@ -734,7 +734,7 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 		if !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
 			t.Fatalf("schedule after shutdown err = %v, want ErrSchedulerShutdown", err)
 		}
-		if got := scheduler.Status().Rejected; got != 1 {
+		if got := scheduler.Status(t.Context()).Rejected; got != 1 {
 			t.Errorf("rejected after shutdown refusal = %d, want 1", got)
 		}
 	})
@@ -1202,14 +1202,14 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 			t.Fatalf("schedule while enabled = %v, want nil", err)
 		}
 		<-acq.started
-		if scheduler.Status().Paused {
+		if scheduler.Status(t.Context()).Paused {
 			t.Fatal("Status().Paused = true before any Pause, want false")
 		}
 		close(acq.release)
 		awaitIdle(t, scheduler)
 
 		scheduler.Pause()
-		if !scheduler.Status().Paused {
+		if !scheduler.Status(t.Context()).Paused {
 			t.Fatal("Status().Paused = false after Pause, want true")
 		}
 		paused := ids.NewTrackId()
@@ -1229,7 +1229,7 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 		}
 
 		scheduler.Resume()
-		if scheduler.Status().Paused {
+		if scheduler.Status(t.Context()).Paused {
 			t.Fatal("Status().Paused = true after Resume, want false")
 		}
 		if err := scheduler.Schedule(context.Background(), user, paused, ""); err != nil {
@@ -1651,10 +1651,10 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 		failing := newOutcomeScheduler(t, errors.New("yt-dlp exited 1"))
 		finishJobs(t, failing, 1)
 
-		if got := succeeding.Status(); got.Succeeded != 5 || got.Failed != 0 || len(got.Recent) != 5 {
+		if got := succeeding.Status(t.Context()); got.Succeeded != 5 || got.Failed != 0 || len(got.Recent) != 5 {
 			t.Errorf("succeeding scheduler status = succeeded %d, failed %d, recent %d, want 5, 0, 5", got.Succeeded, got.Failed, len(got.Recent))
 		}
-		got := failing.Status()
+		got := failing.Status(t.Context())
 		if got.Succeeded != 0 || got.Failed != 1 {
 			t.Errorf("failing scheduler status = succeeded %d, failed %d, want 0, 1", got.Succeeded, got.Failed)
 		}
@@ -1669,7 +1669,7 @@ func TestAcquisitionStatus_RecentBounded(t *testing.T) {
 		s := newOutcomeScheduler(t, errors.New("boom"))
 		finishJobs(t, s, service.RecentJobCap+10)
 
-		if got := len(s.Status().Recent); got != service.RecentJobCap {
+		if got := len(s.Status(t.Context()).Recent); got != service.RecentJobCap {
 			t.Errorf("recent = %d, want capped at %d", got, service.RecentJobCap)
 		}
 	})
@@ -1679,10 +1679,10 @@ func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := newOutcomeScheduler(t, errors.New("boom"))
 		finishJobs(t, s, 1)
-		snap := s.Status()
+		snap := s.Status(t.Context())
 		reason := snap.Recent[0].Reason
 		snap.Recent[0].Reason = "mutated"
-		if s.Status().Recent[0].Reason != reason {
+		if s.Status(t.Context()).Recent[0].Reason != reason {
 			t.Error("Status() returned a shared slice; callers can corrupt internal state")
 		}
 	})
@@ -1906,7 +1906,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 			awaitOutcome(t, recorder.calls)
 			awaitIdle(t, scheduler)
 
-			recent := scheduler.Status().Recent
+			recent := scheduler.Status(t.Context()).Recent
 			if len(recent) != 1 || recent[0].State != acqports.JobSucceeded {
 				t.Fatalf("recent jobs = %+v, want exactly one %s job (a Record error must not change the job's result)", recent, acqports.JobSucceeded)
 			}
@@ -2138,10 +2138,10 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 		release := func() {
 			released.Do(func() { close(ledger.release) })
 			deadline := time.Now().Add(jobSettleTimeout)
-			for scheduler.Status().InFlight > 0 && time.Now().Before(deadline) {
+			for scheduler.Status(t.Context()).InFlight > 0 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond)
 			}
-			if inFlight := scheduler.Status().InFlight; inFlight > 0 {
+			if inFlight := scheduler.Status(t.Context()).InFlight; inFlight > 0 {
 				t.Errorf("%d jobs still in flight %s after release", inFlight, jobSettleTimeout)
 			}
 		}
@@ -2220,7 +2220,7 @@ func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testin
 
 		outcome := assertExactlyOneOutcome(t, recorder.calls)
 		awaitIdle(t, scheduler)
-		recent := scheduler.Status().Recent
+		recent := scheduler.Status(t.Context()).Recent
 		if len(recent) != 1 {
 			t.Fatalf("Status().Recent = %+v, want exactly one job", recent)
 		}
@@ -2385,7 +2385,7 @@ func TestBackgroundScheduler_WithoutAnOutcomeRecorder_LeavesTheJobUntouched(t *t
 		}
 		awaitIdle(t, scheduler)
 
-		status := scheduler.Status()
+		status := scheduler.Status(t.Context())
 		if status.Succeeded != 1 || len(status.Recent) != 1 || status.Recent[0].State != acqports.JobSucceeded {
 			t.Errorf("status = succeeded %d, recent %+v, want one %s job", status.Succeeded, status.Recent, acqports.JobSucceeded)
 		}
@@ -2503,11 +2503,11 @@ func TestAcquisitionStatus_ReportsVerifySkipsAndFingerprintVerification(t *testi
 	s := newTestScheduler(outcomeAcquirer{}, 1, time.Now, withTestVerification(skips.Count, func() bool { return fingerprinted }))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
-	before := s.Status()
+	before := s.Status(t.Context())
 	skips.RecordVerifySkip("decode_timeout")
 	skips.RecordVerifySkip("identify_failed")
 	fingerprinted = true
-	after := s.Status()
+	after := s.Status(t.Context())
 
 	if before.VerifySkipped != 0 || before.Verification.FingerprintVerified {
 		t.Errorf("before = %d skips, verified %v, want 0 and false", before.VerifySkipped, before.Verification.FingerprintVerified)
@@ -2646,7 +2646,7 @@ func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) 
 		<-acq.running
 	}
 
-	got := s.Status()
+	got := s.Status(t.Context())
 	if got.QueueDepth != 5 {
 		t.Errorf("QueueDepth = %d, want 5 pending jobs", got.QueueDepth)
 	}
@@ -2668,7 +2668,7 @@ func TestSchedulerStatus_QueueDepthKnownFalseWhenDepthReadFails(t *testing.T) {
 	s := newTestScheduler(nil, 2, time.Now, withTestQueue(failingDepthQueue{newMemJobQueue(nil)}))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
-	if got := s.Status(); got.QueueDepthKnown {
+	if got := s.Status(t.Context()); got.QueueDepthKnown {
 		t.Errorf("QueueDepthKnown = true after a failed depth read, want false")
 	}
 }
@@ -2678,7 +2678,7 @@ func TestSchedulerStatus_QueueDepthKnownTrueWhenDepthReadSucceeds(t *testing.T) 
 	s := newTestScheduler(nil, 2, time.Now, withTestQueue(queue))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
-	if got := s.Status(); !got.QueueDepthKnown {
+	if got := s.Status(t.Context()); !got.QueueDepthKnown {
 		t.Errorf("QueueDepthKnown = false after a successful depth read, want true")
 	}
 }
@@ -2821,7 +2821,7 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 		service.WithSchedulerPaused(true))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	if !scheduler.Status().Paused {
+	if !scheduler.Status(t.Context()).Paused {
 		t.Fatal("Status().Paused = false right after construction, want true")
 	}
 	probe.driveWorkerLoops(t, 3)
@@ -2840,7 +2840,7 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 func awaitRecent(t *testing.T, s *service.BackgroundAcquisitionScheduler) []acqports.JobRecord {
 	t.Helper()
 	synctest.Wait()
-	recent := s.Status().Recent
+	recent := s.Status(t.Context()).Recent
 	if len(recent) == 0 {
 		t.Fatal("the claimed job never finished")
 	}
@@ -2992,7 +2992,7 @@ func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t
 		if got.Outcome != acqports.JobKept {
 			t.Errorf("outcome = %q, want %q", got.Outcome, acqports.JobKept)
 		}
-		if status := scheduler.Status(); status.Succeeded != 0 || status.Failed != 0 {
+		if status := scheduler.Status(t.Context()); status.Succeeded != 0 || status.Failed != 0 {
 			t.Errorf("succeeded = %d, failed = %d, want a kept file to move neither", status.Succeeded, status.Failed)
 		}
 	})
@@ -3198,7 +3198,7 @@ func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 		}
 
 		synctest.Wait()
-		status := scheduler.Status()
+		status := scheduler.Status(t.Context())
 		if len(status.Recent) == 0 || status.Recent[0].State != acqports.JobRetrying {
 			t.Fatalf("recent = %+v, want one %s job", status.Recent, acqports.JobRetrying)
 		}
@@ -3236,7 +3236,7 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 	if outcome.Outcome != acqports.JobCancelled || outcome.Reason != "lease_lost" {
 		t.Errorf("outcome = %q reason %q, want %q reason lease_lost", outcome.Outcome, outcome.Reason, acqports.JobCancelled)
 	}
-	if failed := scheduler.Status().Failed; failed != 0 {
+	if failed := scheduler.Status(t.Context()).Failed; failed != 0 {
 		t.Errorf("failed = %d, want 0", failed)
 	}
 }
@@ -3502,16 +3502,16 @@ func awaitIdle(t *testing.T, s *service.BackgroundAcquisitionScheduler) {
 	const rounds = 120
 	for range rounds {
 		synctest.Wait()
-		if s.Status().Pending == 0 {
+		if s.Status(t.Context()).Pending == 0 {
 			return
 		}
 		_ = clock.Sleep(context.Background(), time.Second)
 	}
-	t.Fatalf("scheduler still has %d pending jobs after %d simulated seconds, want idle", s.Status().Pending, rounds)
+	t.Fatalf("scheduler still has %d pending jobs after %d simulated seconds, want idle", s.Status(t.Context()).Pending, rounds)
 }
 
 func TestNewBackgroundAcquisitionScheduler_RefusesAMissingClock(t *testing.T) {
-	_, err := service.NewBackgroundAcquisitionScheduler(service.NewProcessRoot(context.Background()), outcomeAcquirer{}, 1, nil, testSchedulerPorts())
+	_, err := service.NewBackgroundAcquisitionScheduler(context.Background(), outcomeAcquirer{}, 1, nil, testSchedulerPorts())
 
 	if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), "clock") {
 		t.Errorf("error = %v, want ErrMissingCollaborator naming the clock", err)
@@ -3554,7 +3554,7 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 			wiring := testSchedulerPorts()
 			drop(&wiring)
 
-			_, err := service.NewBackgroundAcquisitionScheduler(service.NewProcessRoot(context.Background()), outcomeAcquirer{}, 1, time.Now, wiring)
+			_, err := service.NewBackgroundAcquisitionScheduler(context.Background(), outcomeAcquirer{}, 1, time.Now, wiring)
 
 			if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), field) {
 				t.Errorf("error = %v, want ErrMissingCollaborator naming %s", err, field)

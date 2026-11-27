@@ -40,7 +40,7 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 
 		time.Sleep(3 * time.Second)
 
-		active := scheduler.Status().ActiveJobs
+		active := scheduler.Status(t.Context()).ActiveJobs
 		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != ports.JobRunning {
 			t.Fatalf("ActiveJobs = %+v, want the running job of %s", active, track)
 		}
@@ -62,7 +62,7 @@ func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 		time.Sleep(acquireTakes)
 		synctest.Wait()
 
-		status := scheduler.Status()
+		status := scheduler.Status(t.Context())
 		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != ports.JobSucceeded {
 			t.Fatalf("Recent = %+v, want the succeeded job of %s", status.Recent, track)
 		}

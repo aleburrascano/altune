@@ -40,11 +40,10 @@ type Service struct {
 	newTimer clock.TimerFunc
 	now      clock.Func
 
-	lifecycle           context.Context
-	cancelWithLifecycle func(cancel context.CancelFunc) (stop func() bool)
-	jobs                *background.Tracker
-	mu                  sync.Mutex
-	inflight            map[string]*job
+	shutdown <-chan struct{}
+	jobs     *background.Tracker
+	mu       sync.Mutex
+	inflight map[string]*job
 }
 
 var (
@@ -77,23 +76,22 @@ func (NoGenius) SongDetail(context.Context, int) (domain.GeniusSongDetail, error
 }
 
 type Wiring struct {
-	Trackers  ports.TrackerSongs
-	Storage   Storage
-	Lifecycle context.Context
-	Jobs      *background.Tracker
-	Timer     clock.TimerFunc
-	Now       clock.Func
+	Trackers ports.TrackerSongs
+	Storage  Storage
+	Shutdown <-chan struct{}
+	Jobs     *background.Tracker
+	Timer    clock.TimerFunc
+	Now      clock.Func
 }
 
 func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cfg Config, w Wiring) (*Service, error) {
 	for name, missing := range map[string]bool{
-		"genius":    genius == nil,
-		"catalog":   catalog == nil,
-		"trackers":  w.Trackers == nil,
-		"storage":   w.Storage == nil,
-		"lifecycle": w.Lifecycle == nil,
-		"jobs":      w.Jobs == nil,
-		"now":       w.Now == nil,
+		"genius":   genius == nil,
+		"catalog":  catalog == nil,
+		"trackers": w.Trackers == nil,
+		"storage":  w.Storage == nil,
+		"jobs":     w.Jobs == nil,
+		"now":      w.Now == nil,
 	} {
 		if missing {
 			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
@@ -103,17 +101,14 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 		return nil, fmt.Errorf("%w: a Wait needs a timer", ErrCollaboratorRequired)
 	}
 	return &Service{
-		genius:    genius,
-		newTimer:  w.Timer,
-		now:       w.Now,
-		trackers:  w.Trackers,
-		catalog:   catalog,
-		storage:   w.Storage,
-		cfg:       cfg,
-		lifecycle: w.Lifecycle,
-		cancelWithLifecycle: func(cancel context.CancelFunc) func() bool {
-			return context.AfterFunc(w.Lifecycle, cancel)
-		},
+		genius:   genius,
+		newTimer: w.Timer,
+		now:      w.Now,
+		trackers: w.Trackers,
+		catalog:  catalog,
+		storage:  w.Storage,
+		cfg:      cfg,
+		shutdown: w.Shutdown,
 		jobs:     w.Jobs,
 		inflight: map[string]*job{},
 	}, nil

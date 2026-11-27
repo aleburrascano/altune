@@ -66,7 +66,7 @@ func scheduleAndFinishWith(t *testing.T, source ports.AudioSource, wiring servic
 		time.Sleep(10 * time.Second)
 		synctest.Wait()
 
-		recent := scheduler.Status().Recent
+		recent := scheduler.Status(t.Context()).Recent
 		if len(recent) != 1 || recent[0].TrackID != track.ID.String() {
 			t.Fatalf("Recent = %+v, want the one finished job of %s", recent, track.ID)
 		}

@@ -123,7 +123,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	if err := scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
-	return awaitReady(t, repo, track, userID), musicDir, scheduler.Status().Verification
+	return awaitReady(t, repo, track, userID), musicDir, scheduler.Status(t.Context()).Verification
 }
 
 func awaitReady(t *testing.T, repo *library.PostgresTrackRepository, track *library.Track, userID ids.UserId) library.Track {
@@ -244,7 +244,7 @@ func TestNewScheduler_DoesNotCapAPrincipalsQueue(t *testing.T) {
 func TestNewScheduler_AcquisitionPausedStartsPaused(t *testing.T) {
 	s := newOfflineScheduler(t, &config.Config{AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionPaused: true}, fixtureTiers())
 
-	if !s.Status().Paused {
+	if !s.Status(t.Context()).Paused {
 		t.Fatal("Status().Paused = false straight out of NewScheduler, want true so no worker claims before the startup switches apply")
 	}
 }
@@ -425,7 +425,7 @@ func TestNewScheduler_ReportsFingerprintingReadyOnlyWithAnAcoustIDKey(t *testing
 		t.Run(tt.name, func(t *testing.T) {
 			s := newOfflineScheduler(t, &config.Config{AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), FFmpegLocation: binDir, AcoustIDAPIKey: tt.key}, fixtureTiers())
 
-			if got := s.Status().Verification.Fpcalc; got != tt.want {
+			if got := s.Status(t.Context()).Verification.Fpcalc; got != tt.want {
 				t.Errorf("Status().Verification.Fpcalc = %v with fpcalc installed and AcoustID key %q, want %v", got, tt.key, tt.want)
 			}
 		})

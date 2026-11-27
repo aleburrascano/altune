@@ -36,7 +36,7 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	deps.ClientEvents = search.NoClientEvents{}
 	deps.Tracker = h.Tracker
 	deps.Pool = h.Pool
-	return search.New(deps)
+	return search.New(ctx, deps)
 }
 
 func (a *application) discoveryDeps(ctx context.Context, transport http.RoundTripper) search.Deps {

@@ -2,7 +2,6 @@ package contracttest
 
 import (
 	"altune/go-api/internal/library/internal/core/ports"
-	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -12,12 +11,11 @@ import (
 )
 
 type audioStoreSuite struct {
-	ctx      context.Context
 	newStore func(t *testing.T) ports.AudioStore
 }
 
 func AudioStoreContract(t *testing.T, newStore func(t *testing.T) ports.AudioStore) {
-	suite := &audioStoreSuite{ctx: context.Background(), newStore: newStore}
+	suite := &audioStoreSuite{newStore: newStore}
 
 	t.Run("a ref never stored does not exist and cannot be streamed", suite.neverStoredRefIsAbsent)
 	t.Run("a stored ref exists and streams the stored bytes", suite.storedRefStreamsStoredBytes)
@@ -38,14 +36,14 @@ func (c *audioStoreSuite) source(t *testing.T, content string) string {
 
 func (c *audioStoreSuite) store(t *testing.T, s ports.AudioStore, ref, content string) {
 	t.Helper()
-	if err := s.Store(c.ctx, c.source(t, content), ref); err != nil {
+	if err := s.Store(t.Context(), c.source(t, content), ref); err != nil {
 		t.Fatalf("Store %q: %v", ref, err)
 	}
 }
 
 func (c *audioStoreSuite) exists(t *testing.T, s ports.AudioStore, ref string) bool {
 	t.Helper()
-	ok, err := s.Exists(c.ctx, ref)
+	ok, err := s.Exists(t.Context(), ref)
 	if err != nil {
 		t.Fatalf("Exists %q: %v", ref, err)
 	}
@@ -54,7 +52,7 @@ func (c *audioStoreSuite) exists(t *testing.T, s ports.AudioStore, ref string) b
 
 func (c *audioStoreSuite) streamed(t *testing.T, s ports.AudioStore, ref string) (string, int64) {
 	t.Helper()
-	rc, size, err := s.Stream(c.ctx, ref)
+	rc, size, err := s.Stream(t.Context(), ref)
 	if err != nil {
 		t.Fatalf("Stream %q: %v", ref, err)
 	}
@@ -72,7 +70,7 @@ func (c *audioStoreSuite) neverStoredRefIsAbsent(t *testing.T) {
 	if c.exists(t, s, "tracks/missing.opus") {
 		t.Error("Exists = true for a ref never stored")
 	}
-	rc, _, err := s.Stream(c.ctx, "tracks/missing.opus")
+	rc, _, err := s.Stream(t.Context(), "tracks/missing.opus")
 	if err == nil {
 		_ = rc.Close()
 		t.Fatal("Stream of a ref never stored succeeded")
@@ -130,14 +128,14 @@ func (c *audioStoreSuite) deletedRefNoLongerExists(t *testing.T) {
 	s := c.newStore(t)
 	c.store(t, s, "tracks/gone.opus", "to delete")
 
-	if err := s.Delete(c.ctx, "tracks/gone.opus"); err != nil {
+	if err := s.Delete(t.Context(), "tracks/gone.opus"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
 	if c.exists(t, s, "tracks/gone.opus") {
 		t.Error("Exists = true after Delete")
 	}
-	if rc, _, err := s.Stream(c.ctx, "tracks/gone.opus"); err == nil {
+	if rc, _, err := s.Stream(t.Context(), "tracks/gone.opus"); err == nil {
 		_ = rc.Close()
 		t.Error("Stream succeeded after Delete")
 	}
@@ -146,15 +144,15 @@ func (c *audioStoreSuite) deletedRefNoLongerExists(t *testing.T) {
 func (c *audioStoreSuite) deletingMissingRefIsNotAnError(t *testing.T) {
 	s := c.newStore(t)
 
-	if err := s.Delete(c.ctx, "tracks/never.opus"); err != nil {
+	if err := s.Delete(t.Context(), "tracks/never.opus"); err != nil {
 		t.Errorf("Delete of a ref never stored = %v, want nil", err)
 	}
 
 	c.store(t, s, "tracks/twice.opus", "to delete twice")
-	if err := s.Delete(c.ctx, "tracks/twice.opus"); err != nil {
+	if err := s.Delete(t.Context(), "tracks/twice.opus"); err != nil {
 		t.Fatalf("first Delete: %v", err)
 	}
-	if err := s.Delete(c.ctx, "tracks/twice.opus"); err != nil {
+	if err := s.Delete(t.Context(), "tracks/twice.opus"); err != nil {
 		t.Errorf("second Delete = %v, want nil", err)
 	}
 }

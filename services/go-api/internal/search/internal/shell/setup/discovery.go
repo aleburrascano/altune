@@ -50,24 +50,24 @@ type wiring struct {
 	artwork ports.TaggingArtworkLookup
 }
 
-func New(d connections.Deps) (*Discovery, error) {
+func New(ctx context.Context, d connections.Deps) (*Discovery, error) {
 	if err := d.MissingHandles(); err != nil {
 		return nil, err
 	}
-	w, err := newWiring(d)
+	w, err := newWiring(ctx, d)
 	if err != nil {
 		return nil, err
 	}
 	t, s := w.table, w.stores
-	services, err := newHandlerServices(w)
+	services, err := newHandlerServices(ctx, w)
 	if err != nil {
 		return nil, err
 	}
-	unreleasedServices, err := newUnreleasedServices(d, t, s, services.Artist)
+	unreleasedServices, err := newUnreleasedServices(ctx, d, t, s, services.Artist)
 	if err != nil {
 		return nil, err
 	}
-	rankingOnly, err := newRankingOnlySearchService(w)
+	rankingOnly, err := newRankingOnlySearchService(ctx, w)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func New(d connections.Deps) (*Discovery, error) {
 	}, nil
 }
 
-func newWiring(d connections.Deps) (wiring, error) {
+func newWiring(ctx context.Context, d connections.Deps) (wiring, error) {
 	s, err := connections.NewStores(d)
 	if err != nil {
 		return wiring{}, fmt.Errorf("build the stores: %w", err)
@@ -101,7 +101,7 @@ func newWiring(d connections.Deps) (wiring, error) {
 	if err != nil {
 		return wiring{}, fmt.Errorf("build the provider table: %w", err)
 	}
-	t.log(d.Lifecycle, d.Logger)
+	t.log(ctx, d.Logger)
 	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}, nil
 }
 
@@ -109,7 +109,7 @@ func (d *Discovery) RankingOnlySearch() *query.Service {
 	return d.rankingOnly
 }
 
-func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
+func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryServices, error) {
 	breaker := providerguard.NewCircuitBreaker(clock.Now)
 	t, s := w.table, w.stores
 	enrichment, err := newEnrichment(t, s, w.artwork)
@@ -120,7 +120,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, err
 	}
-	search, err := newSearchService(w, breaker)
+	search, err := newSearchService(ctx, w, breaker)
 	if err != nil {
 		return handler.DiscoveryServices{}, err
 	}

@@ -15,8 +15,8 @@ func (h *Handler) registerReads(r chi.Router) {
 	r.Get("/quality/discography", h.serveDiscographyQuality)
 }
 
-func (h *Handler) serveAcquisition(w http.ResponseWriter, _ *http.Request) {
-	httpserver.WriteJSON(w, http.StatusOK, readAcquisitionStatus(h.deps.Acquisition))
+func (h *Handler) serveAcquisition(w http.ResponseWriter, r *http.Request) {
+	httpserver.WriteJSON(w, http.StatusOK, readAcquisitionStatus(r.Context(), h.deps.Acquisition))
 }
 
 func (h *Handler) serveEval(w http.ResponseWriter, _ *http.Request) {
