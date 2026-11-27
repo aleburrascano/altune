@@ -202,12 +202,14 @@ func codeForS(cur cursor) (string, int) {
 	}
 }
 
+const trigraphLen = 3
+
 func codeForSC(cur cursor) (string, int) {
 	switch {
 	case cur.at(2) == 'H':
-		return "SK", cur.pos + 3
+		return "SK", cur.pos + trigraphLen
 	case isFrontVowel(cur.at(2)):
-		return "S", cur.pos + 3
+		return "S", cur.pos + trigraphLen
 	default:
 		return "SK", cur.pos + 2
 	}
@@ -218,7 +220,7 @@ func codeForT(cur cursor) (string, int) {
 	case cur.at(1) == 'H':
 		return "0", cur.pos + 2
 	case startsSibilantTI(cur):
-		return "X", cur.pos + 3
+		return "X", cur.pos + trigraphLen
 	default:
 		return "T", posAfterDouble(cur)
 	}

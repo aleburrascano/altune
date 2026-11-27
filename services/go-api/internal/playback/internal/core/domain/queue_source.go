@@ -124,6 +124,8 @@ const (
 	upperHex   = "0123456789ABCDEF"
 	hexDigits  = "0123456789ABCDEFabcdef"
 	unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
+
+	lowerHexOffset = len(hexDigits) - len(upperHex)
 )
 
 func escape(value string) string {
@@ -175,7 +177,7 @@ func escapedByte(value string, i int) (byte, bool) {
 func hexDigit(c byte) int {
 	d := strings.IndexByte(hexDigits, c)
 	if d >= len(upperHex) {
-		return d - 6
+		return d - lowerHexOffset
 	}
 	return d
 }

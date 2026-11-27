@@ -156,11 +156,13 @@ func rerecordingLabel(detail acqports.RecordingDetail) acqports.TrackLabel {
 	return label
 }
 
+const yearDigits = 4
+
 func releaseYear(date string) int {
-	if len(date) < 4 {
+	if len(date) < yearDigits {
 		return 0
 	}
-	year, err := strconv.Atoi(date[:4])
+	year, err := strconv.Atoi(date[:yearDigits])
 	if err != nil {
 		return 0
 	}

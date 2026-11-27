@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-var qualityRanks = map[string]int{"lossless": 5, "cd quality": 4, "high quality": 3, "recording": 2, "low quality": 1}
+var qualityLadder = []string{"low quality", "recording", "high quality", "cd quality", "lossless"}
 
 func qualityRank(quality string) int {
-	return qualityRanks[strings.ToLower(strings.TrimSpace(quality))]
+	return slices.Index(qualityLadder, strings.ToLower(strings.TrimSpace(quality))) + 1
 }
 
 func (s UnreleasedSong) QualityRank() int {

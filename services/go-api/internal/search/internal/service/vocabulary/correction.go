@@ -171,13 +171,19 @@ func logCandidate(ctx context.Context, queryNorm string, c domain.SpellingHintsE
 	)
 }
 
+const (
+	shortQueryRunes  = 4
+	mediumQueryRunes = 8
+	longQueryEdits   = 3
+)
+
 func maxCorrectionDist(query string) int {
 	n := len([]rune(query))
-	if n <= 4 {
+	if n <= shortQueryRunes {
 		return 1
 	}
-	if n <= 8 {
+	if n <= mediumQueryRunes {
 		return 2
 	}
-	return 3
+	return longQueryEdits
 }

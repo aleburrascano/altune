@@ -139,9 +139,11 @@ func tomlQuoteRunEnd(src []byte, i int, quote byte) int {
 	return i
 }
 
+const tomlMultilineQuoteRun = 3
+
 func tomlMultilineQuoteRunClose(src []byte, i int, quote byte) (int, bool) {
 	runEnd := tomlQuoteRunEnd(src, i, quote)
-	if runEnd-i >= 3 {
+	if runEnd-i >= tomlMultilineQuoteRun {
 		return runEnd, true
 	}
 	return 0, false

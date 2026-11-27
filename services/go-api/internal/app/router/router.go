@@ -43,6 +43,8 @@ func New(s Settings) *chi.Mux {
 const (
 	lastEventIDHeader = "Last-Event-ID"
 	retryAfterHeader  = "Retry-After"
+
+	corsPreflightMaxAgeSeconds = 300
 )
 
 func corsHandler(s Settings) func(http.Handler) http.Handler {
@@ -59,7 +61,7 @@ func corsHandler(s Settings) func(http.Handler) http.Handler {
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders: headers,
 		ExposedHeaders: []string{"Content-Length", httpserver.CorrelationIDHeader, retryAfterHeader},
-		MaxAge:         300,
+		MaxAge:         corsPreflightMaxAgeSeconds,
 	})
 }
 

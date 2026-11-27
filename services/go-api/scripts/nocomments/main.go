@@ -341,11 +341,13 @@ func changedFiles(ctx context.Context, root, base string) ([]change, error) {
 	return changes, nil
 }
 
+const renameStatusFields = 3
+
 func parseNameStatusLine(line string) (change, error) {
 	fields := strings.Split(line, "\t")
 	status := fields[0]
 	if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
-		if len(fields) != 3 {
+		if len(fields) != renameStatusFields {
 			return change{}, fmt.Errorf("unexpected name-status line: %q", line)
 		}
 		return change{path: fields[2], from: fields[1]}, nil

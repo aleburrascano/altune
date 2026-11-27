@@ -80,12 +80,17 @@ func worseOrder(a, b ports.DiscographyCase) int {
 
 func worseThan(a, b ports.DiscographyCase) bool { return precedes(worseOrder(a, b)) }
 
+const (
+	severeContamination   = 0.5
+	moderateContamination = 0.2
+)
+
 func contaminationBand(c ports.DiscographyCase) int {
 	r := contaminationRatio(c)
-	if r >= 0.5 {
+	if r >= severeContamination {
 		return 0
 	}
-	if r >= 0.2 {
+	if r >= moderateContamination {
 		return 1
 	}
 	return 2

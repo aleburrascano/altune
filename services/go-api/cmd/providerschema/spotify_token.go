@@ -149,17 +149,27 @@ func spotifyClientTokenPayload() ([]byte, error) {
 	})
 }
 
+const (
+	totpPeriodSeconds  = 30
+	totpModulus        = 1000000
+	totpOffsetMask     = 0x0F
+	totpTruncatedBytes = 4
+	totpSignBitMask    = 0x7FFFFFFF
+	totpSecretXorCycle = 33
+	totpSecretXorBase  = 9
+)
+
 func spotifyTOTP(secret string, unixSeconds int64) string {
 	var key strings.Builder
 	for i := range len(secret) {
-		key.WriteString(strconv.Itoa(int(secret[i]) ^ (i%33 + 9)))
+		key.WriteString(strconv.Itoa(int(secret[i]) ^ (i%totpSecretXorCycle + totpSecretXorBase)))
 	}
 	var counter [8]byte
-	binary.BigEndian.PutUint64(counter[:], uint64(unixSeconds)/30)
+	binary.BigEndian.PutUint64(counter[:], uint64(unixSeconds)/totpPeriodSeconds)
 	mac := hmac.New(sha1.New, []byte(key.String()))
 	mac.Write(counter[:])
 	digest := mac.Sum(nil)
-	offset := digest[len(digest)-1] & 0x0F
-	code := binary.BigEndian.Uint32(digest[offset:offset+4]) & 0x7FFFFFFF
-	return fmt.Sprintf("%06d", code%1000000)
+	offset := digest[len(digest)-1] & totpOffsetMask
+	code := binary.BigEndian.Uint32(digest[offset:offset+totpTruncatedBytes]) & totpSignBitMask
+	return fmt.Sprintf("%06d", code%totpModulus)
 }

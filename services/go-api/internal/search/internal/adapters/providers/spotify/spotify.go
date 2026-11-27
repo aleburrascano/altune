@@ -62,7 +62,7 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 		Variables: spotifySearchVariables{
 			SearchTerm:                     query,
 			Limit:                          10,
-			NumberOfTopResults:             5,
+			NumberOfTopResults:             topResultsRequested,
 			IncludeAudiobooks:              false,
 			IncludeArtistHasConcertsField:  false,
 			IncludePreReleases:             false,
@@ -290,7 +290,10 @@ var spotifyRecordTypes = domain.RecordTypeVocabulary{
 	"compilation": domain.RecordTypeCompilation,
 }
 
-const spotifyExplicitLabel = "EXPLICIT"
+const (
+	spotifyExplicitLabel = "EXPLICIT"
+	topResultsRequested  = 5
+)
 
 func spotifyExplicit(label string) *bool {
 	if label == spotifyExplicitLabel {

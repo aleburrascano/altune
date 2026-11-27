@@ -76,9 +76,11 @@ const firstPart = 1
 
 var partWords = []string{"pt", "part", "vol", "volume", "chapter", "episode"}
 
-var bareRomanNumerals = map[string]int{"ii": 2, "iii": 3, "iv": 4, "vi": 6, "vii": 7, "viii": 8, "ix": 9}
+var romanNumerals = []string{"i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"}
 
-var keywordedRomanNumerals = map[string]int{"i": 1, "v": 5, "x": 10}
+var keywordOnlyRomans = []string{"i", "v", "x"}
+
+func romanValue(token string) int { return slices.Index(romanNumerals, token) + 1 }
 
 func partNumber(tokens []string) int {
 	if len(tokens) < 2 {
@@ -96,14 +98,14 @@ func partNumber(tokens []string) int {
 }
 
 func keywordedNumber(token string) int {
-	if n, ok := keywordedRomanNumerals[token]; ok {
+	if n := romanValue(token); n > 0 {
 		return n
 	}
 	return bareNumber(token)
 }
 
 func bareNumber(token string) int {
-	if n, ok := bareRomanNumerals[token]; ok {
+	if n := romanValue(token); n > 0 && !slices.Contains(keywordOnlyRomans, token) {
 		return n
 	}
 	if len(token) > 2 {

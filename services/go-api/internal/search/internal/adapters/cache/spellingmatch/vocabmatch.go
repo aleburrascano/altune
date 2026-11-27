@@ -62,15 +62,21 @@ func jaccardCoefficient(shared, totalA, totalB int) float64 {
 	return float64(shared) / float64(union)
 }
 
+const (
+	shortQueryRunes  = 4
+	mediumQueryRunes = 8
+	longQueryEdits   = 3
+)
+
 func maxEditDistance(query string) int {
 	n := len([]rune(query))
-	if n <= 4 {
+	if n <= shortQueryRunes {
 		return 1
 	}
-	if n <= 8 {
+	if n <= mediumQueryRunes {
 		return 2
 	}
-	return 3
+	return longQueryEdits
 }
 
 func editSimilarity(a, b string, dist int) float64 {

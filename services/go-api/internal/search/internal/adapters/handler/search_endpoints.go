@@ -27,7 +27,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit, ok := parseLimit(w, r, "limit", 5, 10, resetToDefault)
+	limit, ok := parseLimit(w, r, "limit", suggestDefaultLimit, suggestMaxLimit, resetToDefault)
 	if !ok {
 		return
 	}
@@ -58,7 +58,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit, ok := limitOrDefault(w, r, "limit", 20)
+	limit, ok := limitOrDefault(w, r, "limit", searchDefaultLimit)
 	if !ok {
 		return
 	}
@@ -125,7 +125,15 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	h.warmUnreleased(result.Results)
 }
 
-const warmArtistLimit = 3
+const (
+	warmArtistLimit = 3
+
+	suggestDefaultLimit = 5
+	suggestMaxLimit     = 10
+	searchDefaultLimit  = 20
+	historyDefaultLimit = 10
+	historyMaxLimit     = 100
+)
 
 func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
 	var artists []unreleased.ArtistToRefresh
@@ -149,7 +157,7 @@ func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {
 	userId := requestuser.UserID(r)
 
-	limit, ok := parseLimit(w, r, "limit", 10, 100, clampToMax)
+	limit, ok := parseLimit(w, r, "limit", historyDefaultLimit, historyMaxLimit, clampToMax)
 	if !ok {
 		return
 	}

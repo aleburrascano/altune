@@ -38,13 +38,20 @@ func (h *routeHist) observe(ms int64, status int) {
 	}
 }
 
+const (
+	statusClassDivisor = 100
+	statusClassOK      = 2
+	statusClassClient  = 4
+	statusClassServer  = 5
+)
+
 func statusClassIndex(status int) int {
-	switch status / 100 {
-	case 2:
+	switch status / statusClassDivisor {
+	case statusClassOK:
 		return class2xx
-	case 4:
+	case statusClassClient:
 		return class4xx
-	case 5:
+	case statusClassServer:
 		return class5xx
 	default:
 		return -1

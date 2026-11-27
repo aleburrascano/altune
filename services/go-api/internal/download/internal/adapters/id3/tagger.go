@@ -14,6 +14,8 @@ import (
 	"github.com/bogem/id3v2/v2"
 )
 
+const id3v24 = 4
+
 var ErrUnsupportedContainer = errors.New("id3: only .mp3 files can be tagged")
 
 type Tagger struct{}
@@ -32,7 +34,7 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 	defer func() { _ = tag.Close() }()
 
 	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
-	tag.SetVersion(4)
+	tag.SetVersion(id3v24)
 
 	tag.SetTitle(tags.Title)
 	tag.SetArtist(tags.Artist)

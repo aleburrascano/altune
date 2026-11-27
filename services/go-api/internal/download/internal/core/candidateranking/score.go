@@ -14,6 +14,16 @@ const (
 	titleOnlyPenalty   = 0.6
 	musicCategory      = "Music"
 	unknownSignalScore = 0.5
+
+	channelWeight  = 0.45
+	lengthWeight   = 0.25
+	categoryWeight = 0.20
+	viewsWeight    = 0.10
+
+	vevoChannelScore  = 0.8
+	otherChannelScore = 0.3
+	nonMusicScore     = 0.2
+	looseLengthScore  = 0.5
 )
 
 type entry struct {
@@ -64,7 +74,7 @@ func metadataRank(c ports.AudioCandidate, uploader string, expectedLength float6
 	category := categoryScore(c.Categories)
 	length := durationScore(expectedLength, c.Duration)
 	views := viewScore(c.ViewCount, maxViews)
-	return 0.45*channel + 0.25*length + 0.20*category + 0.10*views
+	return channelWeight*channel + lengthWeight*length + categoryWeight*category + viewsWeight*views
 }
 
 func channelScore(uploader, channel string) float64 {
@@ -72,16 +82,16 @@ func channelScore(uploader, channel string) float64 {
 		return 1.0
 	}
 	if strings.Contains(strings.ToLower(channel), "vevo") {
-		return 0.8
+		return vevoChannelScore
 	}
-	return 0.3
+	return otherChannelScore
 }
 
 func categoryScore(categories []string) float64 {
 	if slices.Contains(categories, musicCategory) {
 		return 1.0
 	}
-	return 0.2
+	return nonMusicScore
 }
 
 func durationScore(expected, actual float64) float64 {
@@ -92,7 +102,7 @@ func durationScore(expected, actual float64) float64 {
 	case domain.LengthTight.Agrees(expected, actual):
 		return 1.0
 	case domain.LengthLoose.Agrees(expected, actual):
-		return 0.5
+		return looseLengthScore
 	default:
 		return 0.0
 	}

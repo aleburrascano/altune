@@ -122,7 +122,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 	var bestArtist discogsSearchResult
 	bestOverlap := -1
 	for _, artist := range artists {
-		releases, err := a.fetchArtistReleases(ctx, artist.ID, 50)
+		releases, err := a.fetchArtistReleases(ctx, artist.ID, artistProbeReleases)
 		if err != nil {
 			continue
 		}
@@ -234,6 +234,8 @@ func (a *DiscogsAdapter) fetchArtistDetail(ctx context.Context, artistID int) (*
 	}
 	return &detail, nil
 }
+
+const artistProbeReleases = 50
 
 func (a *DiscogsAdapter) fetchArtistReleases(ctx context.Context, artistID, perPage int) ([]discogsRelease, error) {
 	u := fmt.Sprintf("https://api.discogs.com/artists/%d/releases?sort=year&sort_order=desc&per_page=%d",
