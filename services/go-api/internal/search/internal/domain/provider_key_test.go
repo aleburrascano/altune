@@ -138,8 +138,7 @@ func TestProviderName_EveryNameRoundTripsToKnownKey(t *testing.T) {
 func TestParseProviderKey_AcceptedKeysRoundTripAndTheRestAreRefused(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
-		raw := rapid.String().Draw(t, "raw")
-
+		raw := rapid.OneOf(rapid.String(), rapid.SampledFrom(knownRawProviderKeys())).Draw(t, "raw")
 		key, err := domain.ParseProviderKey(raw)
 		if err != nil {
 			if key != "" {
@@ -154,4 +153,12 @@ func TestParseProviderKey_AcceptedKeysRoundTripAndTheRestAreRefused(t *testing.T
 			t.Fatalf("an accepted key %q did not parse again: %v, %v", key, again, err)
 		}
 	})
+}
+
+func knownRawProviderKeys() []string {
+	raw := make([]string, len(persistedProviderKeys))
+	for i, k := range persistedProviderKeys {
+		raw[i] = k.want
+	}
+	return raw
 }

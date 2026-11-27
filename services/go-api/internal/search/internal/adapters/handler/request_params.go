@@ -132,7 +132,7 @@ func parseLimit(w http.ResponseWriter, r *http.Request, param string, def, maxLi
 	if policy == resetToDefault {
 		applied = def
 	}
-	slog.WarnContext(r.Context(), "search.limit_out_of_range",
+	slog.InfoContext(r.Context(), "search.limit_out_of_range",
 		"param", param, "requested", limit, "max", maxLimit, "applied", applied)
 	return applied, true
 }

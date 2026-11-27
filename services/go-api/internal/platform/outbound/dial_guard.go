@@ -59,12 +59,15 @@ func baseTransport() http.RoundTripper {
 	return c
 }
 
-const providerDialTimeout = 30 * time.Second
+const (
+	providerDialTimeout   = 30 * time.Second
+	providerDialKeepAlive = 30 * time.Second
+)
 
 func providerDialer() *net.Dialer {
 	return &net.Dialer{
 		Timeout:   providerDialTimeout,
-		KeepAlive: providerDialTimeout,
+		KeepAlive: providerDialKeepAlive,
 		Control:   refuseNonPublicDial,
 	}
 }
