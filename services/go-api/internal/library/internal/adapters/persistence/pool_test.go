@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
-	"altune/go-api/internal/shared/ids"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -165,7 +164,7 @@ type repoCall struct {
 func unansweredCalls(t *testing.T, metrics library.DBCallMetrics) []repoCall {
 	userId := sharedids.NewUserId(uuid.New())
 	track := newTestTrackForDB(t, userId)
-	playlist, err := library.NewPlaylist(userId, "stuck", time.Now(), ids.Real)
+	playlist, err := library.NewPlaylist(userId, "stuck", time.Now(), sharedids.Real)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
@@ -485,7 +484,7 @@ type repoFixture struct {
 func everyRepoMethod(t *testing.T) []repoCall {
 	t.Helper()
 	userId := sharedids.NewUserId(uuid.New())
-	playlist, err := library.NewPlaylist(userId, "refused", time.Now(), ids.Real)
+	playlist, err := library.NewPlaylist(userId, "refused", time.Now(), sharedids.Real)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}

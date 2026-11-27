@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httpserver"
-	"altune/go-api/internal/shared/ids"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -999,7 +998,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 	t.Run("remove track", func(t *testing.T) {
 		pub := &library.InMemoryRecordingPublisher{}
 		plRepo := library.NewInMemoryPlaylistRepo()
-		track, _ := library.NewTrack(userId, "T", "A", "", time.Now, ids.Real)
+		track, _ := library.NewTrack(userId, "T", "A", "", time.Now, sharedids.Real)
 		pl := librarytest.SeedPlaylist(t, plRepo, userId, "PL")
 		_ = pl.AddTrack(track.ID, time.Now())
 		plRepo.SeedWithTracks(t, pl, []*library.Track{track})
@@ -1017,8 +1016,8 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 	t.Run("reorder", func(t *testing.T) {
 		pub := &library.InMemoryRecordingPublisher{}
 		plRepo := library.NewInMemoryPlaylistRepo()
-		t1, _ := library.NewTrack(userId, "T1", "A", "", time.Now, ids.Real)
-		t2, _ := library.NewTrack(userId, "T2", "A", "", time.Now, ids.Real)
+		t1, _ := library.NewTrack(userId, "T1", "A", "", time.Now, sharedids.Real)
+		t2, _ := library.NewTrack(userId, "T2", "A", "", time.Now, sharedids.Real)
 		pl := librarytest.SeedPlaylist(t, plRepo, userId, "PL")
 		_ = pl.AddTrack(t1.ID, time.Now())
 		_ = pl.AddTrack(t2.ID, time.Now())

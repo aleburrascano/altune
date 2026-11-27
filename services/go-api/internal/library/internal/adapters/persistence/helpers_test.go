@@ -3,7 +3,6 @@ package persistence_test
 import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
-	"altune/go-api/internal/shared/ids"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"testing"
@@ -15,7 +14,7 @@ import (
 
 func newTestTrackForDB(t *testing.T, userId sharedids.UserId) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album", time.Now, ids.Real)
+	track, err := library.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album", time.Now, sharedids.Real)
 	if err != nil {
 		t.Fatalf("newTestTrackForDB: %v", err)
 	}
@@ -43,7 +42,7 @@ func unreachablePool(t *testing.T) *pgxpool.Pool {
 
 func newTestPlaylistForDB(t *testing.T, userId sharedids.UserId) *library.Playlist {
 	t.Helper()
-	pl, err := library.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now(), ids.Real)
+	pl, err := library.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now(), sharedids.Real)
 	if err != nil {
 		t.Fatalf("newTestPlaylistForDB: %v", err)
 	}
