@@ -1,0 +1,15 @@
+{
+  "items": [
+    {
+      "key": "album|||artist",
+      "album": "Album",
+      "artist": "Artist",
+      "artwork_url": "https://example.com/art.jpg",
+      "year": 2020,
+      "track_count": 1,
+      "most_recent_added_at": "2026-11-27T00:30:28Z"
+    }
+  ],
+  "total": 1
+}
+

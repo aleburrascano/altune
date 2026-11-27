@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "key": "artist",
+      "artist": "Artist",
+      "artwork_url": "https://example.com/art.jpg",
+      "track_count": 1,
+      "most_recent_added_at": "2026-11-27T00:30:28Z"
+    }
+  ],
+  "total": 1
+}
+

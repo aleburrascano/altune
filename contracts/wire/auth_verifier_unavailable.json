@@ -1,0 +1,11 @@
+{
+  "status": 503,
+  "www_authenticate": "",
+  "body": {
+    "type": "urn:altune:problem:auth.unavailable",
+    "title": "Authentication unavailable",
+    "status": 503,
+    "detail": "authentication unavailable",
+    "code": "auth.unavailable"
+  }
+}

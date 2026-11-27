@@ -1,92 +1,34 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { QueryClient } from '@tanstack/react-query';
 
-import { SERVER_EVENT_TYPES } from '@shared/events';
+import { SERVER_EVENT_TYPES, applyServerEvent, isServerEvent, parseChunk } from '@shared/events';
+import { recordingCache } from '@shared/events/__tests__/recordingCache';
+import { wireFixture } from '@testing/wireFixtures';
 
-function findGoApiRoot(): string | null {
-  let dir = __dirname;
-  for (let hop = 0; hop < 12; hop += 1) {
-    const candidate = path.join(dir, 'services', 'go-api');
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
+function publishedTypes(): string[] {
+  return wireFixture('events_types') as string[];
 }
 
-const GO_API_ROOT = findGoApiRoot();
-
-const PAYLOAD_EVENT_TYPE =
-  /\)\s*EventType\(\)\s*(?:events\.)?EventType\s*\{\s*return\s+((?:events\.)?Type\w+)\s*\}/g;
-const GO_STRING_CONSTANT = /^\s*([A-Z]\w*)\s*(?:[A-Za-z_.]\w*\s*)?=\s*"([a-zA-Z_]+)"/gm;
-const SSE_LITERAL_EVENT_LINE = /"event:\s*([a-zA-Z_]+)\\n/g;
-const QUOTED_LITERAL = /^"([a-zA-Z_]+)"$/;
-const EXPORTED_CONSTANT = /^(?:\w+\.)?([A-Z]\w*)$/;
-
-function listGoSourceFiles(dir: string): string[] {
-  const files: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...listGoSourceFiles(full));
-    } else if (entry.name.endsWith('.go') && !entry.name.endsWith('_test.go')) {
-      files.push(full);
-    }
-  }
-  return files;
+function frameOf(type: string): string {
+  return `id: 1\nevent: ${type}\ndata: ${JSON.stringify(wireFixture(`events_${type}`))}\n\n`;
 }
 
-function readStringConstants(sources: readonly string[]): Map<string, string> {
-  const constants = new Map<string, string>();
-  for (const text of sources) {
-    for (const [, name, value] of text.matchAll(GO_STRING_CONSTANT)) constants.set(name!, value!);
-  }
-  return constants;
-}
-
-type PublishedEventTypes = { types: Set<string>; unresolved: Set<string> };
-
-function derivePublishedEventTypes(root: string): PublishedEventTypes {
-  const sources = listGoSourceFiles(root).map((file) => fs.readFileSync(file, 'utf8'));
-  const constants = readStringConstants(sources);
-  const types = new Set<string>();
-  const unresolved = new Set<string>();
-
-  for (const text of sources) {
-    for (const [, argument] of text.matchAll(PAYLOAD_EVENT_TYPE)) {
-      const literal = QUOTED_LITERAL.exec(argument!);
-      if (literal !== null) {
-        types.add(literal[1]!);
-        continue;
-      }
-      const constant = EXPORTED_CONSTANT.exec(argument!);
-      if (constant === null) continue;
-      const value = constants.get(constant[1]!);
-      if (value === undefined) unresolved.add(argument!);
-      else types.add(value);
-    }
-    for (const [, type] of text.matchAll(SSE_LITERAL_EVENT_LINE)) types.add(type!);
-  }
-  return { types, unresolved };
-}
-
-describe('published event types, derived from services/go-api at test time', () => {
-  it('finds the Go source tree to derive the contract from', () => {
-    expect(GO_API_ROOT).not.toBeNull();
+describe('the event types go-api publishes, from the events_types wire fixture', () => {
+  it('are exactly SERVER_EVENT_TYPES, with no name unpublished and none unhandled', () => {
+    expect(publishedTypes().length).toBeGreaterThan(0);
+    expect([...SERVER_EVENT_TYPES].sort()).toEqual([...publishedTypes()].sort());
   });
 
-  it('resolves every event type a publisher names, so none can go underived', () => {
-    const { unresolved } = derivePublishedEventTypes(GO_API_ROOT!);
+  it.each(publishedTypes())('%s: the wire frame parses and the handler accepts it', (type) => {
+    const parsed = parseChunk('', frameOf(type), '');
+    const block = parsed.blocks[0];
 
-    expect([...unresolved]).toEqual([]);
-  });
+    expect(parsed.blocks).toHaveLength(1);
+    expect(block !== undefined && isServerEvent(block)).toBe(true);
+    if (block === undefined || !isServerEvent(block)) return;
+    expect(block.type).toBe(type);
 
-  it('matches SERVER_EVENT_TYPES exactly, with no name unpublished and none unhandled', () => {
-    const { types } = derivePublishedEventTypes(GO_API_ROOT!);
-
-    expect(types.size).toBeGreaterThan(0);
-    expect([...types].sort()).toEqual([...SERVER_EVENT_TYPES].sort());
+    const client = new QueryClient();
+    expect(applyServerEvent(recordingCache(client), block)).toBe(true);
+    client.clear();
   });
 });

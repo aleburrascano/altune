@@ -270,7 +270,7 @@ add_mobile_stubs
     git commit -qm "events change"
 )
 run_script_with_stubs
-expect_npx "\\.contract\\.test\\.tsx?\$"
+expect_npx "(\\.contract|Contract)\\.test\\.tsx?\$"
 expect_jest_cache_in_checkout
 
 add_gate_parity_stub() {
@@ -1416,15 +1416,11 @@ add_contract_tests() {
     (
         cd "$WORK/repo" || exit 1
         mkdir -p client/src/shared/a/__tests__ client/src/shared/b/__tests__
-        printf "const dir = 'go-api';\n" >client/src/shared/a/__tests__/aContract.test.ts
-        printf "const dir = 'go-api';\n" >client/src/shared/b/__tests__/bContract.test.tsx
-        printf "const dir = 'elsewhere';\n" >client/src/shared/b/__tests__/other.test.ts
-        printf "const dir = 'go-api';\n" >client/src/shared/b/notATest.ts
     )
     commit_as_base
 }
 
-CASE="a go-api change runs the client test files that mention go-api, found at run time"
+CASE="a go-api change runs the client contract tests, selected by their file name"
 new_repo
 add_mobile_stubs
 add_jest_stub
@@ -1432,10 +1428,23 @@ add_contract_tests
 add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
 run_with_tools
-expect_out "ok    mobile contract tests (go-api changed)"
-expect_npx "src/shared/a/__tests__/aContract.test.ts src/shared/b/__tests__/bContract.test.tsx"
-grep -qF "other.test.ts" "$WORK/npx.log" && fail "a test file that does not mention go-api should not run"
-grep -qF "notATest.ts" "$WORK/npx.log" && fail "a non-test file that mentions go-api should not run"
+expect_out "ok    mobile contract tests (go-api or contracts changed)"
+expect_npx "(\\.contract|Contract)\\.test\\.tsx?\$"
+
+CASE="a change to a wire fixture alone runs the client contract tests"
+new_repo
+add_mobile_stubs
+add_jest_stub
+add_contract_tests
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p contracts/wire
+    printf '{}\n' >contracts/wire/x.json
+    git add -A
+    git commit -qm "wire fixture"
+)
+run_with_tools
+expect_out "ok    mobile contract tests (go-api or contracts changed)"
 
 CASE="a go-api change that breaks a client contract test fails precheck"
 new_repo
@@ -1446,7 +1455,7 @@ add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
 STUB_JEST=fail run_with_tools
 expect_rc 1
-expect_out "FAIL  mobile contract tests (go-api changed)"
+expect_out "FAIL  mobile contract tests (go-api or contracts changed)"
 
 CASE="a client-only change does not run the contract tests"
 new_repo
@@ -1456,22 +1465,6 @@ add_contract_tests
 mobile_src_change
 run_with_tools
 forbid_out "mobile contract tests"
-
-CASE="a client with no test file mentioning go-api fails the contract step loudly"
-new_repo
-add_mobile_stubs
-add_jest_stub
-add_go_fixture
-(
-    cd "$WORK/repo" || exit 1
-    mkdir -p client/src
-    printf 'export const a = 1;\n' >client/src/a.ts
-)
-commit_as_base
-edit_go_file internal/search/adapters/x/x.go
-run_with_tools
-expect_rc 1
-expect_out "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"
 
 CASE="a change that only deletes a go-api go file still vets and tests the package it left"
 new_repo

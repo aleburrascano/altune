@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "kind": "album",
+      "key": "album|damn.|kendrick lamar",
+      "title": "DAMN.",
+      "subtitle": "Kendrick Lamar",
+      "image_url": "https://img.example/damn.jpg"
+    }
+  ],
+  "total": 1
+}
+

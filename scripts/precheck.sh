@@ -493,20 +493,9 @@ if touches '^services/overseer/'; then
   fi
 fi
 
-if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|search/internal/domain/events\.go)' && need npx "mobile contract tests"; then
+if [ $lint_only = 0 ] && { touches '^(services/go-api/internal/(shared/events/|search/internal/domain/events\.go)|contracts/wire/)' || { touches '^services/go-api/' && [ -d client/src ]; }; } && need npx "mobile contract tests"; then
   if link_deps client; then
-    par jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$jest_cache" '\.contract\.test\.tsx?$'
-  else
-    echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
-  fi
-fi
-
-if [ $lint_only = 0 ] && touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
-  contract_tests=$(grep -rlF --include='*.test.ts' --include='*.test.tsx' "'go-api'" client/src | sed 's#^client/##' | sort)
-  if [ -z "$contract_tests" ]; then
-    echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; record_fail "mobile contract tests (go-api changed)" 1 "no client test file mentions 'go-api'"; failed=1
-  elif link_deps client; then
-    par jest_check "mobile contract tests (go-api changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" $contract_tests
+    par jest_check "mobile contract tests (go-api or contracts changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" '(\.contract|Contract)\.test\.tsx?$'
   else
     echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
   fi
