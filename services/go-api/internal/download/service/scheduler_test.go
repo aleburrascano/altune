@@ -1962,7 +1962,7 @@ func startVerifiedScheduler(t *testing.T, v acqports.Verification) {
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 }
 
-func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
+func TestNewBackgroundAcquisitionScheduler_LogsVerificationDegradedOrArmed(t *testing.T) {
 	cases := []struct {
 		name         string
 		verification acqports.Verification
@@ -1992,7 +1992,7 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 	}
 }
 
-func TestWithVerificationStatus_NamesFingerprintLookupsUnverified(t *testing.T) {
+func TestNewBackgroundAcquisitionScheduler_NamesFingerprintLookupsUnverified(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	startVerifiedScheduler(t, acqports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})
@@ -3528,6 +3528,7 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 		"FingerprintVerified": func(p *service.SchedulerPorts) { p.FingerprintVerified = nil },
 		"Timer":               func(p *service.SchedulerPorts) { p.Timer = nil },
 		"Ticker":              func(p *service.SchedulerPorts) { p.Ticker = nil },
+		"Unit":                func(p *service.SchedulerPorts) { p.Unit = nil },
 	}
 	for field, drop := range cases {
 		t.Run(field, func(t *testing.T) {
