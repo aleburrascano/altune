@@ -164,7 +164,7 @@ func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shar
 		return nil
 	}
 	slog.InfoContext(ctx, "track removed from playlist",
-		"playlist_id", playlistId.String(), logging.KeyTrackID, trackId.String(), logging.KeyUserID, userId.String())
+		"playlist_id", playlistId.String(), logging.KeyTrackID, trackId.String())
 	s.events.Publish(ctx, userId, events.TrackRemovedFromPlaylist{
 		PlaylistID: playlistId.String(),
 		TrackID:    trackId.String(),
@@ -186,7 +186,7 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 	}
 
 	slog.InfoContext(ctx, "tracks removed from playlist",
-		"playlist_id", playlistId.String(), logging.KeyUserID, userId.String(),
+		"playlist_id", playlistId.String(),
 		"track_ids", trackIdStrings(removed), "removed", len(removed), "requested", len(trackIds))
 
 	s.events.Publish(ctx, userId, events.TracksRemovedFromPlaylist{

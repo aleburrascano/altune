@@ -37,6 +37,8 @@ type correlationHandler struct {
 	inner slog.Handler
 }
 
+func WithRequestStamps(inner slog.Handler) slog.Handler { return newCorrelationHandler(inner) }
+
 func newCorrelationHandler(inner slog.Handler) *correlationHandler {
 	return &correlationHandler{inner: inner}
 }

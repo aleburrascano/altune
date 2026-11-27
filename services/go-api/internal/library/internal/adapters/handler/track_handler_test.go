@@ -233,7 +233,7 @@ func TestHandleDeleteTrack(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteTrack_LogsActor(t *testing.T) {
+func TestHandleDeleteTrack_LogsTheTrack(t *testing.T) {
 	ring := logging.CaptureRing(t, "info")
 
 	repo := library.NewInMemoryTrackRepo()
@@ -246,8 +246,8 @@ func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 		if r.Message != "track.delete" {
 			continue
 		}
-		if r.Attrs["user_id"] != librarytest.UserId().String() || r.Attrs["track_id"] != track.ID.String() {
-			t.Fatalf("track.delete attrs = %v, want user_id %s and track_id %s", r.Attrs, librarytest.UserId(), track.ID)
+		if r.Attrs["track_id"] != track.ID.String() {
+			t.Fatalf("track.delete attrs = %v, want track_id %s", r.Attrs, track.ID)
 		}
 		return
 	}

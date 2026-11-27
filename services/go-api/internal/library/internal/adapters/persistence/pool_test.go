@@ -157,7 +157,6 @@ type countingDBCallMetrics struct{ timeouts atomic.Int64 }
 
 func (m *countingDBCallMetrics) DBCallTimedOut() { m.timeouts.Add(1) }
 
-
 type repoCall struct {
 	name string
 	call func(ctx context.Context, pool *pgxpool.Pool) error

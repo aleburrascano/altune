@@ -53,7 +53,7 @@ func (h *AuditCapture) Find(t TB, msg string) AuditRecord {
 func CaptureAuditLogs(t TB) *AuditCapture {
 	t.Helper()
 	h := &AuditCapture{}
-	t.Cleanup(logging.Swap(slog.New(h)))
+	t.Cleanup(logging.Swap(slog.New(logging.WithRequestStamps(h))))
 	return h
 }
 
