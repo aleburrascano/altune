@@ -96,8 +96,8 @@ const (
 	artistAlbumsMaxLimit       = 100
 	relatedTracksDefaultLimit  = 20
 	relatedTracksMaxLimit      = 50
-	artistContentTracksDefault = topTracksDefaultLimit
-	artistContentTracksMax     = topTracksMaxLimit
+	artistContentTracksDefault = 5
+	artistContentTracksMax     = 50
 	artistContentAlbumsDefault = 100
 	artistContentAlbumsMax     = 200
 )

@@ -55,9 +55,8 @@ linters:
         - '^strings\.(Repeat|SplitN)$'
         - '^time\.Unix$'
         - '^math\.(Pow|Round|Max)$'
-        - '^binary\.'
       ignored-files:
-        - '.*test/.*'
+        - '(^|/)[a-z]*test/'
     importas:
       no-unaliased: false
       no-extra-aliases: false
