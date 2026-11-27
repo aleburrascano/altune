@@ -22,6 +22,7 @@ func contractTrack(status ports.TrackStatus) ports.TrackSnapshot {
 		Title: "Song", Artist: "Artist", Album: "Album", Status: status,
 	}
 	if status == ports.TrackReady {
+		track.Streamable = true
 		return withFileOnRecord(track)
 	}
 	return withoutFileOnRecord(track)
