@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/logging"
 	"context"
+	"fmt"
 	"log/slog"
 )
 
@@ -105,5 +106,9 @@ func (s *Source) observe(ctx context.Context, videoID string) ytmsearch.Watch {
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
-	return s.fetcher.Download(ctx, candidate.URL, outDir)
+	r0, err := s.fetcher.Download(ctx, candidate.URL, outDir)
+	if err != nil {
+		return r0, fmt.Errorf("download audio: %w", err)
+	}
+	return r0, nil
 }

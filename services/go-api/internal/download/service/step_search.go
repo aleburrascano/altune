@@ -54,10 +54,17 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ Pipe
 
 func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) (FindResult, error) {
 	if reporter, ok := s.finder.(outageReportingFinder); ok {
-		return reporter.FindReportingOutage(ctx, req)
+		r0, err := reporter.FindReportingOutage(ctx, req)
+		if err != nil {
+			return r0, fmt.Errorf("find candidates: %w", err)
+		}
+		return r0, nil
 	}
 	candidates, err := s.finder.Find(ctx, req)
-	return FindResult{Candidates: candidates}, err
+	if err != nil {
+		return FindResult{Candidates: candidates}, fmt.Errorf("find candidates: %w", err)
+	}
+	return FindResult{Candidates: candidates}, nil
 }
 
 func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []ports.AudioCandidate) (kept, skipped []ports.AudioCandidate) {
