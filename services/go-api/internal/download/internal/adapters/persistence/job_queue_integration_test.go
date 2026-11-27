@@ -614,7 +614,11 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 	})
 
 	awaitPanicBackoff(t, pool, acq, track.ID)
+	scheduler.Shutdown(context.Background())
 
+	if _, err := queue.Claim(context.Background(), time.Minute); !errors.Is(err, download.ErrNoJobAvailable) {
+		t.Errorf("Claim after the panic = %v, want ErrNoJobAvailable: a panicked job must back off, not be re-claimed", err)
+	}
 	if got := acq.runs.Load(); got != 1 {
 		t.Errorf("runs = %d, want 1 (a panicked job must back off, not be re-claimed)", got)
 	}

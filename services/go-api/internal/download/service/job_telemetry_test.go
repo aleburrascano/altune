@@ -142,7 +142,10 @@ func TestStatus_AJobSumsTheTimeOfEveryFetchAndReportsTheFormatAndFileItStored(t 
 		takes: map[string]time.Duration{failingRank1URL: 120 * time.Millisecond, storedRank2URL: 30 * time.Millisecond},
 	}
 
-	job := scheduleAndFinishStaged(t, source, noVerification(), noStages(func(s *service.StagePorts) { s.Now = manual.Now }))
+	job := scheduleAndFinishStaged(t, source, noVerification(), noStages(func(s *service.StagePorts) {
+		s.Now = manual.Now
+		s.DownloadLimit = service.MustLimitedTo(1)
+	}))
 
 	if got := job.record.StageMs["download.full"]; got != 150 {
 		t.Errorf("download.full = %dms, want 150, summed across both candidates' fetches", got)
