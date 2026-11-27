@@ -63,11 +63,9 @@ type BackgroundAcquisitionScheduler struct {
 	heartbeatInterval time.Duration
 	pollInterval      time.Duration
 	timer             clock.TimerFunc
-	ticker            clock.TickerFunc
 	drainBudget       time.Duration
 
-	inflightCount atomic.Int64
-	rejected      atomic.Uint64
+	rejected atomic.Uint64
 
 	verification        ports.Verification
 	skipCount           func() uint64
@@ -75,6 +73,7 @@ type BackgroundAcquisitionScheduler struct {
 	log                 *jobLog
 	now                 func() time.Time
 	finisher            *jobFinisher
+	runner              *jobRunner
 
 	upgrades UpgradeLane
 }
@@ -180,7 +179,6 @@ func NewBackgroundAcquisitionScheduler(
 		upgrades:            wiring.Upgrades,
 		events:              wiring.Events,
 		timer:               wiring.Timer,
-		ticker:              wiring.Ticker,
 		verification:        wiring.Verification,
 		notifier:            wiring.Notifier,
 		skipCount:           wiring.VerifySkips,
@@ -196,6 +194,18 @@ func NewBackgroundAcquisitionScheduler(
 	logVerification(ctx, s.verification)
 	s.queue = wiring.Queue(s.wake, s.now)
 	s.finisher = newJobFinisher(s.queue, s.pending, s.log, s.svc, wiring.Outcomes, wiring.Unit)
+	s.runner = &jobRunner{
+		svc:               s.svc,
+		events:            s.events,
+		queue:             s.queue,
+		log:               s.log,
+		finisher:          s.finisher,
+		upgrades:          s.upgrades,
+		ticker:            wiring.Ticker,
+		now:               s.now,
+		heartbeatInterval: s.heartbeatInterval,
+		leaseDuration:     s.leaseDuration,
+	}
 	s.runners.Track(func() { s.notifier.Listen(ctx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
 
@@ -234,23 +244,6 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers(ctx context.Context
 	for range s.upgrades.workers {
 		s.runners.Track(func() { s.runWorker(ctx, claim, s.lanes.upgrade) })
 	}
-}
-
-func (s *BackgroundAcquisitionScheduler) leaseFence(job ports.Job) func(context.Context) error {
-	verifier, ok := s.queue.(ports.UpgradeJobQueue)
-	if !ok || job.Kind != ports.JobKindUpgrade {
-		return nil
-	}
-	return func(ctx context.Context) error {
-		return verifier.VerifyLease(ctx, job.TrackID, job.ClaimNumber)
-	}
-}
-
-func (s *BackgroundAcquisitionScheduler) eventsFor(kind ports.JobKind) events.Publisher {
-	if kind == ports.JobKindUpgrade {
-		return events.NoopPublisher()
-	}
-	return s.events
 }
 
 func (s *BackgroundAcquisitionScheduler) verificationStatus() ports.Verification {
@@ -313,7 +306,7 @@ func (s *BackgroundAcquisitionScheduler) claimFrom(ctx context.Context, claim cl
 	done := make(chan struct{})
 	s.jobs.Track(func() {
 		defer close(done)
-		s.runClaimedJob(ctx, job)
+		s.runner.runClaimedJob(ctx, job)
 	})
 	return done, true
 }
@@ -370,84 +363,3 @@ func (s *BackgroundAcquisitionScheduler) idleWait(wake <-chan struct{}) bool {
 		return false
 	}
 }
-
-func (s *BackgroundAcquisitionScheduler) runClaimedJob(ctx context.Context, job ports.Job) {
-	run := s.acquisitionRunFor(job.Kind)
-
-	jobCtx, cancelJob := s.jobContextFor(ctx, job)
-	defer cancelJob()
-
-	heartbeatDone := make(chan struct{})
-	background.Go(jobCtx, "acquisition.heartbeat_panic", func() { s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone) })
-
-	work := s.startClaimedJob(job)
-	jobErr := s.execClaimedJob(jobCtx, run, work)
-	end := jobEnd{err: jobErr, shutdown: ctx.Err() != nil}
-	s.finisher.completeClaimedJob(jobCtx, job.TrackID, end)
-	s.stopClaimedJob(cancelJob, heartbeatDone)
-
-	finishCtx, cancelFinish := background.DetachCancelable(jobCtx)
-	defer cancelFinish()
-	s.finisher.finishJob(finishCtx, job, end)
-}
-
-func (s *BackgroundAcquisitionScheduler) startClaimedJob(job ports.Job) ports.AcquisitionJob {
-	trackId := job.TrackID
-	s.inflightCount.Add(1)
-	s.log.register(trackId, "")
-	s.log.markRunning(trackId)
-	s.log.update(trackId, func(r *ports.JobRecord) {
-		r.Kind = job.Kind
-		r.Run = job.Run
-	})
-	reporter := schedulerJobReporter{log: s.log, events: s.eventsFor(job.Kind), trackID: trackId, userId: job.UserID}
-	reporter.Timing("queue", job.Waited)
-	return ports.AcquisitionJob{
-		UserID:         job.UserID,
-		TrackID:        job.TrackID,
-		Attempt:        job.Run,
-		Claim:          job.ClaimNumber,
-		SchedulerOwned: true,
-		Reporter:       reporter,
-		CommitCheck:    s.leaseFence(job),
-	}
-}
-
-func (s *BackgroundAcquisitionScheduler) stopClaimedJob(cancelJob context.CancelFunc, heartbeatDone <-chan struct{}) {
-	cancelJob()
-	<-heartbeatDone
-	s.inflightCount.Add(-1)
-}
-
-func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) acquisitionRun {
-	switch kind {
-	case ports.JobKindReplace:
-		return s.svc.ExecuteReplace
-	case ports.JobKindUpgrade:
-		return s.upgrades.runner.ExecuteUpgrade
-	case ports.JobKindAcquire:
-		return s.svc.Execute
-	}
-	return s.svc.Execute
-}
-
-func (s *BackgroundAcquisitionScheduler) jobContextFor(ctx context.Context, job ports.Job) (context.Context, context.CancelFunc) {
-	jobCtx, cancelJob := context.WithCancel(ctx)
-	if job.CorrelationID != "" {
-		jobCtx = logging.ContextWithCorrelationID(jobCtx, job.CorrelationID)
-	}
-	return jobCtx, cancelJob
-}
-
-func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, run acquisitionRun, job ports.AcquisitionJob) error {
-	trackId := job.TrackID
-	var err error
-	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job) }, logging.KeyTrackID, trackId.String()); panicked != nil {
-		err = errJobPanicked
-	}
-	return err
-}
-
-var errJobPanicked = errors.New("acquisition job panicked")
-
-type acquisitionRun func(ctx context.Context, job ports.AcquisitionJob) error
