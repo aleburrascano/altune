@@ -1,7 +1,7 @@
 import type { PlaybackErrorKind } from '@shared/playback';
 import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
 
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 
 export type PrefetchFailureStage = 'resolve' | 'download' | 'swap';
 

@@ -21,11 +21,11 @@ import {
   swapUpcomingToLocal,
   type SwapOutcome,
 } from '@features/player/adapters/native/nativeTrackSwap';
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
-} from '@features/player/domain/playbackHealth';
+} from '@features/player/core/playbackHealth';
 
 const inflight = new Map<string, AbortController>();
 const invalidatedInflight = new Set<string>();
@@ -100,7 +100,7 @@ function upcomingLibraryTrack(
   const track = orderedQueueTracks(useQueueStore.getState())[activeIndex + 1];
   if (!track || track.source.kind !== 'library') return null;
   const parsed = parseTrackId(track.source.trackId);
-  return parsed.ok ? { track, trackId: parsed.id } : null;
+  return parsed.ok ? { track, trackId: parsed.value } : null;
 }
 
 function supersedeAllBut(trackId: TrackId | null): void {

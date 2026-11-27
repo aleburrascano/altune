@@ -40,7 +40,7 @@ export {
   recordQueueRestoreFailure,
   recordQueueSaveFailure,
   recordQueueStateRejected,
-} from '@features/player/domain/playbackHealth';
+} from '@features/player/core/playbackHealth';
 export {
   createNativePlaybackActions,
   ignoringNativeRejection,
@@ -67,9 +67,9 @@ export {
   reportQueueFailure,
   reportingQueueFailure,
 } from '@features/player/adapters/native/queueFailureReport';
-export { derivePlaybackState } from '@features/player/domain/derivePlaybackState';
-export type { DerivePlaybackStateInput } from '@features/player/domain/derivePlaybackState';
-export type { RedactedPlaybackFailure } from '@features/player/domain/playbackError';
+export { derivePlaybackState } from '@features/player/core/derivePlaybackState';
+export type { DerivePlaybackStateInput } from '@features/player/core/derivePlaybackState';
+export type { RedactedPlaybackFailure } from '@features/player/core/playbackError';
 export {
   appendNativeTrack,
   insertNativeTrackNext,
@@ -99,8 +99,8 @@ export {
   classifyPlaybackFailure,
   redactPlaybackErrorMessage,
   warnPlayback,
-} from '@features/player/domain/playbackError';
-export type { QueueRestoreStage } from '@features/player/domain/playbackHealth';
+} from '@features/player/core/playbackError';
+export type { QueueRestoreStage } from '@features/player/core/playbackHealth';
 export {
   PLAYBACK_RATES,
   usePlaybackRateStore,
@@ -129,14 +129,14 @@ export {
   reconstructPlayOrder,
   resolveResumeStartIndex,
   showSavedTrackWhileRehydrating,
-} from '@features/player/domain/queueResume';
+} from '@features/player/core/queueResume';
 export { savedQueueLists } from '@features/player/domain/queueSaveWindow';
 export {
   asRepeatMode,
   fromWireSource,
   parseQueueState,
   toWireSource,
-} from '@features/player/domain/queueStateWire';
+} from '@features/player/core/queueStateWire';
 export {
   claimRecoveryAttempt,
   resetRecoveryBudget,

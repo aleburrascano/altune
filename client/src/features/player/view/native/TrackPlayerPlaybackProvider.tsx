@@ -9,7 +9,7 @@ import {
   trackKey,
   type PlaybackTrack,
 } from '@shared/playback';
-import { derivePlaybackState } from '@features/player/domain/derivePlaybackState';
+import { derivePlaybackState } from '@features/player/core/derivePlaybackState';
 import { useNativePlayback } from '@features/player/view/NativePlaybackProvider';
 import { usePlaybackErrorFor } from '@features/player/view/usePlaybackErrorFor';
 import { usePlaybackPosition } from '@features/player/view/usePlaybackPosition';

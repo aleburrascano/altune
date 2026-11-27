@@ -11,6 +11,7 @@ import {
   type StreamIO,
 } from '@shared/events';
 import { isAppActive, subscribeAppState } from '@shared/lifecycle';
+import { warn } from '@shared/log';
 import { useRouteSegments } from '@shared/navigation';
 import { recordEvent } from '@shared/telemetry';
 
@@ -39,10 +40,6 @@ function createSSEClient(
 
 const foreground: AppForeground = { isActive: isAppActive, subscribe: subscribeAppState };
 
-function warn(message: string, detail: unknown): void {
-  console.warn(message, detail);
-}
-
 function startAppServerEvents(cache: QueryClient): () => void {
   return startServerEvents({
     cache,
@@ -61,7 +58,7 @@ export function ServerEventsBridge(): null {
 
 function sendScreenView(route: string): void {
   recordEvent({ type: 'screen_view', payload: { route } }).catch((error: unknown) => {
-    console.warn('[telemetry] recording event failed', error);
+    warn('[telemetry] recording event failed', error);
   });
 }
 

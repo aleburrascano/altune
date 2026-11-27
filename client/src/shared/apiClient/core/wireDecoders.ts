@@ -1,9 +1,19 @@
-import { ContractError, isApiErrorCode, type ApiErrorCode } from '@shared/failure';
+import {
+  ContractError,
+  isApiErrorCode,
+  type ApiErrorCode,
+  type ApiErrorExtras,
+} from '@shared/failure';
 
-export type ApiErrorBody = {
+export interface ApiErrorBody {
   detail?: string;
   code?: ApiErrorCode;
-};
+  rawCode?: string;
+  type?: string;
+  title?: string;
+  status?: number;
+  instance?: string;
+}
 
 export function asRecord(value: unknown, at: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -84,16 +94,42 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
   return typeof value === 'string' ? value : undefined;
 }
 
+function optionalNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
+export function errorExtrasOf(
+  body: ApiErrorBody,
+  retryAfterMs: number | undefined,
+): ApiErrorExtras {
+  const extras = { rawCode: body.rawCode, detail: body.detail, retryAfterMs };
+  return Object.fromEntries(Object.entries(extras).filter(([, field]) => field !== undefined));
+}
+
 export function parseErrorBody(value: unknown): ApiErrorBody {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
-  const rawCode = record['code'];
-  const code = isApiErrorCode(rawCode) ? rawCode : undefined;
-  const detail = optionalString(record, 'detail');
-  return {
-    ...(code !== undefined ? { code } : {}),
-    ...(detail !== undefined ? { detail } : {}),
+  const rawCode = optionalString(record, 'code');
+  const known = isApiErrorCode(rawCode) ? rawCode : undefined;
+  const fields = {
+    detail: optionalString(record, 'detail'),
+    type: optionalString(record, 'type'),
+    title: optionalString(record, 'title'),
+    status: optionalNumber(record, 'status'),
+    instance: optionalString(record, 'instance'),
+    code: known,
+    rawCode: known === undefined ? rawCode : undefined,
   };
+  return Object.fromEntries(Object.entries(fields).filter(([, field]) => field !== undefined));
+}
+
+const MS_PER_SECOND = 1000;
+const DELTA_SECONDS_PATTERN = /^\d+$/;
+
+export function retryAfterMsOf(header: string | null): number | undefined {
+  if (header === null || !DELTA_SECONDS_PATTERN.test(header.trim())) return undefined;
+  return Number(header.trim()) * MS_PER_SECOND;
 }
 
 export function member<T extends string>(value: unknown, allowed: readonly T[], at: string): T {

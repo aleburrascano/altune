@@ -2,8 +2,8 @@ import type { Dispatch, SetStateAction } from 'react';
 
 import type { TrackKey, PlaybackTrack } from '@shared/playback';
 
-import type { PlayerPhase } from '@features/player/domain/derivePlaybackState';
-import type { RedactedPlaybackFailure } from '@features/player/domain/playbackError';
+import type { PlayerPhase } from '@features/player/core/derivePlaybackState';
+import type { RedactedPlaybackFailure } from '@features/player/core/playbackError';
 
 export interface WebPlayback {
   readonly track: PlaybackTrack | null;

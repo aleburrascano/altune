@@ -1,6 +1,6 @@
 import type { PlaybackControls, PlaybackTrack, QueueStore, RepeatMode } from '@shared/playback';
 
-import type { PlayerPhase } from '@features/player/domain/derivePlaybackState';
+import type { PlayerPhase } from '@features/player/core/derivePlaybackState';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;

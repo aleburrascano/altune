@@ -1,15 +1,42 @@
-import { ApiError, NetworkError } from '@shared/failure';
+import {
+  ApiError,
+  NetworkError,
+  failureKindOf,
+  kindOfStatus,
+  type FailureKind,
+} from '@shared/failure';
 import type { PlaybackErrorKind } from '@shared/playback';
 import { warn } from '@shared/log';
 
-function httpStatusKind(status: number): PlaybackErrorKind {
-  if (status === 401 || status === 403) return 'auth';
-  if (status === 404 || status === 410) return 'not_found';
-  if (status === 408 || status === 429 || status >= 500) return 'network';
-  return 'unknown';
+export function playbackKindOfFailure(kind: FailureKind): PlaybackErrorKind {
+  switch (kind) {
+    case 'unauthorized':
+      return 'auth';
+    case 'not-found':
+      return 'not_found';
+    case 'offline':
+    case 'timeout':
+    case 'rate-limited':
+    case 'server':
+      return 'network';
+    case 'conflict':
+    case 'limit-reached':
+    case 'rejected':
+    case 'contract':
+    case 'unknown':
+      return 'unknown';
+    default:
+      return unreachableKind(kind);
+  }
 }
 
-const HTTP_STATUS_IN_MESSAGE = /\bresponse code:?\s*(\d{3})\b/i;
+function unreachableKind(kind: never): PlaybackErrorKind {
+  throw new Error(`unhandled failure kind ${String(kind)}`);
+}
+
+export function playbackKindOfStatus(status: number): PlaybackErrorKind {
+  return playbackKindOfFailure(kindOfStatus(status));
+}
 
 const NETWORK_NATIVE_CODES: ReadonlySet<string> = new Set([
   'android-io-network-connection-failed',
@@ -21,17 +48,25 @@ const NOT_FOUND_NATIVE_CODES: ReadonlySet<string> = new Set(['android-io-file-no
 const DECODE_NATIVE_CODES: ReadonlySet<string> = new Set(['ios_track_unplayable']);
 const DECODE_NATIVE_PREFIXES = ['android-parsing-', 'android-decoding-'];
 
-function badHttpStatusKind(message: string): PlaybackErrorKind {
-  const status = HTTP_STATUS_IN_MESSAGE.exec(message)?.[1];
-  return status ? httpStatusKind(Number(status)) : 'network';
-}
-
 function isDecodeNativeCode(code: string): boolean {
   return DECODE_NATIVE_CODES.has(code) || DECODE_NATIVE_PREFIXES.some((p) => code.startsWith(p));
 }
 
+export const NATIVE_BAD_HTTP_STATUS_CODE = 'android-io-bad-http-status';
+
+const HTTP_STATUS_IN_MESSAGE = /\bresponse code:?\s*(\d{3})\b/i;
+
+function badHttpStatusKind(message: string): PlaybackErrorKind {
+  const status = HTTP_STATUS_IN_MESSAGE.exec(message)?.[1];
+  return status === undefined ? 'network' : playbackKindOfStatus(Number(status));
+}
+
 export function classifyNativePlaybackError(code: string, message: string): PlaybackErrorKind {
-  if (code === 'android-io-bad-http-status') return badHttpStatusKind(message);
+  if (code === NATIVE_BAD_HTTP_STATUS_CODE) return badHttpStatusKind(message);
+  return nativeCodeKind(code);
+}
+
+function nativeCodeKind(code: string): PlaybackErrorKind {
   if (NETWORK_NATIVE_CODES.has(code)) return 'network';
   if (NOT_FOUND_NATIVE_CODES.has(code)) return 'not_found';
   if (isDecodeNativeCode(code)) return 'decode';
@@ -40,10 +75,10 @@ export function classifyNativePlaybackError(code: string, message: string): Play
 
 export function classifyPlaybackFailure(err: unknown): PlaybackErrorKind {
   if (err instanceof NetworkError) return 'network';
-  if (err instanceof ApiError) return httpStatusKind(err.status);
+  if (err instanceof ApiError) return playbackKindOfFailure(failureKindOf(err));
   if (typeof err !== 'object' || err === null || !('code' in err)) return 'unknown';
   if (typeof err.code !== 'string') return 'unknown';
-  const message = err instanceof Error ? err.message : '';
+  const message = 'message' in err && typeof err.message === 'string' ? err.message : '';
   return classifyNativePlaybackError(err.code, message);
 }
 

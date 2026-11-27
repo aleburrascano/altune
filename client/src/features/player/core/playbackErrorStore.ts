@@ -11,8 +11,8 @@ import {
   classifyPlaybackFailure,
   redactPlaybackErrorMessage,
   warnPlayback,
-} from '@features/player/domain/playbackError';
-import { recordPlaybackFailure } from '@features/player/domain/playbackHealth';
+} from '@features/player/core/playbackError';
+import { recordPlaybackFailure } from '@features/player/core/playbackHealth';
 
 interface PlaybackErrorState {
   key: TrackKey | null;

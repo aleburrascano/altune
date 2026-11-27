@@ -301,7 +301,7 @@ export function createOffline({ now, random }: OfflineDeps) {
       for (const [key, entry] of Object.entries(entries)) {
         const parsed = parseTrackId(key);
         if (!parsed.ok) continue;
-        const trackId = parsed.id;
+        const trackId = parsed.value;
         const file = onDisk.get(trackId);
         if (file !== undefined) {
           next[trackId] = readyEntry(trackId, file.uri, recordedVersion(entry));

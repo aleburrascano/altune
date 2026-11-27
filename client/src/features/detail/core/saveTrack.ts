@@ -1,4 +1,5 @@
 import { trackIdentityKey } from '@shared/acquisition';
+import type { ErrorCopy } from '@shared/failure';
 import {
   type CatalogSourceRef,
   type CreateTrackRequest,
@@ -134,7 +135,7 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
 }
 
 export type SaveFailure = {
-  message: string;
+  copy: ErrorCopy;
   isRetryable: boolean;
   trackId?: TrackId;
 };
@@ -202,8 +203,8 @@ export function ownedRetryTrackId(owned: OwnedTrack | null): TrackId | null {
 }
 
 export function saveFailureBanner(failure: SaveFailure): string {
-  const nextStep = failure.isRetryable ? 'Tap Retry.' : "Retrying won't help.";
-  return `Couldn't save this track. ${nextStep} (${failure.message})`;
+  const nextStep = failure.isRetryable ? 'Tap Retry.' : failure.copy.body;
+  return `${failure.copy.title}. ${nextStep}`;
 }
 
 export const SAVE_ALL_CONCURRENCY = 4;

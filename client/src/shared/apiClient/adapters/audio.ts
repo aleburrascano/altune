@@ -1,6 +1,6 @@
 import { markSessionExpired, stampCredentials } from '@shared/auth';
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/adapters/correlationId';
-import { ApiError, ContractError, HTTP_UNAUTHORIZED } from '@shared/failure';
+import { ContractError, isSessionRefusal } from '@shared/failure';
 import { idPathSegment, parseTrackId, type TrackId } from '@shared/catalog';
 import { apiFetch, apiSend, authorization, logFailure } from '@shared/apiClient/adapters/http';
 import { apiBase } from '@shared/apiConfig';
@@ -15,16 +15,12 @@ import { startDeadline } from '@shared/timing';
 
 const AUDIO_STREAM_ROUTE = '/v1/tracks/{id}/audio';
 
-function isSessionRefusal(error: unknown): boolean {
-  return error instanceof ApiError && error.status === HTTP_UNAUTHORIZED;
-}
-
 export function audioStreamUrl(trackId: TrackId): string {
   return `${apiBase()}/v1/tracks/${idPathSegment(trackId)}/audio`;
 }
 
 export async function audioRequestHeaders(): Promise<Record<string, string>> {
-  const correlationId = newCorrelationId() ?? undefined;
+  const correlationId = newCorrelationId();
   return {
     ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
     ...(await authorizationHeaderOrNone(correlationId)),
@@ -61,7 +57,7 @@ const AUDIO_URLS_TIMEOUT_MS = 2500;
 function decodeTrackId(value: unknown, at: string): TrackId {
   const parsed = parseTrackId(asString(value, at));
   if (!parsed.ok) throw new ContractError(at, 'not a valid id shape');
-  return parsed.id;
+  return parsed.value;
 }
 
 function decodeResolvedAudioUrl(value: unknown, at: string): ResolvedAudioUrl {

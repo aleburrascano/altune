@@ -144,7 +144,7 @@ describe('buildDangerZoneActions', () => {
       history({ isSuccess: false, isError: true, error: new NetworkError('transport', 'offline') }),
     ).toMatchObject({
       status: { label: 'Failed', tone: 'danger' },
-      detail: 'Could not reach the server — check your connection and try again.',
+      detail: 'Check your connection and try again.',
     });
   });
 
@@ -166,7 +166,7 @@ describe('buildDangerZoneActions', () => {
     ).toMatchObject({
       disabled: false,
       status: { label: 'Failed', tone: 'danger' },
-      detail: 'Could not reach the server — check your connection and try again.',
+      detail: 'Check your connection and try again.',
     });
   });
 });

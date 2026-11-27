@@ -29,7 +29,7 @@ import {
   isIndexOutOfBounds,
   reportingQueueFailure,
 } from '@features/player/adapters/native/queueFailureReport';
-import { redactedPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
+import { redactedPlaybackFailure, warnPlayback } from '@features/player/core/playbackError';
 import { markPlayRequested } from '@features/player/adapters/native/playStartTiming';
 import { warn } from '@shared/log';
 

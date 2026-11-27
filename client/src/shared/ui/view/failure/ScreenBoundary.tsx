@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { error as logError } from '@shared/log';
 import { reportClientError } from '@shared/telemetry';
 
 import { Button } from '@shared/ui/view/primitives/Button';
@@ -59,7 +60,7 @@ export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundar
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[ScreenBoundary] render error', error, info.componentStack);
+    logError('[ScreenBoundary] render error', error, info.componentStack);
     reportClientError(error, 'boundary');
     this.setState({ componentStack: info.componentStack ?? null });
   }
