@@ -27,10 +27,18 @@ if [ -f scripts/ci/merge-result.sh ] && git rev-parse --git-dir >/dev/null 2>&1;
     cache=${XDG_CACHE_HOME:-$HOME/.cache}/altune/prepush-merge
     wt=$cache/$(pwd | cksum | cut -d' ' -f1)
     mkdir -p "$cache" || exit 1
+    for src in "$cache"/*.src; do
+      [ -e "$src" ] || continue
+      [ -d "$(cat "$src")" ] && continue
+      stale=${src%.src}
+      rm -rf "$stale" "$stale.lock" "$src"
+    done
+    git worktree prune
     exec 9>"$wt.lock"
     flock -w 900 9 || { echo "❌ pre-push: another push from this checkout holds the merge check for over 15 minutes; try again."; exit 1; }
-    if [ -e "$wt/.git" ]; then
-      git -C "$wt" checkout -q --detach -f "$merged" && git -C "$wt" clean -qfd || exit 1
+    pwd >"$wt.src"
+    if [ -e "$wt/.git" ] && git -C "$wt" checkout -q --detach -f "$merged" 2>/dev/null && git -C "$wt" clean -qfd; then
+      :
     else
       rm -rf "$wt"
       git worktree prune

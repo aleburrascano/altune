@@ -129,6 +129,22 @@ grep -qE "precheck in $WORK/cache/altune/prepush-merge/[0-9]+ args" "$WORK/calls
 grep -qx waited "$WORK/lock.result" || fail "a second push from the same checkout must wait for the first one's merge check"
 grep -qE "precheck in $WORK/cache" "$WORK/calls.log" || fail "the waiting push must run once the lock is free: $(cat "$WORK/calls.log")"
 
+printf 'gitdir: %s/nowhere\n' "$WORK" >"$cache_dir/.git"
+run_git_hook
+[ "$RC" = 0 ] || fail "a merge check directory whose .git points at a dead registration heals itself (exit $RC): $(cat "$WORK/out.log")"
+grep -qE "precheck in $WORK/cache/altune/prepush-merge/[0-9]+ args" "$WORK/calls.log" || fail "after healing the merge check must run in its directory: $(cat "$WORK/calls.log")"
+grep -q "^gitdir: $G/.git/worktrees/" "$cache_dir/.git" || fail "the healed directory must be a live worktree of the repo: $(cat "$cache_dir/.git")"
+
+stale=$WORK/cache/altune/prepush-merge/999999999
+mkdir -p "$stale"
+printf 'x\n' >"$stale/file"
+printf '%s\n' "$WORK/no-such-checkout" >"$stale.src"
+: >"$stale.lock"
+run_git_hook
+[ "$RC" = 0 ] || fail "a push with a stale scratch directory still passes (exit $RC)"
+[ ! -e "$stale" ] && [ ! -e "$stale.src" ] && [ ! -e "$stale.lock" ] || fail "a scratch worktree whose source checkout is gone is removed on the next push"
+[ -e "$cache_dir/.git" ] || fail "the scratch worktree of a checkout that still exists is kept"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
