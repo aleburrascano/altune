@@ -149,6 +149,7 @@ func (s *AcquireTrackAudioService) storedFiles() storedFileFingerprinter {
 }
 
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
+	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
@@ -175,6 +176,7 @@ func (s *AcquireTrackAudioService) observe(ac *AcquisitionContext) {
 }
 
 func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
+	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
@@ -187,6 +189,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId id
 }
 
 func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, userId ids.UserId, track *ports.TrackSnapshot, gate replacement.ReplacementGate) (replacement.Attempt, error) {
+	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
@@ -246,7 +249,6 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 
 	slog.InfoContext(ctx, "track_acquisition_started",
 		logging.KeyTrackID, trackId.String(),
-		logging.KeyUserID, userId.String(),
 		"has_isrc", track.ISRC != nil,
 	)
 	s.events.Publish(ctx, userId, events.TrackAcquisitionStarted{
@@ -391,7 +393,7 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 }
 
 func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, userId ids.UserId, trackId ids.TrackId) {
-	s.outcomes().refuseQueued(ctx, userId, trackId)
+	s.outcomes().refuseQueued(logging.ContextWithSubjectUser(ctx, userId.String()), userId, trackId)
 }
 
 func deref[T any](p *T) T {

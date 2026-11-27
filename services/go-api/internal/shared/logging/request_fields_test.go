@@ -28,6 +28,61 @@ func TestRequestFields_StampEveryLineOfTheContext(t *testing.T) {
 	}
 }
 
+func TestContextWithSubjectUser_StampsBackgroundWorkWithTheUserItIsFor(t *testing.T) {
+	logger, _, out := setupLogger(t, "info", false)
+	ctx := logging.ContextWithSubjectUser(context.Background(), "subject-1")
+
+	logger.InfoContext(ctx, "background line")
+
+	if line := out(); !strings.Contains(line, `"user_id":"subject-1"`) {
+		t.Errorf("line lacks the subject user: %s", line)
+	}
+}
+
+func TestContextWithSubjectUser_KeepsTheRouteAndReplacesTheRequestUser(t *testing.T) {
+	logger, _, out := setupLogger(t, "info", false)
+	request := logging.ContextWithRequestFields(context.Background(), func() logging.RequestFields {
+		return logging.RequestFields{UserID: "caller", Route: "/v1/tracks/{id}/retry"}
+	})
+	ctx := logging.ContextWithSubjectUser(request, "owner")
+
+	logger.InfoContext(ctx, "work for the owner")
+
+	line := out()
+	if !strings.Contains(line, `"user_id":"owner"`) || strings.Contains(line, `"caller"`) {
+		t.Errorf("line should carry the subject user and not the request user: %s", line)
+	}
+	if !strings.Contains(line, `"route":"/v1/tracks/{id}/retry"`) {
+		t.Errorf("line lost the request route: %s", line)
+	}
+}
+
+func TestContextWithSubjectUser_AnEmptyUserKeepsTheRequestUser(t *testing.T) {
+	logger, _, out := setupLogger(t, "info", false)
+	request := logging.ContextWithRequestFields(context.Background(), func() logging.RequestFields {
+		return logging.RequestFields{UserID: "caller"}
+	})
+	ctx := logging.ContextWithSubjectUser(request, "")
+
+	logger.InfoContext(ctx, "no subject")
+
+	if line := out(); !strings.Contains(line, `"user_id":"caller"`) {
+		t.Errorf("line lost the request user: %s", line)
+	}
+}
+
+func TestContextWithSubjectUser_AnExplicitKeyStillWins(t *testing.T) {
+	logger, _, out := setupLogger(t, "info", false)
+	ctx := logging.ContextWithSubjectUser(context.Background(), "subject")
+
+	logger.InfoContext(ctx, "explicit", logging.KeyUserID, "explicit")
+
+	line := out()
+	if got := strings.Count(line, `"user_id"`); got != 1 || !strings.Contains(line, `"user_id":"explicit"`) {
+		t.Errorf("want one explicit user_id, got: %s", line)
+	}
+}
+
 func TestRequestFields_KeepAnExplicitKeyAndSkipEmptyFields(t *testing.T) {
 	logger, _, out := setupLogger(t, "info", false)
 	ctx := logging.ContextWithRequestFields(context.Background(), func() logging.RequestFields {

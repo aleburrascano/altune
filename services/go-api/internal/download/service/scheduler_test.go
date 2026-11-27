@@ -912,6 +912,25 @@ func (r *countingLedger) RevertAt(ctx context.Context, track acqports.TrackSnaps
 	return r.emptyLedger.RevertAt(ctx, track)
 }
 
+func TestBackgroundScheduler_Schedule_LogsCarryTheUserTheTrackBelongsTo(t *testing.T) {
+	ring := logging.CaptureRing(t, "debug")
+	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now)
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+	userId := ids.NewUserId(uuid.New())
+
+	if err := scheduler.Schedule(context.Background(), userId, ids.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	attrs, found := loggedAttrs(ring, "acquisition.scheduling")
+	if !found {
+		t.Fatal("no acquisition.scheduling line was logged")
+	}
+	if attrs[logging.KeyUserID] != userId.String() {
+		t.Errorf("acquisition.scheduling user_id = %q, want %q", attrs[logging.KeyUserID], userId.String())
+	}
+}
+
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ledger := &countingLedger{}

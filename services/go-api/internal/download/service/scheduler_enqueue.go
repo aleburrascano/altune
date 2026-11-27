@@ -23,6 +23,7 @@ func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId id
 }
 
 func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId ids.UserId, trackId ids.TrackId, kind ports.JobKind) error {
+	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
 	if s.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", logging.KeyTrackID, trackId.String())
@@ -61,7 +62,7 @@ func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trac
 	if s.closed.Load() {
 		s.pending.untrack(trackId.String())
 	}
-	slog.InfoContext(ctx, "acquisition.scheduling", logging.KeyTrackID, trackId.String(), logging.KeyUserID, userId.String(), "kind", string(kind))
+	slog.InfoContext(ctx, "acquisition.scheduling", logging.KeyTrackID, trackId.String(), "kind", string(kind))
 	return nil
 }
 
