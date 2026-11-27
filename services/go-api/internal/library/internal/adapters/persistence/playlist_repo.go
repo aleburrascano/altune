@@ -334,7 +334,10 @@ func requireWithinTrackCap(ctx context.Context, tx pgx.Tx, playlistId domain.Pla
 	if err != nil {
 		return fmt.Errorf("count tracks of playlist %s: %w", playlistId.UUID(), err)
 	}
-	return domain.RequirePlaylistWithinCap(total)
+	if err := domain.RequirePlaylistWithinCap(total); err != nil {
+		return fmt.Errorf("playlist %s over its cap: %w", playlistId.UUID(), err)
+	}
+	return nil
 }
 
 const foreignKeyViolation = "23503"
