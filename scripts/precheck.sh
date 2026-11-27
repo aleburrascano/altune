@@ -372,6 +372,7 @@ if touches '^services/go-api/'; then
         if touches "^$m/.*\.go\$"; then
           check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports)" $m go run ./scripts/lintdoors --exports .
           check "go-api no inline duration literals: name each as a const or take it from config (lintdurations)" $m go run ./scripts/lintdurations internal
+          check "go-api no sleeping to wait in a test: wait on the event, a condition or a synctest bubble (lintsleeps)" $m go run ./scripts/lintsleeps .
         fi
         if touches "^$m/go\.(mod|sum)\$"; then
           check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
@@ -421,6 +422,7 @@ if touches '^services/go-api/'; then
       need go-arch-lint "go-api architecture" && check "go-api architecture: every module imports only what its role may (go-arch-lint, whole tree)" $m go-arch-lint check
       check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports, whole tree)" $m go run ./scripts/lintdoors --exports .
       check "go-api no inline duration literals: name each as a const or take it from config (lintdurations, whole tree)" $m go run ./scripts/lintdurations internal
+      check "go-api no sleeping to wait in a test: wait on the event, a condition or a synctest bubble (lintsleeps, whole tree)" $m go run ./scripts/lintsleeps .
       mapfile -t pkgs < <(go_pkgs $m)
       if [ $whole_module = 1 ]; then test_pkgs=(./...); else test_pkgs=("${affected[@]}"); fi
       [ ${#pkgs[@]} -gt 0 ] && [ ${#test_pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages and their importers)" $m "${heavy[@]}" "${db_env[@]}" go test -race -shuffle=on -count=1 "${test_pkgs[@]}"
