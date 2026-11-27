@@ -3,11 +3,12 @@ import { createMemoryNavigator } from '@testing/fakes/navigation/inMemoryNavigat
 import { authClientOver } from '@testing/fakeAuthClient';
 
 import { nativeLinkEvents, startAppAuthDeepLinks } from '@features/signIn';
+import { flushPromises } from '@testing/flushPromises';
 
 const WEB_CALLBACK_PATH = '/auth/callback?code=web-code';
 
 function flushMacrotask(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return flushPromises();
 }
 
 describe('auth deep links on web leave the page URL to the route (#2924)', () => {

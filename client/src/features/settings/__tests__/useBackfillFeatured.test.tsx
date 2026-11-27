@@ -12,6 +12,7 @@ import { ObservedQueryClient } from '@testing/observedQueryClient';
 import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
 import { retryOptionsWithJitter } from '@testing/retryOptions';
 import { useBackfillFeatured } from '@features/settings';
+import { flushPromises } from '@testing/flushPromises';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;
 const RETRY_BACKOFF_CAP_MS = 30_000;
@@ -208,10 +209,10 @@ describe('settings mutations racing a sign-out', () => {
 
     await act(async () => {
       release();
-      await new Promise((r) => setTimeout(r, 0));
+      await flushPromises();
     });
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
+      await flushPromises();
     });
 
     expect(queryClient.invalidated).toEqual([]);

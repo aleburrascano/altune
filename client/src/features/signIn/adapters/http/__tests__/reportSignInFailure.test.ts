@@ -6,6 +6,7 @@ import { flushOutbox } from '@shared/telemetry';
 import { reportSignInFailure, thrownErrorDetail } from '@features/signIn';
 import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 const { getSession } = createSupabaseAuthMock('getSession');
 
 const realFetch = global.fetch;
@@ -44,7 +45,7 @@ describe('reportSignInFailure: the anonymous pre-session report', () => {
     arrange();
 
     expect(() => reportSignInFailure('network')).not.toThrow();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
 
     await flushOutbox();
 
@@ -84,7 +85,7 @@ describe('reportSignInFailure', () => {
     const logs = recordLogs();
 
     reportSignInFailure('network');
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
 
     expect(logs.warnings).toEqual([
       [

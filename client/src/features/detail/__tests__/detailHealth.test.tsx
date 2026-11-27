@@ -18,6 +18,7 @@ import {
   useArtistContent,
 } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -95,7 +96,7 @@ const IN_FLIGHT_REQUESTS = 3;
 const PARTIAL_BATCH = 3;
 
 async function settle(): Promise<void> {
-  for (let i = 0; i < SETTLE_TICKS; i++) await new Promise((resolve) => setImmediate(resolve));
+  for (let i = 0; i < SETTLE_TICKS; i++) await flushPromises();
 }
 
 beforeEach(async () => {
@@ -207,7 +208,7 @@ describe('detail health metric', () => {
     __http.fail(EVENTS);
     recordContentFetchOutcome('album_tracks', true);
     expect(() => flushDetailHealth()).not.toThrow();
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
     flushDetailHealth();
 
     await waitFor(() => expect(sentPayloads()).toHaveLength(1));

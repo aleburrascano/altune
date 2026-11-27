@@ -35,6 +35,7 @@ import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import type { LibraryPort } from '@features/library';
 import { signInTestUser } from '@testing/signInTestUser';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -107,7 +108,7 @@ describe('useOneRunPerTrack', () => {
 
   const rowsCatchUp = async (): Promise<void> => {
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
     });
   };
 

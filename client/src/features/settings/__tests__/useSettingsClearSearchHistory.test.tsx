@@ -11,6 +11,7 @@ import { ObservedQueryClient } from '@testing/observedQueryClient';
 import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
 import { retryOptionsWithJitter } from '@testing/retryOptions';
 import { useBackfillFeatured, useSettingsClearSearchHistory } from '@features/settings';
+import { flushPromises } from '@testing/flushPromises';
 const RETRY_BACKOFF_BASE_MS = 1_000;
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
@@ -86,7 +87,7 @@ describe('useSettingsClearSearchHistory racing an in-flight history fetch', () =
     await act(async () => {
       staleFetch.resolve(beforeClear);
       await staleFetch.promise;
-      await new Promise((r) => setTimeout(r, 0));
+      await flushPromises();
     });
 
     expect(clearRequests()).toHaveLength(1);
@@ -117,7 +118,7 @@ describe('useSettingsClearSearchHistory when the clear fails', () => {
     });
     await waitFor(() => expect(hook.result.current.isError).toBe(true));
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
+      await flushPromises();
     });
 
     expect(clearRequests()).toHaveLength(1);
@@ -289,10 +290,10 @@ describe('settings mutations racing a sign-out', () => {
 
     await act(async () => {
       release();
-      await new Promise((r) => setTimeout(r, 0));
+      await flushPromises();
     });
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
+      await flushPromises();
     });
 
     expect(queryClient.invalidated).toEqual([]);

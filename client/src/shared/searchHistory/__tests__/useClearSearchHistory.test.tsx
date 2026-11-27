@@ -7,6 +7,7 @@ import { runSignOutCleanups } from '@shared/session';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { useClearSearchHistory } from '@shared/searchHistory';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -72,7 +73,7 @@ function startReadAnsweredLater(key: readonly unknown[]) {
 async function settled(): Promise<void> {
   await waitFor(() => expect(queryClient.isMutating()).toBe(0));
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
 }
 
@@ -98,7 +99,7 @@ describe('useClearSearchHistory()', () => {
     answerHistory(OLD_HISTORY);
     answerOther('other data');
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
     });
 
     expect(history()).toEqual({ items: [] });

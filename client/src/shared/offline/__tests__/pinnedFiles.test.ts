@@ -20,6 +20,7 @@ import {
   type MemoryFileStore,
 } from '@testing/fakes/files/inMemoryFileStore';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { resolveAfter } from '@testing/delays';
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 
@@ -36,6 +37,7 @@ const { __fs } = FileSystem as unknown as {
 
 const PINNED_DIR_URI = 'file:///document/offline-audio';
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
+const LATE_WRITE_DELAY_MS = PIN_DOWNLOAD_TIMEOUT_MS;
 
 function pinnedUri(name: string): string {
   return `${PINNED_DIR_URI}/${name}`;
@@ -585,16 +587,14 @@ describe('a pinned download in progress', () => {
   it('is never pinned by an adapter that keeps writing after its deadline expired', async () => {
     jest.useFakeTimers();
     store.download = (_url, dest) =>
-      new Promise<string>((resolve) => {
-        setTimeout(() => {
-          dest.write('written-after-the-deadline');
-          resolve(dest.uri);
-        }, PIN_DOWNLOAD_TIMEOUT_MS * 2);
+      resolveAfter(PIN_DOWNLOAD_TIMEOUT_MS + LATE_WRITE_DELAY_MS, null).then(() => {
+        dest.write('written-after-the-deadline');
+        return dest.uri;
       });
 
     const download = downloadPinned(T1, T1_URL);
     const outcome = expect(download).rejects.toThrow('timed out');
-    await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS * 2);
+    await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS + LATE_WRITE_DELAY_MS);
     await outcome;
 
     expect(pinnedFilesByTrackId()?.has('t1')).toBe(false);

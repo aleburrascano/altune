@@ -12,6 +12,7 @@ import {
   useAppMutation,
   useOptimisticMutation,
 } from '@shared/query';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -28,7 +29,7 @@ beforeEach(async () => {
 
 async function sentEvents(type: string): Promise<SentEvent[]> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
   return (__http.requests as SentRequest[])
     .filter((request) => request.path === EVENTS_PATH)
@@ -188,7 +189,7 @@ describe('useOptimisticMutation() when its optimistic write throws', () => {
         }),
       );
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await flushPromises();
       });
 
       expect(failure).toMatchObject({ message: 'bad write' });

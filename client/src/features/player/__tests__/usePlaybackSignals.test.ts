@@ -10,6 +10,7 @@ import type { PlaybackTrack } from '@shared/playback';
 import { usePlaybackSignals } from '@features/player';
 import { previewTrack } from '@features/player/__tests__/fixtures';
 import { withNativePlayback } from '@features/player/__tests__/withNativePlayback';
+import { flushPromises } from '@testing/flushPromises';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_ROUTE = 'POST /v1/discovery/events';
@@ -62,7 +63,7 @@ function emitQueueEnded(track: number): void {
 
 async function recordedTypes(): Promise<string[]> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
   return (__http.requests as { path: string; body: string }[])
     .filter((request) => request.path === '/v1/discovery/events')

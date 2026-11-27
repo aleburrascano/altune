@@ -1,5 +1,6 @@
 import { createAppTelemetry, createOutboxStore, type DiscoveryEvent } from '@shared/telemetry';
 import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
+import { flushPromises } from '@testing/flushPromises';
 
 type Gate = { promise: Promise<void>; fail: (error: Error) => void };
 
@@ -16,7 +17,7 @@ function gate(): Gate {
 }
 
 function settle(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
+  return flushPromises();
 }
 
 const LIBRARY_ADD: DiscoveryEvent = { type: 'library_add' };

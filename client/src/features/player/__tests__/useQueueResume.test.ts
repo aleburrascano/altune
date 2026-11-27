@@ -30,6 +30,7 @@ import {
   type AppStateDriver,
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { withNativePlayback } from '@features/player/__tests__/withNativePlayback';
+import { flushPromises } from '@testing/flushPromises';
 
 function renderHook<T>(callback: () => T) {
   return renderHookBare(callback, { wrapper: withNativePlayback });
@@ -51,7 +52,7 @@ interface SentEvent {
 
 async function sentEvents(): Promise<SentEvent[]> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
   return (__http.requests as { path: string; body: string }[])
     .filter((request) => request.path === '/v1/discovery/events')

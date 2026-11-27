@@ -4,6 +4,7 @@ import type { DiscoverySource } from '@shared/catalog';
 import { _resetDetailHealthForTest, useRelatedTracks } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 import { freezeDate } from '@testing/freezeDate';
+import { flushPromises } from '@testing/flushPromises';
 
 const CLOCK_START = 1_700_000_000_000;
 
@@ -82,7 +83,7 @@ describe('reopening related tracks against the 30-minute content cache window', 
     clock.advance(elapsedMs);
     renderHook(() => useRelatedTracks({ sources }), { wrapper });
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
 
     expect(__http.countFor(RELATED_PATH)).toBe(expectedRequests);
@@ -100,7 +101,7 @@ describe('useRelatedTracks with no SoundCloud source', () => {
       { wrapper: createWrapper(createTestQueryClient()) },
     );
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
 
     expect(__http.requests).toHaveLength(0);

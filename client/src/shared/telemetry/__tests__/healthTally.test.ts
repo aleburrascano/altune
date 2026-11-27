@@ -5,6 +5,7 @@ import {
   type AppStateDriver,
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -27,7 +28,7 @@ function buildTally(onFlushFailure: (error: unknown) => void = () => undefined):
 }
 
 async function settle(): Promise<void> {
-  for (let i = 0; i < SETTLE_TICKS; i++) await new Promise((resolve) => setImmediate(resolve));
+  for (let i = 0; i < SETTLE_TICKS; i++) await flushPromises();
 }
 
 type SentEvent = { type: string; payload: Record<string, unknown> };

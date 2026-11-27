@@ -22,6 +22,8 @@ import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures'
 import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { resolveAfter } from '@testing/delays';
+import { flushPromises } from '@testing/flushPromises';
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 const QUEUE_OP_TIMEOUT_MS = 15_000;
@@ -88,13 +90,13 @@ describe('createNativePlaybackActions', () => {
     const native = createNativePlaybackActions(jest.fn());
 
     native.controls.seekTo(1500);
-    await new Promise(setImmediate);
+    await flushPromises();
     expect(__player.calls('seekTo')).toEqual([[1.5]]);
     expect(__player.calls('play')).toHaveLength(0);
 
     native.syncIsPlaying(true);
     native.controls.seekTo(3000);
-    await new Promise(setImmediate);
+    await flushPromises();
     expect(__player.calls('play')).toHaveLength(1);
   });
 
@@ -102,7 +104,7 @@ describe('createNativePlaybackActions', () => {
     const native = createNativePlaybackActions(jest.fn(), true);
 
     native.controls.seekTo(2000);
-    await new Promise(setImmediate);
+    await flushPromises();
 
     expect(__player.calls('play')).toHaveLength(1);
   });
@@ -112,7 +114,7 @@ describe('createNativePlaybackActions', () => {
     native.rememberTrack(numberedPreviewTrack(7));
 
     native.controls.retry();
-    await new Promise(setImmediate);
+    await flushPromises();
 
     expect(__player.calls('add')[0]?.[0]).toMatchObject({ title: 'Track 7' });
   });
@@ -285,7 +287,7 @@ describe('createNativePlaybackActions', () => {
       __player.failNext('pause', new Error('no current item'));
 
       controls.pause();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(logged.warnings).toContainEqual([
         '[playback] native command failed',
@@ -298,7 +300,7 @@ describe('createNativePlaybackActions', () => {
       __player.failNext('play', new Error('player not ready'));
 
       controls.resume();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(logged.warnings).toContainEqual([
         '[playback] native command failed',
@@ -315,7 +317,7 @@ describe('createNativePlaybackActions', () => {
       );
 
       controls.seekTo(1500);
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(usePlaybackErrorStore.getState()).toMatchObject({
         key: trackKey(numberedPreviewTrack(1)),
@@ -339,10 +341,10 @@ describe('createNativePlaybackActions', () => {
       );
 
       native.controls.seekTo(1000);
-      await new Promise(setImmediate);
+      await flushPromises();
       native.controls.pause();
       releaseSeek();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       const play = (TrackPlayer.play as jest.Mock).mock.invocationCallOrder;
       const pause = (TrackPlayer.pause as jest.Mock).mock.invocationCallOrder;
@@ -361,14 +363,14 @@ describe('createNativePlaybackActions', () => {
       );
 
       native.controls.seekTo(1000);
-      await new Promise(setImmediate);
+      await flushPromises();
       native.controls.resume();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(__player.calls('play')).toEqual([]);
 
       releaseSeek();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(__player.calls('play')).toHaveLength(1);
     });
@@ -385,12 +387,12 @@ describe('createNativePlaybackActions', () => {
 
       native.controls.seekTo(1000);
       native.controls.seekTo(2000);
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(__player.calls('seekTo')).toEqual([[1]]);
 
       releaseFirstSeek();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(__player.calls('seekTo')).toEqual([[1], [2]]);
     });
@@ -402,7 +404,7 @@ describe('createNativePlaybackActions', () => {
       const { controls } = createNativePlaybackActions(setTrack);
 
       controls.stop();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(__player.calls('reset')).toHaveLength(1);
       expect(setTrack).toHaveBeenCalledWith(null);
@@ -416,7 +418,7 @@ describe('createNativePlaybackActions', () => {
       const { controls } = createNativePlaybackActions(jest.fn());
 
       controls.stop();
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(wasSwappedToLocal(asTrackId('trk-1'))).toBe(false);
     });
@@ -427,7 +429,7 @@ describe('createNativePlaybackActions', () => {
       const loading = controls.startQueue([numberedPreviewTrack(1), numberedPreviewTrack(2)], 0);
       controls.stop();
       await loading;
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(__player.calls('add')).toHaveLength(0);
       expect(__player.calls('play')).toHaveLength(0);
@@ -445,12 +447,12 @@ describe('createNativePlaybackActions', () => {
       );
 
       controls.stop();
-      await new Promise(setImmediate);
+      await flushPromises();
       expect(__player.calls('reset')).toHaveLength(0);
 
       releaseHeldOp();
       await heldOp;
-      await new Promise(setImmediate);
+      await flushPromises();
 
       expect(__player.calls('reset')).toHaveLength(1);
     });
@@ -503,18 +505,14 @@ const nativePlay = TrackPlayer.play as jest.Mock;
 
 let restorePort: (() => void) | null = null;
 
-function after<T>(ms: number, value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
-
 function installSlowMemoryPort(): void {
   const port = createMemoryPlaybackPort({
     audioUrls: { 'trk-1': { url: 'https://cdn.example/trk-1.mp3', version: 'v1' } },
   });
   restorePort = installPlaybackPort({
     ...port,
-    audioRequestHeaders: () => after(HEADERS_MS, {}),
-    fetchAudioUrls: async (ids) => after(PRESIGN_MS, await port.fetchAudioUrls(ids)),
+    audioRequestHeaders: () => resolveAfter(HEADERS_MS, {}),
+    fetchAudioUrls: async (ids) => resolveAfter(PRESIGN_MS, await port.fetchAudioUrls(ids)),
   });
 }
 

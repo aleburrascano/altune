@@ -11,10 +11,9 @@ import {
   recordStatusChanged,
   retryFailureOutcome,
 } from '@shared/acquisition';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const TRIM_LIMIT = 500;
 const TWO_MESSAGES = 2;
@@ -37,7 +36,7 @@ function sentEvents(): SentEvent[] {
 
 async function delivered(): Promise<SentEvent[]> {
   await flushOutbox();
-  await new Promise((resolve) => setImmediate(resolve));
+  await flushPromises();
   return sentEvents();
 }
 

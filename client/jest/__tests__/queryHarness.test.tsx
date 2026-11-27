@@ -3,14 +3,11 @@ import { render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 import { createTestQueryClient } from '@testing/queryHarness';
+import { flushPromises } from '@testing/flushPromises';
 
 function Probe({ answer }: { answer: Promise<string> }) {
   const query = useQuery({ queryKey: ['probe'], queryFn: () => answer });
   return <Text>{query.data ?? query.status}</Text>;
-}
-
-function nextTick(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe('createTestQueryClient', () => {
@@ -31,8 +28,8 @@ describe('createTestQueryClient', () => {
     );
 
     settle('answered');
-    await nextTick();
-    await nextTick();
+    await flushPromises();
+    await flushPromises();
 
     console.error = original;
     expect(screen.getByText('answered')).toBeTruthy();
