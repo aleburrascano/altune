@@ -446,6 +446,10 @@ if touches '^services/go-api/migrations/|^scripts/migration-prefixes\.sh$'; then
   check "go-api migration numbers are unique" . bash scripts/migration-prefixes.sh services/go-api/migrations "$base_ref"
 fi
 
+if touches '^services/go-api/.*\.go$|^services/go-api/internal/library/README\.md$|^scripts/library-table-readers\.sh$'; then
+  check "go-api every reader of a library table is listed in the library README" . bash scripts/library-table-readers.sh
+fi
+
 if touches '\.sh$'; then
   check "no pipefail script pipes into grep -q" . bash scripts/pipefail-grep-q.sh
 fi

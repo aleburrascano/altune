@@ -334,8 +334,8 @@ func requireWithinTrackCap(ctx context.Context, tx pgx.Tx, playlistId domain.Pla
 	if err != nil {
 		return fmt.Errorf("count tracks of playlist %s: %w", playlistId.UUID(), err)
 	}
-	if total > maxPlaylistTracks {
-		return domain.ErrPlaylistFull
+	if err := domain.RequirePlaylistWithinCap(total); err != nil {
+		return fmt.Errorf("playlist %s over its cap: %w", playlistId.UUID(), err)
 	}
 	return nil
 }

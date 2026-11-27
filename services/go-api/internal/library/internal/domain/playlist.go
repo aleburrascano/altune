@@ -33,6 +33,13 @@ const MaxPlaylistTracks = MaxLibraryPageSize
 
 var ErrPlaylistFull = apierror.NewError(apierror.CodeCatalogPlaylistFull, "playlist is full")
 
+func RequirePlaylistWithinCap(total int) error {
+	if total > MaxPlaylistTracks {
+		return ErrPlaylistFull
+	}
+	return nil
+}
+
 type Playlist struct {
 	ID        PlaylistId
 	UserId    ids.UserId
@@ -87,8 +94,8 @@ func (p *Playlist) AddTrack(trackId TrackId, now time.Time) error {
 			return ErrTrackAlreadyInPlaylist
 		}
 	}
-	if len(p.Tracks) >= MaxPlaylistTracks {
-		return ErrPlaylistFull
+	if err := RequirePlaylistWithinCap(len(p.Tracks) + 1); err != nil {
+		return err
 	}
 	p.Tracks = append(p.Tracks, PlaylistTrack{
 		TrackId:  trackId,
