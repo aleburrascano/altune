@@ -15,7 +15,7 @@ Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
   export-tracks [days]  ready tracks added in the window as JSONL (id, title, artist, album, duration_seconds,
                         audio_source_url, acquisition_provenance, acquisition_evidence), input for
                         cmd/acquisitioneval live; default 14 days
-  client [since] [track]  acquisition_ui/client_error events from discovery_events (default
+  client [since] [track]  acquisition_ui/client_error events from client_events and the older discovery_events (default
                         since 24 hours ago; track filters on the event's track_id)
   probe <query>         run the app's own yt-dlp search for <query>, then try extracting each
                         candidate the way the download step would — shows bot-checks, previews, dead ids
@@ -247,7 +247,9 @@ SELECT occurred_at::timestamp(0), event_type, payload->>'track_id' AS track_id,
        payload->>'from' AS from_status, payload->>'to' AS to_status,
        payload->>'source' AS source, left(payload->>'message', 150) AS message,
        left(payload->>'stack', 200) AS stack, payload->>'app_version' AS app_version
-  FROM discovery_events
+  FROM (SELECT user_id, event_type, payload, occurred_at FROM discovery_events
+        UNION ALL
+        SELECT user_id, event_type, payload, occurred_at FROM client_events) e
  WHERE event_type IN ('acquisition_ui', 'client_error')
    AND occurred_at > now() - (:'since')::interval
    AND (:'track' = '' OR payload->>'track_id' = :'track')

@@ -85,14 +85,7 @@ func storedFileKnownWrong(track *ports.TrackSnapshot) bool {
 }
 
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId ids.TrackId) error {
-	ac.Replace.PreservedRef = deref(track.AudioRef)
-	ac.Track.AudioSourceURL = ""
-	if !ac.refetchesCurrentSource() {
-		ac.Replace.ExcludeKeys = mergeSourceKeys(
-			ac.Replace.ExcludeKeys,
-			sourceKey(deref(track.AudioSourceURL)),
-		)
-	}
+	ac.preserveCurrentAudio(track)
 	if track.AudioSourceURL == nil {
 		slog.InfoContext(ctx, "acquisition.replacing_unknown_source", logging.KeyTrackID, trackId.String())
 	}

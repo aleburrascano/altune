@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 
 import {
+  ENDPOINT_LIMITS,
   getLibraryAlbums,
   type LibrarySort,
   searchDiscovery,
@@ -98,7 +99,7 @@ describe("law: searchDiscovery's query string round-trips exactly through URLSea
           fc.array(fc.constantFrom<DiscoveryKind>('artist', 'album', 'track'), { maxLength: 3 }),
           { nil: undefined },
         ),
-        fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
+        fc.option(fc.integer({ min: 0, max: ENDPOINT_LIMITS.search.max }), { nil: undefined }),
         fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
         fc.option(fc.boolean(), { nil: undefined }),
         async (q, kinds, limit, offset, saveHistory) => {
@@ -141,7 +142,7 @@ describe("law: suggestDiscovery's query string round-trips exactly through URLSe
     await fc.assert(
       fc.asyncProperty(
         wildString,
-        fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
+        fc.option(fc.integer({ min: 0, max: ENDPOINT_LIMITS.suggest.max }), { nil: undefined }),
         async (q, limit) => {
           await suggestDiscovery({
             q,
@@ -170,7 +171,9 @@ describe("law: listSearchHistory's query string round-trips exactly, including t
 
     await fc.assert(
       fc.asyncProperty(
-        fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
+        fc.option(fc.integer({ min: 0, max: ENDPOINT_LIMITS.search_history.max }), {
+          nil: undefined,
+        }),
         async (limit) => {
           await listSearchHistory(limit === undefined ? undefined : { limit });
 

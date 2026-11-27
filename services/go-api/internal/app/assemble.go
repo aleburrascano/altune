@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/app/searchsettings"
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/platform/monitoring"
@@ -102,7 +103,12 @@ func (a *application) compose(ctx context.Context, transport http.RoundTripper) 
 	if err != nil {
 		return nil, err
 	}
-	r := a.mountRoutes(verifier, f.catalog, f.playback.handler, f.discovery.Handler)
+	a.clientEvents = monitoring.NewPostgresClientEventStore(a.pool)
+	clientEventRoutes, err := monitoring.NewClientEventRoutes(a.clientEvents, searchsettings.ClientEvents(a.cfg), clock.Now)
+	if err != nil {
+		return nil, fmt.Errorf("client events: %w", err)
+	}
+	r := a.mountRoutes(verifier, f.catalog, f.playback.handler, f.discovery.Handler, clientEventRoutes)
 	if err := a.startAlertMonitor(ctx); err != nil {
 		return nil, err
 	}

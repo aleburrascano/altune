@@ -3,6 +3,7 @@ import { State } from 'react-native-track-player';
 import type { JsonObject } from '@shared/files';
 import { recordEvent } from '@shared/telemetry';
 
+import { recordPlayAttempt, recordPlayStarted } from '@features/player/core/playbackHealth';
 import { warnPlayback } from '@features/player/core/playbackError';
 
 export type PlayTrigger = 'play' | 'queue' | 'resume' | 'remote';
@@ -35,6 +36,7 @@ export function markPlayRequested(trigger: PlayTrigger): void {
     cold: !hasBeenAudible,
     giveUp: setTimeout(() => settle('never_started'), GIVE_UP_MS),
   };
+  recordPlayAttempt();
 }
 
 export function notePlaybackState(state: State | undefined): void {
@@ -49,7 +51,10 @@ function settle(outcome: PlayStartOutcome): void {
   if (start === null) return;
   pending = null;
   clearTimeout(start.giveUp);
-  if (outcome === 'playing') hasBeenAudible = true;
+  if (outcome === 'playing') {
+    hasBeenAudible = true;
+    recordPlayStarted(Date.now() - start.requestedAt);
+  }
   sendPlayStart(start, outcome);
 }
 

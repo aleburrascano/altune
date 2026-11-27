@@ -82,26 +82,12 @@ func TestFillTrackNumber_PassesIdAndPositionThrough(t *testing.T) {
 	setter := &recordingSetter{}
 	filler := searchfromlibrary.NewTrackNumberFiller(setter)
 
-	id := uuid.New().String()
+	id := ids.TrackIdFromUUID(uuid.New())
 	if err := filler.FillTrackNumber(context.Background(), testUser(), id, 7); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if setter.calls != 1 || setter.lastNum != 7 || setter.lastId != id {
+	if setter.calls != 1 || setter.lastNum != 7 || setter.lastId != id.String() {
 		t.Errorf("setter calls=%d lastNum=%d lastId=%q, want 1/7/%q", setter.calls, setter.lastNum, setter.lastId, id)
-	}
-}
-
-func TestFillTrackNumber_MalformedIdRefusedWithoutCallingSetter(t *testing.T) {
-	setter := &recordingSetter{}
-	filler := searchfromlibrary.NewTrackNumberFiller(setter)
-
-	err := filler.FillTrackNumber(context.Background(), testUser(), "not-a-uuid", 3)
-
-	if err == nil || !strings.Contains(err.Error(), "parse track id") {
-		t.Fatalf("err = %v, want one containing %q", err, "parse track id")
-	}
-	if setter.calls != 0 {
-		t.Errorf("setter called %d times, want 0", setter.calls)
 	}
 }
 
@@ -109,7 +95,7 @@ func TestFillTrackNumber_WrapsTheSettersError(t *testing.T) {
 	cause := errors.New("db down")
 	filler := searchfromlibrary.NewTrackNumberFiller(&recordingSetter{err: cause})
 
-	err := filler.FillTrackNumber(context.Background(), testUser(), uuid.New().String(), 3)
+	err := filler.FillTrackNumber(context.Background(), testUser(), ids.TrackIdFromUUID(uuid.New()), 3)
 
 	if !errors.Is(err, cause) || !strings.Contains(err.Error(), "fill track number") {
 		t.Fatalf("err = %v, want it to wrap %v under %q", err, cause, "fill track number")

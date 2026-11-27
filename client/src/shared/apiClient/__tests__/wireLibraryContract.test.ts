@@ -183,7 +183,7 @@ describe('playlist wire fixtures decode through the client adapters', () => {
       json: wireFixture('playlists_rename'),
     });
 
-    const created = await createPlaylist({ name: 'Road trip' });
+    const created = await createPlaylist({ name: 'Road trip' }, 'create-key');
     const renamed = await renamePlaylist(PLAYLIST_ID, 'Night drive');
 
     expect(created.name).toBe('Road trip');
@@ -237,7 +237,7 @@ describe('request bodies the client sends have the keys go-api accepts', () => {
       json: wireFixture('playlists_remove_tracks'),
     });
 
-    await createPlaylist({ name: 'Road trip' });
+    await createPlaylist({ name: 'Road trip' }, 'create-key');
     const create = sortedKeys(sentBody());
     await renamePlaylist(PLAYLIST_ID, 'Night drive');
     const rename = sortedKeys(sentBody());

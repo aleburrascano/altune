@@ -1,6 +1,7 @@
 import type { PlaybackErrorKind } from '@shared/playback';
 import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
 
+import { playStartSpeed } from '@features/player/core/playStartSpeed';
 import { warnPlayback } from '@features/player/core/playbackError';
 
 export type PrefetchFailureStage = 'resolve' | 'download' | 'swap';
@@ -27,6 +28,10 @@ const HEALTH_KEYS = [
   'playback_failed_queue_update_failed',
   'playback_failed_unknown',
   'audio_recovery_failed',
+  'play_attempt',
+  'play_ok',
+  'play_start_fast',
+  'play_start_slow',
   'queue_save_failed',
   'queue_restore_failed_fetch',
   'queue_restore_failed_placeholder',
@@ -68,6 +73,15 @@ export function recordQueueRebuildOutcome(rung: QueueRebuildRung): void {
 
 export function recordPlaybackFailure(kind: PlaybackErrorKind): void {
   count(`playback_failed_${kind}`);
+}
+
+export function recordPlayAttempt(): void {
+  count('play_attempt');
+}
+
+export function recordPlayStarted(startMs: number): void {
+  count('play_ok');
+  count(`play_start_${playStartSpeed(startMs)}`);
 }
 
 export function recordAudioRecoveryFailure(): void {

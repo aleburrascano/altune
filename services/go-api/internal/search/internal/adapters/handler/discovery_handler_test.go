@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -260,7 +259,7 @@ func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	})
 }
 
-func TestHandleRecordEvent_TelemetryRouteKeepsTheOldRouteWorking(t *testing.T) {
+func TestHandleRecordEvent_StoresTheCorrelationId(t *testing.T) {
 	store := &recordingEventStore{}
 	bg := searchtest.NewTracker(t)
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
@@ -270,25 +269,13 @@ func TestHandleRecordEvent_TelemetryRouteKeepsTheOldRouteWorking(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
-	router.Mount("/telemetry", h.TelemetryRoutes())
 	body := map[string]any{"type": "skip", "correlation_id": "corr-1", "payload": map[string]any{"dwell_ms": 1500}}
 
-	rec := discServe(t, router, http.MethodPost, "/telemetry/events", discJsonBody(t, body))
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
 
 	discAssertStatus(t, rec, http.StatusNoContent)
 	if len(store.events) != 1 || store.events[0].CorrelationId != "corr-1" {
 		t.Fatalf("stored %+v, want one event carrying correlation id corr-1", store.events)
-	}
-
-	logs := logging.CaptureJSON(t, slog.LevelWarn)
-	old := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
-
-	discAssertStatus(t, old, http.StatusNoContent)
-	if len(store.events) != 2 {
-		t.Fatalf("the old route stored %d events in total, want 2", len(store.events))
-	}
-	if !strings.Contains(logs.String(), "discovery.events_route_deprecated") {
-		t.Errorf("the old route did not log its deprecation: %s", logs.String())
 	}
 }
 
@@ -301,10 +288,10 @@ func TestHandleRecordEvent_DropsAnOversizedCorrelationId(t *testing.T) {
 	}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
-	router.Mount("/telemetry", h.TelemetryRoutes())
+	router.Mount("/discovery", h.Routes())
 	body := map[string]any{"type": "skip", "correlation_id": strings.Repeat("c", 65), "payload": map[string]any{"dwell_ms": 1}}
 
-	rec := discServe(t, router, http.MethodPost, "/telemetry/events", discJsonBody(t, body))
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
 
 	discAssertStatus(t, rec, http.StatusNoContent)
 	if len(store.events) != 1 || store.events[0].CorrelationId != "" {

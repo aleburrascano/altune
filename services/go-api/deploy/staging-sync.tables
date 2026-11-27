@@ -4,6 +4,7 @@ discovery_search_history user
 discovery_search_history_cleared user
 playback_queue_state user
 discovery_events user
+client_events user
 featured_artists user
 discovery_favorites user
 playlist_tracks child playlists playlist_id

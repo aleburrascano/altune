@@ -1,4 +1,5 @@
 import { ContractError, fail, ok, type Result } from '@shared/failure';
+import { clampLimit } from '@shared/apiClient/core/endpointLimits';
 import { parseDiscoveryResult } from '@shared/apiClient/adapters/discovery';
 import { PROVIDER_STATUSES, sourceIdList } from '@shared/catalog';
 import { apiFetch, setQueryParam, signalInit, withQuery } from '@shared/apiClient/adapters/http';
@@ -90,7 +91,7 @@ export async function getAlbumTracks({
   signal,
 }: AlbumTracksRequest): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
-  if (limit !== undefined) params.set('limit', String(limit));
+  if (limit !== undefined) params.set('limit', String(clampLimit('album_tracks', limit)));
   setQueryParam(params, 'title', albumTitle);
   setQueryParam(params, 'artist', albumArtist);
   setQueryParam(params, 'mbid', mbExternalId);
@@ -106,7 +107,7 @@ export async function getRelatedTracks(
   signal?: AbortSignal,
 ): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
-  if (limit !== undefined) params.set('limit', String(limit));
+  if (limit !== undefined) params.set('limit', String(clampLimit('related_tracks', limit)));
   const path = discoveryEntityPath('tracks', provider, externalId, 'related');
   return parseContentFetchResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
@@ -244,8 +245,10 @@ export async function getArtistContent(
   signal?: AbortSignal,
 ): Promise<ArtistContentResponse> {
   const params = new URLSearchParams();
-  if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
-  if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
+  if (opts.tracksLimit !== undefined)
+    params.set('tracks_limit', String(clampLimit('artist_content_tracks', opts.tracksLimit)));
+  if (opts.albumsLimit !== undefined)
+    params.set('albums_limit', String(clampLimit('artist_content_albums', opts.albumsLimit)));
   setIdsParam(params, opts.knownIds);
   const path = discoveryEntityPath('artists', provider, externalId, 'content');
   return parseArtistContentResponse(await apiFetch(withQuery(path, params), signalInit(signal)));

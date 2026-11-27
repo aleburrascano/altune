@@ -804,3 +804,43 @@ describe('mobile eslint config asks the acquisition predicate, not the raw statu
     );
   });
 });
+
+describe('mobile eslint config bans empty blocks', () => {
+  const emptyErrors = async (filePath, code) => {
+    const [result] = await lintExisting(eslint, code, { filePath });
+    return result.messages.filter((m) => m.ruleId === 'no-empty');
+  };
+
+  for (const file of [
+    'src/shared/failure/core/describeError.ts',
+    'src/app/_layout.tsx',
+    'src/shared/apiClient/__tests__/playback.test.ts',
+    '__tests__/rootLayoutFeaturePorts.integration.test.tsx',
+    'jest/setup-env.js',
+    'scripts/lint-changed-lines.mjs',
+  ]) {
+    it(`reports an empty catch in ${file}`, async () => {
+      const errors = await emptyErrors(
+        file,
+        'export function a() {\n  try {\n    b();\n  } catch {}\n}\n',
+      );
+      assert.strictEqual(errors.length, 1);
+    });
+  }
+
+  it('reports an empty catch that has a binding', async () => {
+    const errors = await emptyErrors(
+      'src/shared/failure/core/describeError.ts',
+      'export function a() {\n  try {\n    b();\n  } catch (e) {}\n}\n',
+    );
+    assert.strictEqual(errors.length, 1);
+  });
+
+  it('allows a catch that does something', async () => {
+    const errors = await emptyErrors(
+      'src/shared/failure/core/describeError.ts',
+      'export function a() {\n  try {\n    b();\n  } catch {\n    return 1;\n  }\n  return 0;\n}\n',
+    );
+    assert.strictEqual(errors.length, 0);
+  });
+});

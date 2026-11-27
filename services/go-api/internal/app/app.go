@@ -36,6 +36,7 @@ type application struct {
 	evalSearch    *search.SearchService
 	eventBus      *events.InProcessBus
 	eventTap      *monitoring.EventTap
+	clientEvents  monitoring.ClientEventStore
 	alertMonitor  *monitoring.AlertMonitor
 	logRing       *logging.RingBuffer
 	latency       *requestmetrics.Registry
