@@ -50,29 +50,41 @@ func (r *PostgresPlaylistRepository) CreateKeyed(ctx context.Context, playlist *
 	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
-	tag, err := r.pool.Exec(ctx,
-		`INSERT INTO playlists (id, user_id, name, created_at, updated_at, idempotency_key)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-		playlist.ID.UUID(), playlist.UserId.UUID(), playlist.Name, playlist.CreatedAt, playlist.UpdatedAt, idempotencyKey,
-	)
-	if err != nil {
-		return nil, false, classifyDBError(err)
+	for range keyedCreateAttempts {
+		tag, err := r.pool.Exec(ctx,
+			`INSERT INTO playlists (id, user_id, name, created_at, updated_at, idempotency_key)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+			playlist.ID.UUID(), playlist.UserId.UUID(), playlist.Name, playlist.CreatedAt, playlist.UpdatedAt, idempotencyKey,
+		)
+		if err != nil {
+			return nil, false, classifyDBError(err)
+		}
+		if tag.RowsAffected() == 1 {
+			return playlist, true, nil
+		}
+		existing, found, err := r.findByIdempotencyKey(ctx, playlist.UserId, idempotencyKey)
+		if err != nil {
+			return nil, false, err
+		}
+		if found {
+			return existing, false, nil
+		}
 	}
-	if tag.RowsAffected() == 1 {
-		return playlist, true, nil
-	}
-	existing, _, err := r.GetByIdempotencyKey(ctx, playlist.UserId, idempotencyKey)
-	if err != nil {
-		return nil, false, err
-	}
-	return existing, false, nil
+	return nil, false, errKeyedCreateUnsettled
 }
+
+const keyedCreateAttempts = 2
+
+var errKeyedCreateUnsettled = errors.New("create playlist by idempotency key: the winning row kept disappearing")
 
 func (r *PostgresPlaylistRepository) GetByIdempotencyKey(ctx context.Context, userId sharedids.UserId, idempotencyKey string) (*domain.Playlist, bool, error) {
 	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
+	return r.findByIdempotencyKey(ctx, userId, idempotencyKey)
+}
 
+func (r *PostgresPlaylistRepository) findByIdempotencyKey(ctx context.Context, userId sharedids.UserId, idempotencyKey string) (*domain.Playlist, bool, error) {
 	var (
 		pid       uuid.UUID
 		name      string

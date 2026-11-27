@@ -73,11 +73,8 @@ func (r *PlaylistRepo) GetByIdempotencyKey(_ context.Context, userId sharedids.U
 	if r.ErrOnGetByID != nil {
 		return nil, false, r.ErrOnGetByID
 	}
-	id, ok := r.Keys[userId.String()+"/"+idempotencyKey]
-	if !ok {
-		return nil, false, nil
-	}
-	return r.Playlists[id], true, nil
+	existing, ok := r.Playlists[r.Keys[userId.String()+"/"+idempotencyKey]]
+	return existing, ok, nil
 }
 
 func (r *PlaylistRepo) ListForUser(_ context.Context, userId sharedids.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {

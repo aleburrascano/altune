@@ -253,6 +253,53 @@ func TestPlaylistLifecycleService_Create_ARepeatAtTheCapStillReturnsTheExisting(
 	}
 }
 
+func TestPlaylistLifecycleService_Create_PublishesPlaylistCreatedOnlyWhenCreated(t *testing.T) {
+	ctx := context.Background()
+	userId := librarytest.UserId()
+	pub := &library.InMemoryRecordingPublisher{}
+	svc := library.MustNewPlaylistLifecycleService(library.NewInMemoryPlaylistRepo(), pub, time.Now, ids.Real)
+	first, second := "a", "b"
+
+	svc.Create(ctx, userId, "One", &first)
+	svc.Create(ctx, userId, "One", &first)
+	svc.Create(ctx, userId, "Two", &second)
+
+	if got := len(pub.Events); got != 2 {
+		t.Fatalf("published %d events, want 2: one per created playlist and none for the repeat", got)
+	}
+}
+
+type missingLookupRepo struct {
+	*library.InMemoryPlaylistRepo
+}
+
+func (missingLookupRepo) GetByIdempotencyKey(context.Context, ids.UserId, string) (*library.Playlist, bool, error) {
+	return nil, false, nil
+}
+
+func TestPlaylistLifecycleService_Create_ALostRaceReturnsTheWinnerWithoutAnEvent(t *testing.T) {
+	ctx := context.Background()
+	userId := librarytest.UserId()
+	repo := missingLookupRepo{library.NewInMemoryPlaylistRepo()}
+	pub := &library.InMemoryRecordingPublisher{}
+	svc := library.MustNewPlaylistLifecycleService(repo, pub, time.Now, ids.Real)
+	key := "raced"
+	winner, _, err := svc.Create(ctx, userId, "Winner", &key)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	published := len(pub.Events)
+
+	got, created, err := svc.Create(ctx, userId, "Loser", &key)
+
+	if err != nil || created || got == nil || got.ID != winner.ID {
+		t.Fatalf("lost race = (%v, %v, %v), want the winner and created=false", got, created, err)
+	}
+	if len(pub.Events) != published {
+		t.Error("the lost race published a PlaylistCreated event")
+	}
+}
+
 func TestPlaylistLifecycleService_Create_KeysAreScopedPerUser(t *testing.T) {
 	ctx := context.Background()
 	plRepo := library.NewInMemoryPlaylistRepo()
