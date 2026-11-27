@@ -37,10 +37,10 @@ func EnabledSources(ctx context.Context, cfg *config.Config, redis *goredis.Clie
 }
 
 func YtDlpSearcher(cfg *config.Config) *download.YouTubeAudioSearcher {
-	return download.MustNewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime, clock.Now, clock.Sleep).
-		WithRemoteComponents(cfg.YtDLPRemoteComponents).
-		WithPOTokenURL(cfg.YtDLPPOTokenURL).
-		WithEnvironment(cfg.Env)
+	return download.MustNewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime, clock.Now, clock.Sleep,
+		download.WithYtDlpRemoteComponents(cfg.YtDLPRemoteComponents),
+		download.WithYtDlpPOTokenURL(cfg.YtDLPPOTokenURL),
+		download.WithYtDlpEnvironment(cfg.Env))
 }
 
 func CanaryYTMClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {

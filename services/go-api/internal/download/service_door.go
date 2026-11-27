@@ -22,6 +22,7 @@ var (
 	NewInPlaceChecker                     = service.NewInPlaceChecker
 	NewReplaceService                     = service.NewReplaceService
 	NewSourceRegistry                     = service.NewSourceRegistry
+	NewSourceRegistryWithFallback         = service.NewSourceRegistryWithFallback
 	MustDirectDeleteOrphans               = service.MustDirectDeleteOrphans
 	MustNewAcquireTrackAudioService       = service.MustNewAcquireTrackAudioService
 	MustNewBackgroundAcquisitionScheduler = service.MustNewBackgroundAcquisitionScheduler

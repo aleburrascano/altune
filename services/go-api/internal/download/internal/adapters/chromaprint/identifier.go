@@ -42,7 +42,11 @@ type Identifier struct {
 	client   *http.Client
 }
 
-func NewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Client) (*Identifier, error) {
+func WithEndpoint(endpoint string) func(*Identifier) {
+	return func(i *Identifier) { i.endpoint = endpoint }
+}
+
+func NewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Client, opts ...func(*Identifier)) (*Identifier, error) {
 	if client == nil {
 		return nil, ErrClientRequired
 	}
@@ -53,24 +57,23 @@ func NewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Clie
 	}
 	bounded := *client
 	bounded.Timeout = lookupTimeout
-	return &Identifier{
+	id := &Identifier{
 		fpcalc:   binpath.Resolve("fpcalc", binDir),
 		apiKey:   key,
 		endpoint: defaultEndpoint,
 		client:   &bounded,
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(id)
+	}
+	return id, nil
 }
 
-func MustNewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Client) *Identifier {
-	i, err := NewIdentifier(ctx, binDir, apiKey, client)
+func MustNewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Client, opts ...func(*Identifier)) *Identifier {
+	i, err := NewIdentifier(ctx, binDir, apiKey, client, opts...)
 	if err != nil {
 		panic(err)
 	}
-	return i
-}
-
-func (i *Identifier) WithEndpoint(endpoint string) *Identifier {
-	i.endpoint = endpoint
 	return i
 }
 

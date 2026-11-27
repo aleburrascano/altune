@@ -199,7 +199,7 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 		Replace: service.ReplaceState{ExcludeKeys: []string{sourcekey.SourceKey(storedArtTrack.URL)}},
 	}
 
-	_ = runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
+	_ = runPipeline(context.Background(), service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback}), ac)
 
 	seen := fallback.seen()
 	if len(seen) != 1 || seen[0].Tier != ports.TierFallbackOnly {
