@@ -26,7 +26,7 @@ const houseModuleNameMapper = {
     '<rootDir>/jest/doubles/reanimated-swipeable.js',
 };
 
-const ESM_ONLY_DEPENDENCIES = 'decode-uri-component';
+const ESM_ONLY_DEPENDENCIES = 'decode-uri-component|@faker-js/faker';
 
 function allowEsmOnlyDependencies(pattern) {
   return pattern.replace('standard-navigation))', `standard-navigation|${ESM_ONLY_DEPENDENCIES}))`);
