@@ -50,7 +50,7 @@ func (k *kindsRun) record(
 	if err != nil {
 		slog.WarnContext(ctx, provider+".search_kind_failed",
 			"kind", kind.String(), logging.SearchTextAttr(query),
-			"error", redact.Secrets(logging.ScrubSearchErr(err, query)))
+			logging.KeyError, redact.Secrets(logging.ScrubSearchErr(err, query)))
 		k.failed = append(k.failed, kind)
 		k.errs = append(k.errs, err)
 		return

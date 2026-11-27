@@ -138,20 +138,18 @@ func writeAttr(b *strings.Builder, a slog.Attr, prefix string) {
 		return
 	}
 
+	text := value.String()
 	switch value.Kind() {
 	case slog.KindTime:
-		fmt.Fprintf(b, " %s%s%s=%s%s%s",
-			colorCyan, key, colorReset,
-			colorGray, value.Time().Format(time.RFC3339), colorReset)
+		text = value.Time().Format(time.RFC3339)
 	case slog.KindDuration:
-		fmt.Fprintf(b, " %s%s%s=%s%s%s",
-			colorCyan, key, colorReset,
-			colorGray, value.Duration(), colorReset)
-	default:
-		fmt.Fprintf(b, " %s%s%s=%s%s%s",
-			colorCyan, key, colorReset,
-			colorGray, value.String(), colorReset)
+		text = value.Duration().String()
+	case slog.KindAny, slog.KindBool, slog.KindFloat64, slog.KindInt64, slog.KindString,
+		slog.KindUint64, slog.KindGroup, slog.KindLogValuer:
 	}
+	fmt.Fprintf(b, " %s%s%s=%s%s%s",
+		colorCyan, key, colorReset,
+		colorGray, text, colorReset)
 }
 
 func shortFuncName(full string) string {

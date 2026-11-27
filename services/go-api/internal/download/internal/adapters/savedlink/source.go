@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/filelinks"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -102,7 +103,7 @@ func (s *Source) fileURL(ctx context.Context, pin ports.CatalogSource) (string, 
 	}
 	body, err := s.pages.ReadPage(ctx, page.PageURL)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.catalogpin_page_unreadable", "provider", pin.Provider, "error", err)
+		slog.WarnContext(ctx, "acquisition.catalogpin_page_unreadable", "provider", pin.Provider, logging.KeyError, err)
 		return "", false
 	}
 	file := page.File.Find(body)

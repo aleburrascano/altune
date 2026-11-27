@@ -7,8 +7,10 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -111,7 +113,7 @@ func TestExecute_ATaggingFailureIsSwallowed(t *testing.T) {
 }
 
 func TestExecute_TheTaggingFailureLogRedactsHostPaths(t *testing.T) {
-	logs := captureLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelInfo)
 	tagger := &recordingTagger{err: errors.New("open /run/secrets/altune/yt_cookies.txt: permission denied")}
 	track := pendingBlindingLights()
 

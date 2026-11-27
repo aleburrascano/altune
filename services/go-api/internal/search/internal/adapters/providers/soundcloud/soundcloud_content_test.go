@@ -24,10 +24,9 @@ func TestSoundCloudDiscographyLive(t *testing.T) {
 	var eps, singles int
 	var has14 bool
 	for _, r := range albums {
-		switch r.RecordType {
-		case "single":
+		if r.RecordType == "single" {
 			singles++
-		default:
+		} else {
 			eps++
 		}
 		if r.Title == "14 HAHAHA LOL" {

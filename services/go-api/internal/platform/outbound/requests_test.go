@@ -1,12 +1,9 @@
-package providerrequests_test
+package outbound_test
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +18,7 @@ func TestGetJSON_non200IsError(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	err := providerrequests.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
+	err := outbound.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
 	if err == nil || !strings.Contains(err.Error(), "http status 500") {
 		t.Fatalf("err = %v, want an http status 500 error", err)
 	}
@@ -33,7 +30,7 @@ func TestGetJSON_anUpstreamStatusIsNeverAnsweredAsOurs(t *testing.T) {
 			w.WriteHeader(upstream)
 		}))
 		var dst map[string]any
-		err := providerrequests.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
+		err := outbound.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
 		srv.Close()
 
 		rec := httptest.NewRecorder()
@@ -53,7 +50,7 @@ func TestGetJSON_malformedBodyIsError(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	if err := providerrequests.GetJSON(context.Background(), srv.Client(), srv.URL, &dst); err == nil {
+	if err := outbound.GetJSON(context.Background(), srv.Client(), srv.URL, &dst); err == nil {
 		t.Fatal("expected a decode error on an HTML-instead-of-JSON body, got nil")
 	}
 }
@@ -65,7 +62,7 @@ func TestGetBytes_non200ReturnsStatusAndBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	status, body, err := providerrequests.GetBytes(context.Background(), srv.Client(), srv.URL)
+	status, body, err := outbound.GetBytes(context.Background(), srv.Client(), srv.URL)
 	if err == nil {
 		t.Fatal("expected an error on 429, got nil")
 	}
@@ -83,7 +80,7 @@ func TestGetBytesCapped_capsBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	status, body, err := providerrequests.GetBytesCapped(context.Background(), srv.Client(), srv.URL, 10)
+	status, body, err := outbound.GetBytesCapped(context.Background(), srv.Client(), srv.URL, 10)
 	if err != nil {
 		t.Fatalf("GetBytesCapped: %v", err)
 	}
@@ -99,7 +96,7 @@ func TestGetBytes_transportErrorZeroStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	srv.Close()
 
-	status, _, err := providerrequests.GetBytes(context.Background(), http.DefaultClient, srv.URL)
+	status, _, err := outbound.GetBytes(context.Background(), http.DefaultClient, srv.URL)
 	if err == nil {
 		t.Fatal("expected a transport error against a closed server")
 	}
@@ -115,7 +112,7 @@ func TestPostJSON_non200IsError(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	status, err := providerrequests.PostJSON(context.Background(), srv.Client(), srv.URL, []byte(`{}`), &dst)
+	status, err := outbound.PostJSON(context.Background(), srv.Client(), srv.URL, []byte(`{}`), &dst)
 	if err == nil || !strings.Contains(err.Error(), "http status 500") {
 		t.Fatalf("err = %v, want an http status 500 error", err)
 	}
@@ -136,7 +133,7 @@ func TestPostJSON_forwardsBodyAndDecodes(t *testing.T) {
 	var dst struct {
 		OK bool `json:"ok"`
 	}
-	status, err := providerrequests.PostJSON(context.Background(), srv.Client(), srv.URL, []byte(`{"q":1}`), &dst)
+	status, err := outbound.PostJSON(context.Background(), srv.Client(), srv.URL, []byte(`{"q":1}`), &dst)
 	if err != nil {
 		t.Fatalf("PostJSON: %v", err)
 	}
@@ -158,7 +155,7 @@ func TestPostBytesCapped_non200ReturnsStatusAndBodyWithoutError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	status, body, err := providerrequests.PostBytesCapped(context.Background(), srv.Client(), srv.URL, strings.NewReader("q"), 1<<20)
+	status, body, err := outbound.PostBytesCapped(context.Background(), srv.Client(), srv.URL, strings.NewReader("q"), 1<<20)
 	if err != nil {
 		t.Fatalf("PostBytesCapped must not gate on status (callers branch on it): %v", err)
 	}
@@ -176,7 +173,7 @@ func TestPostBytesCappedOK_non200IsStatusError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	status, _, err := providerrequests.PostBytesCappedOK(context.Background(), srv.Client(), srv.URL, strings.NewReader("q"), 1<<20)
+	status, _, err := outbound.PostBytesCappedOK(context.Background(), srv.Client(), srv.URL, strings.NewReader("q"), 1<<20)
 	if err == nil || err.Error() != "http status 502" {
 		t.Fatalf("err = %v, want exactly %q", err, "http status 502")
 	}
@@ -191,7 +188,7 @@ func TestPostBytesCappedOK_200ReturnsBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	status, body, err := providerrequests.PostBytesCappedOK(context.Background(), srv.Client(), srv.URL, nil, 1<<20)
+	status, body, err := outbound.PostBytesCappedOK(context.Background(), srv.Client(), srv.URL, nil, 1<<20)
 	if err != nil {
 		t.Fatalf("PostBytesCappedOK: %v", err)
 	}
@@ -204,7 +201,7 @@ func TestPostBytesCappedOK_transportErrorHasZeroStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	srv.Close()
 
-	status, _, err := providerrequests.PostBytesCappedOK(context.Background(), http.DefaultClient, srv.URL, nil, 1<<20)
+	status, _, err := outbound.PostBytesCappedOK(context.Background(), http.DefaultClient, srv.URL, nil, 1<<20)
 	if err == nil || strings.Contains(err.Error(), "http status") {
 		t.Fatalf("err = %v, want the transport error, not a status error", err)
 	}
@@ -219,7 +216,7 @@ func TestPostBytesCapped_capsBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	status, body, err := providerrequests.PostBytesCapped(context.Background(), srv.Client(), srv.URL, nil, 10)
+	status, body, err := outbound.PostBytesCapped(context.Background(), srv.Client(), srv.URL, nil, 10)
 	if err != nil {
 		t.Fatalf("PostBytesCapped: %v", err)
 	}
@@ -249,19 +246,19 @@ func requestHelpers() map[string]func(context.Context, *http.Client, string) err
 	return map[string]func(context.Context, *http.Client, string) error{
 		"GetJSON": func(ctx context.Context, c *http.Client, u string) error {
 			var dst map[string]any
-			return providerrequests.GetJSON(ctx, c, u, &dst)
+			return outbound.GetJSON(ctx, c, u, &dst)
 		},
 		"GetBytes": func(ctx context.Context, c *http.Client, u string) error {
-			_, _, err := providerrequests.GetBytes(ctx, c, u)
+			_, _, err := outbound.GetBytes(ctx, c, u)
 			return err
 		},
 		"PostJSON": func(ctx context.Context, c *http.Client, u string) error {
 			var dst map[string]any
-			_, err := providerrequests.PostJSON(ctx, c, u, []byte(`{}`), &dst)
+			_, err := outbound.PostJSON(ctx, c, u, []byte(`{}`), &dst)
 			return err
 		},
 		"PostBytesCapped": func(ctx context.Context, c *http.Client, u string) error {
-			_, _, err := providerrequests.PostBytesCapped(ctx, c, u, strings.NewReader("q"), 1<<20)
+			_, _, err := outbound.PostBytesCapped(ctx, c, u, strings.NewReader("q"), 1<<20)
 			return err
 		},
 	}
@@ -299,9 +296,9 @@ func TestWithHeader_emptyValueNotSet(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	err := providerrequests.GetJSON(context.Background(), srv.Client(), srv.URL, &dst,
-		providerrequests.WithHeader("X-Custom", ""),
-		providerrequests.WithHeader("X-Other", "set"))
+	err := outbound.GetJSON(context.Background(), srv.Client(), srv.URL, &dst,
+		outbound.WithHeader("X-Custom", ""),
+		outbound.WithHeader("X-Other", "set"))
 	if err != nil {
 		t.Fatalf("GetJSON: %v", err)
 	}
@@ -315,7 +312,7 @@ func TestWithHeader_emptyValueNotSet(t *testing.T) {
 
 func oversizedJSONServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	payload := `{"blob":"` + strings.Repeat("x", int(providerrequests.BodyCap)+1024) + `"}`
+	payload := `{"blob":"` + strings.Repeat("x", int(outbound.BodyCap)+1024) + `"}`
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(payload))
@@ -329,12 +326,12 @@ func TestGetJSON_oversizedBodyIsRejected(t *testing.T) {
 	var dst struct {
 		Blob string `json:"blob"`
 	}
-	err := providerrequests.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
+	err := outbound.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
 	if err == nil {
-		t.Fatalf("GetJSON decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), providerrequests.BodyCap)
+		t.Fatalf("GetJSON decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), outbound.BodyCap)
 	}
-	if len(dst.Blob) > int(providerrequests.BodyCap) {
-		t.Errorf("len(dst.Blob) = %d, want nothing beyond the %d-byte cap buffered", len(dst.Blob), providerrequests.BodyCap)
+	if len(dst.Blob) > int(outbound.BodyCap) {
+		t.Errorf("len(dst.Blob) = %d, want nothing beyond the %d-byte cap buffered", len(dst.Blob), outbound.BodyCap)
 	}
 }
 
@@ -347,7 +344,7 @@ func TestGetJSONWithStatus_okDecodesAndReturnsStatus(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]string
-	status, err := providerrequests.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst, providerrequests.WithHeader("X-Test", "yes"))
+	status, err := outbound.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst, outbound.WithHeader("X-Test", "yes"))
 	if err != nil {
 		t.Fatalf("GetJSONWithStatus: %v", err)
 	}
@@ -369,7 +366,7 @@ func TestGetJSONWithStatus_non200ReturnsStatusAndError(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	status, err := providerrequests.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
+	status, err := outbound.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
 	if err == nil || err.Error() != "http status 401" {
 		t.Fatalf("err = %v, want http status 401", err)
 	}
@@ -385,7 +382,7 @@ func TestGetJSONWithStatus_malformedBodyReturns200AndError(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	status, err := providerrequests.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
+	status, err := outbound.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
 	if err == nil {
 		t.Fatal("expected a decode error, got nil")
 	}
@@ -401,7 +398,7 @@ func TestGetJSONWithStatus_transportErrorReturnsZeroStatus(t *testing.T) {
 	srv.Close()
 
 	var dst map[string]any
-	status, err := providerrequests.GetJSONWithStatus(context.Background(), client, u, &dst)
+	status, err := outbound.GetJSONWithStatus(context.Background(), client, u, &dst)
 	if err == nil {
 		t.Fatal("expected a transport error against a closed server, got nil")
 	}
@@ -417,9 +414,9 @@ func TestGetJSONWithStatus_oversizedBodyIsRejected(t *testing.T) {
 	var dst struct {
 		Blob string `json:"blob"`
 	}
-	status, err := providerrequests.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
+	status, err := outbound.GetJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
 	if err == nil {
-		t.Fatalf("decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), providerrequests.BodyCap)
+		t.Fatalf("decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), outbound.BodyCap)
 	}
 	if status != http.StatusOK {
 		t.Errorf("status = %d, want 200 (the cap is a body failure, not a status one)", status)
@@ -433,15 +430,15 @@ func TestPostJSON_oversizedBodyIsRejected(t *testing.T) {
 	var dst struct {
 		Blob string `json:"blob"`
 	}
-	status, err := providerrequests.PostJSON(context.Background(), srv.Client(), srv.URL, []byte(`{}`), &dst)
+	status, err := outbound.PostJSON(context.Background(), srv.Client(), srv.URL, []byte(`{}`), &dst)
 	if err == nil {
-		t.Fatalf("PostJSON decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), providerrequests.BodyCap)
+		t.Fatalf("PostJSON decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), outbound.BodyCap)
 	}
 	if status != http.StatusOK {
 		t.Errorf("status = %d, want 200 (the cap is a body failure, not a status one)", status)
 	}
-	if len(dst.Blob) > int(providerrequests.BodyCap) {
-		t.Errorf("len(dst.Blob) = %d, want nothing beyond the %d-byte cap buffered", len(dst.Blob), providerrequests.BodyCap)
+	if len(dst.Blob) > int(outbound.BodyCap) {
+		t.Errorf("len(dst.Blob) = %d, want nothing beyond the %d-byte cap buffered", len(dst.Blob), outbound.BodyCap)
 	}
 }
 
@@ -452,7 +449,7 @@ func TestGetJSON_malformedBodyIsMarkedBadPayload(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	err := providerrequests.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
+	err := outbound.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
 	marker, ok := err.(interface{ BadPayload() bool })
 	if !ok || !marker.BadPayload() {
 		t.Fatalf("err = %v, want a bad payload error", err)
@@ -466,7 +463,7 @@ func TestGetJSON_bare403IsNotMarkedPersistent(t *testing.T) {
 	defer srv.Close()
 
 	var dst map[string]any
-	err := providerrequests.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
+	err := outbound.GetJSON(context.Background(), srv.Client(), srv.URL, &dst)
 	if _, marked := err.(interface{ PersistentAuthFailure() bool }); err == nil || marked {
 		t.Fatalf("err = %v, want a plain 403 without the persistent marker", err)
 	}
@@ -480,7 +477,7 @@ func TestGetText_200ReturnsBodyAndSendsUserAgent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := providerrequests.GetText(context.Background(), srv.Client(), srv.URL, 1024, "test-agent/1")
+	got, err := outbound.GetText(context.Background(), srv.Client(), srv.URL, 1024, "test-agent/1")
 	if err != nil || got != "hello" {
 		t.Fatalf("got %q, %v; want hello, nil", got, err)
 	}
@@ -495,7 +492,7 @@ func TestGetText_503ReturnsStatusError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := providerrequests.GetText(context.Background(), srv.Client(), srv.URL, 1024, "ua")
+	_, err := outbound.GetText(context.Background(), srv.Client(), srv.URL, 1024, "ua")
 	want := "GET " + srv.URL + ": status 503"
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v, want %q", err, want)
@@ -508,7 +505,7 @@ func TestGetText_truncatesAtLimit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := providerrequests.GetText(context.Background(), srv.Client(), srv.URL, 10, "ua")
+	got, err := outbound.GetText(context.Background(), srv.Client(), srv.URL, 10, "ua")
 	if err != nil || len(got) != 10 {
 		t.Fatalf("len = %d, err = %v; want 10, nil", len(got), err)
 	}
@@ -518,14 +515,14 @@ func TestGetText_emptyBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer srv.Close()
 
-	got, err := providerrequests.GetText(context.Background(), srv.Client(), srv.URL, 1024, "ua")
+	got, err := outbound.GetText(context.Background(), srv.Client(), srv.URL, 1024, "ua")
 	if err != nil || got != "" {
 		t.Fatalf("got %q, %v; want empty, nil", got, err)
 	}
 }
 
 func TestNewHeadRequest_setsMethodAndOptions(t *testing.T) {
-	req, err := providerrequests.NewHeadRequest(context.Background(), "https://example.test/x", providerrequests.WithHeader("Accept", "image/*"))
+	req, err := outbound.NewHeadRequest(context.Background(), "https://example.test/x", outbound.WithHeader("Accept", "image/*"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,38 +531,5 @@ func TestNewHeadRequest_setsMethodAndOptions(t *testing.T) {
 	}
 	if got := req.Header.Get("Accept"); got != "image/*" {
 		t.Fatalf("Accept = %q, want image/*", got)
-	}
-}
-
-func TestArtworkFailure(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		wantMiss bool
-		wantIs   []error
-	}{
-		{name: "404 is a miss", err: providerrequests.StatusError{Status: 404}, wantMiss: true},
-		{name: "400 is a miss", err: providerrequests.StatusError{Status: 400}, wantMiss: true},
-		{name: "410 is refused", err: providerrequests.StatusError{Status: 410}, wantIs: []error{ports.ErrArtworkUnavailable}},
-		{name: "context canceled", err: context.Canceled, wantIs: []error{ports.ErrArtworkUnavailable, context.Canceled}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := providerrequests.ArtworkFailure(domain.ProviderKeyCoverArtArchive, tt.err)
-			if got != "" {
-				t.Errorf("url = %q, want empty", got)
-			}
-			if tt.wantMiss {
-				if err != nil {
-					t.Fatalf("err = %v, want nil", err)
-				}
-				return
-			}
-			for _, want := range tt.wantIs {
-				if !errors.Is(err, want) {
-					t.Errorf("errors.Is(%v, %v) = false, want true", err, want)
-				}
-			}
-		})
 	}
 }

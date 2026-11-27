@@ -4,12 +4,11 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/dbtest"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"net"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -57,10 +56,7 @@ func TestRun_APortAlreadyInUseIsReturnedInsteadOfServing(t *testing.T) {
 	cfg.Host = "127.0.0.1"
 	cfg.Port = taken.Addr().(*net.TCPAddr).Port
 
-	var logs syncBuffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 
 	err = runUntilItReturns(t, cfg)
 
@@ -70,21 +66,4 @@ func TestRun_APortAlreadyInUseIsReturnedInsteadOfServing(t *testing.T) {
 	if !strings.Contains(logs.String(), `msg="shutdown complete"`) {
 		t.Errorf("Run returned the listen error without shutting the assembly down and closing the datastores; log:\n%s", logs.String())
 	}
-}
-
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
 }

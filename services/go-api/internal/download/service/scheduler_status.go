@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"log/slog"
 	"time"
 )
@@ -39,7 +40,7 @@ func (s *BackgroundAcquisitionScheduler) pendingDepth() (int, time.Duration, boo
 	}
 	pending, oldestAge, err := reader.PendingDepth(s.baseCtx)
 	if err != nil {
-		slog.ErrorContext(s.baseCtx, "acquisition.pending_depth_failed", "error", err)
+		slog.ErrorContext(s.baseCtx, "acquisition.pending_depth_failed", logging.KeyError, err)
 		return 0, 0, false
 	}
 	return pending, oldestAge, true

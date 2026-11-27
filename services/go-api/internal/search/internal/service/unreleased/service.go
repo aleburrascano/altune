@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
@@ -136,8 +137,8 @@ func (s *Service) List(ctx context.Context, provider domain.ProviderName, extern
 	return s.storage.list(ctx, s, provider, externalID, artistName, known)
 }
 
-func (s *Service) cacheTTL(songs []domain.UnreleasedSong, complete bool) time.Duration {
-	if len(songs) == 0 || !complete {
+func (s *Service) cacheTTL(songs []domain.UnreleasedSong) time.Duration {
+	if len(songs) == 0 {
 		return s.cfg.EmptyTTL
 	}
 	return s.cfg.TTL
@@ -218,7 +219,7 @@ func (s *Service) lookUpDetails(ctx context.Context, songs []domain.UnreleasedSo
 func (s *Service) lookUpDetail(ctx context.Context, song domain.UnreleasedSong) lookedUpDetail {
 	detail, err := s.genius.SongDetail(ctx, song.GeniusID)
 	if err != nil {
-		slog.WarnContext(ctx, "unreleased.media_lookup_failed", "genius_id", song.GeniusID, "error", err)
+		slog.WarnContext(ctx, "unreleased.media_lookup_failed", "genius_id", song.GeniusID, logging.KeyError, err)
 		return lookedUpDetail{}
 	}
 	return lookedUpDetail{detail: detail, found: true}

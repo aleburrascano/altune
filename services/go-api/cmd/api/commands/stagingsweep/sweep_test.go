@@ -81,7 +81,15 @@ func runSweepFixture(t *testing.T, cfg *config.Config, refs *fakeRefLister, exec
 	if !ok {
 		t.Fatal("store is not an AudioAgeLister")
 	}
-	tally, err := stagingsweep.Sweep(context.Background(), store, lister, refs, execute, now)
+	run := func() (stagingsweep.Tally, error) {
+		return stagingsweep.Preview(context.Background(), lister, refs, now)
+	}
+	if execute {
+		run = func() (stagingsweep.Tally, error) {
+			return stagingsweep.Sweep(context.Background(), store, lister, refs, now)
+		}
+	}
+	tally, err := run()
 	if err != nil {
 		t.Fatalf("Sweep: %v", err)
 	}
@@ -206,7 +214,7 @@ func TestSweepCountsADeleteTheStoreRefusesAsFailedAndKeepsTheObject(t *testing.T
 		t.Fatal("store is not an AudioAgeLister")
 	}
 
-	got, err := stagingsweep.Sweep(context.Background(), refusingDeleteStore{store}, lister, &fakeRefLister{}, true, mtime.Add(2*time.Hour))
+	got, err := stagingsweep.Sweep(context.Background(), refusingDeleteStore{store}, lister, &fakeRefLister{}, mtime.Add(2*time.Hour))
 	if err != nil {
 		t.Fatalf("Sweep: %v", err)
 	}

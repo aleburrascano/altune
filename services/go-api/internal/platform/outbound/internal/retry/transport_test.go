@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
 	"altune/go-api/internal/platform/outbound/internal/retry"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
@@ -648,9 +649,7 @@ func (h *retryLogRecorder) WithGroup(string) slog.Handler { return h }
 func captureRetryLogs(t *testing.T) *retryLogRecorder {
 	t.Helper()
 	rec := &retryLogRecorder{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(rec))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, rec)
 	return rec
 }
 

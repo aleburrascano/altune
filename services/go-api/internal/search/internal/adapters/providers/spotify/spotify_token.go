@@ -1,6 +1,7 @@
 package spotify
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/spotify/totp"
 	"altune/go-api/internal/shared/clock"
@@ -96,7 +97,7 @@ func (r *spotifyTokenResolver) resolveAccessToken(ctx context.Context) (string, 
 			AccessTokenExpirationTimestampMs int64  `json:"accessTokenExpirationTimestampMs"`
 			Error                            string `json:"error"`
 		}
-		if err := providerrequests.GetJSON(ctx, r.client, u, &body, providerrequests.WithHeader("User-Agent", spotifyUserAgent)); err != nil {
+		if err := outbound.GetJSON(ctx, r.client, u, &body, outbound.WithHeader("User-Agent", spotifyUserAgent)); err != nil {
 			lastErr = err
 			continue
 		}
@@ -122,7 +123,7 @@ func (r *spotifyTokenResolver) fetchServerTime(ctx context.Context) (int64, erro
 	var body struct {
 		ServerTime int64 `json:"serverTime"`
 	}
-	if err := providerrequests.GetJSON(ctx, r.client, spotifyServerTimeURL, &body, providerrequests.WithHeader("User-Agent", spotifyUserAgent)); err != nil {
+	if err := outbound.GetJSON(ctx, r.client, spotifyServerTimeURL, &body, outbound.WithHeader("User-Agent", spotifyUserAgent)); err != nil {
 		return 0, err
 	}
 	if body.ServerTime <= 0 {
@@ -156,7 +157,7 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 			ExpiresAfterSeconds int64  `json:"expires_after_seconds"`
 		} `json:"granted_token"`
 	}
-	if _, err := providerrequests.PostJSON(ctx, r.client, spotifyClientTokenURL, payload, &body, spotifyClientTokenHeaders()...); err != nil {
+	if _, err := outbound.PostJSON(ctx, r.client, spotifyClientTokenURL, payload, &body, spotifyClientTokenHeaders()...); err != nil {
 		return "", time.Time{}, err
 	}
 	if body.GrantedToken.Token == "" {
@@ -170,11 +171,11 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 	return body.GrantedToken.Token, spotifyExpiryAfter(r.now(), ttl, spotifyClientMargin), nil
 }
 
-func spotifyClientTokenHeaders() []providerrequests.ReqOption {
-	return []providerrequests.ReqOption{
-		providerrequests.WithHeader("Content-Type", "application/json"),
-		providerrequests.WithHeader("Accept", "application/json"),
-		providerrequests.WithHeader("User-Agent", spotifyUserAgent),
+func spotifyClientTokenHeaders() []outbound.ReqOption {
+	return []outbound.ReqOption{
+		outbound.WithHeader("Content-Type", "application/json"),
+		outbound.WithHeader("Accept", "application/json"),
+		outbound.WithHeader("User-Agent", spotifyUserAgent),
 	}
 }
 

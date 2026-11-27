@@ -2,6 +2,7 @@ package musicbrainzmatch
 
 import (
 	"altune/go-api/internal/download/internal/core/tracklength"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/titlemarkers"
 	"context"
@@ -84,7 +85,7 @@ func (r *Resolver) resolvePinned(ctx context.Context, q acqports.RecordingQuery)
 	identity := r.pinnedIdentity(ctx, q.MBID)
 	searched, err := r.resolveFromSearch(ctx, q)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.pin_search_failed", "pinned_mbid", q.MBID, "error", err)
+		slog.WarnContext(ctx, "acquisition.pin_search_failed", "pinned_mbid", q.MBID, logging.KeyError, err)
 	}
 	if searched.MBID != "" && searched.MBID != q.MBID {
 		slog.InfoContext(ctx, "acquisition.identity_pin_disagrees",
@@ -114,7 +115,7 @@ func (r *Resolver) pinnedIdentity(ctx context.Context, pin string) acqports.Reco
 func (r *Resolver) pinnedFacts(ctx context.Context, pin string) (acqports.RecordingFacts, bool) {
 	facts, found, err := r.RecordingByMBID(ctx, pin)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.pinned_recording_lookup_failed", "pinned_mbid", pin, "error", err)
+		slog.WarnContext(ctx, "acquisition.pinned_recording_lookup_failed", "pinned_mbid", pin, logging.KeyError, err)
 		return acqports.RecordingFacts{}, false
 	}
 	if !found {
@@ -143,8 +144,7 @@ func (r *Resolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, 
 }
 
 func (r *Resolver) anchorToMismatchedISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity, recordings []acqports.ISRCRecording) acqports.RecordingIdentity {
-	searchMBIDUnregistered := identity.MBID != ""
-	identity.ReferenceDoubted = identity.ReferenceDoubted || searchMBIDUnregistered
+	identity.ReferenceDoubted = identity.ReferenceDoubted || identity.MBID != ""
 
 	chosen, ok := closestRecording(recordings, expectedLength(q.Duration, identity.Duration))
 	if !ok {
@@ -152,7 +152,7 @@ func (r *Resolver) anchorToMismatchedISRC(ctx context.Context, q acqports.Record
 			"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_recordings", len(recordings))
 		return withReferenceSet(identity, identity.MBID, recordings)
 	}
-	logAnchoredToISRC(ctx, q.ISRC, identity.MBID, chosen.MBID, searchMBIDUnregistered)
+	logAnchoredToISRC(ctx, q.ISRC, identity.MBID, chosen.MBID)
 	anchored := adoptRecording(identity, q.ISRC, chosen)
 	return withReferenceSet(anchored, anchored.MBID, recordings)
 }
@@ -166,10 +166,10 @@ func isrcRegistersMBID(recordings []acqports.ISRCRecording, mbid string) bool {
 	return false
 }
 
-func logAnchoredToISRC(ctx context.Context, isrc, searchMBID, isrcMBID string, searchMBIDUnregistered bool) {
+func logAnchoredToISRC(ctx context.Context, isrc, searchMBID, isrcMBID string) {
 	slog.InfoContext(ctx, "acquisition.identity_anchored_to_isrc",
 		"isrc", isrc, "search_mbid", searchMBID, "isrc_mbid", isrcMBID)
-	if searchMBIDUnregistered {
+	if searchMBID != "" {
 		slog.InfoContext(ctx, "acquisition.reference_doubted",
 			"search_mbid", searchMBID, "anchored_mbid", isrcMBID, "isrc", isrc)
 	}
@@ -217,7 +217,7 @@ func (r *Resolver) isrcRecordings(ctx context.Context, isrc string) []acqports.I
 	}
 	recordings, err := r.isrc.RecordingsByISRC(ctx, isrc)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.isrc_lookup_failed", "isrc", isrc, "error", err)
+		slog.WarnContext(ctx, "acquisition.isrc_lookup_failed", "isrc", isrc, logging.KeyError, err)
 		return nil
 	}
 	return recordings

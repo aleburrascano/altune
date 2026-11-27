@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/isrcwriteback"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"math"
@@ -34,9 +35,10 @@ func ScoreConfidence(e Evidence, trackSeconds float64) float64 {
 		return fingerprintConfidence(hardConfidence, e.AcoustIDScore)
 	case VerdictSoft:
 		return fingerprintConfidence(softConfidence, e.AcoustIDScore)
-	default:
+	case VerdictOtherVersion, VerdictDifferentSong, VerdictUnknown, VerdictContradicted:
 		return unknownConfidence(e, trackSeconds)
 	}
+	return unknownConfidence(e, trackSeconds)
 }
 
 func fingerprintConfidence(base, score float64) float64 {
@@ -108,7 +110,7 @@ func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence, conf
 	ac.Evidence = evidence
 	ac.Confidence = confidence
 	slog.InfoContext(ctx, "acquisition.confidence",
-		"track_id", ac.Track.ID,
+		logging.KeyTrackID, ac.Track.ID,
 		"confidence", ac.Confidence,
 		"evidence", evidence,
 	)
@@ -138,9 +140,10 @@ func SourceKindOf(c ports.AudioCandidate, channelClass string) audioquality.Sour
 		return officialVideoKind(c)
 	case ports.KindUpload:
 		return uploadSourceKind(channelClass)
-	default:
+	case ports.KindCatalogPin:
 		return audioquality.FanUpload
 	}
+	return audioquality.FanUpload
 }
 
 func officialVideoKind(c ports.AudioCandidate) audioquality.SourceKind {
@@ -171,9 +174,10 @@ func FingerprintOf(verdict VerdictKind) audioquality.FingerprintResult {
 		return audioquality.Contradicts
 	case VerdictDifferentSong:
 		return audioquality.Unsupported
-	default:
+	case VerdictUnknown:
 		return audioquality.Silent
 	}
+	return audioquality.Silent
 }
 
 func (ac *AcquisitionContext) CollectEvidence() Evidence {

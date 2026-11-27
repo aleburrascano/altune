@@ -49,9 +49,7 @@ func newRouter(s router.Settings) *chi.Mux {
 }
 
 func TestRouter_PanickingHandlerLogsOneErrorAndRequestCompleteAt500(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	r := newRouter(router.Settings{})
 	r.Get("/v1/boom", func(http.ResponseWriter, *http.Request) {
@@ -150,9 +148,7 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 }
 
 func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	slog.SetDefault(slog.New(slog.DiscardHandler))
+	logging.Silence(t)
 
 	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -67,15 +67,6 @@ func TestNewRecordingResolver_RefusesEachMissingPort(t *testing.T) {
 			}
 		})
 	}
-}
-
-func captureDefaultLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
 }
 
 type stubSearcher struct {
@@ -260,7 +251,7 @@ func TestResolve_ISRCAnchorsIdentityWhenSearchFindsNothing(t *testing.T) {
 }
 
 func TestResolve_SoleISRCRecordingMismatchDoubtsTheReference(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
 	resolver := newResolver(t, drinkingInLA(), lookups{isrc: authority})
 
@@ -435,7 +426,7 @@ func assertMBIDs(t *testing.T, got, want []string) {
 }
 
 func TestResolve_ReferenceDoubtedLogCarriesSearchAnchoredAndISRC(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
 	resolver := newResolver(t, drinkingInLA(), lookups{isrc: authority})
 
@@ -532,7 +523,7 @@ func TestResolve_SearchLengthOffByMoreThanFiveSecondsIsLoggedNotDoubtedWhenISRCA
 	q.Duration = 106
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 100}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -694,7 +685,7 @@ func cureLookup() *stubRecordingLookup {
 }
 
 func TestResolve_TheCatalogPinIsTheIdentity(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 	liveSource := download.ProviderRef{Provider: download.ProviderYouTube, ExternalID: "live-video"}
 	resolver := newResolver(t, searchRanking(cureLiveMBID, 187, liveSource), lookups{recording: cureLookup()})
 
@@ -742,7 +733,7 @@ func TestResolve_PinnedIdentityHoldsWhateverTheTextSearchDoes(t *testing.T) {
 }
 
 func TestResolve_SearchAgreeingWithThePinKeepsItsSourcesAndLogsNoDisagreement(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 	studioSource := download.ProviderRef{Provider: download.ProviderYouTube, ExternalID: "studio-video"}
 	resolver := newResolver(t, searchRanking(cureStudioMBID, 157, studioSource), lookups{recording: cureLookup()})
 
@@ -801,7 +792,7 @@ func TestResolve_PinSurvivesAnUnknownOrUnreachablePinnedRecording(t *testing.T) 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logs := captureDefaultLog(t)
+			logs := logging.CaptureText(t, slog.LevelDebug)
 			resolver := newResolver(t, searchRanking(cureLiveMBID, 187), lookups{recording: tt.lookup})
 
 			identity, err := resolver.Resolve(context.Background(), pinnedCureQuery)
@@ -851,7 +842,7 @@ func TestResolve_CatalogLengthConflictWithISRCRegisteredReferenceIsNotDoubted(t 
 	q.Duration = 300
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -877,7 +868,7 @@ func TestResolve_CatalogLengthAgreeingWithISRCRegisteredReferenceLogsNoConflict(
 	q.Duration = 237
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 236}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	if _, err := resolver.Resolve(context.Background(), q); err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -894,7 +885,7 @@ func TestResolve_CatalogLengthConflictWithOtherISRCRecordingsStillDoubts(t *test
 	q.Duration = 300
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "other-mbid", Duration: 300}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -915,7 +906,7 @@ func TestResolve_CatalogLengthConflictStillDoubtsWhenTheISRCLookupFails(t *testi
 	q.Duration = 300
 	authority := &stubISRCLookup{err: errors.New("503")}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -940,7 +931,7 @@ func TestResolve_CatalogLengthConflictIsNotDoubtedWhenTheISRCRegistersTheReferen
 		{MBID: "third-mbid", Duration: 250},
 	}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -972,7 +963,7 @@ func TestResolve_UnknownCatalogLengthWithISRCRegisteredReferenceLogsNoConflict(t
 	q.Duration = 0
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -993,7 +984,7 @@ func TestResolve_UnknownReferenceLengthWithISRCRegisteredReferenceLogsNoConflict
 	q.Duration = 300
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 0}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -1014,7 +1005,7 @@ func TestResolve_CatalogLengthExactlyFiveSecondsOffISRCRegisteredReferenceLogsNo
 	q.Duration = 202
 	authority := &stubISRCLookup{recordings: []download.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {

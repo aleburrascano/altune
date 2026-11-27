@@ -49,12 +49,9 @@ func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics
 				return
 			}
 
-			slog.DebugContext(r.Context(), "auth.verified",
-				"user_id", verified.UserID.String(),
-				logging.KeyPath, r.URL.Path,
-			)
-
 			httpserver.RecordRequestUser(r.Context(), verified.UserID.String())
+			slog.DebugContext(r.Context(), "auth.verified", logging.KeyPath, r.URL.Path)
+
 			next.ServeHTTP(w, r.WithContext(contextFor(r.Context(), verified)))
 		})
 	}
@@ -179,7 +176,4 @@ func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason p
 	httpserver.HandleServiceError(w, r, apierror.NewError(rejectionCode(reason), detail))
 }
 
-var (
-	RequireUserID = requestuser.RequireUserID
-	ClientKey     = requestuser.ClientKey
-)
+var ClientKey = requestuser.ClientKey

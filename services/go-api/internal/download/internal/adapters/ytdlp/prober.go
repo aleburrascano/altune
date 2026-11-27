@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
@@ -127,7 +128,7 @@ func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) 
 		return fmt.Errorf("audio stream failed to decode: %s", firstLine(stderr))
 	default:
 		slog.WarnContext(ctx, "acquisition.decoder_unavailable_accepting",
-			"file", filePath, "error", redact.LogError(err))
+			"file", filePath, logging.KeyError, redact.LogError(err))
 		p.recordSkip(ports.SkipDecoderUnavailable)
 		return nil
 	}

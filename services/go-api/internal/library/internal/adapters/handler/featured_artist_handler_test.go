@@ -98,9 +98,7 @@ func (r *listFailsAfterFirstPage) ListForUser(ctx context.Context, userId ids.Us
 }
 
 func TestHandleBackfillFeatured_LogsTheFailedRunsProgressOnceAtError(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	repo := &listFailsAfterFirstPage{InMemoryTrackRepo: library.NewInMemoryTrackRepo()}
 	seedTracks(t, repo.InMemoryTrackRepo, "Song")

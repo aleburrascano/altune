@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/queuetimeout"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -323,10 +323,7 @@ func TestDiscogsAdapter_ArtworkSource(t *testing.T) {
 }
 
 func TestDiscogsAdapter_429LogOmitsQuery(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	defer slog.SetDefault(prev)
+	buf := logging.CaptureText(t, slog.LevelInfo)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -550,10 +547,7 @@ func TestDiscogsAdapter_ResolveByIdentity_ZeroDiscogsIDIsASilentMissWithNoReques
 }
 
 func TestDiscogsAdapter_ResolveDiscogsArtist_DetailFailureLogsTheSkippedEnrichment(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	defer slog.SetDefault(prev)
+	buf := logging.CaptureText(t, slog.LevelInfo)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

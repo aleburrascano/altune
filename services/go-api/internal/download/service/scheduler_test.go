@@ -11,7 +11,6 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -68,8 +67,6 @@ func withCatalogLength(t *testing.T, ledger *inmemoryledger.Ledger, track ledger
 	ledger.Seed(track)
 	return track
 }
-
-func ptrTo[T any](v T) *T { return &v }
 
 func readyWith(ref string) func(*ledgerTrack) {
 	return func(track *ledgerTrack) { makeReady(track, ref) }
@@ -301,7 +298,7 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t 
 }
 
 func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWorker(t *testing.T) {
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	useSource(&track, "https://www.youtube.com/watch?v=currentAAAA")
@@ -333,7 +330,7 @@ const cookieJarPath = "/home/x/cookies.txt"
 
 func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		logs := captureJSONLog(t)
+		logs := logging.CaptureJSON(t, slog.LevelDebug)
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
 		ledger := inmemoryledger.NewLedger()
@@ -1958,32 +1955,6 @@ func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *tes
 	})
 }
 
-type syncLogBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *syncLogBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncLogBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
-
-func captureJSONLogSync(t *testing.T) *syncLogBuffer {
-	t.Helper()
-	buf := &syncLogBuffer{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return buf
-}
-
 func startVerifiedScheduler(t *testing.T, v acqports.Verification) {
 	t.Helper()
 	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now, service.WithVerificationStatus(v))
@@ -2002,7 +1973,7 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			logs := captureJSONLogSync(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 			startVerifiedScheduler(t, tc.verification)
 
@@ -2021,7 +1992,7 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 }
 
 func TestWithVerificationStatus_NamesFingerprintLookupsUnverified(t *testing.T) {
-	logs := captureJSONLogSync(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	startVerifiedScheduler(t, acqports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})
 
@@ -2039,7 +2010,7 @@ func TestWithVerificationStatus_NamesFingerprintLookupsUnverified(t *testing.T) 
 func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testing.T) {
 	t.Run("failure logs the warning", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			logs := captureJSONLogSync(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			recorder := newFakeOutcomeRecorder()
 			recorder.err = errors.New("outcome store unavailable")
 			svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -2061,7 +2032,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 
 	t.Run("success logs no warning", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			logs := captureJSONLogSync(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			recorder := newFakeOutcomeRecorder()
 			svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
@@ -2275,7 +2246,7 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 
 func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		logs := captureJSONLogSync(t)
+		logs := logging.CaptureJSON(t, slog.LevelDebug)
 		recorder := newFakeOutcomeRecorder()
 		recorder.err = errors.New("pg write: --cookies " + cookieJarPath + ": permission denied")
 		scheduler := newTestScheduler(&stubAcquirer{}, 1, time.Now, withTestOutcomes(recorder))

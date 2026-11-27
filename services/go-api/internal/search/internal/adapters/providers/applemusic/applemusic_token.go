@@ -1,6 +1,7 @@
 package applemusic
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -44,7 +45,7 @@ func newAppleMusicTokenResolver(client *http.Client, now clock.Func) *appleMusic
 const appleMusicResolveTimeout = 20 * time.Second
 
 func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, time.Time, error) {
-	html, err := providerrequests.GetText(ctx, r.client, r.siteURL, appleMusicMaxBody, appleMusicUserAgent)
+	html, err := outbound.GetText(ctx, r.client, r.siteURL, appleMusicMaxBody, appleMusicUserAgent)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("fetch apple music page: %w", err)
 	}
@@ -54,7 +55,7 @@ func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, time.Tim
 		return "", time.Time{}, errors.New("no index bundle found on apple music page")
 	}
 
-	js, err := providerrequests.GetText(ctx, r.client, r.bundleBaseURL+bundlePath, appleMusicMaxBody, appleMusicUserAgent)
+	js, err := outbound.GetText(ctx, r.client, r.bundleBaseURL+bundlePath, appleMusicMaxBody, appleMusicUserAgent)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("fetch apple music bundle: %w", err)
 	}

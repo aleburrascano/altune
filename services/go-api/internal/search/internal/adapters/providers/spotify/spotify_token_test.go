@@ -1,7 +1,7 @@
 package spotify_test
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/adapters/providers/spotify"
 	"errors"
@@ -96,7 +96,7 @@ func TestSpotifyAdapter_Search_sendsTOTPCodesForTheLocalAndTheServerClock(t *tes
 }
 
 func TestSpotifyAdapter_Search_rejectsAnOversizedClientTokenBody(t *testing.T) {
-	oversized := `{"granted_token":{"token":"` + strings.Repeat("x", providerrequests.BodyCap+1024) + `"}}`
+	oversized := `{"granted_token":{"token":"` + strings.Repeat("x", outbound.BodyCap+1024) + `"}}`
 	tokens := serveTokens(t, tokenEndpoints{clientToken: func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(oversized))
@@ -111,7 +111,7 @@ func TestSpotifyAdapter_Search_rejectsAnOversizedClientTokenBody(t *testing.T) {
 	_, err := newSpotifyAdapterWithTokens(tokens, srv, time.Now).Search(t.Context(), "x", providertest.AllKinds())
 	if err == nil {
 		t.Fatalf("Search took a client token off a %d-byte body; want the body capped at %d and the decode rejected",
-			len(oversized), providerrequests.BodyCap)
+			len(oversized), outbound.BodyCap)
 	}
 	if sentClientTokenLen > 0 {
 		t.Errorf("pathfinder got a %d-byte client token, want no search sent without a decoded token", sentClientTokenLen)

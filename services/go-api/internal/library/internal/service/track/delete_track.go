@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -47,7 +48,7 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	}
 
 	slog.InfoContext(ctx, "track deleted from library",
-		"track_id", trackId.String(), "user_id", userId.String())
+		logging.KeyTrackID, trackId.String(), logging.KeyUserID, userId.String())
 	s.events.Publish(ctx, userId, events.TrackDeleted{TrackID: trackId.String()})
 
 	if audioRef == nil {
@@ -64,7 +65,7 @@ func (s *DeleteTrackService) deleteAudio(ctx context.Context, userId ids.UserId,
 	if inUse {
 		slog.InfoContext(ctx, "audio kept: another track still references it",
 			"event", "catalog.shared_audio_kept",
-			"track_id", trackId.String(), "audio_ref", audioRef)
+			logging.KeyTrackID, trackId.String(), "audio_ref", audioRef)
 		return nil
 	}
 	if err := s.audioStore.Delete(ctx, audioRef); err != nil {
@@ -78,11 +79,11 @@ func (s *DeleteTrackService) reportOrphanedAudio(ctx context.Context, userId ids
 	queued := s.recordOrphan(ctx, userId, trackId, audioRef)
 	slog.ErrorContext(ctx, "orphaned audio file after track delete",
 		"event", "catalog.orphaned_audio",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyUserID, userId.String(),
 		"audio_ref", audioRef,
 		"queued_for_retry", queued,
-		"error", cause,
+		logging.KeyError, cause,
 	)
 	return fmt.Errorf("%w: %w", domain.ErrAudioOrphaned, cause)
 }
@@ -98,6 +99,6 @@ func (s *DeleteTrackService) recordOrphan(ctx context.Context, userId ids.UserId
 	if errors.Is(err, ports.ErrOrphanedAudioQueueUnavailable) {
 		level = slog.LevelWarn
 	}
-	slog.Log(ctx, level, "orphaned audio not queued for retry", "audio_ref", audioRef, "error", err)
+	slog.Log(ctx, level, "orphaned audio not queued for retry", "audio_ref", audioRef, logging.KeyError, err)
 	return false
 }

@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
@@ -586,9 +587,7 @@ func (l *levelRecorder) errorCount() int {
 func recordLogLevels(t *testing.T) *levelRecorder {
 	t.Helper()
 	rec := &levelRecorder{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(rec))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, rec)
 	return rec
 }
 
@@ -728,10 +727,7 @@ func TestHandleSave_BadSourceWinsOverBadRepeatMode(t *testing.T) {
 }
 
 func TestHandleForget_AuditRecordNamesTheSelfServiceTrigger(t *testing.T) {
-	var buf strings.Builder
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	buf := logging.CaptureJSON(t, slog.LevelInfo)
 	rec := httptest.NewRecorder()
 
 	newHandler(&recordingRepo{}).Routes().ServeHTTP(rec, deleteReq())

@@ -69,9 +69,10 @@ func albumOrderBy(sort domain.LibrarySort) string {
 		return ` ORDER BY min(t.album) ASC, ` + albumGroupKey
 	case domain.SortYear:
 		return ` ORDER BY (array_agg(t.year ORDER BY t.added_at DESC) FILTER (WHERE t.year IS NOT NULL))[1] DESC NULLS LAST, ` + albumGroupKey
-	default:
+	case domain.SortRecent:
 		return ` ORDER BY max(t.added_at) DESC, ` + albumGroupKey
 	}
+	return ` ORDER BY max(t.added_at) DESC, ` + albumGroupKey
 }
 
 func artistOrderBy(sort domain.LibrarySort) string {
@@ -157,9 +158,10 @@ func trackOrderBy(sort domain.LibrarySort) string {
 		return ` ORDER BY lower(title) ASC, id DESC`
 	case domain.SortYear:
 		return ` ORDER BY year DESC NULLS LAST, id DESC`
-	default:
+	case domain.SortRecent:
 		return ` ORDER BY added_at DESC, id DESC`
 	}
+	return ` ORDER BY added_at DESC, id DESC`
 }
 
 func (r *PostgresLibraryLensRepository) ListFilteredForUser(

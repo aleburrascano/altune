@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"time"
@@ -58,7 +59,7 @@ func (t *DiscographyTelemetry) append(ctx context.Context, occurredAt time.Time,
 		Payload:    payload,
 	}
 	if err := t.eventStore.Append(ctx, event); err != nil {
-		slog.WarnContext(ctx, "discography.telemetry.emit_failed", "error", err)
+		slog.WarnContext(ctx, "discography.telemetry.emit_failed", logging.KeyError, err)
 	}
 }
 

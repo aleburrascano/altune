@@ -21,11 +21,11 @@ const itemStyles = StyleSheet.create({
   },
 });
 
-export function sidebarItemStyle(theme: Theme, active: boolean) {
+export function sidebarItemStyle(theme: Theme, state: 'active' | 'idle') {
   return ({ hovered, focused }: PressableWebState): StyleProp<ViewStyle> => [
     itemStyles.item,
     hovered ? { backgroundColor: theme.color.surface2 } : null,
     { borderColor: focused ? theme.color.accent : 'transparent' },
-    active ? { backgroundColor: theme.color.accentTint } : null,
+    state === 'active' ? { backgroundColor: theme.color.accentTint } : null,
   ];
 }

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -77,7 +78,7 @@ func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, track
 		url, err := s.signer.PresignGet(ctx, *track.AudioRef, audioURLTTL)
 		if err != nil {
 			s.metrics.PresignFailed()
-			slog.WarnContext(ctx, "audio_url.presign_failed", "track_id", id.String(), "error", err)
+			slog.WarnContext(ctx, "audio_url.presign_failed", logging.KeyTrackID, id.String(), logging.KeyError, err)
 			continue
 		}
 		out = append(out, ResolvedAudioURL{TrackID: id, URL: url, Version: track.AudioVersion, ExpiresAt: expiresAt})

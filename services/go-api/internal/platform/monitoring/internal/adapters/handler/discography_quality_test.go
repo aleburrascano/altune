@@ -3,7 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -60,10 +60,7 @@ func TestDiscographyQuality_DeadlineExceededMapsToTimeout(t *testing.T) {
 }
 
 func TestDiscographyQuality_ATimeoutLogsItsCauseButAnswersOnlyTheTimeout(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := logging.CaptureJSON(t, slog.LevelInfo)
 
 	rec := query(stubQualityReader{casesErr: context.DeadlineExceeded})
 

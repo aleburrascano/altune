@@ -193,15 +193,6 @@ func TestQueueStateRateLimit_ForgetIsNeverThrottled(t *testing.T) {
 	}
 }
 
-func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	h := playback.MustNewQueueHandler(playback.MustNewQueueService(&recordingRepo{}, absentNowPlaying{}, time.Now), playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
-	req := httptest.NewRequest(http.MethodPut, "/queue-state", strings.NewReader(validSaveBody))
-
-	if rec := serve(h, req); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("missing principal must still be a 401, got %d", rec.Code)
-	}
-}
-
 func TestQueueStateRateLimit_RefusalWireFormat(t *testing.T) {
 	clock := newFakeClock()
 	limit := playback.QueueSaveLimit{Every: 2 * time.Second, Burst: 1}

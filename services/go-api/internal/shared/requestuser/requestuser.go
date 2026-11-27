@@ -13,6 +13,7 @@ var (
 	ContextWithTokenExpiry = signedinuser.ContextWithTokenExpiry
 	TokenExpiryFromContext = signedinuser.TokenExpiryFromContext
 	UntilTokenExpiry       = signedinuser.UntilTokenExpiry
-	RequireUserID          = httpuser.RequireUserID
+	UserID                 = httpuser.UserID
 	ClientKey              = httpuser.ClientKey
+	LimitPerUser           = httpuser.LimitPerUser
 )

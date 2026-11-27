@@ -3,7 +3,7 @@ package scratchfiles_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -136,19 +136,10 @@ func TestSweepAbandonedBetweenTicks(t *testing.T) {
 	}
 }
 
-func captureJSONLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	buf := &bytes.Buffer{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return buf
-}
-
 func TestSweepAbandonedLogsNothingWithoutStaleDirs(t *testing.T) {
 	root := useTempRoot(t)
 	agedDir(t, root, tempDirPrefix+"live", testMaxAge-time.Minute)
-	logs := captureJSONLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	newWorkspace().SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge))
 
@@ -160,7 +151,7 @@ func TestSweepAbandonedLogsNothingWithoutStaleDirs(t *testing.T) {
 func TestSweepAbandonedLogsTheSweptCount(t *testing.T) {
 	root := useTempRoot(t)
 	agedDir(t, root, tempDirPrefix+"old", testMaxAge+time.Hour)
-	logs := captureJSONLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	newWorkspace().SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge))
 
@@ -169,7 +160,7 @@ func TestSweepAbandonedLogsTheSweptCount(t *testing.T) {
 		Msg     string `json:"msg"`
 		Removed int    `json:"removed"`
 	}
-	if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
+	if err := json.Unmarshal([]byte(logs.String()), &record); err != nil {
 		t.Fatalf("expected exactly one JSON log line, got %q: %v", logs.String(), err)
 	}
 	if record.Level != "INFO" || record.Msg != "acquisition.stale_temp_dirs_swept" || record.Removed != 1 {

@@ -115,8 +115,7 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
 		return liveUsageExitCode
 	}
-	cfg.HTTP = budgeted
-	client, err := download.NewYtmSearch(cfg)
+	client, err := download.NewYtmSearchFor(budgeted)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
 		return liveUsageExitCode

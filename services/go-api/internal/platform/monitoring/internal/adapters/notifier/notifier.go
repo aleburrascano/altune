@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -24,7 +23,10 @@ func (NopNotifier) Notify(ctx context.Context, a domain.Alert) error {
 	return nil
 }
 
-const webhookTimeout = 5 * time.Second
+const (
+	webhookTimeout  = 5 * time.Second
+	webhookReplyCap = 1 << 16
+)
 
 type WebhookNotifier struct {
 	url    string
@@ -59,17 +61,12 @@ func (n *WebhookNotifier) Notify(ctx context.Context, a domain.Alert) error {
 	if err != nil {
 		return err
 	}
-	resp, err := n.client.Do(req)
-	if err != nil {
+	status, _, err := outbound.DoCapped(n.client, req, webhookReplyCap)
+	if err != nil && status == 0 {
 		return fmt.Errorf("post alert: %w", withoutURL(err))
 	}
-	if resp == nil {
-		return errors.New("post alert: no response")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("post alert: status %d", resp.StatusCode)
+	if status < 200 || status > 299 {
+		return fmt.Errorf("post alert: status %d", status)
 	}
 	return nil
 }

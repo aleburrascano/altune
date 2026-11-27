@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/app/sourcecheck"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,13 +15,9 @@ import (
 	"time"
 )
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &logs
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
 func fakeChecks(results map[string]error, names ...string) ([]sourcecheck.Check, *[]string) {
@@ -110,7 +106,7 @@ func TestRun_LogsEachProbeWithItsOutcome(t *testing.T) {
 		t.Errorf("passing probe logged an error: %v", passed)
 	}
 	for _, line := range lines {
-		if _, ok := line["duration"].(string); !ok {
+		if _, ok := line["duration_ms"].(float64); !ok {
 			t.Errorf("probe logged no duration: %v", line)
 		}
 	}

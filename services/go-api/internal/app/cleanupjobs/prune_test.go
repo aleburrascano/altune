@@ -2,7 +2,7 @@ package cleanupjobs_test
 
 import (
 	"altune/go-api/internal/app/cleanupjobs"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -13,15 +13,13 @@ import (
 
 func captureLogs(t *testing.T, run func()) string {
 	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+	buf := &logging.Capture{}
+	logging.UseHandler(t, slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 		if len(groups) == 0 && a.Key == slog.TimeKey {
 			return slog.Attr{}
 		}
 		return a
-	}})))
-	defer slog.SetDefault(restore)
+	}}))
 	run()
 	return buf.String()
 }

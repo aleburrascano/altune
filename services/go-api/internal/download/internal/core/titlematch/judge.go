@@ -113,9 +113,10 @@ func kindRank(k Kind) int {
 		return 0
 	case ArtTrack:
 		return 1
-	default:
+	case Upload:
 		return 2
 	}
+	return 2
 }
 
 func lengthsAgree(want, got float64) bool {

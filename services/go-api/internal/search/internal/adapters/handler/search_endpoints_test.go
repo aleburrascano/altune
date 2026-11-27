@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -420,18 +419,10 @@ func TestHandleSuggest(t *testing.T) {
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=x", nil)
 		discAssertStatus(t, rec, http.StatusInternalServerError)
 	})
-
-	t.Run("no auth returns 401", func(t *testing.T) {
-		router := buildSuggestRouter(t, &fakeVocabStore{})
-		rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/suggest?q=x")
-		discAssertStatus(t, rec, http.StatusUnauthorized)
-	})
 }
 
 func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 
 	const secret = "kendricksecretunreleasedcut"
 	router := buildSuggestRouter(t, &fakeVocabStore{err: context.DeadlineExceeded})
@@ -586,12 +577,6 @@ func TestHandleClearSearchHistory_RepoErrorReturns500(t *testing.T) {
 
 	rec := discServe(t, router, http.MethodDelete, "/discovery/search-history", nil)
 	discAssertStatus(t, rec, http.StatusInternalServerError)
-}
-
-func TestHandleClearSearchHistory_NoAuthReturns401(t *testing.T) {
-	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, nil)
-	rec := discServeNoAuth(t, router, http.MethodDelete, "/discovery/search-history")
-	discAssertStatus(t, rec, http.StatusUnauthorized)
 }
 
 func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
@@ -1372,9 +1357,7 @@ func seededHistoryRepo() *fakeSearchHistoryRepo {
 
 func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("info")
+	return logging.CaptureRing(t, "info")
 }
 
 func findRecord(ring *logging.RingBuffer, msg string) (logging.CapturedRecord, bool) {

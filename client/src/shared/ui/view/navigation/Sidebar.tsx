@@ -43,7 +43,7 @@ function sidebarItemProps({ theme, route, label, active, onPress }: SidebarItemP
     accessibilityRole: 'button' as const,
     accessibilityLabel: label,
     accessibilityState: { selected: active },
-    style: sidebarItemStyle(theme, active),
+    style: sidebarItemStyle(theme, active ? 'active' : 'idle'),
   };
 }
 

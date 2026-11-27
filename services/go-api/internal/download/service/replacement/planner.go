@@ -5,6 +5,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -67,14 +68,14 @@ func (p *ReplacementPlanner) schedule(ctx context.Context, candidate ports.Upgra
 		return nil
 	}
 	if errors.Is(err, acqdomain.ErrTrackJobInFlight) {
-		slog.InfoContext(ctx, "acquisition.upgrade_skipped_job_in_flight", "track_id", candidate.TrackID.String())
+		slog.InfoContext(ctx, "acquisition.upgrade_skipped_job_in_flight", logging.KeyTrackID, candidate.TrackID.String())
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("schedule upgrade of track %s: %w", candidate.TrackID, err)
 	}
 	slog.InfoContext(ctx, "acquisition.upgrade_scheduled",
-		"track_id", candidate.TrackID.String(), "grade", candidate.Grade)
+		logging.KeyTrackID, candidate.TrackID.String(), "grade", candidate.Grade)
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
@@ -142,7 +143,7 @@ func (v *SupabaseJWTVerifier) registerJWKS(ctx context.Context) error {
 		jwk.WithRefreshWindow(v.schedule.refreshWindow),
 		jwk.WithErrSink(jwksErrSink(func(err error) { v.onBackgroundRefreshError(ctx, err) })),
 	)
-	httpClient, err := outbound.NewClient(v.schedule.fetchTimeout, cappedJWKSBodyTransport{base: outbound.DefaultTransport()})
+	httpClient, err := outbound.NewClient(v.schedule.fetchTimeout, nil, outbound.WithBodyCap(maxJWKSBodyBytes))
 	if err != nil {
 		return fmt.Errorf("build JWKS client: %w", err)
 	}
@@ -163,7 +164,7 @@ func (v *SupabaseJWTVerifier) primeJWKS(ctx context.Context) {
 	defer cancel()
 	if _, err := v.cache.Refresh(refreshCtx, v.jwksURL); err != nil {
 		v.metrics.JWKSFetchFailed()
-		slog.WarnContext(ctx, "initial JWKS fetch failed, will retry on first request", "error", err)
+		slog.WarnContext(ctx, "initial JWKS fetch failed, will retry on first request", logging.KeyError, err)
 		return
 	}
 	v.primed.Store(true)
@@ -187,7 +188,7 @@ func (v *SupabaseJWTVerifier) onBackgroundRefreshError(ctx context.Context, err 
 	v.metrics.JWKSFetchFailed()
 	failures, age := v.refresher.recordBackgroundFailure(err)
 	slog.WarnContext(ctx, "JWKS background refresh failed, serving last-known-good key set until it is older than stale_after, then rejecting tokens",
-		"error", err,
+		logging.KeyError, err,
 		"consecutive_failures", failures,
 		"key_set_age", age.Round(time.Second).String(),
 		"stale_after", jwksStaleAfter.String(),

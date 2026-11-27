@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/app/alerts"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/config"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"net/http"
@@ -14,13 +14,9 @@ import (
 	"testing"
 )
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureText(t, slog.LevelInfo)
 }
 
 func isLogOnly(n monitoring.AlertNotifier) bool {

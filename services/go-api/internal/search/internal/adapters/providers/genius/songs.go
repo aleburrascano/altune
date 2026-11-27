@@ -1,6 +1,7 @@
 package genius
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
@@ -171,8 +172,8 @@ func (b geniusSongDetailBody) detail() domain.GeniusSongDetail {
 }
 
 func (c *SongCatalog) get(ctx context.Context, path string, dst any) error {
-	return providerrequests.GetJSON(ctx, c.client, "https://api.genius.com"+path, dst,
-		providerrequests.WithHeader("Authorization", "Bearer "+c.accessToken))
+	return outbound.GetJSON(ctx, c.client, "https://api.genius.com"+path, dst,
+		outbound.WithHeader("Authorization", "Bearer "+c.accessToken))
 }
 
 func toUnreleasedSong(s geniusSong) domain.UnreleasedSong {

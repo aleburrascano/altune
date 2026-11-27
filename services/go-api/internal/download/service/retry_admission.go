@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -53,7 +54,7 @@ func (g cooldownGate) release(ctx context.Context, trackID ids.TrackId, at time.
 	relCtx, cancel := background.Detach(ctx, releaseTimeout)
 	defer cancel()
 	if err := g.store.Release(relCtx, trackID, g.kind, at); err != nil {
-		slog.WarnContext(ctx, "acquisition: cooldown release failed", "kind", string(g.kind), "track_id", trackID.String(), "error", err)
+		slog.WarnContext(ctx, "acquisition: cooldown release failed", "kind", string(g.kind), logging.KeyTrackID, trackID.String(), logging.KeyError, err)
 	}
 }
 

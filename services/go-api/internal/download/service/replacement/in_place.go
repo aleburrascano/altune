@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
@@ -153,11 +154,11 @@ func (r *Runner) failedCheck(ctx context.Context, track *ports.TrackSnapshot, st
 	failures, err := r.inPlace.check.noteFailure(ctx, track.ID)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.upgrade_in_place_failure_unrecorded",
-			"track_id", track.ID.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, track.ID.String(), logging.KeyError, redact.LogError(err))
 	}
 	if err == nil && failures >= maxInPlaceFailures {
 		slog.WarnContext(ctx, "acquisition.upgrade_in_place_given_up",
-			"track_id", track.ID.String(), "failures", failures, "error", redact.LogError(checkErr))
+			logging.KeyTrackID, track.ID.String(), "failures", failures, logging.KeyError, redact.LogError(checkErr))
 		return r.settleFinding(ctx, track, stored, Finding{})
 	}
 	return inPlaceOutcome{}, fmt.Errorf("check track %s in place: %w", track.ID, checkErr)
@@ -166,7 +167,7 @@ func (r *Runner) failedCheck(ctx context.Context, track *ports.TrackSnapshot, st
 func (r *Runner) settleFinding(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, finding Finding) (inPlaceOutcome, error) {
 	record := verdictOf(track, stored, finding)
 	slog.InfoContext(ctx, "acquisition.upgrade_in_place",
-		"track_id", track.ID.String(), "from", string(stored.Grade), "to", record.Grade,
+		logging.KeyTrackID, track.ID.String(), "from", string(stored.Grade), "to", record.Grade,
 		"verdict", finding.Verdict, "basis", finding.Basis,
 		"user_upload", isUserUpload(track), "user_upload_mismatch", record.UserUploadMismatch)
 	if err := r.recordInPlace(ctx, track, record); err != nil {
@@ -221,7 +222,7 @@ func (r *Runner) recordInPlace(ctx context.Context, track *ports.TrackSnapshot, 
 		return fmt.Errorf("record in-place verdict of track %s: %w", track.ID, err)
 	}
 	if !recorded {
-		slog.InfoContext(ctx, "acquisition.upgrade_in_place_file_changed", "track_id", track.ID.String())
+		slog.InfoContext(ctx, "acquisition.upgrade_in_place_file_changed", logging.KeyTrackID, track.ID.String())
 	}
 	return nil
 }
