@@ -81,7 +81,7 @@ func TestStampOwnership_StampsOwnedTracksOnly(t *testing.T) {
 	svc.StampOwnership(context.Background(), ids.UserId{}, []inlibrary.OwnableItem{track, album, other})
 
 	if got := (*trackExtras)["owned_track_id"]; got != "0b1f4c0e-6f3a-4a52-9a53-5f0c7a1d0002" {
-		t.Errorf("track owned_track_id = %v, want t1", got)
+		t.Errorf("track owned_track_id = %v, want the owned track id", got)
 	}
 	if got := (*trackExtras)["owned_acquisition_status"]; got != "ready" {
 		t.Errorf("track owned_acquisition_status = %v, want ready", got)
@@ -292,7 +292,7 @@ func TestEnrichAlbumTracks_TwoDiscAlbumWritesTheProvidersPositionNotTheListIndex
 	)
 
 	if len(got) != 1 || got[0] != (fillWrite{trackId: "0b1f4c0e-6f3a-4a52-9a53-5f0c7a1d0004", trackNumber: 1}) {
-		t.Errorf("writes = %v, want only t-disc2 = 1", got)
+		t.Errorf("writes = %v, want only the disc 2 track = 1", got)
 	}
 }
 
@@ -352,7 +352,7 @@ func TestEnrichAlbumTracks_WritesTheTypedTrackPositionOfTheISRCMatch(t *testing.
 	)
 
 	if len(got) != 1 || got[0] != (fillWrite{trackId: "0b1f4c0e-6f3a-4a52-9a53-5f0c7a1d0004", trackNumber: 4}) {
-		t.Errorf("writes = %v, want only t-disc2 = 4", got)
+		t.Errorf("writes = %v, want only the disc 2 track = 4", got)
 	}
 }
 

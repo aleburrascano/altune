@@ -172,7 +172,7 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 	defer filler.mu.Unlock()
 	sort.Slice(filler.calls, func(i, j int) bool { return filler.calls[i].trackID < filler.calls[j].trackID })
 	if len(filler.calls) != 1 || filler.calls[0] != (fillCall{"0b1f4c0e-6f3a-4a52-9a53-5f0c7a1d0001", 1}) {
-		t.Errorf("fill calls = %+v, want only track-1 at position 1", filler.calls)
+		t.Errorf("fill calls = %+v, want only the owned track at position 1", filler.calls)
 	}
 }
 
