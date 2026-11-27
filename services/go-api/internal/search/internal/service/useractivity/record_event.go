@@ -33,7 +33,7 @@ type NoopActivityFeed struct{}
 func (NoopActivityFeed) EmitActivity(string) {}
 
 type RecordEventInput struct {
-	Type             domain.EventType
+	Type             domain.InteractionType
 	SearchId         string
 	EventId          string
 	ClientOccurredAt time.Time
@@ -109,16 +109,16 @@ func validatePayloadTypes(payload map[string]any) error {
 	return nil
 }
 
-func requiresEventID(t domain.EventType) bool {
+func requiresEventID(t domain.InteractionType) bool {
 	return slices.Contains(eventTypesRequiringID, t)
 }
 
-var eventTypesRequiringID = []domain.EventType{
-	domain.EventTypeLibraryAdd, domain.EventTypeWrongAlbum,
-	domain.EventTypeAcquisitionUi, domain.EventTypeClientError,
+var eventTypesRequiringID = []domain.InteractionType{
+	domain.InteractionTypeLibraryAdd, domain.InteractionTypeWrongAlbum,
+	domain.InteractionTypeAcquisitionUi, domain.InteractionTypeClientError,
 }
 
-func validateEventID(t domain.EventType, eventID string) error {
+func validateEventID(t domain.InteractionType, eventID string) error {
 	if eventID == "" {
 		if requiresEventID(t) {
 			return domain.NewInvalidEventError(fmt.Sprintf("event_id is required for %q events", t))
@@ -135,18 +135,18 @@ func (s *RecordEventService) RecordAnonymousAuthFailure(ctx context.Context, rea
 	event := domain.InteractionEvent{
 		OccurredAt: s.now().UTC(),
 		UserId:     ids.AnonymousUserId(),
-		Type:       domain.EventTypeAuthFailed,
+		Type:       domain.InteractionTypeAuthFailed,
 		Payload:    map[string]any{"reason": reason, "app_version": appVersion},
 	}
 	if err := s.eventStore.Append(ctx, event); err != nil {
 		return fmt.Errorf("record anonymous auth failure: %w", err)
 	}
-	s.activity.EmitActivity(domain.EventTypeAuthFailed.String())
+	s.activity.EmitActivity(domain.InteractionTypeAuthFailed.String())
 	return nil
 }
 
 func (s *RecordEventService) Execute(ctx context.Context, userId ids.UserId, input RecordEventInput) error {
-	if input.Type == domain.EventTypeUnknown {
+	if input.Type == domain.InteractionTypeUnknown {
 		return fmt.Errorf("record event: unknown event type")
 	}
 	if !input.Type.ClientSubmittable() {

@@ -31,7 +31,7 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 		t.Fatalf("got %d events, want 1", len(events))
 	}
 	e := events[0]
-	if e.Type != domain.EventTypeSearchPerformed {
+	if e.Type != domain.InteractionTypeSearchPerformed {
 		t.Errorf("type = %v, want search_performed", e.Type)
 	}
 	if e.Payload["pipeline_version"] != "v2" {

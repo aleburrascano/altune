@@ -100,7 +100,7 @@ func (r *PostgresEventStore) Append(ctx context.Context, event domain.Interactio
 
 	err = execUnderSearchTextLock(ctx, r.pool, event.UserId.UUID(), appendEventSQL,
 		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, eventID, clientOccurredAt, string(payloadJSON), occurredAt,
-		domain.EventTypeSearchPerformed.String(),
+		domain.InteractionTypeSearchPerformed.String(),
 	)
 	if err != nil {
 		return fmt.Errorf("append telemetry event: %w", err)
@@ -121,7 +121,7 @@ var zeroResultQueriesSQL = fmt.Sprintf(`SELECT query_norm, COUNT(*) AS cnt
 
 func (r *PostgresEventStore) NoResultSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx, zeroResultQueriesSQL,
-		domain.EventTypeSearchPerformed.String(), since, limit,
+		domain.InteractionTypeSearchPerformed.String(), since, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query zero-result events: %w", err)
@@ -140,7 +140,7 @@ var zeroResultTotalSQL = fmt.Sprintf(`SELECT COUNT(*)
 func (r *PostgresEventStore) ZeroResultTotal(ctx context.Context, since time.Time) (int, error) {
 	var total int
 	err := r.pool.QueryRow(ctx, zeroResultTotalSQL,
-		domain.EventTypeSearchPerformed.String(), since,
+		domain.InteractionTypeSearchPerformed.String(), since,
 	).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("count zero-result events: %w", err)
@@ -171,8 +171,8 @@ var nonZeroNoClickQueriesSQL = fmt.Sprintf(`SELECT e.query_norm, COUNT(*) AS cnt
 
 func (r *PostgresEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx, nonZeroNoClickQueriesSQL,
-		domain.EventTypeSearchPerformed.String(), since, limit,
-		domain.EventTypeResultClicked.String(),
+		domain.InteractionTypeSearchPerformed.String(), since, limit,
+		domain.InteractionTypeResultClicked.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query no-click events: %w", err)
@@ -215,10 +215,10 @@ var satisfactionSignalsSQL = fmt.Sprintf(`SELECT sig, SUM(user_score)::float8 AS
 func (r *PostgresEventStore) SatisfactionSignals(ctx context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
 	rows, err := r.pool.Query(ctx, satisfactionSignalsSQL,
 		since, shortDwellThresholdMs, perUserSignalCap, int64(shownResultWindow/time.Second),
-		domain.EventTypePlay.String(),
-		domain.EventTypeSkip.String(),
-		domain.EventTypeCompleted.String(),
-		domain.EventTypeSearchPerformed.String(),
+		domain.InteractionTypePlay.String(),
+		domain.InteractionTypeSkip.String(),
+		domain.InteractionTypeCompleted.String(),
+		domain.InteractionTypeSearchPerformed.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query satisfaction signals: %w", err)
@@ -262,8 +262,8 @@ const abandonedSearchesSQL = `SELECT sp.query_norm, COUNT(*) AS cnt
 func (r *PostgresEventStore) AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx, abandonedSearchesSQL,
 		since, limit,
-		domain.EventTypeSearchPerformed.String(),
-		domain.EventTypeResultClicked.String(),
+		domain.InteractionTypeSearchPerformed.String(),
+		domain.InteractionTypeResultClicked.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query abandoned searches: %w", err)

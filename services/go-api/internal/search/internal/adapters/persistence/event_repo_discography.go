@@ -41,7 +41,7 @@ var discographyLatestSQL = fmt.Sprintf(`SELECT artist_ref, releases, single_prov
 
 func (r *PostgresEventStore) DiscographyQuality(ctx context.Context, since time.Time, groupBy ports.DiscographyGroupBy, limit int) ([]ports.DiscographyCase, error) {
 	rows, err := r.pool.Query(ctx, discographyLatestSQL,
-		domain.EventTypeDiscographyObserved.String(), since, limit,
+		domain.InteractionTypeDiscographyObserved.String(), since, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query discography quality: %w", err)
@@ -85,7 +85,7 @@ func (r *PostgresEventStore) SuspectRate(ctx context.Context, since time.Time) (
 		lastSample          *time.Time
 	)
 	err := r.pool.QueryRow(ctx, discographySuspectRateSQL,
-		domain.EventTypeDiscographyObserved.String(), since,
+		domain.InteractionTypeDiscographyObserved.String(), since,
 	).Scan(&opens, &suspectOpens, &lastSample)
 	if err != nil {
 		return ports.DiscographySuspectRate{}, fmt.Errorf("query discography suspect rate: %w", err)

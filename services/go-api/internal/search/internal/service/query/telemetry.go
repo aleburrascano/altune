@@ -43,7 +43,7 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page fi
 	event := domain.InteractionEvent{
 		OccurredAt: run.startedAt,
 		UserId:     run.userId,
-		Type:       domain.EventTypeSearchPerformed,
+		Type:       domain.InteractionTypeSearchPerformed,
 		QueryNorm:  run.queryNorm,
 		SearchId:   run.searchId,
 		Payload:    payload,
@@ -73,7 +73,7 @@ func (t *SearchTelemetry) append(ctx context.Context, event domain.InteractionEv
 			logging.KeyError, err)
 		return
 	}
-	t.activity.EmitActivity(domain.EventTypeSearchPerformed.String())
+	t.activity.EmitActivity(domain.InteractionTypeSearchPerformed.String())
 }
 
 func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup) []string {

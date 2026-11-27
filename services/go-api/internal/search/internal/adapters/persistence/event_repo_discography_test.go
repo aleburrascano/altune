@@ -19,7 +19,7 @@ func seedObservation(t *testing.T, store *persistence.PostgresEventStore, at tim
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
 		UserId:     ids.SystemUserId(),
-		Type:       domain.EventTypeDiscographyObserved,
+		Type:       domain.InteractionTypeDiscographyObserved,
 		Payload: map[string]any{
 			"artist_ref":      artistRef,
 			"releases":        releases,
@@ -36,7 +36,7 @@ func seedObservationWithNoID(t *testing.T, store *persistence.PostgresEventStore
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
 		UserId:     ids.SystemUserId(),
-		Type:       domain.EventTypeDiscographyObserved,
+		Type:       domain.InteractionTypeDiscographyObserved,
 		Payload: map[string]any{
 			"artist_ref":            artistRef,
 			"releases":              releases,
@@ -189,8 +189,8 @@ func TestPostgresEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 
 	for i := 0; i < 20; i++ {
 		at := now.Add(-time.Duration(i) * time.Minute)
-		seedNonDiscographyEvent(t, store, at, domain.EventTypeSearchPerformed)
-		seedNonDiscographyEvent(t, store, at, domain.EventTypePlay)
+		seedNonDiscographyEvent(t, store, at, domain.InteractionTypeSearchPerformed)
+		seedNonDiscographyEvent(t, store, at, domain.InteractionTypePlay)
 	}
 
 	after, err := store.SuspectRate(context.Background(), since)
@@ -220,7 +220,7 @@ func TestPostgresEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
 	}
 }
 
-func seedNonDiscographyEvent(t *testing.T, store *persistence.PostgresEventStore, at time.Time, eventType domain.EventType) {
+func seedNonDiscographyEvent(t *testing.T, store *persistence.PostgresEventStore, at time.Time, eventType domain.InteractionType) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
