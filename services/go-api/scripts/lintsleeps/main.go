@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintsleeps [--summary] <dir>...\n  lists every time.Sleep call in the go files under each dir, and in its _test.go files every clock.Sleep, time.AfterFunc, time.NewTimer and time.Tick call and every bare <-time.After receive (a timeout case in a select is a bound, not a wait), that is not inside a synctest.Test or synctest.Run callback, and exits 1 when there are any; --summary prints only the count per directory"
+const usage = "usage: go run ./scripts/lintsleeps [--summary] <dir>...\n  lists every time.Sleep call in the go files under each dir, and in its _test.go files every clock.Sleep, time.AfterFunc, time.NewTimer and time.Tick call and every <-time.After receive (also as _ = or x :=), except a timeout case in a select whose body fails the test through t, b or tb or returns, which is a bound, that is not inside a synctest.Test or synctest.Run callback, and exits 1 when there are any; --summary prints only the count per directory"
 
 const clockImportPath = "altune/go-api/internal/shared/clock"
 
@@ -201,6 +201,8 @@ func endsTheTest(body []ast.Stmt) bool {
 	for _, stmt := range body {
 		ast.Inspect(stmt, func(n ast.Node) bool {
 			switch x := n.(type) {
+			case *ast.FuncLit:
+				return false
 			case *ast.ReturnStmt:
 				ends = true
 			case *ast.CallExpr:
@@ -215,6 +217,10 @@ func endsTheTest(body []ast.Stmt) bool {
 func failsTheTest(fun ast.Expr) bool {
 	switch f := fun.(type) {
 	case *ast.SelectorExpr:
+		recv, isIdent := f.X.(*ast.Ident)
+		if !isIdent || (recv.Name != "t" && recv.Name != "b" && recv.Name != "tb") {
+			return false
+		}
 		name := f.Sel.Name
 		return strings.HasPrefix(name, "Fatal") || strings.HasPrefix(name, "Error") || strings.HasPrefix(name, "Skip") || name == "FailNow" || name == "Fail"
 	case *ast.Ident:

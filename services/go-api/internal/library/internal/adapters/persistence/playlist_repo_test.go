@@ -713,11 +713,10 @@ func TestPostgresPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 		{TrackId: ids[1], Position: 1},
 		{TrackId: ids[0], Position: 2},
 	}
-	waitingBefore := dbtest.LockWaiters(t, pool)
 	done := make(chan error, 1)
 	go func() { done <- playlistRepo.ReorderTracks(ctx, userId, pl.ID, reversed) }()
 
-	dbtest.AwaitLockWaitersBeyond(t, pool, waitingBefore, 1, "ReorderTracks to queue behind the playlist lock")
+	dbtest.AwaitBlockedBy(t, pool, int(holder.Conn().PgConn().PID()), 1, "ReorderTracks to queue behind the playlist lock")
 	select {
 	case err := <-done:
 		t.Fatalf("ReorderTracks finished (err=%v) while the playlist lock was held; it must serialize behind it", err)

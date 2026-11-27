@@ -272,6 +272,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 
 type commitGate struct {
 	armed   atomic.Bool
+	backend atomic.Int32
 	reached chan struct{}
 	release chan struct{}
 	opened  sync.Once
@@ -283,8 +284,9 @@ func newCommitGate() *commitGate {
 	return g
 }
 
-func (g *commitGate) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+func (g *commitGate) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	if strings.EqualFold(strings.TrimSpace(data.SQL), "commit") && g.armed.CompareAndSwap(true, false) {
+		g.backend.Store(int32(conn.PgConn().PID()))
 		close(g.reached)
 		<-g.release
 	}
@@ -316,7 +318,6 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		t.Fatal("erase never reached its commit")
 	}
 
-	waitingBefore := dbtest.LockWaiters(t, pool)
 	written := make(chan error, 2)
 	go func() {
 		written <- persistence.NewPostgresSearchHistoryRepository(pool).Insert(ctx, &domain.SearchHistoryEntry{
@@ -331,7 +332,7 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		})
 	}()
 
-	dbtest.AwaitLockWaitersBeyond(t, pool, waitingBefore, 2, "both racing writes to queue behind the open erase")
+	dbtest.AwaitBlockedBy(t, pool, int(gate.backend.Load()), 2, "both racing writes to queue behind the open erase")
 	select {
 	case err := <-written:
 		t.Fatalf("a write finished while the erase was still open (err %v), want it held until the erase commits", err)

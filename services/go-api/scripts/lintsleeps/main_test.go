@@ -81,16 +81,18 @@ func TestClockSleepCallInATestOutsideABubbleIsFlagged(t *testing.T) {
 
 func TestTimerUsedAsAWaitInATestOutsideABubbleIsFlagged(t *testing.T) {
 	cases := map[string]string{
-		"delayed trigger":       "package p\n\nimport \"time\"\n\nfunc f(cancel func()) { time.AfterFunc(time.Second, cancel) }\n",
-		"timer":                 "package p\n\nimport \"time\"\n\nfunc f() { <-time.NewTimer(1).C }\n",
-		"tick":                  "package p\n\nimport \"time\"\n\nfunc f() { <-time.Tick(1) }\n",
-		"nothing-happened wait": "package p\n\nimport \"time\"\n\nfunc f(ch chan int) {\n\tselect {\n\tcase <-ch:\n\tcase <-time.After(1):\n\t}\n}\n",
-		"discarded receive":     "package p\n\nimport \"time\"\n\nfunc f() { _ = <-time.After(1) }\n",
-		"assigned receive":      "package p\n\nimport \"time\"\n\nfunc f() { x := <-time.After(1); _ = x }\n",
-		"timer in a select":     "package p\n\nimport \"time\"\n\nfunc f(ch chan int) {\n\tt := time.NewTimer(1)\n\tselect {\n\tcase <-ch:\n\tcase <-t.C:\n\t}\n}\n",
-		"bare receive":          "package p\n\nimport \"time\"\n\nfunc f() { <-time.After(1) }\n",
-		"aliased time":          "package p\n\nimport t \"time\"\n\nfunc f(cancel func()) { t.AfterFunc(1, cancel) }\n",
-		"next to a bubble":      "package p\n\nimport (\n\t\"testing\"\n\t\"testing/synctest\"\n\t\"time\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) {})\n\t<-time.After(1)\n}\n",
+		"delayed trigger":              "package p\n\nimport \"time\"\n\nfunc f(cancel func()) { time.AfterFunc(time.Second, cancel) }\n",
+		"timer":                        "package p\n\nimport \"time\"\n\nfunc f() { <-time.NewTimer(1).C }\n",
+		"tick":                         "package p\n\nimport \"time\"\n\nfunc f() { <-time.Tick(1) }\n",
+		"nothing-happened wait":        "package p\n\nimport \"time\"\n\nfunc f(ch chan int) {\n\tselect {\n\tcase <-ch:\n\tcase <-time.After(1):\n\t}\n}\n",
+		"error value is not a failure": "package p\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc f(ch chan int) (err error) {\n\tselect {\n\tcase <-ch:\n\tcase <-time.After(1):\n\t\terr = fmt.Errorf(\"slow\")\n\t}\n\treturn err\n}\n",
+		"return inside a closure":      "package p\n\nimport \"time\"\n\nfunc f(ch chan int) {\n\tselect {\n\tcase <-ch:\n\tcase <-time.After(1):\n\t\tgo func() { return }()\n\t}\n}\n",
+		"discarded receive":            "package p\n\nimport \"time\"\n\nfunc f() { _ = <-time.After(1) }\n",
+		"assigned receive":             "package p\n\nimport \"time\"\n\nfunc f() { x := <-time.After(1); _ = x }\n",
+		"timer in a select":            "package p\n\nimport \"time\"\n\nfunc f(ch chan int) {\n\tt := time.NewTimer(1)\n\tselect {\n\tcase <-ch:\n\tcase <-t.C:\n\t}\n}\n",
+		"bare receive":                 "package p\n\nimport \"time\"\n\nfunc f() { <-time.After(1) }\n",
+		"aliased time":                 "package p\n\nimport t \"time\"\n\nfunc f(cancel func()) { t.AfterFunc(1, cancel) }\n",
+		"next to a bubble":             "package p\n\nimport (\n\t\"testing\"\n\t\"testing/synctest\"\n\t\"time\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) {})\n\t<-time.After(1)\n}\n",
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
