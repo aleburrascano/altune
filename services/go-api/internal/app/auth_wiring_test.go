@@ -208,7 +208,7 @@ func TestAuth_RejectionsAndAnUnreachableKeySetReachLiveMetrics(t *testing.T) {
 	var code int
 	var body []byte
 	polltest.Within(10*time.Second, func() bool {
-		code, body = getFrom(t, h, fmt.Sprintf("203.0.113.%d:1234", unavailable), "/observe/metrics/live", operator)
+		code, body = getFrom(t, h, fmt.Sprintf("203.0.%d.%d:1234", unavailable/250, unavailable%250+1), "/observe/metrics/live", operator)
 		if code == http.StatusServiceUnavailable {
 			unavailable++
 			return false
