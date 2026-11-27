@@ -20,4 +20,6 @@ var (
 	NewRefreshingTokenSource = goapihttp.NewRefreshingTokenSource
 	WithRefreshHTTPClient    = goapihttp.WithRefreshHTTPClient
 	WithPasswordGrant        = goapihttp.WithPasswordGrant
+	DecodeCapped             = goapihttp.DecodeCapped
+	ErrBodyTooLarge          = goapihttp.ErrBodyTooLarge
 )
