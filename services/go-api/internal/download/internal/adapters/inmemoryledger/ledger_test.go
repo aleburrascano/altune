@@ -34,7 +34,7 @@ func pendingTrack() inmemoryledger.LedgerTrack {
 func readyTrack() inmemoryledger.LedgerTrack {
 	track := pendingTrack()
 	ref := servingRef
-	track.Status, track.AudioRef = ports.TrackReady, &ref
+	track.Status, track.AudioRef, track.Streamable = ports.TrackReady, &ref, true
 	return track
 }
 
@@ -73,24 +73,6 @@ func TestLedger_GetReturnsTheSeededTrackToItsOwnerOnly(t *testing.T) {
 	}
 	if missing, err := ledger.Get(context.Background(), ids.NewTrackId(), track.UserId); missing != nil || !errors.Is(err, ports.ErrTrackNotFound) {
 		t.Errorf("Get of an unknown track = %+v, %v, want ErrTrackNotFound", missing, err)
-	}
-}
-
-func TestLedger_APendingTrackOrAReadyOneWithoutAFileIsNotStreamable(t *testing.T) {
-	noFile := pendingTrack()
-	noFile.Status = ports.TrackReady
-	pending := pendingTrack()
-	ref := servingRef
-	pending.AudioRef = &ref
-	ledger := inmemoryledger.NewLedger(pending, noFile)
-
-	for _, track := range []inmemoryledger.LedgerTrack{pending, noFile} {
-		if committed(t, ledger, track.ID).Streamable {
-			t.Errorf("Track(%+v) reads as streamable", track)
-		}
-		if got, _ := ledger.Get(context.Background(), track.ID, track.UserId); got.Streamable {
-			t.Errorf("Get(%+v) = streamable, want not", track)
-		}
 	}
 }
 

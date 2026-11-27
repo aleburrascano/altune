@@ -22,6 +22,7 @@ func contractTrack(status ports.TrackStatus) ports.TrackSnapshot {
 		Title: "Song", Artist: "Artist", Album: "Album", Status: status,
 	}
 	if status == ports.TrackReady {
+		track.Streamable = true
 		return withFileOnRecord(track)
 	}
 	return withoutFileOnRecord(track)
@@ -119,6 +120,7 @@ func contractGetReportsEachStatusAndWhetherTheTrackIsStreamable(t *testing.T, l 
 		if tt.withFile {
 			track = withFileOnRecord(track)
 		}
+		track.Streamable = tt.streamable
 		l.AddTrack(t, track)
 
 		if got := ownersView(t, l, track); got.Status != tt.status || got.Streamable != tt.streamable {

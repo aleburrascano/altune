@@ -150,6 +150,44 @@ func TestGetMapsFieldsAndReportsAMissingTrackAsErrTrackNotFound(t *testing.T) {
 	}
 }
 
+func TestGetMapsEveryLibraryDownloadStatus(t *testing.T) {
+	want := map[librarydoor.DownloadStatus]download.TrackStatus{
+		librarydoor.AcquisitionPending: download.TrackPending,
+		librarydoor.AcquisitionReady:   download.TrackReady,
+		librarydoor.AcquisitionFailed:  download.TrackFailed,
+	}
+	known := 0
+	for status := librarydoor.DownloadStatus(0); status.String() != "unknown"; status++ {
+		known++
+		track, userId := newTrack(t, 1)
+		track.DownloadStatus = status
+		ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now, upgradestatetest.New(), ids.Real)
+
+		snap, err := ledger.Get(t.Context(), track.ID, userId)
+		if err != nil {
+			t.Fatalf("library status %q has no acquisition status: %v", status, err)
+		}
+		if snap.Status != want[status] {
+			t.Errorf("library status %q maps to %v, want %v", status, snap.Status, want[status])
+		}
+	}
+	if known != len(want) {
+		t.Errorf("walked %d library statuses, the expectations cover %d", known, len(want))
+	}
+}
+
+func TestGetRefusesALibraryStatusItDoesNotKnow(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	track.DownloadStatus = librarydoor.DownloadStatus(99)
+	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now, upgradestatetest.New(), ids.Real)
+
+	snap, err := ledger.Get(t.Context(), track.ID, userId)
+
+	if err == nil || snap != nil {
+		t.Fatalf("Get = %+v, %v; want an error and no snapshot, never a silent pending", snap, err)
+	}
+}
+
 func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	track, userId := newTrack(t, 4)
 	store := newFakeStore(track)

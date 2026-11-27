@@ -190,7 +190,7 @@ func refOf(track inmemoryledger.LedgerTrack, prefix string) string {
 func servedBy(track inmemoryledger.LedgerTrack, audioRef string) inmemoryledger.LedgerTrack {
 	serving := pending(track.Title, track.Artist, track.Album)
 	serving.UserId = track.UserId
-	serving.Status, serving.AudioRef = ports.TrackReady, &audioRef
+	serving.Status, serving.AudioRef, serving.Streamable = ports.TrackReady, &audioRef, true
 	return serving
 }
 
