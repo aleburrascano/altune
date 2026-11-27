@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
-	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -226,11 +225,14 @@ func TestLive_CarriesAuthCatalogAndPlaybackFailureCounters(t *testing.T) {
 	auth.NewAuthMetrics(s.Metrics).VerifierUnavailable()
 	auth.NewAuthMetrics(s.Metrics).JWKSFetchFailed()
 	library.NewAudioStoreMetrics(s.Metrics).PresignFailed()
-	pb := playback.NewPlaybackMetrics(s.Metrics)
-	pb.EnrichmentFailed()
-	pb.CorruptStoredState()
-	pb.QueueStateOpTimedOut()
-	pb.NowPlayingLookupTimedOut()
+	for _, counter := range []string{
+		"playback_now_playing_enrichment_failures_total",
+		"playback_corrupt_stored_state_total",
+		"playback_queue_state_op_timeouts_total",
+		"playback_now_playing_lookup_timeouts_total",
+	} {
+		s.Metrics.Counter(counter).Add(1)
+	}
 
 	var got counterWire
 	decode(t, served(t, s), &got)
@@ -293,10 +295,9 @@ func TestLive_CarriesProviderBreakerAndLatency(t *testing.T) {
 		}
 		_ = resp.Body.Close()
 	}
-	pb := playback.NewPlaybackMetrics(s.Metrics)
-	pb.EnrichmentBreakerOpened()
-	pb.EnrichmentBreakerRejected()
-	defer pb.EnrichmentBreakerClosed()
+	s.Metrics.Gauge("playback_now_playing_enrichment_breaker_open").Set(1)
+	s.Metrics.Counter("playback_now_playing_enrichment_breaker_rejections_total").Add(1)
+	defer s.Metrics.Gauge("playback_now_playing_enrichment_breaker_open").Set(0)
 	const route = "/v1/live-snapshot-probe/{status}"
 	router := chi.NewRouter()
 	router.Use(httpserver.ObserveRequests(clock.Now, requestmetrics.Observer(s.Latency.Observe)))

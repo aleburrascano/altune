@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -108,7 +109,7 @@ func (a *application) compose(ctx context.Context, transport http.RoundTripper) 
 	if err != nil {
 		return nil, fmt.Errorf("client events: %w", err)
 	}
-	r := a.mountRoutes(verifier, f.catalog, f.playback.handler, f.discovery.Handler, clientEventRoutes)
+	r := a.mountRoutes(verifier, f.catalog, f.playback.Routes(), f.discovery.Handler, clientEventRoutes)
 	if err := a.startAlertMonitor(ctx); err != nil {
 		return nil, err
 	}
@@ -137,7 +138,7 @@ func (a *application) openEventBus(ctx context.Context) error {
 type features struct {
 	discovery *search.Discovery
 	catalog   catalogWiring
-	playback  playbackWiring
+	playback  *playback.Module
 }
 
 func (a *application) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
@@ -156,7 +157,7 @@ func (a *application) wireFeatures(ctx context.Context, transport http.RoundTrip
 	if err := a.applyStartupSwitches(ctx); err != nil {
 		return features{}, fmt.Errorf("startup switches: %w", err)
 	}
-	playback, err := a.wirePlayback(ctx, cat.trackRepo)
+	playbackModule, err := a.wirePlayback(cat.trackRepo)
 	if err != nil {
 		return features{}, fmt.Errorf("playback: %w", err)
 	}
@@ -167,5 +168,5 @@ func (a *application) wireFeatures(ctx context.Context, transport http.RoundTrip
 	if err := disc.Handler.AttachOwnership(ownership); err != nil {
 		return features{}, fmt.Errorf("ownership enrichment: %w", err)
 	}
-	return features{discovery: disc, catalog: cat, playback: playback}, nil
+	return features{discovery: disc, catalog: cat, playback: playbackModule}, nil
 }

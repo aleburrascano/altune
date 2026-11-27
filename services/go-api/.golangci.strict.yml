@@ -72,6 +72,7 @@ linters:
         - outbound.GetBytesCapped
       ignore-package-globs:
         - altune/go-api/internal/*/internal/core/ports
+        - altune/go-api/internal/*/internal
       ignore-sig-regexps:
         - '\(context\.Context\)\.Err\(\)'
         - '\(io\.Reader\)\.Read\('

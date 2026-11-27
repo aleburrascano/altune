@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -69,9 +70,9 @@ func (a *application) connectAuth(ctx context.Context) (auth.TokenVerifier, erro
 	return supaVerifier, nil
 }
 
-func (a *application) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
+func (a *application) startCatalogJobs(ctx context.Context, cat catalogWiring, playbackModule *playback.Module) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
-	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
+	a.startDeletedIdentityErasure(ctx, playbackModule)
 	a.startSourceCanary(ctx, sourcecheck.Probes{
 		YtDlp: cat.ytDlpSearcher, YtDlpAvailable: cat.ytDlpAvailable, InnerTube: cat.ytmCanary,
 		YtMusicEnabled: a.cfg.YtMusicEnabled, YtDlpEnabled: a.cfg.YtDLPEnabled,

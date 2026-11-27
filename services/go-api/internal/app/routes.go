@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/app/router"
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/eventstream"
-	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
 	"net/http"
@@ -22,7 +21,7 @@ const (
 func (a *application) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
-	queueHandler *playback.QueueHandler,
+	playbackRoutes http.Handler,
 	discoveryH *search.DiscoveryHandler,
 	clientEventRoutes http.Handler,
 ) *chi.Mux {
@@ -50,7 +49,7 @@ func (a *application) mountRoutes(
 				}
 				r.Mount("/library", cat.libraryHandler.Routes())
 				r.Mount("/playlists", cat.playlistHandler.Routes())
-				r.Mount("/playback", queueHandler.Routes())
+				r.Mount("/playback", playbackRoutes)
 				r.Mount("/discovery", discoveryH.Routes())
 				r.Mount("/telemetry", clientEventRoutes)
 			})
