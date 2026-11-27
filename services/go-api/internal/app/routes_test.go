@@ -253,6 +253,7 @@ func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 		{"authed route rejected", http.MethodGet, "/v1/library", "", http.StatusUnauthorized},
 		{"discovery per-user route rejected", http.MethodGet, "/v1/discovery/search-history", "", http.StatusUnauthorized},
 		{"event stream rejected", http.MethodGet, "/v1/events", "", http.StatusUnauthorized},
+		{"client events rejected", http.MethodPost, "/v1/telemetry/events", `{"type":"screen_view"}`, http.StatusUnauthorized},
 		{"audio stream rejected", http.MethodGet, "/v1/tracks/abc/audio", "", http.StatusUnauthorized},
 		{"audio recover rejected", http.MethodPost, "/v1/tracks/abc/audio/recover", "", http.StatusUnauthorized},
 		{"playback rejected", http.MethodGet, "/v1/playback/queue-state", "", http.StatusUnauthorized},
