@@ -440,6 +440,10 @@ if need go "secret scan" && need jq "secret scan"; then
   fi
 fi
 
+if [ $stage = push ] && touches '(^|/)(go\.sum|pnpm-lock\.yaml|package-lock\.json)$' && need go "dependency scan"; then
+  check "dependency scan (osv-scanner)" . bash "$root/scripts/ci/vuln-scan.sh" --osv
+fi
+
 script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
 if touches '^client/(stryker\.config\.json|jest\.mutate\.config\.js)$'; then
   script_tests=$(printf '%s\n' $script_tests scripts/ci/__tests__/client-mutate.test.sh | sort -u)
