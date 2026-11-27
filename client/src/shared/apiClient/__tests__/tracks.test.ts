@@ -19,6 +19,7 @@ import {
 } from '@shared/catalog';
 import { ContractError, NetworkError, isAbort } from '@shared/failure';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { expectAbortsInFlight } from '@shared/apiClient/__tests__/abortInFlight';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -771,5 +772,13 @@ describe('the Idempotency-Key via the uuid port', () => {
     await createTrack(baseCreateBody());
 
     expect(__http.last().headers['Idempotency-Key']).toBe('fixed-track-id');
+  });
+});
+
+describe('listTracksFeaturing abort', () => {
+  it('aborts its in-flight request when the caller signal fires', async () => {
+    await expectAbortsInFlight('GET /v1/tracks/featuring', (signal) =>
+      listTracksFeaturing({ name: 'Lindsey', mbid: null, deezer_id: null }, signal),
+    );
   });
 });

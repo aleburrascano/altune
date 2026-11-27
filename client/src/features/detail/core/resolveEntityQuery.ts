@@ -2,9 +2,7 @@ import type { UseQueryOptions } from '@tanstack/react-query';
 
 import type { searchDiscovery } from '@shared/apiClient';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
-import { detailKeys } from '@shared/query';
-
-const RESOLVE_STALE_TIME = 30 * 60 * 1000;
+import { detailKeys, STALE } from '@shared/query';
 
 export interface DiscoverySearchPort {
   searchDiscovery: typeof searchDiscovery;
@@ -25,6 +23,6 @@ export function resolveEntityQuery(
       );
       return res.results;
     },
-    staleTime: RESOLVE_STALE_TIME,
+    staleTime: STALE.halfHour,
   };
 }

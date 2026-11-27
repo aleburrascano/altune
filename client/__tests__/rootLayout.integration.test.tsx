@@ -11,7 +11,7 @@ import { authClientOver } from '@testing/fakeAuthClient';
 import { makeIdlePlayback } from '@testing/factories';
 import { setWindowWidth } from '@testing/setWindowWidth';
 
-import { AppChrome, FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { AppChrome, FeaturePorts, PlayerNavigationBridge, httpFeaturePorts } from '@/mobile';
 import TabsLayout from '@/app/(tabs)/_layout';
 import DiscoverLayout from '@/app/(tabs)/discover/_layout';
 import LibraryLayout from '@/app/(tabs)/library/_layout';
@@ -103,7 +103,7 @@ function WebPlaybackShortcutsBridgeStandIn() {
 function RootTestLayout() {
   const isWideWeb = useWideWebLayout();
   return (
-    <>
+    <PlayerNavigationBridge>
       {RN.Platform.OS === 'web' && <WebPlaybackShortcutsBridgeStandIn />}
       <AppChrome isWideWeb={isWideWeb}>
         <Stack screenOptions={{ headerShown: false }}>
@@ -111,7 +111,7 @@ function RootTestLayout() {
           <Stack.Screen name="player" options={{ animation: 'none' }} />
         </Stack>
       </AppChrome>
-    </>
+    </PlayerNavigationBridge>
   );
 }
 

@@ -1,5 +1,5 @@
 import { DISCOVERY_KINDS, asFavoriteKey } from '@shared/catalog';
-import { apiFetch, apiSend } from '@shared/apiClient/adapters/http';
+import { apiFetch, apiSend, signalInit } from '@shared/apiClient/adapters/http';
 import { asRecord, asString, member, parseListEnvelope } from '@shared/apiClient/core/wireDecoders';
 import type { DiscoveryKind, FavoriteKey } from '@shared/catalog';
 export type Favorite = {
@@ -40,8 +40,8 @@ function parseFavoritesResponse(value: unknown, at = 'FavoritesResponse'): Favor
   return parseListEnvelope(r, at, parseFavorite);
 }
 
-export async function listFavorites(): Promise<FavoritesResponse> {
-  return parseFavoritesResponse(await apiFetch('/v1/discovery/favorites'));
+export async function listFavorites(signal?: AbortSignal): Promise<FavoritesResponse> {
+  return parseFavoritesResponse(await apiFetch('/v1/discovery/favorites', signalInit(signal)));
 }
 
 export async function addFavorite(ref: FavoriteRef): Promise<Favorite> {

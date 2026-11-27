@@ -1,5 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
+import { runSignOutCleanups } from '@shared/session';
+
 import {
   getSearchState,
   setSearchState,
@@ -556,6 +558,27 @@ describe('useDebouncedSearch keeps an explicit submit when the same query is re-
     });
 
     expect(result.current.committedQuery).toBe('abc');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+});
+
+describe('useDebouncedSearch on sign-out', () => {
+  it('clears the input and the committed query and drops a pending commit', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+    act(() => {
+      result.current.setQuery('ab');
+    });
+    act(() => {
+      result.current.onChangeText('abc');
+    });
+
+    act(() => {
+      runSignOutCleanups();
+      jest.advanceTimersByTime(OPTIONS.debounceMs);
+    });
+
+    expect(result.current.inputValue).toBe('');
+    expect(result.current.committedQuery).toBe('');
     expect(result.current.isExplicitSubmit).toBe(false);
   });
 });

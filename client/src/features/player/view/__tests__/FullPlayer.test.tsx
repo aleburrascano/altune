@@ -7,10 +7,9 @@ import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback';
 
 import { FullPlayer } from '@features/player';
 import { libraryTrack } from '@features/player/__tests__/fixtures';
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
-}));
+import { createRecordingPlayerNavigation } from '@testing/fakes/player/recordingPlayerNavigation';
 
+const navigation = createRecordingPlayerNavigation();
 const FAILED_TRACK = libraryTrack();
 const NEXT_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-2') } });
 
@@ -33,6 +32,7 @@ function renderPlayerInError(
     <PlaybackContext.Provider value={value}>
       <Player />
     </PlaybackContext.Provider>,
+    { wrapper: navigation.wrapper },
   );
   return commands;
 }
@@ -81,6 +81,24 @@ describe('FullPlayer — a permanently gone track at the end of the queue', () =
   });
 });
 
+describe('FullPlayer — navigation', () => {
+  beforeEach(() => {
+    navigation.steps.length = 0;
+  });
+
+  it.each([
+    ['Close player', 'close'],
+    ['View lyrics', 'lyrics'],
+    ['View queue', 'queue'],
+  ])('asks the app to navigate when %s is pressed', (label, step) => {
+    renderPlayerInError(FullPlayer, 'network');
+
+    fireEvent.press(screen.getByLabelText(label));
+
+    expect(navigation.steps).toEqual([step]);
+  });
+});
+
 describe('FullPlayer — transport controls', () => {
   function renderPlaying(overrides: Partial<PlaybackContextValue>) {
     const value = {
@@ -102,6 +120,7 @@ describe('FullPlayer — transport controls', () => {
       <PlaybackContext.Provider value={value}>
         <FullPlayer />
       </PlaybackContext.Provider>,
+      { wrapper: navigation.wrapper },
     );
     return value;
   }

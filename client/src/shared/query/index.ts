@@ -13,3 +13,4 @@ export {
   appMutationCache,
   appQueryCache,
 } from '@shared/query/shell/useAppMutation';
+export { STALE } from '@shared/query/core/stalePolicy';

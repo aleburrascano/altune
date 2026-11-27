@@ -5,7 +5,7 @@ import TrackPlayer, {
   type RemoteSeekEvent,
 } from 'react-native-track-player';
 
-import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
+import { shouldRestartOnPrevious } from '@features/player/core/restartOnPrevious';
 import {
   orderedQueueTracks,
   useQueueStore,
@@ -28,7 +28,7 @@ import {
   claimRecoveryAttempt,
   resetRecoveryBudget,
 } from '@features/player/adapters/native/recoveryBudget';
-import { claimSessionReset } from '@features/player/domain/loadToken';
+import { claimSessionReset } from '@features/player/core/loadToken';
 import {
   markPlayRequested,
   notePlaybackState,
@@ -56,7 +56,7 @@ import {
   recordAudioRecoveryFailure,
   recordPlaybackFailure,
 } from '@features/player/core/playbackHealth';
-import { progressSecondsToMs } from '@features/player/domain/time';
+import { progressSecondsToMs } from '@features/player/core/time';
 import {
   reportingQueueFailure,
   reportQueueFailure,

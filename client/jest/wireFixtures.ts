@@ -18,4 +18,3 @@ const WIRE_ROOT = findWireRoot();
 export function wireFixture(name: string): unknown {
   return JSON.parse(fs.readFileSync(path.join(WIRE_ROOT, `${name}.json`), 'utf8'));
 }
-

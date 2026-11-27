@@ -1,7 +1,8 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoverySuggestion, DiscoverySuggestResponse } from '@shared/catalog';
-import { discoveryKeys } from '@shared/query';
+import { useDebouncedValue } from '@shared/concurrency';
+import { discoveryKeys, STALE } from '@shared/query';
 import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/core/searchPaging';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
@@ -11,8 +12,6 @@ const SUGGEST_DEBOUNCE_MS = 150;
 export const SEARCH_DEBOUNCE_MS = 300;
 
 const SUGGESTION_LIMIT = 5;
-
-const SUGGEST_STALE_MS = 60_000;
 
 const NO_SUGGESTIONS: DiscoverySuggestion[] = [];
 
@@ -26,7 +25,7 @@ export function visibleSuggestions(
 
 export function useAutocompleteSuggestions(inputValue: string, canShow = true) {
   const typedQuery = normalizeQuery(inputValue).toLowerCase();
-  const debouncedQuery = useSettledValue(typedQuery, SUGGEST_DEBOUNCE_MS);
+  const debouncedQuery = useDebouncedValue(typedQuery, SUGGEST_DEBOUNCE_MS);
   const isSettled = debouncedQuery === typedQuery;
   const { data: response, error } = useSuggestQuery(debouncedQuery, canShow && isSettled);
   useReportQueryFailure(error, 'suggest');
@@ -44,20 +43,9 @@ function suggestQueryOptions(port: DiscoverPort, query: string, wanted: boolean)
     queryFn: ({ signal }: QueryFunctionContext) =>
       port.suggestDiscovery({ q: query, limit: SUGGESTION_LIMIT }, signal),
     enabled: wanted && isSearchableQuery(query),
-    staleTime: SUGGEST_STALE_MS,
+    staleTime: STALE.minute,
     retry: false,
   };
-}
-
-function useSettledValue(value: string, delayMs: number): string {
-  const [settled, setSettled] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-
-  return settled;
 }
 
 type SearchInput = {

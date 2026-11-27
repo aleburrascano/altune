@@ -2,7 +2,7 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { warnPlayback } from '@features/player/core/playbackError';
 import { clamp } from '@shared/math';
-import { msToSeconds } from '@features/player/domain/time';
+import { msToSeconds } from '@features/player/core/time';
 import { ensurePlayerSetup } from '@features/player/adapters/native/initPlayer';
 import {
   onNativeQueueTimeout,
@@ -23,13 +23,13 @@ import {
   currentLoadToken,
   isStale,
   type LoadToken,
-} from '@features/player/domain/loadToken';
+} from '@features/player/core/loadToken';
 import { beginNativeLoad, endNativeLoad } from '@features/player/adapters/native/nativeSyncGuard';
 import {
   NATIVE_QUEUE_WINDOW,
   markPresignedFrom,
   extendPresignWindow,
-} from '@features/player/domain/presignWindow';
+} from '@features/player/core/presignWindow';
 import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 
 export interface LoadNativeTrackOptions {

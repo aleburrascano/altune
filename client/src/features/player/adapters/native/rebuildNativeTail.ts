@@ -6,9 +6,9 @@ import {
   activeNativeTrackId,
   nativeTrackBuilder,
 } from '@features/player/adapters/native/nativeTrack';
-import { currentLoadToken, isStale, type LoadToken } from '@features/player/domain/loadToken';
+import { currentLoadToken, isStale, type LoadToken } from '@features/player/core/loadToken';
 import { warnPlayback } from '@features/player/core/playbackError';
-import { NATIVE_QUEUE_WINDOW } from '@features/player/domain/presignWindow';
+import { NATIVE_QUEUE_WINDOW } from '@features/player/core/presignWindow';
 import {
   identityOrder,
   orderedQueueTracks,

@@ -1,12 +1,8 @@
 import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
-import { detailKeys } from '@shared/query';
+import { detailKeys, STALE } from '@shared/query';
 
-import {
-  contentFailure,
-  DETAIL_CONTENT_STALE_MS,
-  type ContentFailure,
-} from '@features/detail/core/contentStatus';
+import { contentFailure, type ContentFailure } from '@features/detail/core/contentStatus';
 import { fetchTallyingOutcome } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
@@ -38,7 +34,7 @@ function relatedTracksOptions(port: DetailPort, scSource: DiscoverySource | null
     queryKey: detailKeys.relatedTracks(scSource?.external_id ?? ''),
     queryFn: ({ signal }: QueryFunctionContext) => fetchRelated(port, scSource, signal),
     enabled: scSource !== null,
-    staleTime: DETAIL_CONTENT_STALE_MS,
+    staleTime: STALE.halfHour,
   };
 }
 

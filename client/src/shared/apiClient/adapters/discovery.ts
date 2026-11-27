@@ -267,14 +267,17 @@ export async function suggestDiscovery(
   return parseDiscoverySuggestResponse(body);
 }
 
-export async function listSearchHistory(params?: {
-  limit?: number;
-}): Promise<DiscoverySearchHistoryResponse> {
+type SearchHistoryParams = { limit?: number };
+
+export async function listSearchHistory(
+  params?: SearchHistoryParams,
+  signal?: AbortSignal,
+): Promise<DiscoverySearchHistoryResponse> {
   const qs = new URLSearchParams();
   if (params?.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  const body = await apiFetch(withQuery('/v1/discovery/search-history', qs));
+  const body = await apiFetch(withQuery('/v1/discovery/search-history', qs), signalInit(signal));
   return parseDiscoverySearchHistoryResponse(body);
 }
 

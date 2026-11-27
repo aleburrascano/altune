@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw } from 'lucide-react-native';
 import { withFeaturing } from '@shared/catalog';
-import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
+import { usePlayerNavigation } from '@features/player/view/PlayerNavigationProvider';
+import { shouldRestartOnPrevious } from '@features/player/core/restartOnPrevious';
 import { useQueueStore } from '@shared/playback';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback';
 import {
@@ -11,7 +11,7 @@ import {
   endedLabel,
   isPreviewTrack,
   libraryTrackId,
-} from '@features/player/domain/playerStatus';
+} from '@features/player/core/playerStatus';
 import { PlayerOptionsSheets } from '@features/player/view/PlayerOptionsSheets';
 import { Scrubber } from '@features/player/view/Scrubber';
 import { VolumeSlider } from '@features/player/view/web/VolumeSlider';
@@ -118,7 +118,7 @@ export function FullPlayer() {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const queueLength = useQueueStore((s) => s.playOrder.length);
   const theme = useTheme();
-  const router = useRouter();
+  const navigation = usePlayerNavigation();
   const { width: screenWidth } = useWindowDimensions();
   const artworkSize = screenWidth - spacing['3xl'] * 2;
   const shadowStyle = useMemo(
@@ -139,7 +139,7 @@ export function FullPlayer() {
 
   return (
     <SheetScreen>
-      <SheetHeader onClose={() => router.back()} closeLabel="Close player">
+      <SheetHeader onClose={() => navigation.close()} closeLabel="Close player">
         <SheetHeaderCenter>
           <Text variant="caption" tone={statusTone}>
             {statusLabel}
@@ -150,7 +150,7 @@ export function FullPlayer() {
             action="playback.full.lyrics"
             icon={Mic2}
             size={20}
-            onPress={() => router.push('/player/lyrics')}
+            onPress={() => navigation.openLyrics()}
             accessibilityLabel="View lyrics"
           />
           {queueLength > 1 ? (
@@ -158,7 +158,7 @@ export function FullPlayer() {
               action="playback.full.queue"
               icon={ListMusic}
               size={22}
-              onPress={() => router.push('/player/queue')}
+              onPress={() => navigation.openQueue()}
               accessibilityLabel="View queue"
             />
           ) : null}

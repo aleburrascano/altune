@@ -9,6 +9,7 @@ import {
 import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ContractError } from '@shared/failure';
+import { expectAbortsInFlight } from '@shared/apiClient/__tests__/abortInFlight';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -1073,5 +1074,13 @@ describe('searchDiscovery tolerates additive wire enum values', () => {
     });
 
     await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
+  });
+});
+
+describe('listSearchHistory abort', () => {
+  it('aborts its in-flight request when the caller signal fires', async () => {
+    await expectAbortsInFlight('GET /v1/discovery/search-history', (signal) =>
+      listSearchHistory({ limit: 10 }, signal),
+    );
   });
 });

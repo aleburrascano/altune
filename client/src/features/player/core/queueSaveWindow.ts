@@ -1,7 +1,7 @@
 import type { SaveQueueStateRequest } from '@shared/apiClient';
 import { type PlaybackTrack, orderedQueueTracks, type QueueStore } from '@shared/playback';
 
-import { libraryTrackId } from '@features/player/domain/playerStatus';
+import { libraryTrackId } from '@features/player/core/playerStatus';
 
 const MAX_SAVED_QUEUE_IDS = 10_000;
 

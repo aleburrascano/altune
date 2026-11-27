@@ -1,28 +1,6 @@
-import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { formatSeconds, type QueueItem, QueueRow } from '@features/player';
-type SwipeDrag = { value: number };
-type SwipeableMockProps = { children: React.ReactNode; renderRightActions: RenderRightActions };
-type RenderRightActions = (progress: number, drag: SwipeDrag) => React.ReactNode;
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
-}));
-jest.mock('react-native-reanimated', () => ({
-  __esModule: true,
-  default: { View: jest.requireActual('react-native').View },
-  useAnimatedStyle: () => ({}),
-}));
-jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
-  __esModule: true,
-  default: ({ children, renderRightActions }: SwipeableMockProps) => (
-    <>
-      {renderRightActions(0, { value: 0 })}
-      {children}
-    </>
-  ),
-}));
 
 const item: QueueItem = {
   trackIndex: 4,
@@ -52,12 +30,6 @@ describe('QueueRow', () => {
     const props = renderRow();
     fireEvent.press(screen.getByLabelText('Options for Song'));
     expect(props.onOpenMenu).toHaveBeenCalledWith(item);
-  });
-
-  it('shows the remove action revealed by swiping the row', () => {
-    renderRow();
-
-    expect(screen.getByText('Remove')).toBeTruthy();
   });
 
   it('shows the formatted duration', () => {

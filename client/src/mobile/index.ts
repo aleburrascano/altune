@@ -5,6 +5,7 @@ export { fetchWithinAuthDeadline } from '@/mobile/authFetch';
 export { createAuthStorage } from '@/mobile/authStorage';
 export { createWebAuthStorage } from '@/mobile/authStorage.web';
 export { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+export { PlayerNavigationBridge } from '@/mobile/wiring/PlayerNavigationBridge';
 export { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 export { PlaybackShortcuts, SystemNavigationBar, TabsTitle } from '@/mobile/frame/platformExtras';
 export { StagingBanner } from '@/mobile/frame/StagingBanner';

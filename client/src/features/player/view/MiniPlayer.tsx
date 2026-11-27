@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
 import { withFeaturing } from '@shared/catalog';
 import { useQueueStore, useQueuePlayback, usePlayback } from '@shared/playback';
@@ -20,7 +19,8 @@ import {
   isPreviewTrack,
   libraryTrackId,
   statusFlagsOf,
-} from '@features/player/domain/playerStatus';
+} from '@features/player/core/playerStatus';
+import { usePlayerNavigation } from '@features/player/view/PlayerNavigationProvider';
 
 export function MiniPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage, errorKind } =
@@ -28,7 +28,7 @@ export function MiniPlayer() {
   const { skipToNext } = useQueuePlayback();
   const showSkipNext = useQueueStore((s) => s.hasNext());
   const theme = useTheme();
-  const router = useRouter();
+  const navigation = usePlayerNavigation();
   const isWideWeb = useWideWebLayout();
 
   const [progressAnim] = useState(() => new Animated.Value(0));
@@ -70,7 +70,7 @@ export function MiniPlayer() {
     <Tappable
       action="playback.mini.open_player"
       testID="mini-player"
-      onPress={() => router.push('/player')}
+      onPress={() => navigation.openPlayer()}
       style={[
         styles.container,
         { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border },

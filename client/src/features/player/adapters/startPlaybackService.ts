@@ -1,5 +1,5 @@
 import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-import { playsThroughTrackPlayer } from '@features/player/domain/playsThroughTrackPlayer';
+import { playsThroughTrackPlayer } from '@features/player/core/playsThroughTrackPlayer';
 import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
 import type { PlaybackPort } from '@features/player/ports/playbackPort';
 

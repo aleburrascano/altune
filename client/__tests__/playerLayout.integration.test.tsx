@@ -8,6 +8,9 @@ import { makeIdlePlayback } from '@testing/factories';
 import { setWindowWidth } from '@testing/setWindowWidth';
 
 import PlayerLayout from '@/app/player/_layout';
+import { createRecordingPlayerNavigation } from '@testing/fakes/player/recordingPlayerNavigation';
+
+const { wrapper: PlayerNavigation } = createRecordingPlayerNavigation();
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -31,7 +34,9 @@ afterEach(() => {
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <PlaybackContext.Provider value={IDLE}>{children}</PlaybackContext.Provider>
+      <PlaybackContext.Provider value={IDLE}>
+        <PlayerNavigation>{children}</PlayerNavigation>
+      </PlaybackContext.Provider>
     </QueryClientProvider>
   );
 }
@@ -188,7 +193,9 @@ describe('player layout: does not mount keyboard shortcuts on its own', () => {
         initialUrl,
         wrapper: ({ children }: { children: ReactNode }) => (
           <QueryClientProvider client={client}>
-            <PlaybackContext.Provider value={playback}>{children}</PlaybackContext.Provider>
+            <PlaybackContext.Provider value={playback}>
+              <PlayerNavigation>{children}</PlayerNavigation>
+            </PlaybackContext.Provider>
           </QueryClientProvider>
         ),
       },

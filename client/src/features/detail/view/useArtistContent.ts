@@ -4,11 +4,10 @@ import { isAbort } from '@shared/failure';
 import type { ArtistContentOptions, ArtistContentResponse } from '@shared/apiClient';
 import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
 import { sourceIdList } from '@shared/catalog';
-import { detailKeys } from '@shared/query';
+import { detailKeys, STALE } from '@shared/query';
 
 import {
   contentFailure,
-  DETAIL_CONTENT_STALE_MS,
   DETAIL_LIST_CAP,
   hasDegradedStatus,
   type ContentFailure,
@@ -141,7 +140,7 @@ export function useArtistContent({
     ),
     queryFn: ({ signal }) => loadArtistContent(port, [source!, ...sources.slice(1)], signal),
     enabled: enabled && source !== null,
-    staleTime: DETAIL_CONTENT_STALE_MS,
+    staleTime: STALE.halfHour,
     retry,
   });
 

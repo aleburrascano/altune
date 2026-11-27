@@ -21,9 +21,9 @@ import type {
   SetDisplayedTrack,
 } from '@features/player/ports/nativePlayback';
 import { reorderUpcomingNative } from '@features/player/adapters/native/rebuildNativeTail';
-import { claimSessionReset } from '@features/player/domain/loadToken';
+import { claimSessionReset } from '@features/player/core/loadToken';
 import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLock';
-import { msToSeconds } from '@features/player/domain/time';
+import { msToSeconds } from '@features/player/core/time';
 import { clearPlaybackError, reportLoadFailure } from '@features/player/core/playbackErrorStore';
 import {
   isIndexOutOfBounds,

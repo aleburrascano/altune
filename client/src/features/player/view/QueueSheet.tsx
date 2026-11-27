@@ -1,6 +1,5 @@
 import { useCallback, useState, type ReactElement } from 'react';
 import { FlatList, type ListRenderItemInfo, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { EllipsisVertical, Play } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
@@ -28,13 +27,14 @@ import {
   queueMenuOptions,
   queueSourceLabel,
   type QueueItem,
-} from '@features/player/domain/upNextQueue';
+} from '@features/player/core/upNextQueue';
 import {
   SheetHeader,
   SheetHeaderCenter,
   SheetHeaderTrailing,
   SheetScreen,
 } from '@features/player/view/SheetHeader';
+import { usePlayerNavigation } from '@features/player/view/PlayerNavigationProvider';
 
 const REMOVE_ACTION_WIDTH = 80;
 
@@ -134,7 +134,7 @@ const rowStyles = StyleSheet.create({
 
 export function QueueSheet(): ReactElement {
   const theme = useTheme();
-  const router = useRouter();
+  const navigation = usePlayerNavigation();
   const tracks = useQueueStore((s) => s.tracks);
   const playOrder = useQueueStore((s) => s.playOrder);
   const currentIndex = useQueueStore((s) => s.currentIndex);
@@ -172,7 +172,7 @@ export function QueueSheet(): ReactElement {
 
   return (
     <SheetScreen>
-      <SheetHeader onClose={() => router.back()} closeLabel="Close queue">
+      <SheetHeader onClose={() => navigation.close()} closeLabel="Close queue">
         <SheetHeaderCenter>
           <Text variant="title">Up Next</Text>
           <Text variant="caption" tone="secondary">

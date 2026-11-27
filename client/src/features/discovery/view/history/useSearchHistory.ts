@@ -15,7 +15,7 @@ export function useSearchHistory() {
     refetch: refetchHistory,
   } = useQuery<DiscoverySearchHistoryResponse>({
     queryKey: discoveryKeys.history,
-    queryFn: () => port.listSearchHistory({ limit: 10 }),
+    queryFn: ({ signal }) => port.listSearchHistory({ limit: 10 }, signal),
   });
 
   useReportQueryFailure(error, 'history');

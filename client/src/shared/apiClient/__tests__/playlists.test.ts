@@ -19,6 +19,7 @@ import {
 } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ApiError, ContractError, NetworkError } from '@shared/failure';
+import { expectAbortsInFlight } from '@shared/apiClient/__tests__/abortInFlight';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -402,4 +403,12 @@ describe('parsePlaylistId', () => {
       });
     },
   );
+});
+
+describe('getPlaylist abort', () => {
+  it('aborts its in-flight request when the caller signal fires', async () => {
+    await expectAbortsInFlight('GET /v1/playlists/p1', (signal) =>
+      getPlaylist(asPlaylistId('p1'), signal),
+    );
+  });
 });

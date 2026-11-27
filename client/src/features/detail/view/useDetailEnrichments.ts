@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DeezerEnrichmentResponse, EnrichmentResponse } from '@shared/apiClient';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
-import { detailKeys } from '@shared/query';
+import { detailKeys, STALE } from '@shared/query';
 import { isAbort } from '@shared/failure';
 import {
   recordEnrichmentOutcome,
@@ -11,9 +11,6 @@ import {
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { trackExtras } from '@features/detail/core/trackExtras';
-
-const ONE_DAY_MS = 86_400_000;
-const ENRICHMENT_STALE_TIME = ONE_DAY_MS;
 
 type EnrichmentParams = {
   kind: DiscoveryKind;
@@ -117,7 +114,7 @@ function enrichmentQueryOptions<T>(request: EnrichmentRequest<T>) {
     queryKey: enrichmentQueryKey(config, params),
     queryFn: enrichmentQueryFn(request),
     enabled: params.enabled && hasLookupKey(config, params),
-    staleTime: ENRICHMENT_STALE_TIME,
+    staleTime: STALE.day,
   };
 }
 

@@ -10,9 +10,8 @@ import type { UnreleasedTrack, UnreleasedTracksResponse } from '@shared/apiClien
 import type { DiscoveryResult } from '@shared/catalog';
 import { sourceIdList } from '@shared/catalog';
 import { useQueuePlayback } from '@shared/playback';
-import { detailKeys } from '@shared/query';
+import { detailKeys, STALE } from '@shared/query';
 
-import { DETAIL_CONTENT_STALE_MS } from '@features/detail/core/contentStatus';
 import {
   ownedFromTrackInfo,
   toPlaybackQueue,
@@ -48,7 +47,7 @@ function fetchUnreleased(port: DetailPort, artist: DiscoveryResult, signal: Abor
 }
 
 const UNRELEASED_POLLING = {
-  staleTime: DETAIL_CONTENT_STALE_MS,
+  staleTime: STALE.halfHour,
   retry: false,
   refetchInterval: pendingPollInterval,
   notifyOnChangeProps: REFRESH_ON_EVERY_POLL,

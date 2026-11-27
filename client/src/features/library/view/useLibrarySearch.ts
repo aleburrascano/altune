@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+
+import { useDebouncedCall } from '@shared/concurrency';
 
 const DEBOUNCE_MS = 300;
 const MIN_CHARS = 2;
@@ -20,37 +22,28 @@ interface UseLibrarySearchReturn {
 export function useLibrarySearch(): UseLibrarySearchReturn {
   const [inputValue, setInputValue] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => clearTimeout(debounceRef.current ?? undefined), []);
-
-  const clearDebounce = (): void => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-  };
+  const debounce = useDebouncedCall(DEBOUNCE_MS);
 
   const onChangeText = (text: string): void => {
     setInputValue(text);
-    clearDebounce();
     const committable = committableOf(text);
     if (committable === '') {
+      debounce.cancel();
       setCommittedQuery('');
     } else {
-      debounceRef.current = setTimeout(() => {
+      debounce.schedule(() => {
         setCommittedQuery(committable);
-      }, DEBOUNCE_MS);
+      });
     }
   };
 
   const onSubmit = (): void => {
-    clearDebounce();
+    debounce.cancel();
     setCommittedQuery(committableOf(inputValue));
   };
 
   const onClear = (): void => {
-    clearDebounce();
+    debounce.cancel();
     setInputValue('');
     setCommittedQuery('');
   };

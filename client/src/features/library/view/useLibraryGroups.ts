@@ -13,7 +13,7 @@ import {
 } from '@features/library/core/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 import type { LibraryChip } from '@features/library/view/libraryView';
-import { libraryKeys } from '@shared/query';
+import { libraryKeys, STALE } from '@shared/query';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 
 interface GroupPage<T> {
@@ -41,7 +41,7 @@ function nextPageOffset<T>(lastPage: GroupPage<T>, _pages: GroupPage<T>[], lastO
 const PAGING = {
   initialPageParam: 0,
   getNextPageParam: nextPageOffset,
-  staleTime: Infinity,
+  staleTime: STALE.untilEvent,
   placeholderData: keepPreviousData,
 };
 

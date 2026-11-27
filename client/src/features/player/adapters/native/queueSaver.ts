@@ -11,9 +11,9 @@ import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import type { IsSkippable } from '@features/player/ports/nativePlayback';
 import { toWireSource } from '@features/player/core/queueStateWire';
 import { recordQueueSaveFailure } from '@features/player/core/playbackHealth';
-import { savedQueueLists } from '@features/player/domain/queueSaveWindow';
+import { savedQueueLists } from '@features/player/core/queueSaveWindow';
 import { warnPlayback } from '@features/player/core/playbackError';
-import { progressSecondsToRoundedMs } from '@features/player/domain/time';
+import { progressSecondsToRoundedMs } from '@features/player/core/time';
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {

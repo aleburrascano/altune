@@ -71,11 +71,14 @@ describe('useTracksFeaturing', () => {
     renderHook(() => useTracksFeaturing(fa), { wrapper });
 
     await waitFor(() =>
-      expect(mockListTracksFeaturing).toHaveBeenCalledWith({
-        name: 'Guest',
-        mbid: null,
-        deezer_id: null,
-      }),
+      expect(mockListTracksFeaturing).toHaveBeenCalledWith(
+        {
+          name: 'Guest',
+          mbid: null,
+          deezer_id: null,
+        },
+        expect.any(AbortSignal),
+      ),
     );
   });
 
@@ -92,11 +95,14 @@ describe('useTracksFeaturing', () => {
     renderHook(() => useTracksFeaturing(fa), { wrapper });
 
     await waitFor(() =>
-      expect(mockListTracksFeaturing).toHaveBeenCalledWith({
-        name: 'Guest',
-        mbid: null,
-        deezer_id: 42,
-      }),
+      expect(mockListTracksFeaturing).toHaveBeenCalledWith(
+        {
+          name: 'Guest',
+          mbid: null,
+          deezer_id: 42,
+        },
+        expect.any(AbortSignal),
+      ),
     );
   });
 });

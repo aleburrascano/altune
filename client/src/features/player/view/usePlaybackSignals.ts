@@ -3,8 +3,8 @@ import { useEffect, useEffectEvent, useRef } from 'react';
 import { useQueueStore, trackKey, type TrackKey, type PlaybackTrack } from '@shared/playback';
 import { useRecordEvent } from '@shared/telemetry';
 
-import { buildTrackPayload, hasCrossedListenThreshold } from '@features/player/domain/signals';
-import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/player/domain/time';
+import { buildTrackPayload, hasCrossedListenThreshold } from '@features/player/core/signals';
+import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/player/core/time';
 import { useNativePlayback } from '@features/player/view/NativePlaybackProvider';
 
 const COMPLETION_EPSILON_MS = 2000;

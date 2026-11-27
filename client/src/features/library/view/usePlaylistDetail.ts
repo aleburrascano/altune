@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { PlaylistId } from '@shared/catalog';
-import { playlistKeys } from '@shared/query';
+import { playlistKeys, STALE } from '@shared/query';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import { useEffect } from 'react';
 import { failureLogFields } from '@features/library/core/libraryFailure';
@@ -9,9 +9,9 @@ export function usePlaylistDetail(playlistId: PlaylistId) {
   const port = useLibraryPort();
   return useQuery({
     queryKey: playlistKeys.detail(playlistId),
-    queryFn: () => port.getPlaylist(playlistId),
+    queryFn: ({ signal }) => port.getPlaylist(playlistId, signal),
     enabled: playlistId.length > 0,
-    staleTime: Infinity,
+    staleTime: STALE.untilEvent,
   });
 }
 

@@ -12,7 +12,7 @@ import { withFeaturing } from '@shared/catalog';
 import { usePlayback } from '@shared/playback';
 import { Text, Tappable, Skeleton, useReduceMotion, spacing, doubled } from '@shared/ui';
 import { useLyrics } from '@features/player/view/useLyrics';
-import { activeLineIndex, _lyricsView } from '@features/player/domain/lyricsSync';
+import { activeLineIndex, _lyricsView } from '@features/player/core/lyricsSync';
 import {
   SheetHeader,
   SheetHeaderCenter,
