@@ -59,7 +59,15 @@ func WithStreamWriteIdleTimeout(idle time.Duration) func(*StreamHandler) {
 }
 
 func (h *StreamHandler) Routes(r chi.Router) {
+	h.StreamRoute(r)
+	h.RecoverRoute(r)
+}
+
+func (h *StreamHandler) StreamRoute(r chi.Router) {
 	r.With(h.limiter).Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
+}
+
+func (h *StreamHandler) RecoverRoute(r chi.Router) {
 	r.With(h.limiter).Post("/tracks/{trackId}/audio/recover", h.HandleRecover)
 }
 
@@ -96,7 +104,6 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 func setAudioBodyHeaders(w http.ResponseWriter, audioRef string) {
 	w.Header().Set("Content-Type", ports.AudioContentType(audioRef))
 	w.Header().Set("Cache-Control", "private")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
 func logStreamOutcome(ctx context.Context, trackId domain.TrackId, body *countedAudioBody, elapsed time.Duration) {

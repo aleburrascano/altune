@@ -167,13 +167,10 @@ func assertProblem(t *testing.T, rec *httptest.ResponseRecorder, wantCode, wantD
 	}
 }
 
-func assertPrivateAudioHeaders(t *testing.T, rec *httptest.ResponseRecorder, wantCacheControl string) {
+func assertAudioCacheControl(t *testing.T, rec *httptest.ResponseRecorder, wantCacheControl string) {
 	t.Helper()
 	if got := rec.Header().Get("Cache-Control"); got != wantCacheControl {
 		t.Errorf("Cache-Control = %q, want %q", got, wantCacheControl)
-	}
-	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
 	}
 }
 

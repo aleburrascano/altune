@@ -356,11 +356,11 @@ func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
 	ranged := sendAs(router, rangeReq, librarytest.UserId())
 
 	assertStatus(t, whole, http.StatusOK)
-	assertPrivateAudioHeaders(t, whole, "private")
+	assertAudioCacheControl(t, whole, "private")
 	if ranged.Code != http.StatusPartialContent {
 		t.Fatalf("range request status = %d, want 206: the caching headers must not block seeking", ranged.Code)
 	}
-	assertPrivateAudioHeaders(t, ranged, "private")
+	assertAudioCacheControl(t, ranged, "private")
 	if ranged.Body.Len() != 1024 {
 		t.Errorf("range body = %d bytes, want 1024", ranged.Body.Len())
 	}

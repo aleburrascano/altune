@@ -16,11 +16,10 @@ import (
 const maxBodyBytes = 1 << 20
 
 type Settings struct {
-	WriteTimeout   time.Duration
-	RequestTimeout time.Duration
-	CORSOrigins    []string
-	Development    bool
-	Latency        *requestmetrics.Registry
+	WriteTimeout time.Duration
+	CORSOrigins  []string
+	Development  bool
+	Latency      *requestmetrics.Registry
 }
 
 func New(s Settings) *chi.Mux {
@@ -33,7 +32,6 @@ func New(s Settings) *chi.Mux {
 		httpserver.LogRequest,
 	))
 	r.Use(httpserver.WriteDeadline(clock.Now, s.WriteTimeout))
-	r.Use(v1RequestTimeout(s.RequestTimeout))
 	r.Use(httpserver.Recoverer)
 	r.Use(httpserver.MaxBodySize(maxBodyBytes))
 	r.Use(corsHandler(s))
@@ -74,26 +72,24 @@ func V1ResponseHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func untraced(r *http.Request) bool {
-	return r.URL.Path == "/health" || isLongLivedRoute(r)
+type V1 struct {
+	Bounded   func(chi.Router)
+	LongLived func(chi.Router)
 }
 
-func isLongLivedRoute(r *http.Request) bool {
-	path := r.URL.Path
-	return path == "/v1/events" ||
-		(r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/tracks/") && strings.HasSuffix(path, "/audio"))
-}
-
-func v1RequestTimeout(d time.Duration) func(http.Handler) http.Handler {
-	bounded := httpserver.RequestTimeout(d)
-	return func(next http.Handler) http.Handler {
-		withDeadline := bounded(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.HasPrefix(r.URL.Path, "/v1/") || isLongLivedRoute(r) {
-				next.ServeHTTP(w, r)
-				return
-			}
-			withDeadline.ServeHTTP(w, r)
+func MountV1(r chi.Router, requestTimeout time.Duration, v1 V1) {
+	r.Route("/v1", func(r chi.Router) {
+		r.Use(V1ResponseHeaders)
+		r.Group(func(r chi.Router) {
+			r.Use(httpserver.RequestTimeout(requestTimeout))
+			v1.Bounded(r)
 		})
-	}
+		r.Group(v1.LongLived)
+	})
+}
+
+func untraced(r *http.Request) bool {
+	path := r.URL.Path
+	return path == "/health" || path == "/v1/events" ||
+		(r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/tracks/") && strings.HasSuffix(path, "/audio"))
 }

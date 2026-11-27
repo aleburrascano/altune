@@ -476,9 +476,6 @@ func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
 		t.Errorf("Cache-Control = %q, want %q", got, "private, no-store")
 	}
-	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
-	}
 }
 
 type unavailableRepo struct {

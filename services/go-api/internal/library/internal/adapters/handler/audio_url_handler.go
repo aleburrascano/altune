@@ -113,7 +113,6 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 		"resolved", len(urls),
 		logging.KeyDurationMS, h.now().Sub(start).Milliseconds(),
 	)
-	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", httpserver.CacheControlPrivateNoStore)
 	httpserver.WriteJSON(w, http.StatusOK, resolveAudioURLsResponse{URLs: urls, PrefetchEnabled: h.prefetchEnabled})
 }
