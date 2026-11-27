@@ -5,9 +5,7 @@ import (
 	"altune/go-api/internal/shared/requestuser/internal/core/signedinuser"
 )
 
-var (
-	ErrTokenExpired = signedinuser.ErrTokenExpired
-)
+var ErrTokenExpired = signedinuser.ErrTokenExpired
 
 var (
 	ContextWithUserID      = signedinuser.ContextWithUserID

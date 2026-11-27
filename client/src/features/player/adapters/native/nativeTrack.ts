@@ -72,14 +72,14 @@ function libraryIdsToSign(tracks: readonly PlaybackTrack[]): string[] {
 
 function presignFailed(ids: string[], err: unknown): ResolvedUrls {
   warnPlayback('presign failed', { trackIds: ids }, err);
-  recordPresignOutcome('failed');
+  recordPresignOutcome(false);
   return { urls: new Map(), denied: classifyPlaybackFailure(err) === 'auth', presigned: false };
 }
 
 async function fetchResolvedUrls(ids: string[]): Promise<ResolvedUrls> {
   try {
     const resolved = await playbackPort().fetchAudioUrls(ids);
-    recordPresignOutcome('ok');
+    recordPresignOutcome(true);
     return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false, presigned: true };
   } catch (err) {
     return presignFailed(ids, err);

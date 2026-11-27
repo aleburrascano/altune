@@ -174,7 +174,7 @@ describe('playback health metric', () => {
 
   it('sends one aggregate event per batch, not one per outcome', async () => {
     for (let i = 0; i < PLAYBACK_HEALTH_BATCH * TWO_REQUESTS + EXTRA_OUTCOMES; i++) {
-      recordPresignOutcome(i % FAILURE_EVERY !== 0 ? 'ok' : 'failed');
+      recordPresignOutcome(i % FAILURE_EVERY !== 0);
     }
 
     const payloads = await sentPayloads(TWO_REQUESTS);
@@ -183,7 +183,7 @@ describe('playback health metric', () => {
   });
 
   it('flushes the partial batch when the app goes to the background', async () => {
-    recordPresignOutcome('failed');
+    recordPresignOutcome(false);
     expect(await sentPayloads(0)).toEqual([]);
 
     app.change('background');
@@ -197,7 +197,7 @@ describe('playback health metric', () => {
 
     __http.reset();
     __http.fail(HEALTH_ROUTE);
-    recordPresignOutcome('ok');
+    recordPresignOutcome(true);
     expect(() => flushPlaybackHealth()).not.toThrow();
     await settleRequests();
     expect(__http.countFor(HEALTH_ROUTE)).toBe(1);
