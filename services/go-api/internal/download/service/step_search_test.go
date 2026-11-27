@@ -243,7 +243,7 @@ func TestSearchStep_AFallbackOnlyPassStaysAFallbackOnlyPass(t *testing.T) {
 	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u2"}}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}, Pass: service.PassFallbackOnly}
 
-	_ = runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
+	_ = runPipeline(context.Background(), service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback}), ac)
 
 	if got := len(first.seen()); got != 0 {
 		t.Errorf("first tier finds = %d, want 0: a fallback-only pass skips the first tier", got)
@@ -258,7 +258,7 @@ func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing
 	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u2", Kind: ports.KindArtTrack}}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}}
 
-	err := runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
+	err := runPipeline(context.Background(), service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback}), ac)
 
 	if step := failedStep(t, err).Step; step == "search" {
 		t.Fatalf("failed step = %v, want the search to succeed and a later step to stop the run", err)

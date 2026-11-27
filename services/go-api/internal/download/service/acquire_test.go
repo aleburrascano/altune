@@ -1198,7 +1198,7 @@ func (*brokenArtTrackSource) Fetch(_ context.Context, _ ports.AudioCandidate, _ 
 func TestExecuteReplace_AFailedFirstTierDownloadFallsBackToTheTextSearch(t *testing.T) {
 	ledger, store, userId, trackId, _ := seedReadyTrackWith(t)
 	first := &brokenArtTrackSource{}
-	registry := service.NewSourceRegistry(first).WithFallback(newAudioSource{})
+	registry := service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{newAudioSource{}})
 	svc := newTestAcquireService(ledger, registry, store)
 
 	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: userId, TrackID: trackId}); err != nil {
@@ -1217,7 +1217,7 @@ func TestExecuteReplace_NoFallbackRetryWhenTheFallbackAlreadyRan(t *testing.T) {
 	ledger, store, userId, trackId, _ := seedReadyTrackWith(t)
 	unresolvedBroken := &findStubSource{name: "ytdlp", found: []ports.AudioCandidate{titledCandidate("https://www.youtube.com/watch?v=brokenAAAAA")}, fetchErr: errors.New("exit status 1")}
 	first := &findStubSource{name: "ytmsearch"}
-	svc := newTestAcquireService(ledger, service.NewSourceRegistry(first).WithFallback(unresolvedBroken), store)
+	svc := newTestAcquireService(ledger, service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{unresolvedBroken}), store)
 
 	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: userId, TrackID: trackId}); err == nil {
 		t.Fatal("ExecuteReplace = nil, want the download failure")

@@ -24,9 +24,8 @@ func NewSourceRegistry(sources ...ports.AudioSource) *SourceRegistry {
 	return &SourceRegistry{sources: liveSources(sources)}
 }
 
-func (r *SourceRegistry) WithFallback(sources ...ports.AudioSource) *SourceRegistry {
-	r.fallback = liveSources(sources)
-	return r
+func NewSourceRegistryWithFallback(first, fallback []ports.AudioSource) *SourceRegistry {
+	return &SourceRegistry{sources: liveSources(first), fallback: liveSources(fallback)}
 }
 
 func liveSources(sources []ports.AudioSource) []ports.AudioSource {

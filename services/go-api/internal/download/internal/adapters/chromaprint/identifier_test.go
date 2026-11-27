@@ -25,9 +25,9 @@ import (
 	"time"
 )
 
-func newIdentifier(t *testing.T, binDir, apiKey string) *chromaprint.Identifier {
+func newIdentifier(t *testing.T, binDir, apiKey string, opts ...func(*chromaprint.Identifier)) *chromaprint.Identifier {
 	t.Helper()
-	id, err := chromaprint.NewIdentifier(context.Background(), binDir, apiKey, &http.Client{})
+	id, err := chromaprint.NewIdentifier(context.Background(), binDir, apiKey, &http.Client{}, opts...)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -53,12 +53,12 @@ func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
 		through++
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := chromaprint.NewIdentifier(context.Background(), fakeFpcalcDir(t, 100), "real-key", client)
+	id, err := chromaprint.NewIdentifier(context.Background(), fakeFpcalcDir(t, 100), "real-key", client, chromaprint.WithEndpoint(srv.URL))
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
 
-	if _, err := id.WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
 
@@ -75,12 +75,12 @@ func TestIdentify_MarksTheLookupPostRetrySafeSoTheTransportMayRetryIt(t *testing
 		marked = retrysafe.Marked(r.Context())
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := chromaprint.NewIdentifier(context.Background(), fakeFpcalcDir(t, 100), "real-key", client)
+	id, err := chromaprint.NewIdentifier(context.Background(), fakeFpcalcDir(t, 100), "real-key", client, chromaprint.WithEndpoint(srv.URL))
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
 
-	if _, err := id.WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
 
@@ -97,7 +97,7 @@ func matchFromBody(t *testing.T, body string) download.RecordingMatch {
 	t.Helper()
 	srv := lookupServerServing(body)
 	t.Cleanup(srv.Close)
-	match, err := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0)
+	match, err := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key", chromaprint.WithEndpoint(srv.URL)).Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestLookup_EmptyKeyReturnsError(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "", chromaprint.WithEndpoint(srv.URL))
 
 	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -279,7 +279,7 @@ func TestLookup_OversizedResponseBodyIsRejected(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -347,7 +347,7 @@ func TestIdentify_SendsCandidateDurationNotFpcalcsMeasuredLength(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 236); err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -372,7 +372,7 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -405,7 +405,7 @@ func TestIdentify_CarriesReleaseGroupsOnLinkedRecordings(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key", chromaprint.WithEndpoint(srv.URL))
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -432,7 +432,7 @@ func TestIdentify_TheMatchIsTheTopResult(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key", chromaprint.WithEndpoint(srv.URL))
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -457,7 +457,7 @@ func TestIdentify_ZeroFullLengthForPreviewKeepsFpcalcsMeasuredDuration(t *testin
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -477,7 +477,7 @@ func TestIdentify_KeepsResultAtExactlyTheScoreFloor(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 200), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	match, err := id.Identify(context.Background(), "/tmp/floor.mp3", 0)
 	if err != nil {
@@ -499,7 +499,7 @@ func TestIdentify_TiedScoresKeepStableInputOrder(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 200), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	match, err := id.Identify(context.Background(), "/tmp/tied.mp3", 0)
 	if err != nil {
@@ -533,7 +533,7 @@ func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap-1))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -547,7 +547,7 @@ func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key", chromaprint.WithEndpoint(srv.URL))
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err == nil {
 		t.Fatalf("oversized body must error, not parse the truncated prefix; got match %+v", match)
@@ -557,7 +557,7 @@ func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T
 func TestLookup_BodyExactlyAtTheCapIsRejected(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key", chromaprint.WithEndpoint(srv.URL))
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err == nil {
 		t.Fatalf("a body at the cap must error; got match %+v", match)
@@ -576,7 +576,7 @@ func matchingLookupBodyPaddedTo(t *testing.T, size int) string {
 func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing.T) {
 	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -591,7 +591,7 @@ func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing
 func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
 	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -603,7 +603,7 @@ func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
 func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap-1))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -617,7 +617,7 @@ func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 func TestLookup_OversizedBodyErrorNamesTheLookupResponse(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -649,7 +649,7 @@ func TestLookup_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key", chromaprint.WithEndpoint(srv.URL))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -693,7 +693,7 @@ const throttleMatchBody = `{"status":"ok","results":[{"id":"ac-1","score":0.97,"
 
 func TestIdentify_AThrottledAnswerSurfacesErrIdentifyThrottledWithoutAnAdapterRetry(t *testing.T) {
 	srv, hits := throttlingServer(t, 2, throttleMatchBody)
-	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	_, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 
@@ -707,7 +707,7 @@ func TestIdentify_AThrottledAnswerSurfacesErrIdentifyThrottledWithoutAnAdapterRe
 
 func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 	srv, _ := throttlingServer(t, 0, `{"status":"ok","results":[]}`)
-	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key", chromaprint.WithEndpoint(srv.URL))
 	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err != nil || match.Known() {
 		t.Fatalf("no-match = %+v, %v; want zero match and nil error", match, err)
@@ -717,7 +717,7 @@ func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer failing.Close()
-	id = newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(failing.URL)
+	id = newIdentifier(t, fakeFpcalcDir(t, 130), "real-key", chromaprint.WithEndpoint(failing.URL))
 	_, err = id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err == nil || errors.Is(err, download.ErrIdentifyThrottled) {
 		t.Errorf("500 err = %v, want a non-throttled error", err)
@@ -741,7 +741,7 @@ func TestLookup_SendsAPIKeyInPostFormNotURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), apiKey).WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), apiKey, chromaprint.WithEndpoint(srv.URL))
 	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
@@ -761,7 +761,7 @@ func TestIdentify_EmptyFingerprintIsAnError(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
 	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDirs[emptyFingerprint], "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDirs[emptyFingerprint], "real-key", chromaprint.WithEndpoint(srv.URL))
 
 	_, err := id.Identify(context.Background(), "/tmp/broken.mp3", 0)
 
