@@ -58,12 +58,14 @@ func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name str
 	return identity, nil
 }
 
+const birthYearDigits = 4
+
 func parseBirthYear(begin string) int {
-	if len(begin) < 4 {
+	if len(begin) < birthYearDigits {
 		return 0
 	}
 	year := 0
-	for _, c := range begin[:4] {
+	for _, c := range begin[:birthYearDigits] {
 		if c < '0' || c > '9' {
 			return 0
 		}

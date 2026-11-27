@@ -7,6 +7,14 @@ import (
 	"os"
 )
 
+const (
+	boxHeaderSize    = 8
+	stcoEntryWidth   = 4
+	co64EntryWidth   = 8
+	chunkTableHeader = 16
+	versionFlagsSize = 4
+)
+
 type box struct {
 	start, end int
 	kind       string
@@ -15,7 +23,7 @@ type box struct {
 func childBoxes(mp4 []byte, from, to int) ([]box, error) {
 	var boxes []box
 	for pos := from; pos < to; {
-		if to-pos < 8 {
+		if to-pos < boxHeaderSize {
 			return nil, errors.New("truncated box header")
 		}
 		size := int(binary.BigEndian.Uint32(mp4[pos:]))
@@ -43,13 +51,13 @@ func findBox(mp4 []byte, from, to int, kind string) (box, error) {
 
 func freeformAtom(name, value string) []byte {
 	leaf := func(kind string, payload []byte) []byte {
-		out := make([]byte, 8, 8+len(payload))
-		binary.BigEndian.PutUint32(out, uint32(8+len(payload)))
+		out := make([]byte, boxHeaderSize, boxHeaderSize+len(payload))
+		binary.BigEndian.PutUint32(out, uint32(boxHeaderSize+len(payload)))
 		copy(out[4:], kind)
 		return append(out, payload...)
 	}
-	mean := leaf("mean", append(make([]byte, 4), "com.apple.iTunes"...))
-	nameBox := leaf("name", append(make([]byte, 4), name...))
+	mean := leaf("mean", append(make([]byte, versionFlagsSize), "com.apple.iTunes"...))
+	nameBox := leaf("name", append(make([]byte, versionFlagsSize), name...))
 	payload := leaf("data", append([]byte{0, 0, 0, 1, 0, 0, 0, 0}, value...))
 	return leaf("----", append(append(mean, nameBox...), payload...))
 }
@@ -57,13 +65,13 @@ func freeformAtom(name, value string) []byte {
 func chunkTables(mp4 []byte, trak box) ([]box, error) {
 	node := trak
 	for _, kind := range []string{"mdia", "minf", "stbl"} {
-		next, err := findBox(mp4, node.start+8, node.end, kind)
+		next, err := findBox(mp4, node.start+boxHeaderSize, node.end, kind)
 		if err != nil {
 			return nil, err
 		}
 		node = next
 	}
-	boxes, err := childBoxes(mp4, node.start+8, node.end)
+	boxes, err := childBoxes(mp4, node.start+boxHeaderSize, node.end)
 	if err != nil {
 		return nil, err
 	}
@@ -77,19 +85,19 @@ func chunkTables(mp4 []byte, trak box) ([]box, error) {
 }
 
 func shiftTable(mp4 []byte, table box, at int, delta uint32) error {
-	width := 4
+	width := stcoEntryWidth
 	if table.kind == "co64" {
-		width = 8
+		width = co64EntryWidth
 	}
 	count := int(binary.BigEndian.Uint32(mp4[table.start+12:]))
-	first := table.start + 16
+	first := table.start + chunkTableHeader
 	if first+count*width > table.end {
 		return fmt.Errorf("%s table overruns its box", table.kind)
 	}
 	for i := range count {
 		entry := mp4[first+i*width:]
 		switch width {
-		case 4:
+		case stcoEntryWidth:
 			if offset := binary.BigEndian.Uint32(entry); int(offset) >= at {
 				binary.BigEndian.PutUint32(entry, offset+delta)
 			}
@@ -114,7 +122,7 @@ func ilstChain(mp4 []byte) ([]box, error) {
 	chain := []box{moov}
 	for _, kind := range []string{"udta", "meta", "ilst"} {
 		parent := chain[len(chain)-1]
-		from := parent.start + 8
+		from := parent.start + boxHeaderSize
 		if parent.kind == "meta" {
 			from += 4
 		}
@@ -128,7 +136,7 @@ func ilstChain(mp4 []byte) ([]box, error) {
 }
 
 func shiftAllChunkOffsets(mp4 []byte, moov box, at int, delta uint32) error {
-	children, err := childBoxes(mp4, moov.start+8, moov.end)
+	children, err := childBoxes(mp4, moov.start+boxHeaderSize, moov.end)
 	if err != nil {
 		return err
 	}

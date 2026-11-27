@@ -107,7 +107,7 @@ func (r Report) Render() string {
 	fmt.Fprintf(&b, "\nAcquisition selection eval — %d/%d (%.1f%%) · median %.1fs · mean %.1f attempts\n\n",
 		r.Passed, r.Total, r.Accuracy()*100, r.MedianSimulatedSeconds, r.MeanAttempts)
 	fmt.Fprintf(&b, "  %-8s %-8s %s\n", "CLASS", "SCORE", "ACCURACY")
-	fmt.Fprintf(&b, "  %s\n", strings.Repeat("-", 34))
+	fmt.Fprintf(&b, "  %s\n", strings.Repeat("-", reportRuleWidth))
 	for _, c := range r.Classes {
 		fmt.Fprintf(&b, "  %-8s %-8s %.0f%%\n",
 			c.Class, fmt.Sprintf("%d/%d", c.Passed, c.Total), c.Accuracy()*100)
@@ -160,6 +160,7 @@ type Baseline struct {
 const (
 	baselineMargin  = 0.01
 	timeMarginRatio = 1.05
+	reportRuleWidth = 34
 )
 
 func LoadBaseline(path string) (Baseline, error) {

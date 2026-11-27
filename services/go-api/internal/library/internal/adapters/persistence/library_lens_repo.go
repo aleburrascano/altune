@@ -26,6 +26,8 @@ func NewPostgresLibraryLensRepository(pool *pgxpool.Pool, metrics ports.DBCallMe
 const (
 	albumGroupKey  = `lower(t.album) || '|||' || lower(coalesce(t.album_artist, t.artist))`
 	artistGroupKey = `lower(t.artist)`
+
+	lensArgCapacity = 4
 )
 
 const albumSelect = `
@@ -175,7 +177,7 @@ func (r *PostgresLibraryLensRepository) ListFilteredForUser(
 	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
-	args := make([]any, 0, 4)
+	args := make([]any, 0, lensArgCapacity)
 	placeholder := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))

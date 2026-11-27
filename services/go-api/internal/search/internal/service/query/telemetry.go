@@ -51,11 +51,13 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page fi
 	t.bg.LaunchWithin(parentCtx, "telemetry.emit", emitTimeout, func(ctx context.Context) { t.append(ctx, event) })
 }
 
+const tailNoiseTopK = 5
+
 func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string) map[string]any {
 	payload := map[string]any{
 		"result_count":                   len(shown),
 		domain.PayloadKeyZeroResult:      len(shown) == 0,
-		domain.PayloadKeyTailNoiseTop5:   rank.TailNoiseInTopK(shown, 5),
+		domain.PayloadKeyTailNoiseTop5:   rank.TailNoiseInTopK(shown, tailNoiseTopK),
 		"pipeline_version":               pipelineVersionV2,
 		domain.PayloadKeyShownSignatures: shownSigs,
 	}

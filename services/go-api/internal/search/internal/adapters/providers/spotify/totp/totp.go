@@ -11,6 +11,12 @@ import (
 const (
 	periodSeconds = 30
 	codeDigits    = 6
+
+	truncationOffsetMask = 0x0F
+	truncatedBytes       = 4
+	signBitMask          = 0x7FFFFFFF
+	secretXorCycle       = 33
+	secretXorBase        = 9
 )
 
 func Code(secret string, unixSeconds int64) string {
@@ -23,8 +29,8 @@ func Code(secret string, unixSeconds int64) string {
 	mac.Write(counterBytes[:])
 	digest := mac.Sum(nil)
 
-	offset := digest[len(digest)-1] & 0x0F
-	code := binary.BigEndian.Uint32(digest[offset:offset+4]) & 0x7FFFFFFF
+	offset := digest[len(digest)-1] & truncationOffsetMask
+	code := binary.BigEndian.Uint32(digest[offset:offset+truncatedBytes]) & signBitMask
 
 	mod := uint32(1)
 	for i := 0; i < codeDigits; i++ {
@@ -36,7 +42,7 @@ func Code(secret string, unixSeconds int64) string {
 func key(secret string) []byte {
 	var b strings.Builder
 	for i := 0; i < len(secret); i++ {
-		b.WriteString(strconv.Itoa(int(secret[i]) ^ (i%33 + 9)))
+		b.WriteString(strconv.Itoa(int(secret[i]) ^ (i%secretXorCycle + secretXorBase)))
 	}
 	return []byte(b.String())
 }

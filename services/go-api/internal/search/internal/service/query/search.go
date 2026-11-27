@@ -352,7 +352,7 @@ func (s *Service) execute(
 		"continued", searchId == continues,
 		"offset", query.Offset,
 		"total", total,
-		"tail_noise_top5", rank.TailNoiseInTopK(shown, 5),
+		"tail_noise_top5", rank.TailNoiseInTopK(shown, tailNoiseTopK),
 	}, stages.logAttrs(s.now().Sub(startedAt))...)...)
 
 	return &SearchOutput{

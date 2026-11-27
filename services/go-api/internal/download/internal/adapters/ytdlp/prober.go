@@ -134,13 +134,15 @@ func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) 
 	}
 }
 
+const maxDiagnosticBytes = 200
+
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]
 	}
-	if len(s) > 200 {
-		cut := 200
+	if len(s) > maxDiagnosticBytes {
+		cut := maxDiagnosticBytes
 		for cut > 0 && !utf8.RuneStart(s[cut]) {
 			cut--
 		}

@@ -12,13 +12,18 @@ import (
 const (
 	audioURLRateInterval   = 250 * time.Millisecond
 	trackWriteRateInterval = 500 * time.Millisecond
+
+	streamRateBurst        = 120
+	audioURLRateBurst      = 300
+	trackWriteRateBurst    = 200
+	playlistWriteRateBurst = 60
 )
 
 var (
-	streamRateLimit        = httpserver.RateLimit{Every: time.Second, Burst: 120}
-	audioURLRateLimit      = httpserver.RateLimit{Every: audioURLRateInterval, Burst: 300}
-	trackWriteRateLimit    = httpserver.RateLimit{Every: trackWriteRateInterval, Burst: 200}
-	playlistWriteRateLimit = httpserver.RateLimit{Every: time.Second, Burst: 60}
+	streamRateLimit        = httpserver.RateLimit{Every: time.Second, Burst: streamRateBurst}
+	audioURLRateLimit      = httpserver.RateLimit{Every: audioURLRateInterval, Burst: audioURLRateBurst}
+	trackWriteRateLimit    = httpserver.RateLimit{Every: trackWriteRateInterval, Burst: trackWriteRateBurst}
+	playlistWriteRateLimit = httpserver.RateLimit{Every: time.Second, Burst: playlistWriteRateBurst}
 )
 
 var (

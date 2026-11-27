@@ -193,7 +193,7 @@ func (sc *yamlScanner) scanLineHead(ln yamlLine) int {
 	if sc.flow == 0 {
 		sc.scalarStart = true
 		if isDocumentMarker(sc.src, ln, i) {
-			return skipBlanks(sc.src, i+3, ln.end)
+			return skipBlanks(sc.src, i+documentMarkerLen, ln.end)
 		}
 		for i < ln.end && (sc.src[i] == '-' || sc.src[i] == '?') && indicatorEnd(sc.src, i, ln.end) {
 			sc.parent = i - ln.start
@@ -566,9 +566,14 @@ func maskExpressions(text []byte) ([]byte, error) {
 	return out, nil
 }
 
+const (
+	documentMarkerLen = 3
+	expressionOpenLen = 3
+)
+
 func expressionEnd(text []byte, open int) (int, error) {
 	quoted := false
-	for i := open + 3; i < len(text); i++ {
+	for i := open + expressionOpenLen; i < len(text); i++ {
 		switch {
 		case text[i] == '\'':
 			quoted = !quoted

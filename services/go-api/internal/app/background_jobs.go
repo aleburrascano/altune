@@ -66,9 +66,12 @@ func (a *application) startVocabularyRefresh(ctx context.Context, vocabStore sea
 	if vocabStore == nil || len(charts) == 0 {
 		return
 	}
-	const vocabRefreshInterval = 6 * time.Hour
+	const (
+		vocabRefreshInterval = 6 * time.Hour
+		vocabChartDepth      = 50
+	)
 	a.vocabRefresh = search.NewVocabularyRefreshService(
-		charts, vocabStore, 50,
+		charts, vocabStore, vocabChartDepth,
 	)
 	a.startSimpleJob(ctx, jobs.SpellingHintsRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		return a.vocabRefresh.RunOnce(ctx)

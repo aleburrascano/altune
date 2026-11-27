@@ -7,9 +7,14 @@ type LengthMargin struct {
 	Fraction     float64
 }
 
+const (
+	looseSlackSeconds = 15
+	looseFraction     = 0.07
+)
+
 var (
 	LengthTight = LengthMargin{SlackSeconds: 2}
-	LengthLoose = LengthMargin{SlackSeconds: 15, Fraction: 0.07}
+	LengthLoose = LengthMargin{SlackSeconds: looseSlackSeconds, Fraction: looseFraction}
 )
 
 func (t LengthMargin) Allowance(expectedSeconds float64) float64 {

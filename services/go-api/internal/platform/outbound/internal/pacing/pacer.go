@@ -15,34 +15,43 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	quarterPerSecond rate.Limit = 0.25
+	halfPerSecond    rate.Limit = 0.5
+	threePerSecond   rate.Limit = 3
+	fivePerSecond    rate.Limit = 5
+
+	acoustidBurst = 3
+)
+
 var providerRateLimits = map[string]rate.Limit{
 	"musicbrainz.org":            1,
-	"itunes.apple.com":           0.25,
-	"ws.audioscrobbler.com":      5,
+	"itunes.apple.com":           quarterPerSecond,
+	"ws.audioscrobbler.com":      fivePerSecond,
 	"music.youtube.com":          2,
 	"api.discogs.com":            1,
-	"api.deezer.com":             5,
-	"api-v2.soundcloud.com":      3,
+	"api.deezer.com":             fivePerSecond,
+	"api-v2.soundcloud.com":      threePerSecond,
 	"na.web.skill.music.a2z.com": 2,
-	"api-partner.spotify.com":    3,
+	"api-partner.spotify.com":    threePerSecond,
 	"api.genius.com":             2,
 	"sheets.googleapis.com":      2,
 	"webservice.fanart.tv":       2,
 	"coverartarchive.org":        2,
-	"api.music.apple.com":        3,
-	"open.spotify.com":           3,
+	"api.music.apple.com":        threePerSecond,
+	"open.spotify.com":           threePerSecond,
 	"auth.deezer.com":            1,
-	"pipe.deezer.com":            3,
-	"theaudiodb.com":             0.5,
+	"pipe.deezer.com":            threePerSecond,
+	"theaudiodb.com":             halfPerSecond,
 	"music.amazon.com":           2,
 	"music.apple.com":            2,
 	"clienttoken.spotify.com":    2,
 	"soundcloud.com":             2,
 	"imgur.gg":                   2,
 	"krakenfiles.com":            2,
-	"api.acoustid.org":           3,
+	"api.acoustid.org":           threePerSecond,
 	"cdnt-preview.dzcdn.net":     1,
-	"www.youtube.com":            5,
+	"www.youtube.com":            fivePerSecond,
 }
 
 const defaultProviderBurst = 4
@@ -50,7 +59,7 @@ const defaultProviderBurst = 4
 var providerBursts = map[string]int{
 	"musicbrainz.org":        1,
 	"api.discogs.com":        1,
-	"api.acoustid.org":       3,
+	"api.acoustid.org":       acoustidBurst,
 	"cdnt-preview.dzcdn.net": 1,
 	"www.youtube.com":        1,
 }

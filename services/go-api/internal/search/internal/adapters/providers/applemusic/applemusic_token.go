@@ -68,10 +68,12 @@ func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, time.Tim
 	return token, expiry, nil
 }
 
+const jwtParts = 3
+
 func extractAppleMusicToken(js string) (token string, expiry time.Time, ok bool) {
 	for _, candidate := range appleMusicJWTRe.FindAllString(js, -1) {
 		parts := strings.Split(candidate, ".")
-		if len(parts) != 3 {
+		if len(parts) != jwtParts {
 			continue
 		}
 		payload, err := base64.RawURLEncoding.DecodeString(parts[1])

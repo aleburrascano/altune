@@ -315,6 +315,8 @@ func (s *YouTubeAudioSearcher) DownloadPreview(ctx context.Context, url, outDir 
 const (
 	sourceFormatPrefix = "altune-source-format:"
 	outputPathPrefix   = "altune-output-path:"
+
+	sourceFormatFields = 3
 )
 
 func parseSourceFormat(stdout string) ports.SourceFormat {
@@ -324,7 +326,7 @@ func parseSourceFormat(stdout string) ports.SourceFormat {
 			continue
 		}
 		parts := strings.Split(fields, "|")
-		if len(parts) != 3 {
+		if len(parts) != sourceFormatFields {
 			return ports.SourceFormat{}
 		}
 		format := ports.SourceFormat{ID: parts[0], Codec: parts[1]}

@@ -31,6 +31,8 @@ const (
 	kindVocab   CacheKind = "discovery:vocab"
 
 	errorLogInterval = 30 * time.Second
+
+	cacheKeyParts = 3
 )
 
 type Signal struct {
@@ -55,8 +57,8 @@ func WithSignal(s *Signal) Option {
 }
 
 func kindOf(key string) CacheKind {
-	parts := strings.SplitN(key, ":", 3)
-	if len(parts) < 3 {
+	parts := strings.SplitN(key, ":", cacheKeyParts)
+	if len(parts) < cacheKeyParts {
 		return kindUnknown
 	}
 	return CacheKind(parts[0] + ":" + parts[1])

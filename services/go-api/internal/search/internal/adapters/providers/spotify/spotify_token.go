@@ -142,7 +142,7 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 				"device_model": "unknown",
 				"os":           "unknown",
 				"os_version":   "unknown",
-				"device_id":    randomHexID(16),
+				"device_id":    randomHexID(deviceIDBytes),
 				"device_type":  "computer",
 			},
 		},
@@ -178,6 +178,8 @@ func spotifyClientTokenHeaders() []outbound.ReqOption {
 		outbound.WithHeader("User-Agent", spotifyUserAgent),
 	}
 }
+
+const deviceIDBytes = 16
 
 func randomHexID(n int) string {
 	b := make([]byte, n)

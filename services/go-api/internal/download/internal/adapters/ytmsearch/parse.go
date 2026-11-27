@@ -216,6 +216,8 @@ func bylineAlbum(runs []node) string {
 	return ""
 }
 
+const secondsPerClockUnit = 60
+
 func bylineDuration(runs []node) int {
 	if len(runs) == 0 {
 		return 0
@@ -227,7 +229,7 @@ func bylineDuration(runs []node) int {
 	seconds := 0
 	for _, part := range strings.Split(match[0], ":") {
 		n, _ := strconv.Atoi(part)
-		seconds = seconds*60 + n
+		seconds = seconds*secondsPerClockUnit + n
 	}
 	return seconds
 }

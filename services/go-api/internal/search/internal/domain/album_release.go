@@ -67,9 +67,11 @@ func normalizeReleaseSortKeys[T any](items []T, key func(T) string) []keyedItem[
 	return pairs
 }
 
+const releaseKeyYearLen = 4
+
 func releaseKeyYear(k string) string {
-	if len(k) > 4 {
-		return k[:4]
+	if len(k) > releaseKeyYearLen {
+		return k[:releaseKeyYearLen]
 	}
 	return k
 }

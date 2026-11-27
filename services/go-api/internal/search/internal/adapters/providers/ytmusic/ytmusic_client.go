@@ -18,6 +18,8 @@ var errYTMUnexpectedShape = errors.New("ytmusic: response is not a JSON object")
 
 const (
 	ytmResponseBodyCap = 16 << 20
+
+	clockUnitSeconds = 60
 )
 
 type ytmFilter string
@@ -348,7 +350,7 @@ func ytmDurationToSeconds(duration string) int {
 		if err != nil {
 			return 0
 		}
-		total += n * int(math.Pow(60, float64(len(parts)-i-1)))
+		total += n * int(math.Pow(clockUnitSeconds, float64(len(parts)-i-1)))
 	}
 	return total
 }

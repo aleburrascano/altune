@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mozillazg/go-unidecode"
 	"golang.org/x/text/unicode/norm"
@@ -66,7 +67,7 @@ func stripSymbols(s string) string {
 }
 
 func isWordContent(r rune) bool {
-	if r < 128 {
+	if r < utf8.RuneSelf {
 		return isASCIIWordChar(r) || isASCIIWhitespace(r)
 	}
 	return unicode.IsLetter(r) || unicode.IsNumber(r)

@@ -46,9 +46,11 @@ func parseIP(s string) netip.Addr {
 	return addr.Unmap().WithZone("")
 }
 
+const ipv6ClientPrefixBits = 64
+
 func prefixKey(addr netip.Addr) string {
 	if addr.Is4() {
 		return addr.String()
 	}
-	return netip.PrefixFrom(addr, 64).Masked().String()
+	return netip.PrefixFrom(addr, ipv6ClientPrefixBits).Masked().String()
 }

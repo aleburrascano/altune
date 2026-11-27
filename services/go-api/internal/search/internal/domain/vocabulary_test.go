@@ -57,3 +57,25 @@ func TestVocabularyMatchScore_MonotonicInEachSignal(t *testing.T) {
 		t.Fatalf("raising length similarity must raise the score")
 	}
 }
+
+func TestMaxEditDistance_BandsByRuneCount(t *testing.T) {
+	cases := map[string]struct {
+		query string
+		want  int
+	}{
+		"empty":            {"", 1},
+		"four runes":       {"abcd", 1},
+		"five runes":       {"abcde", 2},
+		"eight runes":      {"abcdefgh", 2},
+		"nine runes":       {"abcdefghi", 3},
+		"counts runes":     {"éééé", 1},
+		"multibyte medium": {"ééééé", 2},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := domain.MaxEditDistance(tc.query); got != tc.want {
+				t.Fatalf("MaxEditDistance(%q) = %d, want %d", tc.query, got, tc.want)
+			}
+		})
+	}
+}

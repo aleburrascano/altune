@@ -87,7 +87,20 @@ func withProvider(
 	call(r.Context(), pn, provider, externalID)
 }
 
-const maxAlbumTracks = 250
+const (
+	maxAlbumTracks = 250
+
+	topTracksDefaultLimit      = 5
+	topTracksMaxLimit          = 50
+	artistAlbumsDefaultLimit   = 50
+	artistAlbumsMaxLimit       = 100
+	relatedTracksDefaultLimit  = 20
+	relatedTracksMaxLimit      = 50
+	artistContentTracksDefault = 5
+	artistContentTracksMax     = 50
+	artistContentAlbumsDefault = 100
+	artistContentAlbumsMax     = 200
+)
 
 func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
@@ -136,7 +149,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
 		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
-			limit, ok := parseLimit(w, r, "limit", 5, 50, clampToMax)
+			limit, ok := parseLimit(w, r, "limit", topTracksDefaultLimit, topTracksMaxLimit, clampToMax)
 			if !ok {
 				return
 			}
@@ -155,7 +168,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
 		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
-			limit, ok := parseLimit(w, r, "limit", 50, 100, clampToMax)
+			limit, ok := parseLimit(w, r, "limit", artistAlbumsDefaultLimit, artistAlbumsMaxLimit, clampToMax)
 			if !ok {
 				return
 			}
@@ -174,7 +187,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
 		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
-			limit, ok := parseLimit(w, r, "limit", 20, 50, clampToMax)
+			limit, ok := parseLimit(w, r, "limit", relatedTracksDefaultLimit, relatedTracksMaxLimit, clampToMax)
 			if !ok {
 				return
 			}
@@ -236,11 +249,11 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 	withProvider(w, r,
 		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
 			known := knownIDsParam(r)
-			tracksLimit, ok := parseLimit(w, r, "tracks_limit", 5, 50, clampToMax)
+			tracksLimit, ok := parseLimit(w, r, "tracks_limit", artistContentTracksDefault, artistContentTracksMax, clampToMax)
 			if !ok {
 				return
 			}
-			albumsLimit, ok := parseLimit(w, r, "albums_limit", 100, 200, clampToMax)
+			albumsLimit, ok := parseLimit(w, r, "albums_limit", artistContentAlbumsDefault, artistContentAlbumsMax, clampToMax)
 			if !ok {
 				return
 			}

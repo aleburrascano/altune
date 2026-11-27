@@ -341,11 +341,13 @@ func changedFiles(ctx context.Context, root, base string) ([]change, error) {
 	return changes, nil
 }
 
+const renameStatusFields = 3
+
 func parseNameStatusLine(line string) (change, error) {
 	fields := strings.Split(line, "\t")
 	status := fields[0]
 	if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
-		if len(fields) != 3 {
+		if len(fields) != renameStatusFields {
 			return change{}, fmt.Errorf("unexpected name-status line: %q", line)
 		}
 		return change{path: fields[2], from: fields[1]}, nil
@@ -557,13 +559,15 @@ func matchKind(path string) (kind, bool, error) {
 	return kind{}, false, nil
 }
 
+const headSniffBytes = 512
+
 func readHead(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	buf := make([]byte, 512)
+	buf := make([]byte, headSniffBytes)
 	n, err := f.Read(buf)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err

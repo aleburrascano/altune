@@ -44,8 +44,16 @@ linters:
     - importas
     - contextcheck
     - containedctx
+    - mnd
 
   settings:
+    mnd:
+      checks: [argument, case, condition, operation, return]
+      ignored-numbers: ["0", "1", "2", "10", "100", "1000"]
+      ignored-functions:
+        - '^os\.(WriteFile|MkdirAll|Mkdir|OpenFile|Exit)$'
+      ignored-files:
+        - '(^|/)[a-z]*test/'
     importas:
       no-unaliased: false
       no-extra-aliases: false

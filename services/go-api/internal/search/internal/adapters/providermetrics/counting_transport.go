@@ -157,7 +157,7 @@ func outcomeFor(resp *http.Response, err error) string {
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return outcomeQuota
 	}
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		return outcomeError
 	}
 	return outcomeOK
