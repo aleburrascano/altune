@@ -4,7 +4,6 @@ import ports "altune/go-api/internal/download/internal/core/ports"
 
 var (
 	NoopAudioIdentifier    = ports.NoopAudioIdentifier
-	NoopAudioProber        = ports.NoopAudioProber
 	NoopAudioTagger        = ports.NoopAudioTagger
 	NoopPreviewMatcher     = ports.NoopPreviewMatcher
 	NoopJobNotifier        = ports.NoopJobNotifier

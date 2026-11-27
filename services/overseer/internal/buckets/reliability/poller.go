@@ -71,6 +71,12 @@ func newReachPoller(checker reachChecker, interval time.Duration, now func() tim
 	return p
 }
 
+func (p *reachPoller) useSeries(s core.Series) { p.series = s }
+
+func (p *reachPoller) ring() *core.RingStore { return p.samples }
+
+func (p *reachPoller) snapshot() []core.Signal { return p.samples.Snapshot() }
+
 func (p *reachPoller) run(ctx context.Context) {
 	p.safePollOnce(ctx)
 	ticker := time.NewTicker(p.interval)

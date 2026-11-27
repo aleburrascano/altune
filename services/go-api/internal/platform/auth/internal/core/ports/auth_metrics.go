@@ -6,12 +6,3 @@ type AuthMetrics interface {
 	VerifierUnavailable()
 	JWKSFetchFailed()
 }
-
-func NoopAuthMetrics() AuthMetrics { return noopAuthMetrics{} }
-
-type noopAuthMetrics struct{}
-
-func (noopAuthMetrics) TokenRejected(string) {}
-func (noopAuthMetrics) RequestThrottled()    {}
-func (noopAuthMetrics) VerifierUnavailable() {}
-func (noopAuthMetrics) JWKSFetchFailed()     {}

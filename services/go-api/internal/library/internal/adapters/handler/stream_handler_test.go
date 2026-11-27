@@ -25,7 +25,7 @@ import (
 )
 
 func streamOnlyRoute(repo *library.InMemoryTrackRepo, store library.AudioStore, scheduler library.AcquisitionScheduler) chi.Router {
-	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, scheduler, library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), time.Now)
+	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, scheduler, &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), time.Now)
 	router := chi.NewRouter()
 	router.Use(asBearer)
 	router.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
@@ -40,7 +40,7 @@ func streamRoutesAt(store library.AudioStore, now func() time.Time) (*library.In
 	repo := library.NewInMemoryTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), now).Routes(router)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), now).Routes(router)
 	return repo, router
 }
 
@@ -177,7 +177,7 @@ func TestHandleRecover(t *testing.T) {
 	gone := seedReady(t, repo, "Gone", "audio/gone.opus")
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now)
+	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now)
 	library.MustNewStreamHandler(svc, time.Now).Routes(router)
 
 	tests := []struct {
@@ -405,7 +405,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 	r.Use(httpserver.WriteDeadline(clock.Now, routeDeadline))
 	r.Use(httpserver.RequestLogger(clock.Now))
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), time.Now, opts...).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), time.Now, opts...).Routes(r)
 	srv := slowclienttest.NewServer(t, r)
 
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"

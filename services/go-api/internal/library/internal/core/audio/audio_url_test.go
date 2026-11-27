@@ -47,7 +47,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pending := librarytest.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
-		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, library.NoopAudioStoreMetrics())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, &librarytest.Metrics{})
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID, pending.ID, library.NewTrackId()})
 		if err != nil {
@@ -76,7 +76,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("a re-acquired track resolves under a new version so a cached client copy stops matching", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, library.NoopAudioStoreMetrics())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, &librarytest.Metrics{})
 
 		before, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -109,7 +109,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		if err := repo.Update(ctx, ready, ready.Version); err != nil {
 			t.Fatalf("update: %v", err)
 		}
-		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, library.NoopAudioStoreMetrics())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, &librarytest.Metrics{})
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -126,7 +126,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("a failed track lookup surfaces the error instead of an empty result", func(t *testing.T) {
 		errLookup := errors.New("track lookup down")
 		repo := failingTrackLister{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), err: errLookup}
-		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, library.NoopAudioStoreMetrics())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, &librarytest.Metrics{})
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{library.NewTrackId()})
 
@@ -141,7 +141,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := library.MustNewAudioURLService(repo, library.NewInMemoryAudioStore(), time.Now, library.NoopAudioStoreMetrics())
+		svc := library.MustNewAudioURLService(repo, library.NewInMemoryAudioStore(), time.Now, &librarytest.Metrics{})
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -177,7 +177,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 		signer := newRecordingSigner()
-		svc := library.MustNewAudioURLService(repo, signer, func() time.Time { return pinned }, library.NoopAudioStoreMetrics())
+		svc := library.MustNewAudioURLService(repo, signer, func() time.Time { return pinned }, &librarytest.Metrics{})
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -193,7 +193,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 }
 
 func TestNewAudioURLService_RefusesANilClock(t *testing.T) {
-	svc, err := library.NewAudioURLService(library.NewInMemoryTrackRepo(), newRecordingSigner(), nil, library.NoopAudioStoreMetrics())
+	svc, err := library.NewAudioURLService(library.NewInMemoryTrackRepo(), newRecordingSigner(), nil, &librarytest.Metrics{})
 
 	if !errors.Is(err, library.ErrAudioClockRequired) || svc != nil {
 		t.Fatalf("NewAudioURLService(nil clock) = (%v, %v), want ErrAudioClockRequired and no service", svc, err)

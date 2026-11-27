@@ -9,7 +9,11 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
+
+const jwksFlightKey = "jwks"
 
 const jwksRefreshBackoffBase = time.Second
 
@@ -37,9 +41,9 @@ type jwksRefresher struct {
 	jitter       random.Unit
 	fetchTimeout time.Duration
 
+	flight singleflight.Group
+
 	mu          sync.Mutex
-	inflight    *jwksRefreshCall
-	refreshing  bool
 	failures    int
 	notBefore   time.Time
 	lastErr     error
@@ -48,11 +52,6 @@ type jwksRefresher struct {
 	keySetAt   time.Time
 	bgFailures int
 	bgErr      error
-}
-
-type jwksRefreshCall struct {
-	done chan struct{}
-	err  error
 }
 
 func newJWKSRefresher(fetch func(context.Context) error, now func() time.Time, jitter random.Unit, fetchTimeout time.Duration) *jwksRefresher {
@@ -68,59 +67,48 @@ func (r *jwksRefresher) RefreshIfStale(ctx context.Context) error {
 }
 
 func (r *jwksRefresher) refresh(ctx context.Context, minAge time.Duration) error {
-	call, err := r.join(ctx, minAge)
-	if err != nil {
-		return err
-	}
+	pending := r.flight.DoChan(jwksFlightKey, func() (any, error) { return nil, r.fetchOnce(ctx, minAge) })
 	select {
-	case <-call.done:
-		return call.err
+	case result := <-pending:
+		return result.Err
 	case <-ctx.Done():
 		return fmt.Errorf("wait for JWKS refresh: %w", ctx.Err())
 	}
 }
 
-func (r *jwksRefresher) join(ctx context.Context, minAge time.Duration) (*jwksRefreshCall, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.refreshing {
-		return r.inflight, nil
+func (r *jwksRefresher) fetchOnce(parent context.Context, minAge time.Duration) error {
+	if err := r.admit(minAge); err != nil {
+		return err
 	}
-	if r.now().Sub(r.lastSuccess) < minAge {
-		return nil, errJWKSRefreshRecent
-	}
-	if wait := r.notBefore.Sub(r.now()); wait > 0 {
-		return nil, fmt.Errorf("%w (retry in %s): %w", ErrJWKSRefreshBackoff, wait.Round(time.Millisecond), r.lastErr)
-	}
-	r.inflight = &jwksRefreshCall{done: make(chan struct{})}
-	r.refreshing = true
-	call := r.inflight
-	background.Go(ctx, "auth.jwks_refresh_panic", func() { r.run(ctx, call) })
-	return call, nil
-}
-
-func (r *jwksRefresher) run(parent context.Context, call *jwksRefreshCall) {
 	ctx, cancel := background.Detach(parent, r.fetchTimeout)
 	defer cancel()
-	call.err = errJWKSRefreshAborted
-	defer func() {
-		r.settle(call)
-		close(call.done)
-	}()
-	call.err = r.fetch(ctx)
+	err := errJWKSRefreshAborted
+	_ = background.SafeRun(ctx, "auth.jwks_refresh_panic", func() { err = r.fetch(ctx) })
+	r.settle(err)
+	return err
 }
 
-func (r *jwksRefresher) settle(call *jwksRefreshCall) {
+func (r *jwksRefresher) admit(minAge time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.inflight = nil
-	r.refreshing = false
-	if call.err == nil {
+	if r.now().Sub(r.lastSuccess) < minAge {
+		return errJWKSRefreshRecent
+	}
+	if wait := r.notBefore.Sub(r.now()); wait > 0 {
+		return fmt.Errorf("%w (retry in %s): %w", ErrJWKSRefreshBackoff, wait.Round(time.Millisecond), r.lastErr)
+	}
+	return nil
+}
+
+func (r *jwksRefresher) settle(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err == nil {
 		r.failures, r.notBefore, r.lastErr, r.lastSuccess = 0, time.Time{}, nil, r.now()
 		return
 	}
 	r.failures++
-	r.lastErr = call.err
+	r.lastErr = err
 	r.notBefore = r.now().Add(jwksRefreshBackoff.DelayAt(r.failures, r.jitter()))
 }
 

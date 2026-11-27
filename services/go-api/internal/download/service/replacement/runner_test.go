@@ -2,6 +2,7 @@ package replacement_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -244,7 +245,7 @@ type audioDeleter interface {
 
 func noStages(store audioDeleter) download.StagePorts {
 	return download.StagePorts{
-		Prober:        download.NoopAudioProber(),
+		Prober:        downloadtest.SilentAudioProber(),
 		Tagger:        download.NoopAudioTagger(),
 		Rejections:    download.NoopRejectionStore(),
 		StoredAudio:   download.NoopStoredAudioReader(),

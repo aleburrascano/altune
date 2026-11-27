@@ -373,6 +373,10 @@ if touches '^services/go-api/'; then
         fi
         mapfile -t pkgs < <(go_pkgs $m)
         [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+        if touches "^$m/.*\.go\$"; then
+          check "go-api collaborators: no nil guard on a required one, no collaborator option (collabcheck)" $m go run ./cmd/collabcheck ./...
+          check "go-api every Noop constructor is used by production code" . bash scripts/ci/noop-reachable.sh
+        fi
       fi
     else
       affected=()
@@ -408,6 +412,8 @@ if touches '^services/go-api/'; then
       fi
       need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
       check "go-api deadcode" $m "${heavy[@]}" bash "$root/scripts/ci/go-deadcode.sh"
+      check "go-api collaborators: no nil guard on a required one, no collaborator option (collabcheck)" $m go run ./cmd/collabcheck ./...
+      check "go-api every Noop constructor is used by production code" . bash scripts/ci/noop-reachable.sh
     fi
   fi
 fi

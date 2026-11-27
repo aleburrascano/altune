@@ -97,12 +97,12 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 		stubCounter
 		stubUpdater
 	}{}, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
-	_ = library.MustNewAudioURLService(stubBatchGetter{}, store, time.Now, library.NoopAudioStoreMetrics())
+	_ = library.MustNewAudioURLService(stubBatchGetter{}, store, time.Now, &librarytest.Metrics{})
 	_ = library.MustNewBackfillFeaturedService(stubLister{}, nil, nil, time.Now)
 	_ = library.NewStreamTrackService(struct {
 		stubGetter
 		stubUpdater
-	}{}, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now)
+	}{}, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now)
 	_ = library.MustNewPlaylistMembershipService(library.NewInMemoryPlaylistRepo(), struct {
 		stubGetter
 		stubBatchGetter
@@ -129,11 +129,11 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 		call func(repo *library.InMemoryTrackRepo) error
 	}{
 		{"stream", func(repo *library.InMemoryTrackRepo) error {
-			_, err := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now).Execute(context.Background(), userId, library.NewTrackId())
+			_, err := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now).Execute(context.Background(), userId, library.NewTrackId())
 			return err
 		}},
 		{"recover", func(repo *library.InMemoryTrackRepo) error {
-			return library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now).RecoverIfMissing(context.Background(), userId, library.NewTrackId())
+			return library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now).RecoverIfMissing(context.Background(), userId, library.NewTrackId())
 		}},
 		{"status", func(repo *library.InMemoryTrackRepo) error {
 			_, err := library.NewGetTrackStatusService(repo).Execute(context.Background(), userId, library.NewTrackId())
