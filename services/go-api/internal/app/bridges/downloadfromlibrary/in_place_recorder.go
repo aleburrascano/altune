@@ -37,8 +37,11 @@ func (r *InPlaceRecorder) RecordInPlace(ctx context.Context, trackID ids.TrackId
 		MayLower:           record.MayLower,
 		DropScore:          record.Verdict == "preview",
 	})
-	if err != nil || !recorded {
-		return false, err
+	if err != nil {
+		return false, fmt.Errorf("record in-place verdict: %w", err)
+	}
+	if !recorded {
+		return false, nil
 	}
 	if err := r.state.RecordInPlaceState(ctx, trackID, record.Generation, record.Basis, record.BitErrorRate); err != nil {
 		return false, fmt.Errorf("record in-place state: %w", err)
@@ -47,5 +50,9 @@ func (r *InPlaceRecorder) RecordInPlace(ctx context.Context, trackID ids.TrackId
 }
 
 func (r *InPlaceRecorder) NoteInPlaceFailure(ctx context.Context, trackID ids.TrackId) (int, error) {
-	return r.state.NoteInPlaceFailure(ctx, trackID)
+	r0, err := r.state.NoteInPlaceFailure(ctx, trackID)
+	if err != nil {
+		return r0, fmt.Errorf("note in place failure: %w", err)
+	}
+	return r0, nil
 }

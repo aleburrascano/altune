@@ -33,7 +33,10 @@ func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
 		Attrs:   h.flattenedAttrs(r),
 	})
 	if h.inner.Enabled(ctx, r.Level) {
-		return h.inner.Handle(ctx, r)
+		if err := h.inner.Handle(ctx, r); err != nil {
+			return fmt.Errorf("handle: %w", err)
+		}
+		return nil
 	}
 	return nil
 }

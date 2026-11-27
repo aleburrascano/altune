@@ -48,7 +48,11 @@ func CanaryYTMClient(ctx context.Context, cfg *config.Config, redis *goredis.Cli
 }
 
 func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
-	return download.NewYtmSearchFor(innerTubeClient(ctx, cfg, redis, transport))
+	r0, err := download.NewYtmSearchFor(innerTubeClient(ctx, cfg, redis, transport))
+	if err != nil {
+		return r0, fmt.Errorf("call failed: %w", err)
+	}
+	return r0, nil
 }
 
 func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) *http.Client {

@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -25,8 +26,10 @@ func (a *application) startOrphanedAudioReconcile(ctx context.Context, queue lib
 	svc := library.NewReconcileOrphanedAudioService(queue, audioStore,
 		library.NewAudioStoreMetrics(a.metrics), a.jobs.Switch(jobs.OrphanedAudioReconcile))
 	a.startSimpleJob(ctx, jobs.OrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
-		_, err := svc.Execute(ctx)
-		return err
+		if _, err := svc.Execute(ctx); err != nil {
+			return fmt.Errorf("reconcile orphaned audio: %w", err)
+		}
+		return nil
 	}, "interval", orphanedAudioReconcileInterval.String())
 }
 

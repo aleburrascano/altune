@@ -53,7 +53,11 @@ func (apple *appleMusicSource) Resource(ctx context.Context, entity, id string) 
 	if !ok {
 		return nil, fmt.Errorf("apple music has no entity %q", entity)
 	}
-	return apple.catalog.CatalogResource(ctx, endpoint.kind, id)
+	r0, err := apple.catalog.CatalogResource(ctx, endpoint.kind, id)
+	if err != nil {
+		return r0, fmt.Errorf("catalog resource: %w", err)
+	}
+	return r0, nil
 }
 
 func (apple *appleMusicSource) Reference(ctx context.Context, entity string) (providerfields.Observed, error) {

@@ -108,7 +108,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 func modulePathOf(root string) (string, error) {
 	goMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read file: %w", err)
 	}
 	for _, line := range strings.Split(string(goMod), "\n") {
 		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
@@ -142,7 +142,7 @@ func discoverModules(root string) (map[string]bool, error) {
 	modules := map[string]bool{}
 	top, err := os.ReadDir(filepath.Join(root, "internal"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read dir: %w", err)
 	}
 	for _, e := range top {
 		if !e.IsDir() {
@@ -154,7 +154,7 @@ func discoverModules(root string) (map[string]bool, error) {
 		}
 		members, err := os.ReadDir(filepath.Join(root, "internal", e.Name()))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read dir: %w", err)
 		}
 		for _, m := range members {
 			if m.IsDir() {
@@ -214,7 +214,7 @@ func scanTree(root string) (*scan, error) {
 		return s.scanFile(p)
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("walk dir: %w", err)
 	}
 	sort.Slice(s.violations, func(i, j int) bool {
 		a, b := s.violations[i], s.violations[j]
@@ -234,7 +234,7 @@ func (s *scan) scanFile(file string) error {
 	}
 	rel, err := filepath.Rel(s.root, filepath.Dir(file))
 	if err != nil {
-		return err
+		return fmt.Errorf("rel: %w", err)
 	}
 	importer := filepath.ToSlash(rel)
 	ownModule := ""
@@ -380,7 +380,7 @@ func (s *scan) addUnusedExports() error {
 func rootExports(dir string) (map[string]declPos, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read dir: %w", err)
 	}
 	names := map[string]declPos{}
 	for _, e := range entries {

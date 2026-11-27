@@ -1,6 +1,10 @@
 package database
 
-import "github.com/jackc/pgx/v5/pgconn"
+import (
+	"fmt"
+
+	"github.com/jackc/pgx/v5/pgconn"
+)
 
 type endpoint struct {
 	Host                 string
@@ -11,7 +15,7 @@ type endpoint struct {
 func ParseEndpoint(databaseURL string) (endpoint, error) {
 	cfg, err := pgconn.ParseConfig(databaseURL)
 	if err != nil {
-		return endpoint{}, err
+		return endpoint{}, fmt.Errorf("parse database url: %w", err)
 	}
 	ep := endpoint{Host: cfg.Host, RequiresTLS: cfg.TLSConfig != nil}
 	for _, fallback := range cfg.Fallbacks {

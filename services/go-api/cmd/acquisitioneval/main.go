@@ -56,7 +56,7 @@ func run(goldenDir, baselinePath string) error {
 
 	base, err := download.LoadEvalBaseline(baselinePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("call failed: %w", err)
 	}
 	regressions := report.Regressions(base)
 	if len(regressions) == 0 {
@@ -78,7 +78,7 @@ func updateBaseline(goldenDir, baselinePath string) error {
 		return err
 	}
 	if err := report.WriteBaseline(baselinePath); err != nil {
-		return err
+		return fmt.Errorf("write baseline: %w", err)
 	}
 	fmt.Printf("baseline written to %s\n\n", baselinePath)
 	return nil
@@ -107,7 +107,15 @@ func subcommand(args []string) (name string, rest []string) {
 
 func loadCases(goldenDir string) ([]download.EvalCase, error) {
 	if goldenDir == "" {
-		return download.LoadEmbeddedEvalCases()
+		r0, err := download.LoadEmbeddedEvalCases()
+		if err != nil {
+			return r0, fmt.Errorf("call failed: %w", err)
+		}
+		return r0, nil
 	}
-	return download.LoadEvalDir(goldenDir)
+	r0, err := download.LoadEvalDir(goldenDir)
+	if err != nil {
+		return r0, fmt.Errorf("call failed: %w", err)
+	}
+	return r0, nil
 }

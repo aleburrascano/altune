@@ -3,6 +3,7 @@ package eventstest
 import (
 	"altune/go-api/internal/shared/events"
 	"encoding/json"
+	"fmt"
 )
 
 type Event struct {
@@ -20,7 +21,13 @@ func Fielded(name events.EventType, fields map[string]any) Event {
 
 func (e Event) EventType() events.EventType { return e.Name }
 
-func (e Event) MarshalJSON() ([]byte, error) { return json.Marshal(e.Fields) }
+func (e Event) MarshalJSON() ([]byte, error) {
+	r0, err := json.Marshal(e.Fields)
+	if err != nil {
+		return r0, fmt.Errorf("marshal: %w", err)
+	}
+	return r0, nil
+}
 
 func (e Event) Subject() string {
 	for _, key := range []string{"track_id", "entity_id", "result_signature"} {

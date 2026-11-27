@@ -41,16 +41,16 @@ type Downloader interface {
 func RankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (Searcher, error) {
 	tracker, err := app.NewTracker(cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new tracker: %w", err)
 	}
 	metrics := telemetry.NewRegistry()
 	transport, err := providertransport.New(metrics)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new: %w", err)
 	}
 	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: transport, Tracker: tracker, Metrics: metrics})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new eval discovery: %w", err)
 	}
 	return disc.RankingOnlySearch(), nil
 }
@@ -78,13 +78,13 @@ func runSearch(ctx context.Context, searcher Searcher) (int, error) {
 	}
 	query, err := search.NewSearchQuery(searchQuery, kinds, searchLimit)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("call failed: %w", err)
 	}
 	searchCtx, cancel := context.WithTimeout(ctx, searchTimeout)
 	defer cancel()
 	output, err := searcher.Execute(searchCtx, ids.SystemUserId(), query)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("execute: %w", err)
 	}
 	if len(output.Results) == 0 {
 		return 0, errNoResults
@@ -95,17 +95,17 @@ func runSearch(ctx context.Context, searcher Searcher) (int, error) {
 func runDownload(ctx context.Context, downloader Downloader) (int64, error) {
 	outDir, err := os.MkdirTemp("", "journey-check-*")
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("mkdir temp: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(outDir) }()
 
 	fetched, err := downloader.Download(ctx, download.YouTubeCanary.URL, outDir)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("download: %w", err)
 	}
 	info, err := os.Stat(fetched.Path)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("stat: %w", err)
 	}
 	if info.Size() == 0 {
 		return 0, errEmptyFile

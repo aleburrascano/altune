@@ -28,14 +28,14 @@ func runHealthCheck(cfg *config.Config, mode RunMode) error {
 func healthCheck(ctx context.Context, cfg *config.Config, repo *library.PostgresTrackRepository, mode RunMode) error {
 	tracks, err := repo.ListReadyAudioTracks(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("list ready audio tracks: %w", err)
 	}
 	totalChecked := len(tracks)
 	fmt.Printf("\nChecking %d tracks with status=ready...\n\n", totalChecked)
 
 	audioStore, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NewFSCallMetrics(telemetry.NewRegistry()))
 	if err != nil {
-		return err
+		return fmt.Errorf("call failed: %w", err)
 	}
 
 	orphaned := orphans.Check(ctx, tracks, audioStore)
@@ -45,7 +45,10 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *library.Postgres
 	}
 	fixed := orphans.Fix(ctx, orphaned, repo)
 	reportHealthCheck(ctx, totalChecked, len(orphaned), fixed, mode)
-	return orphans.RepairOutcome(len(orphaned), fixed)
+	if err := orphans.RepairOutcome(len(orphaned), fixed); err != nil {
+		return fmt.Errorf("repair outcome: %w", err)
+	}
+	return nil
 }
 
 func reportHealthCheck(ctx context.Context, totalChecked, orphanedDB, fixed int, mode RunMode) {

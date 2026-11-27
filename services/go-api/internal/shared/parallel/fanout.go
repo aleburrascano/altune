@@ -3,6 +3,7 @@ package parallel
 import (
 	"altune/go-api/internal/shared/background"
 	"context"
+	"fmt"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -23,5 +24,8 @@ func (g *Limited) Go(ctx context.Context, fn func(), attrs ...any) {
 }
 
 func (g *Limited) Wait() error {
-	return g.g.Wait()
+	if err := g.g.Wait(); err != nil {
+		return fmt.Errorf("wait: %w", err)
+	}
+	return nil
 }

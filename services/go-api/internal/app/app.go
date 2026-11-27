@@ -84,7 +84,10 @@ func (a *application) startCatalogJobs(ctx context.Context, cat catalogWiring, p
 }
 
 func (a *application) applyDisabledJobs(ctx context.Context) error {
-	return a.jobs.DisableAtStartup(ctx, a.cfg.DisabledJobs)
+	if err := a.jobs.DisableAtStartup(ctx, a.cfg.DisabledJobs); err != nil {
+		return fmt.Errorf("disable at startup: %w", err)
+	}
+	return nil
 }
 
 func (a *application) applyStartupSwitches(ctx context.Context) error {

@@ -142,7 +142,10 @@ func commentsUnder(dir string) ([]violation, error) {
 		found = append(found, hits...)
 		return err
 	})
-	return found, err
+	if err != nil {
+		return found, fmt.Errorf("walk directory: %w", err)
+	}
+	return found, nil
 }
 
 func commentsIn(path string) ([]violation, error) {

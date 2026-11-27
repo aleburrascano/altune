@@ -7,11 +7,12 @@ import (
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
+	"fmt"
 	"net/http"
 )
 
 func newAuthVerifier(ctx context.Context, cfg *config.Config, metrics *telemetry.Registry) (*auth.SupabaseJWTVerifier, error) {
-	return auth.NewSupabaseJWTVerifier(
+	r0, err := auth.NewSupabaseJWTVerifier(
 		ctx,
 		cfg.SupabaseJWTJWKSURL,
 		cfg.SupabaseProjectURL,
@@ -22,6 +23,10 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config, metrics *telemetry
 		auth.NoopTokenRevoker(),
 		auth.DefaultJWKSSchedule(),
 	)
+	if err != nil {
+		return r0, fmt.Errorf("call failed: %w", err)
+	}
+	return r0, nil
 }
 
 func authMiddleware(verifier auth.TokenVerifier, metrics *telemetry.Registry) func(http.Handler) http.Handler {

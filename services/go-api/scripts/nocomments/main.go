@@ -103,21 +103,24 @@ func stripTarget(t target, stdout io.Writer) (int, bool) {
 func replaceFile(path string, content []byte, mode os.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".nocomments-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("create temp: %w", err)
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
 	if _, err := tmp.Write(content); err != nil {
 		_ = tmp.Close()
-		return err
+		return fmt.Errorf("write temp file: %w", err)
 	}
 	if err := tmp.Chmod(mode); err != nil {
 		_ = tmp.Close()
-		return err
+		return fmt.Errorf("chmod temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		return fmt.Errorf("close: %w", err)
 	}
-	return os.Rename(tmp.Name(), path)
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return fmt.Errorf("rename: %w", err)
+	}
+	return nil
 }
 
 func failTarget(t target, stdout io.Writer, err error) (int, bool) {
@@ -207,7 +210,7 @@ func violationExit(stdout io.Writer, violations int) int {
 func reportTarget(t target, stdout io.Writer) (int, error) {
 	src, err := os.ReadFile(t.read)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("read file: %w", err)
 	}
 	lines, err := reportedLines(t.kind, src)
 	if err != nil {
@@ -417,7 +420,7 @@ func resolveTargets(ctx context.Context, args []string) ([]target, error) {
 func collectTargets(ctx context.Context, root string) ([]target, error) {
 	info, err := os.Stat(root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stat: %w", err)
 	}
 	if !info.IsDir() {
 		return collectFileTarget(root)
@@ -427,7 +430,7 @@ func collectTargets(ctx context.Context, root string) ([]target, error) {
 		return walkTarget(path, d, err, &targets)
 	})
 	if walkErr != nil {
-		return nil, walkErr
+		return nil, fmt.Errorf("walk dir: %w", walkErr)
 	}
 	return withoutIgnored(ctx, root, targets)
 }
@@ -470,7 +473,7 @@ func absolutePaths(targets []target) (map[string]string, io.Reader, error) {
 	for _, t := range targets {
 		abs, err := filepath.Abs(t.read)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("abs: %w", err)
 		}
 		absolute[abs] = t.read
 		paths.WriteString(abs + "\x00")
@@ -564,13 +567,13 @@ const headSniffBytes = 512
 func readHead(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	buf := make([]byte, headSniffBytes)
 	n, err := f.Read(buf)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
+		return nil, fmt.Errorf("read file head: %w", err)
 	}
 	return buf[:n], nil
 }

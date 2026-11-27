@@ -147,7 +147,7 @@ func (deezer *deezerSession) lyrics(ctx context.Context, trackID string) (json.R
 		"variables":     map[string]string{"trackId": trackID},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal: %w", err)
 	}
 	return pacedFetch(ctx, deezer.client, deezer.gate, request{method: http.MethodPost, url: deezer.urls.pipe, body: payload, header: map[string]string{
 		"Content-Type": "application/json", "Authorization": "Bearer " + jwt,

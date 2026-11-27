@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -33,7 +34,11 @@ type idleDeadlineWriter struct {
 
 func (w *idleDeadlineWriter) Write(b []byte) (int, error) {
 	setWriteDeadline(w.ResponseWriter, w.now().Add(w.idle))
-	return w.ResponseWriter.Write(b)
+	r0, err := w.ResponseWriter.Write(b)
+	if err != nil {
+		return r0, fmt.Errorf("write: %w", err)
+	}
+	return r0, nil
 }
 
 func (w *idleDeadlineWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

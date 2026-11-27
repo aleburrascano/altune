@@ -3,6 +3,7 @@ package ytdlprunner
 import (
 	"altune/go-api/internal/shared/childprocess"
 	"context"
+	"fmt"
 	"strings"
 )
 
@@ -11,7 +12,7 @@ const binaryName = "yt-dlp"
 func DumpJSON(ctx context.Context, args []string) (lines [][]byte, stderr string, err error) {
 	stdout, capturedStderr, stdoutTruncated, runErr := childprocess.RunCapture(ctx, binaryName, args...)
 	if runErr != nil {
-		return nil, capturedStderr, runErr
+		return nil, capturedStderr, fmt.Errorf("run capture: %w", runErr)
 	}
 	if stdoutTruncated {
 		return nil, capturedStderr, childprocess.ErrOutputTruncated

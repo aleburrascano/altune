@@ -69,7 +69,7 @@ func TestRun(t *testing.T) {
 			name:       "fails when the search errors",
 			searcher:   &fakeJourneySearcher{err: errors.New("deezer 503")},
 			downloader: &fakeJourneyDownloader{payload: []byte("x")},
-			wantErr:    "journey-check: search failed: deezer 503",
+			wantErr:    "journey-check: search failed: execute: deezer 503",
 		},
 		{
 			name:       "fails when the search returns zero results",
@@ -81,7 +81,7 @@ func TestRun(t *testing.T) {
 			name:       "fails when the download errors",
 			searcher:   &fakeJourneySearcher{results: 1},
 			downloader: &fakeJourneyDownloader{err: errors.New("HTTP Error 403")},
-			wantErr:    "journey-check: download failed: HTTP Error 403",
+			wantErr:    "journey-check: download failed: download: HTTP Error 403",
 			wantOut:    "journey-check: search ok (1 results)\n",
 		},
 		{

@@ -28,8 +28,11 @@ func (s Search) SearchRecordings(ctx context.Context, text string, limit int) ([
 		return nil, fmt.Errorf("build resolve query: %w", err)
 	}
 	out, err := s.searcher.Execute(ctx, ids.UserId{}, tracksOnly)
-	if err != nil || out == nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("search recordings: %w", err)
+	}
+	if out == nil {
+		return nil, nil
 	}
 	return recordingsOf(out.Results), nil
 }

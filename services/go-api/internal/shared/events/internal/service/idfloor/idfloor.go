@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -91,5 +92,8 @@ func (f *Floor) persistOrWarn(ctx context.Context, ceiling uint64) {
 }
 
 func (f *Floor) persist(ceiling uint64) error {
-	return f.store.Save([]byte(strconv.FormatUint(ceiling, 10)))
+	if err := f.store.Save([]byte(strconv.FormatUint(ceiling, 10))); err != nil {
+		return fmt.Errorf("save: %w", err)
+	}
+	return nil
 }

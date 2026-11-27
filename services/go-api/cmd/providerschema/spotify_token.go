@@ -135,7 +135,7 @@ const deviceIDBytes = 16
 func spotifyClientTokenPayload() ([]byte, error) {
 	deviceID := make([]byte, deviceIDBytes)
 	_, _ = rand.Read(deviceID)
-	return json.Marshal(map[string]any{
+	r0, err := json.Marshal(map[string]any{
 		"client_data": map[string]any{
 			"client_version": spotifyWebClientVer,
 			"client_id":      spotifyWebClientID,
@@ -149,6 +149,10 @@ func spotifyClientTokenPayload() ([]byte, error) {
 			},
 		},
 	})
+	if err != nil {
+		return r0, fmt.Errorf("marshal: %w", err)
+	}
+	return r0, nil
 }
 
 const (

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/search"
 	"context"
+	"fmt"
 )
 
 type FeaturedArtistSource interface {
@@ -21,7 +22,7 @@ func NewFeaturedArtistCredits(source FeaturedArtistSource) library.FeaturedArtis
 func (c featuredArtistCredits) FeaturedArtistCredits(ctx context.Context, artist, title string) ([]library.FeaturedArtistCredit, error) {
 	feats, err := c.source.Resolve(ctx, artist, title)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve: %w", err)
 	}
 	credits := make([]library.FeaturedArtistCredit, len(feats))
 	for i, f := range feats {
