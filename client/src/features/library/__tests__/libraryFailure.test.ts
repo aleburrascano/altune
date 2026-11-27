@@ -112,7 +112,7 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
       status: 409,
       code: 'catalog.track_already_in_playlist',
       failure: 'unknown',
-      correlationId: 'corr-1',
+      corr_id: 'corr-1',
     });
   });
 
@@ -131,7 +131,7 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
       trackId: 't1',
       endpoint: 'POST /v1/tracks/t1/retry',
       failure: 'network',
-      correlationId: 'corr-2',
+      corr_id: 'corr-2',
     });
   });
 

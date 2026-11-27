@@ -35,18 +35,25 @@ type FailureLogFields = {
   status?: number;
   code?: string;
   failure: LibraryFailure;
-  correlationId?: string;
+  corr_id?: string;
 };
+
+const AUDIO_ORPHANED_CODE = 'catalog.audio_orphaned';
+
+export function isTrackGoneAfterDelete(error: unknown): boolean {
+  if (error instanceof ApiError && error.code === AUDIO_ORPHANED_CODE) return true;
+  return classifyLibraryError(error) === 'not-found';
+}
 
 export function failureLogFields(error: unknown): FailureLogFields {
   const correlationId = correlationIdOf(error);
-  return {
-    ...(error instanceof ApiError
-      ? { status: error.status, ...(error.code === undefined ? {} : { code: error.code }) }
-      : {}),
-    failure: classifyLibraryError(error),
-    ...(correlationId === undefined ? {} : { correlationId }),
-  };
+  const fields: FailureLogFields = { failure: classifyLibraryError(error) };
+  if (error instanceof ApiError) {
+    fields.status = error.status;
+    if (error.code !== undefined) fields.code = error.code;
+  }
+  if (correlationId !== undefined) fields.corr_id = correlationId;
+  return fields;
 }
 
 export function libraryFailureAlert(

@@ -345,6 +345,13 @@ go_affected() {
     }'
 }
 
+if touches '^services/go-api/internal/shared/apierror/|^services/go-api/scripts/genclientcodes/|^client/src/shared/failure/core/apiErrorCodes\.generated\.ts$' || [ $full = 1 ]; then
+  go_pin services/go-api
+  if need go "client error codes"; then
+    check "client error codes match the go-api catalog (genclientcodes --check)" services/go-api go run ./scripts/genclientcodes --check "$client_codes_file"
+  fi
+fi
+
 if touches '^services/go-api/'; then
   m=services/go-api
   go_pin $m
@@ -364,9 +371,6 @@ if touches '^services/go-api/'; then
         fi
         if touches "^$m/.*\.go\$"; then
           check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports)" $m go run ./scripts/lintdoors --exports .
-        fi
-        if touches "^$m/internal/shared/apierror/|^$m/scripts/genclientcodes/|^client/src/shared/failure/core/apiErrorCodes\.generated\.ts\$"; then
-          check "client error codes match the go-api catalog (genclientcodes --check)" $m go run ./scripts/genclientcodes --check "$client_codes_file"
         fi
         if touches "^$m/go\.(mod|sum)\$"; then
           check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
@@ -415,7 +419,6 @@ if touches '^services/go-api/'; then
       check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
       need go-arch-lint "go-api architecture" && check "go-api architecture: every module imports only what its role may (go-arch-lint, whole tree)" $m go-arch-lint check
       check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports, whole tree)" $m go run ./scripts/lintdoors --exports .
-      check "client error codes match the go-api catalog (genclientcodes --check, whole tree)" $m go run ./scripts/genclientcodes --check "$client_codes_file"
       mapfile -t pkgs < <(go_pkgs $m)
       if [ $whole_module = 1 ]; then test_pkgs=(./...); else test_pkgs=("${affected[@]}"); fi
       [ ${#pkgs[@]} -gt 0 ] && [ ${#test_pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages and their importers)" $m "${heavy[@]}" "${db_env[@]}" go test -race -shuffle=on -count=1 "${test_pkgs[@]}"
