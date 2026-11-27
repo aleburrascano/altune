@@ -6,6 +6,9 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock/clocktest"
+	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/ids/idstest"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"strings"
@@ -14,7 +17,7 @@ import (
 )
 
 func TestRecordHistory_RefusesAMissingRepository(t *testing.T) {
-	if _, err := history.NewRecordSearchHistoryService(nil, time.Now); !errors.Is(err, history.ErrCollaboratorRequired) {
+	if _, err := history.NewRecordSearchHistoryService(nil, time.Now, ids.Real); !errors.Is(err, history.ErrCollaboratorRequired) {
 		t.Fatalf("err = %v, want history.ErrCollaboratorRequired", err)
 	}
 }
@@ -29,7 +32,7 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	const raw = "zqxj private diagnosis clinic"
 	ring := memory.CaptureDetachedLogs(t)
 
-	searchtest.NewHistoryRecorder(t, repo).Record(context.Background(), user, memory.NewQuery(t, raw), raw, time.Now())
+	searchtest.NewHistoryRecorder(t, repo).Record(logging.ContextWithSubjectUser(context.Background(), user.String()), user, memory.NewQuery(t, raw), raw, time.Now())
 
 	rec := memory.OnlyRecord(t, ring, "search.v2.history_persist_failed")
 	if rec.Attrs["user_id"] != user.String() {
@@ -54,7 +57,7 @@ func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
 			return nil
 		},
 	}
-	svc := history.MustNewRecordSearchHistoryService(repo, clocktest.NewManual(at).Func())
+	svc := history.MustNewRecordSearchHistoryService(repo, clocktest.NewManual(at).Func(), ids.Real)
 
 	if err := svc.RecordSubmitted(context.Background(), memory.NewUser(), "some query"); err != nil {
 		t.Fatalf("RecordSubmitted: %v", err)
@@ -66,9 +69,35 @@ func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
 }
 
 func TestNewRecordSearchHistoryService_RefusesANilClock(t *testing.T) {
-	svc, err := history.NewRecordSearchHistoryService(&memory.FakeHistoryWriter{}, nil)
+	svc, err := history.NewRecordSearchHistoryService(&memory.FakeHistoryWriter{}, nil, ids.Real)
 
 	if !errors.Is(err, history.ErrClockRequired) || svc != nil {
 		t.Fatalf("NewRecordSearchHistoryService(nil clock) = (%v, %v), want history.ErrClockRequired and no service", svc, err)
+	}
+}
+
+func TestNewRecordSearchHistoryService_RefusesANilIDSource(t *testing.T) {
+	svc, err := history.NewRecordSearchHistoryService(&memory.FakeHistoryWriter{}, time.Now, nil)
+
+	if !errors.Is(err, history.ErrIDSourceRequired) || svc != nil {
+		t.Fatalf("NewRecordSearchHistoryService(nil id source) = (%v, %v), want history.ErrIDSourceRequired and no service", svc, err)
+	}
+}
+
+func TestRecordHistory_EntryIdComesFromTheInjectedSource(t *testing.T) {
+	var stored *domain.SearchHistoryEntry
+	repo := &memory.FakeHistoryWriter{
+		InsertFn: func(_ context.Context, e *domain.SearchHistoryEntry) error {
+			stored = e
+			return nil
+		},
+	}
+	sequence := idstest.Sequence()
+	svc := history.MustNewRecordSearchHistoryService(repo, time.Now, sequence)
+
+	svc.Record(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"), "humble", time.Now())
+
+	if stored == nil || stored.ID != idstest.Sequence().NewEntityId() {
+		t.Errorf("entry id = %v, want the first id of the injected sequence", stored)
 	}
 }

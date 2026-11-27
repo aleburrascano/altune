@@ -87,5 +87,6 @@ func AbsentCollaborators() Collaborators {
 		ExplorationDraw: random.Real,
 		DeadlineTimer:   clock.NewTimer,
 		Now:             clock.Now,
+		IDs:             ids.Real,
 	}
 }

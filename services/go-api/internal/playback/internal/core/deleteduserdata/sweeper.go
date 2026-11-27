@@ -143,7 +143,7 @@ func (s *Sweeper) keepForRetry(ctx context.Context, owners []ids.UserId) {
 			continue
 		}
 		if len(s.retryOwners) >= s.retryCap {
-			slog.WarnContext(ctx, "playback.deleted_identity_retry_owner_dropped", logging.KeyUserID, owner.String())
+			slog.WarnContext(logging.ContextWithSubjectUser(ctx, owner.String()), "playback.deleted_identity_retry_owner_dropped")
 			s.metrics.RetryOwnerDropped()
 			continue
 		}

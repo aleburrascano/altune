@@ -41,8 +41,13 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string, now clock.Func
 	}
 }
 
+const (
+	mbMemoTTL      = 6 * time.Hour
+	mbMemoCapacity = 2048
+)
+
 func newMBMemo[V any](now clock.Func) *expiringcache.Memo[string, V] {
-	return expiringcache.New[string, V](6*time.Hour, 2048, now)
+	return expiringcache.New[string, V](mbMemoTTL, mbMemoCapacity, now)
 }
 
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }

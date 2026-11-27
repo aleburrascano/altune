@@ -146,7 +146,7 @@ func (s *Service) ResumeView(ctx context.Context, userId ids.UserId) (*ResumeVie
 	}
 	if err != nil {
 		slog.WarnContext(ctx, "resume.current_track_enrichment_failed",
-			logging.KeyUserID, userId.String(), logging.KeyError, err)
+			logging.KeyError, err)
 		view.CurrentTrackUnavailable = true
 		return view, nil
 	}
@@ -178,9 +178,9 @@ func (s *Service) forget(ctx context.Context, userId ids.UserId, trigger string)
 }
 
 func auditQueueStateForgotten(ctx context.Context, userId ids.UserId, trigger string) {
+	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
 	slog.InfoContext(ctx, "playback.queue_state_forgotten",
 		"action", forgetQueueStateAction,
-		logging.KeyUserID, userId.String(),
 		"object", "playback_queue_state",
 		"trigger", trigger)
 }

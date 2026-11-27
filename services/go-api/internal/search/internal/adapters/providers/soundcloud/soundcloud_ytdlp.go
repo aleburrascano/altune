@@ -34,7 +34,9 @@ func NewSoundCloudAdapterWithRunner(run YtdlpRunner) *SoundCloudAdapter {
 	}
 }
 
-func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
+const soundCloudSearchTimeout = 5 * time.Second
+
+func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return soundCloudSearchTimeout }
 
 func (a *SoundCloudAdapter) Name() domain.ProviderName { return domain.ProviderSoundCloud }
 

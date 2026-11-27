@@ -14,6 +14,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/ids/idstest"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/random/randomtest"
@@ -519,6 +520,7 @@ func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 		"explorationDraw": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ExplorationDraw = nil }),
 		"deadlineTimer":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.DeadlineTimer = nil }),
 		"now":             withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Now = nil }),
+		"ids":             withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.IDs = nil }),
 	} {
 		svc, err := build()
 		if !errors.Is(err, querypkg.ErrCollaboratorRequired) || svc != nil {
@@ -2009,5 +2011,33 @@ func TestService_MeasuresProviderLatencyOnTheInjectedClock(t *testing.T) {
 	}
 	if got := out.ProviderStatuses[0].LatencyMs; got != 40 {
 		t.Errorf("LatencyMs = %d, want 40 from the injected clock", got)
+	}
+}
+
+func TestSearchService_TheSearchIdComesFromTheInjectedIDSource(t *testing.T) {
+	bg := searchtest.NewTracker(t)
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	var mu sync.Mutex
+	var drawn []string
+	sequence := idstest.Sequence()
+	source := ids.Source(func() uuid.UUID {
+		id := sequence()
+		mu.Lock()
+		defer mu.Unlock()
+		drawn = append(drawn, id.String())
+		return id
+	})
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.IDs = source })
+
+	out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
+	bg.Wait()
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(drawn, out.SearchId) {
+		t.Errorf("search id %q was not drawn from the injected source (drew %v)", out.SearchId, drawn)
 	}
 }

@@ -24,6 +24,7 @@ import (
 )
 
 type Service struct {
+	ids            ids.Source
 	providers      []ports.SearchProvider
 	circuitBreaker *providerguard.CircuitBreaker
 	providerCache  ports.ProviderResultCache
@@ -86,6 +87,7 @@ type Collaborators struct {
 	ExplorationDraw random.Unit
 	DeadlineTimer   clock.TimerFunc
 	Now             clock.Func
+	IDs             ids.Source
 }
 
 var ErrCollaboratorRequired = errors.New("search service needs every collaborator, pass the absent adapter to switch one off")
@@ -114,6 +116,7 @@ func (c Collaborators) missing(bg *background.Tracker, breaker *providerguard.Ci
 		{"explorationDraw", c.ExplorationDraw == nil},
 		{"deadlineTimer", c.DeadlineTimer == nil},
 		{"now", c.Now == nil},
+		{"ids", c.IDs == nil},
 	} {
 		if check.missing {
 			missing = append(missing, check.name)
@@ -193,7 +196,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 	if err != nil {
 		return nil, fmt.Errorf("favorites lifter: %w", err)
 	}
-	recorder, err := history.NewRecordSearchHistoryService(c.History, c.Now)
+	recorder, err := history.NewRecordSearchHistoryService(c.History, c.Now, c.IDs)
 	if err != nil {
 		return nil, fmt.Errorf("history recorder: %w", err)
 	}
@@ -225,6 +228,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 		vocab:          ingestor,
 		bg:             bg,
 		now:            c.Now,
+		ids:            c.IDs,
 		resolver:       newSharedResolver(),
 	}, nil
 }
@@ -393,7 +397,7 @@ func (s *Service) slateForPage(
 	if held, ok := s.cache.heldSlate(ctx, continues, queryNorm, query.Kinds); ok {
 		return rankedResolution{ranked: held, cached: true}, continues
 	}
-	return s.resolveRanked(ctx, query, searchQuery, queryNorm), ids.NewEntityId()
+	return s.resolveRanked(ctx, query, searchQuery, queryNorm), s.ids.NewEntityId()
 }
 
 func (s *Service) resolveRanked(

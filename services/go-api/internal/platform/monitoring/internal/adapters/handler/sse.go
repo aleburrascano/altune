@@ -22,8 +22,14 @@ type StreamBounds struct {
 	MaxLifetime time.Duration
 }
 
+const (
+	streamWriteIdle   = 10 * time.Second
+	streamHeartbeat   = 25 * time.Second
+	streamMaxLifetime = 15 * time.Minute
+)
+
 func DefaultStreamBounds() StreamBounds {
-	return StreamBounds{WriteIdle: 10 * time.Second, Heartbeat: 25 * time.Second, MaxLifetime: 15 * time.Minute}
+	return StreamBounds{WriteIdle: streamWriteIdle, Heartbeat: streamHeartbeat, MaxLifetime: streamMaxLifetime}
 }
 
 const keepaliveFrame = ": keepalive\n\n"

@@ -66,10 +66,10 @@ func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string) map
 }
 
 func (t *SearchTelemetry) append(ctx context.Context, event domain.InteractionEvent) {
+	ctx = logging.ContextWithSubjectUser(ctx, event.UserId.String())
 	if err := t.eventStore.Append(ctx, event); err != nil {
 		slog.WarnContext(ctx, "search.v2.telemetry_emit_failed",
 			"search_id", event.SearchId,
-			logging.KeyUserID, event.UserId.String(),
 			logging.KeyError, err)
 		return
 	}

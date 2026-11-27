@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-var trackNumberFillTimeout = 10 * time.Second
+const trackNumberFillTimeout = 10 * time.Second
 
 type OwnableItem struct {
 	Kind          string

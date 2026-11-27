@@ -2,14 +2,13 @@ package background
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const runBudgetFraction = 2
@@ -30,7 +29,7 @@ func RunBudget(interval time.Duration) time.Duration {
 }
 
 func bindRun(ctx context.Context, name string) context.Context {
-	return logging.ContextWithJobRun(ctx, name, uuid.NewString())
+	return logging.ContextWithJobRun(ctx, name, ids.Real().String())
 }
 
 func RunJob(parent context.Context, control *JobControl, now clock.Func, name string, budget time.Duration, fn func(context.Context) error) {

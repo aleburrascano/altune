@@ -153,8 +153,8 @@ func (b *InProcessBus) recordIssuedID(ctx context.Context, id uint64) {
 
 func (b *InProcessBus) recordDropForFullSubscriber(ctx context.Context, userId ids.UserId, eventType EventType, eventID uint64) {
 	total := b.dropped.Add(1)
-	slog.WarnContext(ctx, "events.subscriber_dropped",
-		logging.KeyUserID, userId.String(), "event_type", eventType,
+	slog.WarnContext(logging.ContextWithSubjectUser(ctx, userId.String()), "events.subscriber_dropped",
+		"event_type", eventType,
 		"event_id", eventID, "dropped_total", total)
 }
 
@@ -239,7 +239,7 @@ func warnIfEventsWereEvictedBeforeResume(ctx context.Context, userId ids.UserId,
 	if resumingFromBeginning || oldestRetainedID <= afterID+1 {
 		return
 	}
-	slog.WarnContext(ctx, "events.replay_gap",
-		logging.KeyUserID, userId.String(), "after_id", afterID,
+	slog.WarnContext(logging.ContextWithSubjectUser(ctx, userId.String()), "events.replay_gap",
+		"after_id", afterID,
 		"oldest_retained_id", oldestRetainedID, "lost", oldestRetainedID-afterID-1)
 }

@@ -3,6 +3,7 @@ package details_test
 import (
 	"altune/go-api/internal/search/internal/core/details"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"testing"
@@ -161,5 +162,46 @@ func TestCachedLookup_ErroringGetNegativeStillFallsThroughToFetch(t *testing.T) 
 	}
 	if got != "fresh" || calls != 1 {
 		t.Errorf("got %q after %d fetches, want fresh after 1", got, calls)
+	}
+}
+
+type failingSetCache struct {
+	*searchtest.NameKeyedCache[string]
+}
+
+func (failingSetCache) Set(context.Context, string, string) error {
+	return errors.New("redis read-only")
+}
+
+func (failingSetCache) SetNegative(context.Context, string) error {
+	return errors.New("redis read-only")
+}
+
+func TestCachedLookup_AFailedCacheWriteStillAnswersAndIsLogged(t *testing.T) {
+	cases := []struct {
+		name    string
+		found   bool
+		wantMsg string
+	}{
+		{"positive write", true, "enrichment.cache_set_failed"},
+		{"negative write", false, "enrichment.cache_set_negative_failed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ring := logging.CaptureRing(t, "info")
+			cache := &failingSetCache{searchtest.NewNameKeyedCache[string]()}
+			calls := 0
+
+			if _, err := details.CachedLookup(context.Background(), cache, "daft punk", "", countingFetch(&calls, "fresh", tc.found, nil)); err != nil {
+				t.Fatalf("a cache write error failed the lookup: %v", err)
+			}
+
+			for _, r := range ring.Snapshot() {
+				if r.Message == tc.wantMsg {
+					return
+				}
+			}
+			t.Errorf("no %s line after a failed cache write", tc.wantMsg)
+		})
 	}
 }

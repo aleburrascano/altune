@@ -63,7 +63,7 @@ func (r *NowPlayingReader) Lookup(
 	id, err := ids.ParseTrackId(trackId)
 	if err != nil {
 		slog.WarnContext(ctx, "now_playing.malformed_track_id",
-			logging.KeyUserID, userId.String(), "raw_len", len(trackId), logging.KeyError, err)
+			"raw_len", len(trackId), logging.KeyError, err)
 		return nil, ports.ErrNowPlayingTrackNotFound
 	}
 

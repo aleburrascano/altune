@@ -43,14 +43,14 @@ func (c *Capture) Reset() {
 func CaptureText(t tb, level slog.Level) *Capture {
 	t.Helper()
 	c := &Capture{}
-	UseHandler(t, slog.NewTextHandler(c, &slog.HandlerOptions{Level: level}))
+	UseHandler(t, newCorrelationHandler(slog.NewTextHandler(c, &slog.HandlerOptions{Level: level})))
 	return c
 }
 
 func CaptureJSON(t tb, level slog.Level) *Capture {
 	t.Helper()
 	c := &Capture{}
-	UseHandler(t, slog.NewJSONHandler(c, &slog.HandlerOptions{Level: level}))
+	UseHandler(t, newCorrelationHandler(slog.NewJSONHandler(c, &slog.HandlerOptions{Level: level})))
 	return c
 }
 

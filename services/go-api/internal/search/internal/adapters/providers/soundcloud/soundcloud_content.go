@@ -94,7 +94,7 @@ func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.Pro
 	}
 	singles, err := a.fetchArtistStandaloneSingles(ctx, userID, inPlaylist)
 	if err != nil {
-		slog.WarnContext(ctx, "soundcloud.singles_skipped", logging.KeyUserID, userID, logging.KeyError, err)
+		slog.WarnContext(ctx, "soundcloud.singles_skipped", "soundcloud_user_id", userID, logging.KeyError, err)
 		return albums, nil
 	}
 	return append(albums, singles...), nil

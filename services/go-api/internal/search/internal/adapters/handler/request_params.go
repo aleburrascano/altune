@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
+	"log/slog"
 	"math"
 	"net/http"
 	"strings"
@@ -127,8 +128,11 @@ func parseLimit(w http.ResponseWriter, r *http.Request, param string, def, maxLi
 	if limit <= maxLimit {
 		return limit, true
 	}
+	applied := maxLimit
 	if policy == resetToDefault {
-		return def, true
+		applied = def
 	}
-	return maxLimit, true
+	slog.InfoContext(r.Context(), "search.limit_out_of_range",
+		"param", param, "requested", limit, "max", maxLimit, "applied", applied)
+	return applied, true
 }

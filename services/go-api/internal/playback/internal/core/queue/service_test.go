@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/playback"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -126,7 +127,7 @@ func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if _, err := svc.ResumeView(context.Background(), user); err != nil {
+	if _, err := svc.ResumeView(logging.ContextWithSubjectUser(context.Background(), user.String()), user); err != nil {
 		t.Fatalf("enrichment failure must not fail the resume: %v", err)
 	}
 

@@ -21,9 +21,11 @@ func NewITunesAdapter(client *http.Client) *ITunesAdapter {
 	return &ITunesAdapter{client: client}
 }
 
+const itunesSearchTimeout = 4 * time.Second
+
 const itunesUserAgent = "Altune/1.0 (music manager; self-hosted)"
 
-func (a *ITunesAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
+func (a *ITunesAdapter) SearchTimeout() time.Duration { return itunesSearchTimeout }
 
 func (a *ITunesAdapter) Name() domain.ProviderName { return domain.ProviderITunes }
 

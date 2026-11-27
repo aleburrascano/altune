@@ -7,8 +7,6 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type FakeProvider struct {
@@ -51,7 +49,7 @@ func NewQuery(t TB, raw string) *domain.SearchQuery {
 }
 
 func NewUser() ids.UserId {
-	return ids.NewUserId(uuid.New())
+	return ids.Source(ids.Real).NewUserId()
 }
 
 type PanickingEventStore struct{ Calls int32 }

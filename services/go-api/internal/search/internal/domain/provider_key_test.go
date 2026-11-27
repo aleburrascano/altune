@@ -3,6 +3,8 @@ package domain_test
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 var persistedProviderKeys = []struct {
@@ -131,4 +133,32 @@ func TestProviderName_EveryNameRoundTripsToKnownKey(t *testing.T) {
 			t.Errorf("%v.Key() = %q is not a known provider key: %v", p, p.Key(), err)
 		}
 	}
+}
+
+func TestParseProviderKey_AcceptedKeysRoundTripAndTheRestAreRefused(t *testing.T) {
+	t.Parallel()
+	rapid.Check(t, func(t *rapid.T) {
+		raw := rapid.OneOf(rapid.String(), rapid.SampledFrom(knownRawProviderKeys())).Draw(t, "raw")
+		key, err := domain.ParseProviderKey(raw)
+		if err != nil {
+			if key != "" {
+				t.Fatalf("ParseProviderKey(%q) refused but returned key %q", raw, key)
+			}
+			return
+		}
+		if key.String() != raw {
+			t.Fatalf("ParseProviderKey(%q) = %q, want the same text back", raw, key)
+		}
+		if again, err := domain.ParseProviderKey(key.String()); err != nil || again != key {
+			t.Fatalf("an accepted key %q did not parse again: %v, %v", key, again, err)
+		}
+	})
+}
+
+func knownRawProviderKeys() []string {
+	raw := make([]string, len(persistedProviderKeys))
+	for i, k := range persistedProviderKeys {
+		raw[i] = k.want
+	}
+	return raw
 }

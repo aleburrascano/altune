@@ -13,8 +13,10 @@ type QueueSaveLimit = httpserver.RateLimit
 
 var errQueueRateLimited = apierror.NewError(apierror.CodePlaybackRateLimited, "too many queue state requests, try again later")
 
+const queueStateRateInterval = 2 * time.Second
+
 var DefaultQueueStateRateLimit = QueueSaveLimit{
-	Every: 2 * time.Second,
+	Every: queueStateRateInterval,
 	Burst: 20,
 }
 

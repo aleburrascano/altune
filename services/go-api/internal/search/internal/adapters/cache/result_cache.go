@@ -2,7 +2,9 @@ package cache
 
 import (
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"context"
+	"log/slog"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -50,7 +52,9 @@ func (c *RedisResultCache) Get(ctx context.Context, key string) ([]domain.Search
 }
 
 func (c *RedisResultCache) Set(ctx context.Context, key string, results []domain.SearchResult) {
-	_ = c.base.Set(ctx, key, results)
+	if err := c.base.Set(ctx, key, results); err != nil {
+		slog.WarnContext(ctx, "search.result_cache_set_failed", logging.KeyError, err)
+	}
 }
 
 const providerResultPrefix = "discovery:provider:v1:"
