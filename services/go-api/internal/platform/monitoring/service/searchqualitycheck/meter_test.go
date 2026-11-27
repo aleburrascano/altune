@@ -261,9 +261,7 @@ func TestMeter_PanickingRunnerSurfacesAsError(t *testing.T) {
 }
 
 func TestMeter_APanickingRunIsLoggedOnceByTheGuard(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 	_, r := steppedMeter(t, func(context.Context) (monitoring.EvalMeterResult, error) {
 		panic("scorer dereferenced a nil provider")
 	})
@@ -282,9 +280,7 @@ func TestMeter_APanickingRunIsLoggedOnceByTheGuard(t *testing.T) {
 }
 
 func TestMeter_AFailedRunIsLogged(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 	_, r := steppedMeter(t, func(context.Context) (monitoring.EvalMeterResult, error) {
 		return monitoring.EvalMeterResult{}, errors.New("golden set unreadable")
 	})

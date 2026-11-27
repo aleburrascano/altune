@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"strings"
@@ -37,13 +37,9 @@ func TestPostgresIdentityStore_EmptyInputGuards(t *testing.T) {
 	})
 }
 
-func captureWarnings(t *testing.T) *bytes.Buffer {
+func captureWarnings(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureText(t, slog.LevelWarn)
 }
 
 func TestPostgresIdentityStore_LookupByProviderID_DBFailureWarnsAndMisses(t *testing.T) {

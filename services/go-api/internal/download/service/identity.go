@@ -6,6 +6,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service/replacement"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
@@ -30,7 +31,7 @@ func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, ac
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",
-			"track_id", ac.Track.ID, "error", redact.LogError(err))
+			logging.KeyTrackID, ac.Track.ID, logging.KeyError, redact.LogError(err))
 	}
 	identity = withCatalogPin(identity, ac.Track.CatalogMBID)
 	if identity.IsZero() {
@@ -113,7 +114,7 @@ func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *Acqu
 	match, err := s.identifier.Identify(ctx, path, 0)
 	if errors.Is(err, acqdomain.ErrEmptyFingerprint) {
 		slog.WarnContext(ctx, "acquisition.in_place_fingerprint_empty",
-			"track_id", ac.Track.ID, "error", redact.LogError(err))
+			logging.KeyTrackID, ac.Track.ID, logging.KeyError, redact.LogError(err))
 		return 0, nil
 	}
 	if err != nil {
@@ -148,7 +149,7 @@ func storedSourceOf(ctx context.Context, track *ports.TrackSnapshot) judgedSourc
 	if len(track.Evidence) > 0 {
 		if err := json.Unmarshal(track.Evidence, &stored); err != nil {
 			slog.ErrorContext(ctx, "acquisition.stored_evidence_unreadable",
-				"track_id", track.ID.String(), "error", redact.LogError(err))
+				logging.KeyTrackID, track.ID.String(), logging.KeyError, redact.LogError(err))
 			stored = Evidence{}
 		}
 	}
@@ -167,7 +168,7 @@ func (s *AcquireTrackAudioService) previewInPlace(ctx context.Context, track *po
 	comparison, err := s.previews.MatchesPreview(ctx, path, target)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.in_place_preview_failed",
-			"track_id", track.ID.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, track.ID.String(), logging.KeyError, redact.LogError(err))
 		return nil
 	}
 	if comparison.Unavailable != "" {

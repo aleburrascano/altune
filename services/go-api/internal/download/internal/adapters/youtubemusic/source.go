@@ -5,6 +5,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 )
@@ -97,7 +98,7 @@ func resolvedKind(videoType ytmsearch.VideoType) ports.CandidateKind {
 func (s *Source) observe(ctx context.Context, videoID string) ytmsearch.Watch {
 	watch, err := s.lookup.Watch(ctx, videoID)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.ytmusic_lookup_failed", "video_id", videoID, "error", err)
+		slog.WarnContext(ctx, "acquisition.ytmusic_lookup_failed", "video_id", videoID, logging.KeyError, err)
 		return ytmsearch.Watch{}
 	}
 	return watch

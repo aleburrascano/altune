@@ -3,6 +3,7 @@ package details
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -48,7 +49,7 @@ func (s *DeezerEnrichmentService) Execute(
 			id, err := s.enricher.ResolveID(ctx, kind, artist, entityTitle)
 			if err != nil {
 				slog.WarnContext(ctx, "deezer_enrichment.failed",
-					"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
+					"kind", kind.String(), "artist", artist, "title", entityTitle, logging.KeyError, err)
 				return domain.EmptyDeezerEnrichment(), false, err
 			}
 			if id == "" {
@@ -58,7 +59,7 @@ func (s *DeezerEnrichmentService) Execute(
 			v, err := s.enricher.Lookup(ctx, kind, id)
 			if err != nil {
 				slog.WarnContext(ctx, "deezer_enrichment.failed",
-					"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
+					"kind", kind.String(), "artist", artist, "title", entityTitle, logging.KeyError, err)
 				return domain.EmptyDeezerEnrichment(), false, err
 			}
 			if v.IsZero() {

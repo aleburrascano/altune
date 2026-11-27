@@ -2,6 +2,7 @@ package audio
 
 import (
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -110,10 +111,10 @@ func (s *CleanUpUnusedAudioService) deleteOrphan(ctx context.Context, orphan por
 func logDeleteFailure(ctx context.Context, orphan ports.OrphanedAudio, err error) {
 	slog.WarnContext(ctx, "catalog.orphaned_audio_delete_failed",
 		"audio_ref", orphan.AudioRef,
-		"user_id", orphan.UserId.String(),
-		"track_id", orphan.TrackId.String(),
+		logging.KeyUserID, orphan.UserId.String(),
+		logging.KeyTrackID, orphan.TrackId.String(),
 		"attempts", orphan.Attempts,
-		"error", err)
+		logging.KeyError, err)
 }
 
 func (s *CleanUpUnusedAudioService) deleteObject(ctx context.Context, audioRef string) error {

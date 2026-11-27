@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"fmt"
 	"log/slog"
@@ -113,7 +114,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 	slog.InfoContext(r.Context(), "audio_urls.handled",
 		"requested", len(ids),
 		"resolved", len(urls),
-		"duration_ms", h.now().Sub(start).Milliseconds(),
+		logging.KeyDurationMS, h.now().Sub(start).Milliseconds(),
 	)
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")

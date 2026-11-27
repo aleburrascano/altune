@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -209,7 +210,7 @@ func (t budgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req)
 	if err == nil && resp != nil && resp.StatusCode == http.StatusForbidden {
 		if coolErr := t.budget.CoolDown(req.Context()); coolErr != nil {
-			slog.WarnContext(req.Context(), "ytminnertube: could not start the cooldown after a 403", "error", coolErr)
+			slog.WarnContext(req.Context(), "ytminnertube: could not start the cooldown after a 403", logging.KeyError, coolErr)
 		}
 	}
 	return resp, err

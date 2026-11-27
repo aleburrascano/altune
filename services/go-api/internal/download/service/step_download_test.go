@@ -13,8 +13,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/downloadprovenance"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -905,16 +905,7 @@ func (p scriptedProber) ProbeDuration(context.Context, string) (float64, error) 
 
 func (p scriptedProber) ValidateDecodable(context.Context, string) error { return p.decodeErr }
 
-func captureJSONLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
-func findLogRecord(t *testing.T, buf *bytes.Buffer, want string) map[string]any {
+func findLogRecord(t *testing.T, buf *logging.Capture, want string) map[string]any {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
 		if line == "" {
@@ -1068,7 +1059,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logs := captureJSONLog(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			tt.run(context.Background(), t)
 
 			rec := findLogRecord(t, logs, tt.msg)
@@ -1317,7 +1308,7 @@ func TestDownloadStep_LinksToAnotherSongAreRejected(t *testing.T) {
 }
 
 func TestDownloadStep_LogsAudioVerdictForEveryDecision(t *testing.T) {
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	match := ports.RecordingMatch{
 		AcoustID: "ac-a", MBIDs: []string{"mb-master"}, Score: 0.97,
 		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
@@ -1634,7 +1625,7 @@ func TestDownloadStep_FailedPreviewIdentifyRecordsAPreviewFallbackSkip(t *testin
 }
 
 func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(t *testing.T) {
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	ac := logTestDownloadContext()
 	ac.Track.CatalogDuration = 0
 	ac.Identity = ports.RecordingIdentity{MBID: "mb-want"}
@@ -1653,7 +1644,7 @@ func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(
 }
 
 func TestDownloadStep_ThrottledPreviewLogsThrottledNotPreviewFallback(t *testing.T) {
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
 	identifier := &stubIdentifier{err: fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled)}
 	step := newTestDownloadStep(fetcher, withTestIdentifier(identifier))
@@ -2210,15 +2201,6 @@ func TestDownloadStep_WorkspaceRollbackWithOnlyTempPathRemovesThatFile(t *testin
 	}
 }
 
-func captureDefaultLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
 func assertNoCookiePathInText(t *testing.T, logs string, wantMsg string) {
 	t.Helper()
 	if !strings.Contains(logs, wantMsg) {
@@ -2233,7 +2215,7 @@ func assertNoCookiePathInText(t *testing.T, logs string, wantMsg string) {
 }
 
 func TestDownloadStep_CandidateDownloadFailedLogRedactsCookiePath(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 	step := newTestDownloadStep(&fileWritingSearcher{err: ytdlpCookieErr()})
 	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x", Source: "youtube"}}}
 
@@ -2671,7 +2653,7 @@ func TestDownloadStep_ACancelledWindowSiblingRecordsNoVerifySkip(t *testing.T) {
 	step := newTestDownloadStep(windowSiblingFetcher{fetcher},
 		withTestIdentifier(identifier), withTestProber(cancelledSiblingProber{fetcher: fetcher}),
 		withTestSkips(rec), service.WithVerifyWidth(2))
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -2763,7 +2745,7 @@ func (g *gatedVersionLookup) RecordingByMBID(ctx context.Context, mbid string) (
 }
 
 func TestDownloadStep_ALookupSharedWithACancelledJobStillAnswersTheOtherJob(t *testing.T) {
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	synctest.Test(t, func(t *testing.T) {
 		lookup := &gatedVersionLookup{started: make(chan struct{}), release: make(chan struct{})}
 		step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
@@ -2826,7 +2808,7 @@ func TestDownloadStep_APanickingVersionLookupFailsOnlyThatLookup(t *testing.T) {
 }
 
 func TestDownloadStep_AnEmptyFingerprintIsAVerifySkip(t *testing.T) {
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	rec := &gateRecorder{}
 	empty := fmt.Errorf("/tmp/x.mp3: %w", acqdomain.ErrEmptyFingerprint)
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
@@ -2942,7 +2924,7 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 }
 
 func TestDownloadStep_RollbackLogsAScratchFolderItCouldNotRemove(t *testing.T) {
-	logs := captureJSONLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	step := mustNewDownloadStep(&fileWritingSearcher{}, failingRemoveWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
 
 	if err := step.Rollback(context.Background(), &service.AcquisitionContext{TempDir: "/tmp/altune-acquire-x"}); err != nil {

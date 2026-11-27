@@ -3,6 +3,7 @@ package cache
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"time"
@@ -55,7 +56,7 @@ func (s *RedisIdentityStore) backfill(ctx context.Context, key string, entry ide
 		return
 	}
 	if err := s.setJSON(ctx, key, entry, identityTTL); err != nil {
-		slog.DebugContext(ctx, "identity.cache_backfill_failed", "error", err)
+		slog.DebugContext(ctx, "identity.cache_backfill_failed", logging.KeyError, err)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -94,7 +95,7 @@ func (o outcome) countsAsTry() bool { return o == keptCurrent || o == noBetterSo
 func (r *Runner) ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
 	track, err := r.ledger.Get(ctx, trackId, userId)
 	if errors.Is(err, ports.ErrTrackNotFound) {
-		slog.WarnContext(ctx, "acquisition.upgrade_track_not_found", "track_id", trackId.String())
+		slog.WarnContext(ctx, "acquisition.upgrade_track_not_found", logging.KeyTrackID, trackId.String())
 		return nil
 	}
 	if err != nil {
@@ -103,7 +104,7 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId 
 	stored := inPlaceEvidenceOf(track.Evidence)
 	current := stored.Grade
 	if !track.Streamable || r.isSettled(track, current, stored.format()) {
-		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
+		slog.InfoContext(ctx, "acquisition.upgrade_skipped", logging.KeyTrackID, trackId.String())
 		return nil
 	}
 	if r.isUnchecked(track) {
@@ -114,7 +115,7 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId 
 		current = checked.grade
 	}
 	if isUserUpload(track) {
-		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
+		slog.InfoContext(ctx, "acquisition.upgrade_skipped", logging.KeyTrackID, trackId.String())
 		return nil
 	}
 	gate := ReplacementGate{
@@ -133,7 +134,7 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId 
 func (r *Runner) settle(ctx context.Context, trackId ids.TrackId, gate ReplacementGate, attempt Attempt, runErr error) error {
 	result := outcomeOf(attempt, runErr)
 	slog.InfoContext(ctx, "acquisition.upgrade_outcome",
-		"track_id", trackId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"outcome", string(result),
 		"from", string(gate.Current),
 		"to", string(attempt.Grade))
@@ -157,7 +158,7 @@ func (r *Runner) record(ctx context.Context, trackId ids.TrackId, gate Replaceme
 	tries, err := r.store.NoteAttempt(ctx, trackId, note)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.upgrade_attempt_unrecorded",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return
 	}
 	if note.CountsAsTry && tries >= r.cfg.MaxTries {
@@ -169,11 +170,11 @@ func (r *Runner) giveUp(ctx context.Context, trackId ids.TrackId, current audioq
 	reason := fmt.Sprintf("no source graded above %s after %d tries", current, tries)
 	if err := r.store.GiveUp(ctx, trackId, audioquality.PipelineGeneration, reason); err != nil {
 		slog.ErrorContext(ctx, "acquisition.upgrade_give_up_unrecorded",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return
 	}
 	slog.InfoContext(ctx, "acquisition.upgrade_gave_up",
-		"track_id", trackId.String(), "grade", string(current), "tries", tries, "reason", reason)
+		logging.KeyTrackID, trackId.String(), "grade", string(current), "tries", tries, "reason", reason)
 }
 
 func (r *Runner) isSettled(track *ports.TrackSnapshot, current audioquality.Grade, stored ports.SourceFormat) bool {

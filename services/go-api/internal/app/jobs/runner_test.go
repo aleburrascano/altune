@@ -12,7 +12,6 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -84,13 +83,9 @@ func lead(t *testing.T, r *jobs.Runner, e jobs.Election) {
 	r.Lead(ctx, e)
 }
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(restore) })
-	return &buf
+	return logging.CaptureText(t, slog.LevelInfo)
 }
 
 func waitForAtLeast(t *testing.T, c *atomic.Int32, want int32) {
@@ -389,9 +384,7 @@ func TestLeaderContext_WithoutAnElectionEveryPassLeads(t *testing.T) {
 }
 
 func TestLeaderContextFor_EachPassBindsTheJobAndAFreshRunID(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	scope := r.LeaderContextFor(jobs.AlertMonitor)
 
@@ -680,9 +673,7 @@ func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t 
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	won := make(lockWonRecords, 1)
-	prev := slog.Default()
-	slog.SetDefault(slog.New(won))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, won)
 
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	election, err := jobs.NewElection(leader.AdaptLocks(database.NewAdvisoryLocks(pool).Acquire))

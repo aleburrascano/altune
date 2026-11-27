@@ -3,6 +3,7 @@ package featured
 import (
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 )
@@ -36,7 +37,7 @@ func storableFeaturedArtist(ctx context.Context, credit ports.FeaturedArtistCred
 	}
 	if err := domain.ValidateFeaturedArtist(fa); err != nil {
 		slog.WarnContext(ctx, "featured artist skipped: exceeds field cap",
-			"name_length", len(fa.Name), "mbid_length", len(fa.MBID), "error", err)
+			"name_length", len(fa.Name), "mbid_length", len(fa.MBID), logging.KeyError, err)
 		return domain.FeaturedArtist{}, false
 	}
 	return fa, true

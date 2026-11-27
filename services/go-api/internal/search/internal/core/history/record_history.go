@@ -60,15 +60,15 @@ func (s *RecordSearchHistoryService) Record(
 	}
 	if err := s.HistoryRepo.Insert(ctx, entry); err != nil {
 		slog.WarnContext(ctx, "search.v2.history_persist_failed",
-			"user_id", userId.String(),
+			logging.KeyUserID, userId.String(),
 			logging.SearchTextAttr(query.Raw),
-			"error", logging.ScrubSearchErr(err, query.Raw))
+			logging.KeyError, logging.ScrubSearchErr(err, query.Raw))
 		return
 	}
 	if err := s.HistoryRepo.TrimToN(ctx, userId, HistoryRingSize); err != nil {
 		slog.WarnContext(ctx, "search.v2.history_trim_failed",
-			"user_id", userId.String(),
-			"error", err)
+			logging.KeyUserID, userId.String(),
+			logging.KeyError, err)
 	}
 }
 

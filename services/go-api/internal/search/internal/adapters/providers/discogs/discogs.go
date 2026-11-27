@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
@@ -106,7 +107,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		country := artists[0].Country
 		detail, err := a.fetchArtistDetail(ctx, artists[0].ID)
 		if err != nil {
-			slog.WarnContext(ctx, "discogs.detail_enrichment_skipped", "error", err)
+			slog.WarnContext(ctx, "discogs.detail_enrichment_skipped", logging.KeyError, err)
 			return &ports.DiscogsArtistInfo{ID: artists[0].ID, Name: artists[0].Title, Genre: genre, Country: country}, nil
 		}
 		return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country}, nil
@@ -149,7 +150,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 
 	detail, err := a.fetchArtistDetail(ctx, bestArtist.ID)
 	if err != nil {
-		slog.WarnContext(ctx, "discogs.detail_enrichment_skipped", "error", err)
+		slog.WarnContext(ctx, "discogs.detail_enrichment_skipped", logging.KeyError, err)
 		return &ports.DiscogsArtistInfo{ID: bestArtist.ID, Name: bestArtist.Title, Genre: genre, Country: country, Overlap: bestOverlap}, nil
 	}
 	return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country, Overlap: bestOverlap}, nil
@@ -254,7 +255,7 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 		providerrequests.WithHeader("Authorization", "Discogs token="+a.token),
 		providerrequests.WithHeader("User-Agent", a.userAgent))
 	if status == http.StatusTooManyRequests {
-		slog.WarnContext(ctx, "discogs.rate_limited", "path", urlPathOnly(rawURL))
+		slog.WarnContext(ctx, "discogs.rate_limited", logging.KeyPath, urlPathOnly(rawURL))
 		return nil, fmt.Errorf("discogs rate limited")
 	}
 	if err != nil {

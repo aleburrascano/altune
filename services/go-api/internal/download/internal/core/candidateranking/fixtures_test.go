@@ -3,8 +3,8 @@ package candidateranking_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/candidateranking"
+	"altune/go-api/internal/shared/logging"
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -36,21 +36,12 @@ func urls(candidates []download.AudioCandidate) []string {
 	return out
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
 func evaluations(t *testing.T, track candidateranking.Track, candidates ...download.AudioCandidate) []map[string]any {
 	t.Helper()
-	buf := captureLog(t)
+	buf := logging.CaptureJSON(t, slog.LevelInfo)
 	rank(track, candidates...)
 	var records []map[string]any
-	lines := bufio.NewScanner(buf)
+	lines := bufio.NewScanner(strings.NewReader(buf.String()))
 	for lines.Scan() {
 		var record map[string]any
 		if err := json.Unmarshal(lines.Bytes(), &record); err != nil {

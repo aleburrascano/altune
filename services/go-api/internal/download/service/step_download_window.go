@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"context"
 	"fmt"
@@ -130,7 +131,7 @@ func cancelSlots(slots []windowSlot) {
 
 func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) attempt {
 	var result attempt
-	panicked := background.SafeRun(ctx, "acquisition.download_attempt_panic", func() { result = s.runWindowAttempt(ctx, ac, candidate) }, "track_id", ac.Track.ID)
+	panicked := background.SafeRun(ctx, "acquisition.download_attempt_panic", func() { result = s.runWindowAttempt(ctx, ac, candidate) }, logging.KeyTrackID, ac.Track.ID)
 	if panicked != nil {
 		return attempt{candidate: candidate, rejection: &downloadRejection{
 			stage: rejectedcandidates.Download, reason: "download failed", err: panicked,

@@ -8,6 +8,7 @@ import (
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
 	"fmt"
@@ -213,7 +214,7 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
 		slog.WarnContext(r.Context(), "clear search history failed",
 			"action", history.ClearSearchHistoryAction,
-			"user_id", userId.String())
+			logging.KeyUserID, userId.String())
 		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", history.ClearSearchHistoryAction, err))
 		return
 	}

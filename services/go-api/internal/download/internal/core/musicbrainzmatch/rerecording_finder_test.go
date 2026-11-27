@@ -3,9 +3,11 @@ package musicbrainzmatch_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -86,7 +88,7 @@ func findRerecording(t *testing.T, authority *stubRerecordingLookup) (download.T
 }
 
 func TestFindRerecording_BryanAdamsItsOnlyLoveTakesTheClassicVersionWithAnISRC(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 
 	label, found := findRerecording(t, itsOnlyLoveWork())
 
@@ -171,7 +173,7 @@ func TestFindRerecording_NoneWithoutARerecordingLookup(t *testing.T) {
 }
 
 func TestFindRerecording_LogsNoneWithTheCandidateCount(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logs := logging.CaptureText(t, slog.LevelDebug)
 	authority := itsOnlyLoveWork()
 	authority.work = authority.work[:6]
 	authority.details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = download.RecordingDetail{}

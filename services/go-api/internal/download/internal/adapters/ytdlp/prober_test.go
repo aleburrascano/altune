@@ -3,8 +3,10 @@ package ytdlp_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,7 +57,7 @@ func missingFfmpeg(t *testing.T) string {
 }
 
 func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.NoopVerifySkipRecorder(), ytdlp.WithDecodeTimeout(100*time.Millisecond))
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
@@ -68,7 +70,7 @@ func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *
 }
 
 func TestFfprobeProber_ValidateDecodable_WarnsWhenTheDecoderCannotStart(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	p := newProber(t, missingFfmpeg(t), download.NoopVerifySkipRecorder())
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
@@ -92,7 +94,7 @@ func unrunnableFfmpegOutsideTheTempDir(t *testing.T) string {
 }
 
 func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannotStart(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	binDir := unrunnableFfmpegOutsideTheTempDir(t)
 	p := newProber(t, binDir, download.NoopVerifySkipRecorder())
 

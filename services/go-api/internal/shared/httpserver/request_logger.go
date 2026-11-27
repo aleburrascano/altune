@@ -23,32 +23,35 @@ func requestLogger(next http.Handler, now clock.Func) http.Handler {
 		start := now()
 		sw := newStatusWriter(w)
 		ctx, scope := withRequestScope(r.Context())
-		r = r.WithContext(ctx)
+		r = r.WithContext(logging.ContextWithRequestFields(ctx, func() logging.RequestFields {
+			return logging.RequestFields{UserID: scope.user(), Route: matchedRoute(r)}
+		}))
 		defer func(r *http.Request) {
-			attrs := []any{
+			slog.InfoContext(r.Context(), "request.complete",
 				logging.KeyMethod, r.Method,
 				logging.KeyPath, r.URL.Path,
 				logging.KeyRoute, routePattern(r),
 				logging.KeyStatus, sw.status,
-				logging.KeyDuration, now().Sub(start),
+				logging.KeyDurationMS, now().Sub(start).Milliseconds(),
 				logging.KeyBytes, sw.bytes,
-			}
-			if userID := scope.user(); userID != "" {
-				attrs = append(attrs, logging.KeyUserID, userID)
-			}
-			slog.InfoContext(r.Context(), "request.complete", attrs...)
+			)
 		}(r)
 		next.ServeHTTP(sw, r)
 	})
 }
 
 func routePattern(r *http.Request) string {
-	if rc := chi.RouteContext(r.Context()); rc != nil {
-		if pattern := rc.RoutePattern(); pattern != "" {
-			return pattern
-		}
+	if pattern := matchedRoute(r); pattern != "" {
+		return pattern
 	}
 	return unmatchedRoute
+}
+
+func matchedRoute(r *http.Request) string {
+	if rc := chi.RouteContext(r.Context()); rc != nil {
+		return rc.RoutePattern()
+	}
+	return ""
 }
 
 const unmatchedRoute = "unmatched"

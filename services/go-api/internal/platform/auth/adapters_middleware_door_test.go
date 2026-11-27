@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -163,9 +162,7 @@ func TestMiddleware_OversizedBearerDoesNotSpendFailureBudget(t *testing.T) {
 }
 
 func TestMiddleware_TheVerifiedUserReachesTheRequestCompleteLine(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 	uid := ids.NewUserId(uuid.New())
 	next, _ := noopHandler()
 
@@ -236,16 +233,12 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 	}
 }
 
-func captureJSONLog(t *testing.T) *bytes.Buffer {
+func captureJSONLog(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
-func findLogRecord(t *testing.T, buf *bytes.Buffer, want string) map[string]any {
+func findLogRecord(t *testing.T, buf *logging.Capture, want string) map[string]any {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
 		if line == "" {
@@ -1132,9 +1125,7 @@ func BenchmarkFailureThrottle_BenignChurn(b *testing.B) { benchmarkChurn(b, 3*ti
 func BenchmarkFailureThrottle_AttackChurn(b *testing.B) { benchmarkChurn(b, 0) }
 
 func benchmarkChurn(b *testing.B, step time.Duration) {
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.DiscardHandler))
-	b.Cleanup(func() { slog.SetDefault(prev) })
+	logging.Silence(b)
 	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 20, Refill: 3 * time.Second, MaxClients: 10_000})
 	var worst time.Duration
 	for i := 0; b.Loop(); i++ {

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/fansheets"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -148,13 +148,9 @@ func TestNewClient_RefusesAMissingIndexCache(t *testing.T) {
 	}
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
+func captureLog(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &buf
+	return logging.CaptureText(t, slog.LevelInfo)
 }
 
 func TestClient_ArtistSongsReturnsTheTrackersFullLeaks(t *testing.T) {

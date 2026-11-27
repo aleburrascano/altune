@@ -3,6 +3,7 @@ package spotify
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"context"
@@ -60,7 +61,7 @@ func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderN
 		},
 		func(page int, err error) {
 			slog.WarnContext(ctx, "spotify.artist_albums_page_failed",
-				"provider", domain.ProviderSpotify.String(), "artist", externalID, "page", page, "error", redact.Secrets(err.Error()))
+				"provider", domain.ProviderSpotify.String(), "artist", externalID, "page", page, logging.KeyError, redact.Secrets(err.Error()))
 		})
 }
 
@@ -109,7 +110,7 @@ func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderNa
 		},
 		func(page int, err error) {
 			slog.WarnContext(ctx, "spotify.album_tracks_page_failed",
-				"provider", domain.ProviderSpotify.String(), "album", externalID, "page", page, "error", redact.Secrets(err.Error()))
+				"provider", domain.ProviderSpotify.String(), "album", externalID, "page", page, logging.KeyError, redact.Secrets(err.Error()))
 		})
 }
 

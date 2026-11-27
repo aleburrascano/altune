@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -122,7 +123,7 @@ func (s *FillFeaturedArtistsService) Execute(ctx context.Context, userId ids.Use
 		return res, err
 	}
 	slog.InfoContext(ctx, "featured backfill complete",
-		"user_id", userId.String(), "scanned", res.Scanned, "updated", res.Updated, "failed", res.Failed,
+		"scanned", res.Scanned, "updated", res.Updated, "failed", res.Failed,
 		"truncated", res.Truncated, "next_offset", res.NextOffset)
 	return res, nil
 }
@@ -198,7 +199,7 @@ func (s *FillFeaturedArtistsService) backfillTrack(
 	if err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill resolve failed",
-			"track_id", t.ID.String(), "error", err)
+			logging.KeyTrackID, t.ID.String(), logging.KeyError, err)
 		return nil
 	}
 	if len(feats) == 0 {
@@ -207,7 +208,7 @@ func (s *FillFeaturedArtistsService) backfillTrack(
 	if err := s.persist(ctx, t.ID, userId, feats); err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill persist failed",
-			"track_id", t.ID.String(), "error", err)
+			logging.KeyTrackID, t.ID.String(), logging.KeyError, err)
 		return nil
 	}
 	res.Updated++

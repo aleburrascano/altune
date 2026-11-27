@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
-	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -50,6 +49,29 @@ func TestRequestLogger_LogsTheRoutePatternAndTheUserTheHandlerRecorded(t *testin
 	}
 }
 
+func TestRequestLogger_EveryLineOfARequestCarriesTheUserAndRouteOnceRecorded(t *testing.T) {
+	ring := captureLogs(t)
+	router := chi.NewRouter()
+	router.Use(httpserver.RequestLogger(clock.Now))
+	router.Get("/tracks/{trackId}", func(w http.ResponseWriter, r *http.Request) {
+		slog.InfoContext(r.Context(), "before.auth")
+		httpserver.RecordRequestUser(r.Context(), "user-7")
+		slog.InfoContext(r.Context(), "deep.in.the.service")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/tracks/abc-123", nil))
+
+	before := onlyRecord(t, ring, "before.auth")
+	if _, present := before.Attrs["user_id"]; present || before.Attrs["route"] != "/tracks/{trackId}" {
+		t.Errorf("before.auth attrs = %v, want the route and no user yet", before.Attrs)
+	}
+	deep := onlyRecord(t, ring, "deep.in.the.service")
+	if deep.Attrs["user_id"] != "user-7" || deep.Attrs["route"] != "/tracks/{trackId}" {
+		t.Errorf("deep.in.the.service attrs = %v, want user_id user-7 and route /tracks/{trackId} bound by the request logger", deep.Attrs)
+	}
+}
+
 func TestRequestLogger_AnUnmatchedRouteIsOneBucketAndAnAnonymousRequestHasNoUser(t *testing.T) {
 	ring := captureLogs(t)
 	router := chi.NewRouter()
@@ -86,9 +108,7 @@ func TestRequestLogger_TracksStatusCode(t *testing.T) {
 }
 
 func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("debug")
+	ring := logging.CaptureRing(t, "debug")
 
 	const secret = "queenssecretobsessionquery"
 	handler := httpserver.RequestLogger(clock.Now)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,14 +139,11 @@ func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 
 func completedRequest(t *testing.T, h http.HandlerFunc) map[string]any {
 	t.Helper()
-	var out bytes.Buffer
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&out, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	out := logging.CaptureJSON(t, slog.LevelDebug)
 
 	httpserver.RequestLogger(clock.Now)(h).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
 
-	dec := json.NewDecoder(&out)
+	dec := json.NewDecoder(strings.NewReader(out.String()))
 	for dec.More() {
 		var rec map[string]any
 		if err := dec.Decode(&rec); err != nil {
@@ -193,8 +210,8 @@ func TestRequestLogger_LogsTheDurationTheInjectedClockMeasured(t *testing.T) {
 	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
 
 	complete := onlyRecord(t, ring, "request.complete")
-	if got := complete.Attrs[logging.KeyDuration]; got != (1500 * time.Millisecond).String() {
-		t.Errorf("duration = %v (%T), want 1.5s from the injected clock", got, got)
+	if got := complete.Attrs[logging.KeyDurationMS]; got != "1500" {
+		t.Errorf("duration_ms = %v (%T), want 1500 from the injected clock", got, got)
 	}
 }
 

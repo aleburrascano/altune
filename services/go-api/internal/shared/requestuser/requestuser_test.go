@@ -2,8 +2,8 @@ package requestuser_test
 
 import (
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -202,10 +202,7 @@ func TestRequireUserID_AbsentBodyIsPinned(t *testing.T) {
 }
 
 func TestRequireUserID_AbsentLogsTheRejection(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := logging.CaptureJSON(t, slog.LevelInfo)
 	req := httptest.NewRequest(http.MethodGet, "/v1/queue", nil)
 	req.RemoteAddr = "203.0.113.7:5000"
 

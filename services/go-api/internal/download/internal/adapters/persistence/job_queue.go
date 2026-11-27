@@ -111,13 +111,13 @@ func (q *PostgresJobQueue) Enqueue(ctx context.Context, trackID ids.TrackId, kin
 	}
 	if err := q.requeuer.Requeue(ctx, trackID); err != nil {
 		slog.WarnContext(ctx, "acquisition.enqueue_requeue_failed",
-			"track_id", trackID.String(), "error", err)
+			logging.KeyTrackID, trackID.String(), logging.KeyError, err)
 	} else {
 		q.clearNeedsPending(ctx, trackID)
 	}
 	if _, err := q.pool.Exec(ctx, "NOTIFY "+acquisitionJobChannel); err != nil {
 		slog.WarnContext(ctx, "acquisition.enqueue_notify_failed",
-			"track_id", trackID.String(), "error", err)
+			logging.KeyTrackID, trackID.String(), logging.KeyError, err)
 	}
 	return nil
 }
@@ -261,7 +261,7 @@ func (q *PostgresJobQueue) claim(ctx context.Context, sql string, lease time.Dur
 	if err := q.requeuer.Requeue(ctx, job.TrackID); err != nil {
 		if releaseErr := q.releaseUnstarted(ctx, job); releaseErr != nil {
 			slog.WarnContext(ctx, "acquisition.claim_release_failed",
-				"track_id", job.TrackID.String(), "error", releaseErr)
+				logging.KeyTrackID, job.TrackID.String(), logging.KeyError, releaseErr)
 		}
 		return ports.Job{}, fmt.Errorf("mark the claimed track pending: %w", err)
 	}
@@ -309,7 +309,7 @@ func scanTrackClaim(row pgx.Row, trackID *ids.TrackId, userID *ids.UserId, kind 
 func (q *PostgresJobQueue) clearNeedsPending(ctx context.Context, trackID ids.TrackId) {
 	if _, err := q.pool.Exec(ctx, clearNeedsPendingSQL, trackID.UUID()); err != nil {
 		slog.WarnContext(ctx, "acquisition.clear_needs_pending_failed",
-			"track_id", trackID.String(), "error", err)
+			logging.KeyTrackID, trackID.String(), logging.KeyError, err)
 	}
 }
 
@@ -432,7 +432,7 @@ func (n *PostgresJobNotifier) Listen(ctx context.Context, wake chan<- struct{}) 
 
 func warnNotifierCannotListen(ctx context.Context, err error) {
 	if ctx.Err() == nil {
-		slog.WarnContext(ctx, "acquisition.notifier_listen_failed", "error", err)
+		slog.WarnContext(ctx, "acquisition.notifier_listen_failed", logging.KeyError, err)
 	}
 }
 

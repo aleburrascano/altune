@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/playback/internal/core/domain"
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -109,7 +110,7 @@ func (s *Service) Resume(ctx context.Context, userId ids.UserId) (*domain.QueueS
 	state, err := s.repo.GetForUser(ctx, userId)
 	if errors.Is(err, ports.ErrCorruptStoredState) {
 		slog.ErrorContext(ctx, "resume.corrupt_stored_queue_state",
-			"user_id", userId.String(), "error", err)
+			logging.KeyError, err)
 		return domain.EmptyQueueState(userId, s.now()), nil
 	}
 	if errors.Is(err, ports.ErrQueueStateNotFound) {
@@ -145,7 +146,7 @@ func (s *Service) ResumeView(ctx context.Context, userId ids.UserId) (*ResumeVie
 	}
 	if err != nil {
 		slog.WarnContext(ctx, "resume.current_track_enrichment_failed",
-			"user_id", userId.String(), "error", err)
+			logging.KeyUserID, userId.String(), logging.KeyError, err)
 		view.CurrentTrackUnavailable = true
 		return view, nil
 	}
@@ -179,7 +180,7 @@ func (s *Service) forget(ctx context.Context, userId ids.UserId, trigger string)
 func auditQueueStateForgotten(ctx context.Context, userId ids.UserId, trigger string) {
 	slog.InfoContext(ctx, "playback.queue_state_forgotten",
 		"action", forgetQueueStateAction,
-		"user_id", userId.String(),
+		logging.KeyUserID, userId.String(),
 		"object", "playback_queue_state",
 		"trigger", trigger)
 }

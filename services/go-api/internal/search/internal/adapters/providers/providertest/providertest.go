@@ -3,7 +3,7 @@ package providertest
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"io"
 	"log/slog"
@@ -154,13 +154,9 @@ func CapturingClient(capture **http.Request) *http.Client {
 
 const SensitiveQuery = "zqxj private diagnosis clinic"
 
-func CaptureDefaultLog(t *testing.T) *bytes.Buffer {
+func CaptureDefaultLog(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
 func AssertNoQueryText(t *testing.T, logged string) {

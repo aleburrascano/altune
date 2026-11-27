@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/library/internal/service/track"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -69,16 +70,16 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	reader, size, err := s.audioStore.Stream(ctx, *loaded.AudioRef)
 	if err != nil {
 		slog.WarnContext(ctx, "stream.audio_missing",
-			"track_id", trackId.String(), "error", err)
+			logging.KeyTrackID, trackId.String(), logging.KeyError, err)
 		if !s.recoveryEnabled() {
-			slog.WarnContext(ctx, "stream.recovery_disabled", "track_id", trackId.String())
+			slog.WarnContext(ctx, "stream.recovery_disabled", logging.KeyTrackID, trackId.String())
 			return nil, domain.ErrAudioTemporarilyUnavailable
 		}
 		s.metrics.StreamRecoveryTriggered()
 		confirmedMissing, recErr := s.recoverMissingAudio(ctx, userId, loaded)
 		if recErr != nil {
 			slog.ErrorContext(ctx, "stream.recover_failed",
-				"track_id", trackId.String(), "error", recErr)
+				logging.KeyTrackID, trackId.String(), logging.KeyError, recErr)
 		}
 		if confirmedMissing {
 			return nil, domain.ErrAudioNotAvailable
@@ -87,7 +88,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	}
 
 	slog.InfoContext(ctx, "stream.opened",
-		"track_id", trackId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"db_lookup_ms", dbDuration.Milliseconds(),
 		"storage_open_ms", s.now().Sub(storageStart).Milliseconds(),
 	)
@@ -107,7 +108,7 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId ids.Us
 		return nil
 	}
 	if !s.recoveryEnabled() {
-		slog.WarnContext(ctx, "stream.recovery_disabled", "track_id", trackId.String())
+		slog.WarnContext(ctx, "stream.recovery_disabled", logging.KeyTrackID, trackId.String())
 		return nil
 	}
 
@@ -147,7 +148,7 @@ func (s *StreamTrackService) markAudioMissing(ctx context.Context, userId ids.Us
 		return fmt.Errorf("mark failed: %w", err)
 	}
 	slog.WarnContext(ctx, "track marked failed: audio file missing",
-		"track_id", current.ID.String(), "user_id", userId.String())
+		logging.KeyTrackID, current.ID.String())
 	if err := s.trackRepo.Update(ctx, current, expectedVersion); err != nil {
 		return fmt.Errorf("persist recovery: %w", err)
 	}
@@ -156,9 +157,9 @@ func (s *StreamTrackService) markAudioMissing(ctx context.Context, userId ids.Us
 
 func (s *StreamTrackService) scheduleReacquire(ctx context.Context, userId ids.UserId, trackId domain.TrackId) {
 	slog.InfoContext(ctx, "stream.reacquire_scheduled",
-		"track_id", trackId.String())
+		logging.KeyTrackID, trackId.String())
 	if err := track.ScheduleBounded(ctx, s.scheduler, userId, trackId, ""); err != nil {
 		slog.WarnContext(ctx, "stream.reacquire_refused",
-			"track_id", trackId.String(), "error", err)
+			logging.KeyTrackID, trackId.String(), logging.KeyError, err)
 	}
 }

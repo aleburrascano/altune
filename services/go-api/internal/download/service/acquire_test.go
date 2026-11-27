@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"context"
 	"encoding/json"
@@ -1300,15 +1301,6 @@ func (i *contentRecordingIdentifier) identifiedStoredFile() int {
 	return n
 }
 
-func captureServiceLogs(t *testing.T) *strings.Builder {
-	t.Helper()
-	var out strings.Builder
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &out
-}
-
 func seedUnknownSourceTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId, trackId ids.TrackId) {
 	t.Helper()
 	row := committedTrack(t, ledger, trackId)
@@ -1334,7 +1326,7 @@ func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
 				seedUnknownSourceTrack(t, ledger, userId, trackId)
 			}
 			identifier := &contentRecordingIdentifier{storedID: "acoustid-of-the-stored-file"}
-			logs := captureServiceLogs(t)
+			logs := logging.CaptureText(t, slog.LevelInfo)
 			svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store,
 				withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}))
 
@@ -1358,7 +1350,7 @@ func TestExecuteReplace_AFailedStoredCopyIsLoggedAndTheReplaceStillRuns(t *testi
 	ledger, store, userId, trackId, originalRef := seedReadyTrackWith(t)
 	seedUnknownSourceTrack(t, ledger, userId, trackId)
 	identifier := &contentRecordingIdentifier{storedID: "never-recorded"}
-	logs := captureServiceLogs(t)
+	logs := logging.CaptureText(t, slog.LevelInfo)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store,
 		withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store, err: errors.New("object storage unavailable")}))
 
@@ -1532,7 +1524,7 @@ func TestExecuteReplace_NoFingerprintExcludesNothing(t *testing.T) {
 				"the current file again": {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
 				"another upload":         {AcoustID: "acoustid-of-another-upload", MBIDs: []string{recordingMBID}},
 			}}
-			logs := captureServiceLogs(t)
+			logs := logging.CaptureText(t, slog.LevelInfo)
 
 			store, err := replaceOfAnUnknownSource(t, source, identifier, tt.readerFor)
 			if err != nil {

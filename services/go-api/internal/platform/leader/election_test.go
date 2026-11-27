@@ -5,8 +5,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/polltest"
-	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -214,18 +214,14 @@ func (s *session) state() (unlockAttempted, unlocked, released bool, unlockCtxEr
 	return s.unlockAttempted, s.unlocked, s.released, s.unlockCtxErr
 }
 
-func captureWarnings(t *testing.T) *bytes.Buffer {
+func captureWarnings(t *testing.T) *logging.Capture {
 	t.Helper()
 	return captureLogs(t, slog.LevelWarn)
 }
 
-func captureLogs(t *testing.T, level slog.Level) *bytes.Buffer {
+func captureLogs(t *testing.T, level slog.Level) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: level})))
-	t.Cleanup(func() { slog.SetDefault(restore) })
-	return &buf
+	return logging.CaptureText(t, level)
 }
 
 func runOneTick(t *testing.T, s *store) *leader.Election {

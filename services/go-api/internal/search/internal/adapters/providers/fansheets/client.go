@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -103,7 +104,7 @@ func (c *Client) storeIndex(ctx context.Context, index map[string]string) {
 		return
 	}
 	if err := c.index.Set(ctx, index, hubIndexTTL); err != nil {
-		slog.WarnContext(ctx, "trackers.index_cache_set_failed", "error", err)
+		slog.WarnContext(ctx, "trackers.index_cache_set_failed", logging.KeyError, err)
 	}
 }
 
@@ -118,7 +119,7 @@ func (c *Client) artistRows(ctx context.Context, sheetID string) ([]trackerRow, 
 	}
 	released, err := c.tabRows(ctx, sheetID, tabs.released, parseReleased)
 	if err != nil {
-		slog.WarnContext(ctx, "trackers.released_tab_failed", "sheet_id", sheetID, "error", err)
+		slog.WarnContext(ctx, "trackers.released_tab_failed", "sheet_id", sheetID, logging.KeyError, err)
 		return unreleased, fmt.Errorf("%w: released tab: %w", ports.ErrTrackerPartial, err)
 	}
 	return append(unreleased, released...), nil

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -82,7 +83,7 @@ func (r *PostgresEventStore) Append(ctx context.Context, event domain.Interactio
 			eventID = &id
 		} else {
 			slog.DebugContext(ctx, "telemetry.event_id_unparseable",
-				"event_id", event.EventId, "error", parseErr)
+				"event_id", event.EventId, logging.KeyError, parseErr)
 		}
 	}
 

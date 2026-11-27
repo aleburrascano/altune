@@ -3,6 +3,7 @@ package ffmpegtag
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -45,7 +46,7 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 		return fmt.Errorf("replace tagged file: %w", err)
 	}
 
-	slog.InfoContext(ctx, "m4a_tags_written", "path", filePath)
+	slog.InfoContext(ctx, "m4a_tags_written", logging.KeyPath, filePath)
 	return nil
 }
 

@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
@@ -32,6 +33,6 @@ func CleanupTemp(ctx context.Context, ws ports.ScratchFolder, ac *AcquisitionCon
 
 func removeScratch(ctx context.Context, ws ports.ScratchFolder, path string) {
 	if err := ws.Remove(path); err != nil {
-		slog.WarnContext(ctx, "temp_cleanup_failed", "path", path, "error", redact.LogError(err))
+		slog.WarnContext(ctx, "temp_cleanup_failed", logging.KeyPath, path, logging.KeyError, redact.LogError(err))
 	}
 }
