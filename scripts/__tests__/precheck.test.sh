@@ -232,20 +232,7 @@ expect_jest_cache_in_checkout() {
     ! grep -qE -- '--cacheDirectory /' "$WORK/npx.log" 2>/dev/null || fail "jest got an absolute cache directory, which keeps heavy.sh from running it on a remote slot"
 }
 
-CASE="a changed platform file or knip entry list runs the doctor config test, which reads the whole tree and so fails in CI when main moved"
-new_repo
-add_mobile_stubs
-(
-    cd "$WORK/repo" || exit 1
-    mkdir -p client/src/a
-    printf 'export const x = 1;\n' >client/src/a/x.ios.tsx
-    git add -A
-    git commit -qm "platform file"
-)
-run_script_with_stubs
-expect_npx "__tests__/doctor.config.test.ts"
-
-CASE="an ordinary mobile source change does not run the doctor config test"
+CASE="any client change runs the doctor config test, which reads the whole tree and so fails in CI for files a push never touched"
 new_repo
 add_mobile_stubs
 (
@@ -256,7 +243,7 @@ add_mobile_stubs
     git commit -qm "mobile change"
 )
 run_script_with_stubs
-! grep -qF "__tests__/doctor.config.test.ts" "$WORK/npx.log" 2>/dev/null || fail "an ordinary mobile change must not run the doctor config test"
+expect_npx "__tests__/doctor.config.test.ts"
 
 CASE="mobile related tests keep the jest cache inside the checkout, so heavy.sh can run them remotely"
 new_repo
