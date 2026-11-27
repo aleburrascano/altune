@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage="usage: ci-precheck.sh   run in CI from the checkout: precheck at PR scope against origin/main, or on a push to main against the commit before the push (BEFORE, else HEAD~1), with the whole go-api module linted and mutation left to its own job"
+usage="usage: ci-precheck.sh   run in CI from the checkout: precheck at PR scope against origin/main, or on a push to main against the commit before the push (BEFORE, else HEAD~1), with the go-api packages the change touches and their importers linted and tested, the whole module linted on a push to main, and mutation left to its own job"
 [ $# = 0 ] || { echo "$usage" >&2; exit 2; }
 root=$(git rev-parse --show-toplevel)
 cd "$root"
@@ -14,4 +14,5 @@ if [ "${GITHUB_REF:-}" = refs/heads/main ]; then
   fi
 fi
 export CLIENT_MUTATE_RUNS_ELSEWHERE=1
+export PRECHECK_WHOLE_MODULE="$([ "${GITHUB_REF:-}" = refs/heads/main ] && echo 1)"
 exec bash scripts/precheck.sh --full "$base"
