@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -50,9 +49,9 @@ func (q *firstOutcomeQueue) Settle(ctx context.Context, trackID ids.TrackId, fen
 }
 
 type jobRunner interface {
-	Execute(ctx context.Context, job jobrun.Job) error
-	ExecuteReplace(ctx context.Context, job jobrun.Job) error
-	RefuseQueued(ctx context.Context, job jobrun.Job)
+	Execute(ctx context.Context, job ports.AcquisitionJob) error
+	ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error
+	RefuseQueued(ctx context.Context, job ports.AcquisitionJob)
 }
 
 func runOneJob(t *testing.T, acquirer jobRunner, track inmemoryledger.LedgerTrack) jobOutcome {
@@ -147,5 +146,5 @@ func withTestUpgrades(runner upgradeRunner, workers int) schedulerPortsOption {
 }
 
 type upgradeRunner interface {
-	ExecuteUpgrade(ctx context.Context, job jobrun.Job) error
+	ExecuteUpgrade(ctx context.Context, job ports.AcquisitionJob) error
 }

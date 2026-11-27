@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
@@ -98,9 +97,9 @@ func (r recordedRerecording) FindRerecording(_ context.Context, q ports.Rerecord
 
 func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, track ports.TrackSnapshot) error {
 	if kase.Stored != nil {
-		return svc.ExecuteReplace(ctx, jobrun.Job{UserID: track.UserId, TrackID: track.ID})
+		return svc.ExecuteReplace(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 	}
-	return svc.Execute(ctx, jobrun.Job{UserID: track.UserId, TrackID: track.ID})
+	return svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }
 
 func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {

@@ -5,7 +5,6 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/downloadfailure"
 	"context"
 	"errors"
@@ -313,7 +312,7 @@ func searchFailureCode(t *testing.T, reg *service.SourceRegistry) downloadfailur
 	t.Helper()
 	track := pendingSong()
 	ledger := inmemoryledger.NewLedger(track)
-	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID}); err == nil {
+	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want a search failure")
 	}
 	return persistedCode(t, ledger, track.ID)

@@ -3,7 +3,6 @@ package service_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"os"
@@ -53,7 +52,7 @@ func TestSelect_RanksArtTracksByTheResolvedLengthWhenTheTrackHasNone(t *testing.
 		download.NewTempWorkspace(),
 		resolving(&resolver{identity: ports.RecordingIdentity{Duration: 128}}, noVerification()), noStages())
 
-	_ = svc.Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID})
+	_ = svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	if len(source.fetched) == 0 || source.fetched[0] != "https://music.youtube.com/watch?v=bbbbbbbbbbb" {
 		t.Errorf("fetched %v, want the 128 s art track first: it is the closest to the resolved length", source.fetched)

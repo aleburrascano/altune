@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -17,15 +16,15 @@ const acquireTakes = 2 * time.Second
 
 type slowAcquirer struct{}
 
-func (slowAcquirer) Execute(ctx context.Context, job jobrun.Job) error {
+func (slowAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
 	return clock.Sleep(ctx, acquireTakes)
 }
 
-func (slowAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
+func (slowAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
 	return nil
 }
 
-func (slowAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
+func (slowAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {

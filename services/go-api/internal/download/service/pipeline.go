@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/download/internal/core/titlematch"
 	"altune/go-api/internal/download/internal/core/tracklength"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -256,7 +255,7 @@ func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext)
 }
 
 type AcquisitionContext struct {
-	Job               jobrun.Job
+	Job               ports.AcquisitionJob
 	Track             TrackRef
 	Identity          ports.RecordingIdentity
 	Candidates        []ports.AudioCandidate
