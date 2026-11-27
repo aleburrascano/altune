@@ -16,7 +16,7 @@ import (
 	"log/slog"
 )
 
-func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
+func (s *pipeline) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
 	ResolveIdentity(ctx, s.recordings, ac)
 }
 
@@ -63,7 +63,7 @@ func WithProvenMaxBitErrorRate(provenMaxBitErrorRate float64) func(*AcquireTrack
 	}
 }
 
-func (s *AcquireTrackAudioService) CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
+func (s *pipeline) CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
 	if track.AudioRef == nil {
 		return replacement.Finding{}, ErrInPlaceUnavailable
 	}
@@ -74,7 +74,7 @@ func (s *AcquireTrackAudioService) CheckInPlace(ctx context.Context, track *port
 	return finding, err
 }
 
-func (s *AcquireTrackAudioService) checkStoredFile(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
+func (s *pipeline) checkStoredFile(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
 	dir, err := s.workspace.Create("in-place-*")
 	if err != nil {
 		return replacement.Finding{}, fmt.Errorf("create in-place dir: %w", err)
@@ -89,7 +89,7 @@ func (s *AcquireTrackAudioService) checkStoredFile(ctx context.Context, track *p
 	return s.judgeInPlace(ctx, ac, track, path)
 }
 
-func (s *AcquireTrackAudioService) judgeInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (replacement.Finding, error) {
+func (s *pipeline) judgeInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (replacement.Finding, error) {
 	input := judgeInput(ac, nil, deref(track.StoredDurationSeconds), storedSourceOf(ctx, track))
 	score, err := s.fingerprintInto(ctx, ac, &input, path)
 	if err != nil {
@@ -107,7 +107,7 @@ func (s *AcquireTrackAudioService) judgeInPlace(ctx context.Context, ac *Acquisi
 	return findingOf(audioverdict.Judge(input, s.cuts), basisPreview, score, preview.BitErrorRate), nil
 }
 
-func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *AcquisitionContext, input *audioverdict.Input, path string) (float64, error) {
+func (s *pipeline) fingerprintInto(ctx context.Context, ac *AcquisitionContext, input *audioverdict.Input, path string) (float64, error) {
 	if ac.Identity.MBID == "" {
 		return 0, nil
 	}
@@ -166,7 +166,7 @@ func storedSourceOf(ctx context.Context, track *ports.TrackSnapshot) judgedSourc
 	return judgedSource{kind: kind, title: stored.SourceTitle}
 }
 
-func (s *AcquireTrackAudioService) previewInPlace(ctx context.Context, track *ports.TrackSnapshot, path string) *audioverdict.Preview {
+func (s *pipeline) previewInPlace(ctx context.Context, track *ports.TrackSnapshot, path string) *audioverdict.Preview {
 	target := previewTargetOf(track)
 	if target == (ports.PreviewTarget{}) {
 		return nil

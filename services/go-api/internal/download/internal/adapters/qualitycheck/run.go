@@ -97,7 +97,7 @@ func (r recordedRerecording) FindRerecording(_ context.Context, q ports.Rerecord
 
 func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, track ports.TrackSnapshot) error {
 	if kase.Stored != nil {
-		return svc.ExecuteReplace(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+		return service.NewReplaceService(svc).ExecuteReplace(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 	}
 	return svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }

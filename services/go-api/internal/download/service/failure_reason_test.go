@@ -117,8 +117,9 @@ func pendingSong() inmemoryledger.LedgerTrack {
 	}}
 }
 
-func acquireService(ledger *inmemoryledger.Ledger, registry *service.SourceRegistry, store ports.AudioWriter) *service.AcquireTrackAudioService {
-	return service.MustNewAcquireTrackAudioService(ledger, registry, store, scratchfiles.New(), noVerification(), noStages(deletingFrom(store)))
+func acquireService(ledger *inmemoryledger.Ledger, registry *service.SourceRegistry, store ports.AudioWriter) *acquisitionServices {
+	acquire := service.MustNewAcquireTrackAudioService(ledger, registry, store, scratchfiles.New(), noVerification(), noStages(deletingFrom(store)))
+	return &acquisitionServices{AcquireTrackAudioService: acquire, ReplaceService: service.NewReplaceService(acquire)}
 }
 
 func persistedCode(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId) downloadfailure.FailureCode {

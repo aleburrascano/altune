@@ -270,7 +270,7 @@ func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
 	synctest.Test(t, func(t *testing.T) {
 		track := pending("Song", "Artist", "Album")
 		store, orphans := newRecordingStore(), &recordingOrphanQueue{}
-		svc := service.MustNewAcquireTrackAudioService(waitingCommitLedger{inmemoryledger.NewLedger(track)}, sourceFor(track), store,
+		svc := mustAcquisitionServices(waitingCommitLedger{inmemoryledger.NewLedger(track)}, sourceFor(track), store,
 			scratchfiles.New(), noVerification(), noStages(orphaningInto(orphans)))
 		opts := []any{}
 		queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
@@ -406,7 +406,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store := newRecordingStore()
-	svc := service.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(track), sourceFor(track), store,
+	svc := mustAcquisitionServices(inmemoryledger.NewLedger(track), sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages(taggedBy(cancellingTagger{cancel})))
 
 	err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})

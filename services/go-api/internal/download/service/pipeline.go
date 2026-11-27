@@ -440,7 +440,7 @@ type TrackRef struct {
 	AudioSourceURL string
 }
 
-func (s *AcquireTrackAudioService) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
+func (s *pipeline) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
 	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.sleep, s.unit, s.now, s.workspace, s.downloadLimiter,
 		[]func(*DownloadStep){
 			WithConfidenceFloor(s.confidenceFloor),

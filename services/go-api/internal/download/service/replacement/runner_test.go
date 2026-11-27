@@ -201,7 +201,7 @@ func (w *world) runnerChecking(cfg download.UpgradeConfig, pub events.Publisher,
 	stages := noStages(w.audio)
 	stages.Events = pub
 	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), stages)
-	runner, err := replacement.NewRunner(w.tracks, svc, w.upgrades, cfg, inPlace(svc))
+	runner, err := replacement.NewRunner(w.tracks, download.NewReplaceService(svc), w.upgrades, cfg, inPlace(svc))
 	if err != nil {
 		w.t.Fatalf("NewUpgradeRunner: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestReplace_IsNotHeldToTheRatchet(t *testing.T) {
 	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio,
 		download.NewTempWorkspace(), noVerification(), noStages(w.audio))
 
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := download.NewReplaceService(svc).ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -476,7 +476,7 @@ func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
 	w := seed(t, audioquality.D)
 	store := &failingGiveUpStore{}
 	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), noStages(w.audio))
-	runner := newRunner(t, w.tracks, svc, store, download.UpgradeConfig{MaxTries: 1})
+	runner := newRunner(t, w.tracks, download.NewReplaceService(svc), store, download.UpgradeConfig{MaxTries: 1})
 
 	err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 

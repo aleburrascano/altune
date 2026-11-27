@@ -26,7 +26,7 @@ func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 	track := pendingBlindingLights()
 	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 	store := &objectStore{objects: map[string]string{}}
-	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := mustAcquisitionServices(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
@@ -68,7 +68,7 @@ func (vanishingLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.
 func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.T) {
 	track := pendingBlindingLights()
 	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
-	svc := service.MustNewAcquireTrackAudioService(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
+	svc := mustAcquisitionServices(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 
 	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
@@ -105,7 +105,7 @@ func (p *progressRecorder) published() []string {
 func TestScheduledRun_TellsTheClientWhenItReachesTheUpdateTrackStage(t *testing.T) {
 	track := inmemoryledger.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
 	ledger := inmemoryledger.NewLedger(track)
-	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}),
+	svc := mustAcquisitionServices(ledger, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 	progress := &progressRecorder{}
 
@@ -126,7 +126,7 @@ func TestReplaceGated_AnUnprobedFileGetsNoLengthRescue(t *testing.T) {
 		Title: "The Weeknd - Blinding Lights", URL: "https://www.youtube.com/watch?v=fanUploadAA",
 		Channel: "Some Fan", Kind: ports.KindUpload, Duration: 285, Categories: []string{"Music"},
 	}}}
-	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(source), served.store,
+	svc := mustAcquisitionServices(served.ledger, service.NewSourceRegistry(source), served.store,
 		scratchfiles.New(), resolving(&resolver{identity: ports.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}},
 			verifiedBy(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
 				{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},
