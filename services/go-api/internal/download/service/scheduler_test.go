@@ -504,7 +504,7 @@ func settledJob(s *service.BackgroundAcquisitionScheduler, trackID string) (acqp
 	return acqports.JobRecord{}, false
 }
 
-func trackHeldByJob(t *testing.T, hold func(*service.BackgroundAcquisitionScheduler) error) (*service.BackgroundAcquisitionScheduler, func()) {
+func trackHeldByJob(t *testing.T, advance func(time.Duration), hold func(*service.BackgroundAcquisitionScheduler) error) (*service.BackgroundAcquisitionScheduler, func()) {
 	t.Helper()
 	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -515,7 +515,7 @@ func trackHeldByJob(t *testing.T, hold func(*service.BackgroundAcquisitionSchedu
 	var released sync.Once
 	drain := func() {
 		released.Do(func() { close(ledger.release) })
-		awaitIdle(t, scheduler, time.Sleep)
+		awaitIdle(t, scheduler, advance)
 	}
 	t.Cleanup(drain)
 	if err := hold(scheduler); err != nil {
@@ -528,7 +528,7 @@ func trackHeldByJob(t *testing.T, hold func(*service.BackgroundAcquisitionSchedu
 func TestBackgroundScheduler_AReplaceWaitsOutAPlainJobOnTheSameTrack(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userId, trackId := ids.NewUserId(uuid.New()), ids.NewTrackId()
-		scheduler, drain := trackHeldByJob(t, func(s *service.BackgroundAcquisitionScheduler) error {
+		scheduler, drain := trackHeldByJob(t, time.Sleep, func(s *service.BackgroundAcquisitionScheduler) error {
 			return s.Schedule(context.Background(), userId, trackId, "")
 		})
 
@@ -546,7 +546,7 @@ func TestBackgroundScheduler_AReplaceWaitsOutAPlainJobOnTheSameTrack(t *testing.
 func TestBackgroundScheduler_ARetryWaitsOutAReplaceOnTheSameTrack(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userId, trackId := ids.NewUserId(uuid.New()), ids.NewTrackId()
-		scheduler, drain := trackHeldByJob(t, func(s *service.BackgroundAcquisitionScheduler) error {
+		scheduler, drain := trackHeldByJob(t, time.Sleep, func(s *service.BackgroundAcquisitionScheduler) error {
 			return s.ScheduleReplace(context.Background(), userId, trackId)
 		})
 
@@ -1625,14 +1625,14 @@ func (a outcomeAcquirer) ExecuteReplace(context.Context, acqports.AcquisitionJob
 
 func (outcomeAcquirer) RefuseQueued(context.Context, acqports.AcquisitionJob) {}
 
-func finishJobs(t *testing.T, s *service.BackgroundAcquisitionScheduler, count int) {
+func finishJobs(t *testing.T, advance func(time.Duration), s *service.BackgroundAcquisitionScheduler, count int) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
 	for range count {
 		if err := s.Schedule(context.Background(), userId, ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule: %v", err)
 		}
-		awaitIdle(t, s, time.Sleep)
+		awaitIdle(t, s, advance)
 	}
 }
 
@@ -1646,9 +1646,9 @@ func newOutcomeScheduler(t *testing.T, err error) *service.BackgroundAcquisition
 func TestAcquisitionStatus_Counts(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		succeeding := newOutcomeScheduler(t, nil)
-		finishJobs(t, succeeding, 5)
+		finishJobs(t, time.Sleep, succeeding, 5)
 		failing := newOutcomeScheduler(t, errors.New("yt-dlp exited 1"))
-		finishJobs(t, failing, 1)
+		finishJobs(t, time.Sleep, failing, 1)
 
 		if got := succeeding.Status(t.Context()); got.Succeeded != 5 || got.Failed != 0 || len(got.Recent) != 5 {
 			t.Errorf("succeeding scheduler status = succeeded %d, failed %d, recent %d, want 5, 0, 5", got.Succeeded, got.Failed, len(got.Recent))
@@ -1666,7 +1666,7 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 func TestAcquisitionStatus_RecentBounded(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := newOutcomeScheduler(t, errors.New("boom"))
-		finishJobs(t, s, service.RecentJobCap+10)
+		finishJobs(t, time.Sleep, s, service.RecentJobCap+10)
 
 		if got := len(s.Status(t.Context()).Recent); got != service.RecentJobCap {
 			t.Errorf("recent = %d, want capped at %d", got, service.RecentJobCap)
@@ -1677,7 +1677,7 @@ func TestAcquisitionStatus_RecentBounded(t *testing.T) {
 func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := newOutcomeScheduler(t, errors.New("boom"))
-		finishJobs(t, s, 1)
+		finishJobs(t, time.Sleep, s, 1)
 		snap := s.Status(t.Context())
 		reason := snap.Recent[0].Reason
 		snap.Recent[0].Reason = "mutated"
