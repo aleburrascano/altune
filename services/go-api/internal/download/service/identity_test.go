@@ -80,7 +80,7 @@ type inPlaceWiring struct {
 	provenCut  float64
 }
 
-func inPlaceChecker(w inPlaceWiring) *download.AcquireTrackAudioService {
+func inPlaceChecker(w inPlaceWiring) *download.InPlaceChecker {
 	if w.resolver == nil {
 		w.resolver = resolvedTo(pinnedBoysDontCry)
 	}
@@ -97,8 +97,8 @@ func inPlaceChecker(w inPlaceWiring) *download.AcquireTrackAudioService {
 	if w.lookup != nil {
 		wiring.RecordingLookup = w.lookup
 	}
-	return download.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(), download.NewSourceRegistry(), storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
-		download.WithProvenMaxBitErrorRate(w.provenCut))
+	return download.NewInPlaceChecker(download.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(), download.NewSourceRegistry(), storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
+		download.WithProvenMaxBitErrorRate(w.provenCut)))
 }
 
 func inPlaceTrack() *download.TrackSnapshot {
@@ -370,7 +370,7 @@ func TestCheckInPlace_AFailedFingerprintIsAnErrorNotAnAnswer(t *testing.T) {
 func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.T) {
 	svc := download.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(), download.NewSourceRegistry(), storedAudio{}, download.NewTempWorkspace(), noVerification(), noStages())
 
-	finding, err := svc.CheckInPlace(context.Background(), inPlaceTrack())
+	finding, err := download.NewInPlaceChecker(svc).CheckInPlace(context.Background(), inPlaceTrack())
 
 	if !errors.Is(err, service.ErrInPlaceUnavailable) || finding.Answered() {
 		t.Errorf("CheckInPlace = %+v, %v, want ErrInPlaceUnavailable", finding, err)

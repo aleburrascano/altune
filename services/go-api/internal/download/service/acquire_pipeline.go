@@ -8,8 +8,6 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
-	"altune/go-api/internal/shared/redact"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -108,7 +106,7 @@ func (s *pipeline) runAcquisition(ctx context.Context, ac *AcquisitionContext) e
 	steps := s.buildSteps(ac.Job.UserID, ac.Job.TrackID)
 	failure := RunPipeline(ctx, steps, ac)
 	if failure != nil {
-		failure = s.takeRerecording(ctx, steps, ac, failure)
+		failure = s.rerecording().take(ctx, steps, ac, failure)
 	}
 	if failure != nil {
 		return failure
@@ -118,68 +116,6 @@ func (s *pipeline) runAcquisition(ctx context.Context, ac *AcquisitionContext) e
 	ac.Job.Progress().Provenance(string(ac.Provenance()))
 	s.outcomes().completed(ctx, ac.Job.UserID, ac.Job.TrackID, ac.AudioRef)
 	return nil
-}
-
-func (s *pipeline) takeRerecording(ctx context.Context, steps Pipeline, ac *AcquisitionContext, originalErr error) error {
-	originalMBID := cmp.Or(ac.Identity.MBID, ac.Track.CatalogMBID)
-	if !s.mayTakeRerecording(ctx, ac, originalErr) || originalMBID == "" {
-		return originalErr
-	}
-	label, found := s.findRerecording(ctx, ac, originalMBID)
-	if !found {
-		return originalErr
-	}
-	err := s.runRerecordingPass(ctx, steps, ac, label)
-	if err == nil {
-		logRerecordingTier(ctx, ac, originalMBID, label.MBID, "taken", nil)
-		return nil
-	}
-	logRerecordingTier(ctx, ac, originalMBID, label.MBID, "pass_failed", err)
-	if ctx.Err() != nil {
-		return err
-	}
-	return originalErr
-}
-
-func (s *pipeline) runRerecordingPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.TrackLabel) error {
-	pass := ac.Snapshot()
-	pass.retargetTo(label)
-	s.resolveIdentity(ctx, &pass)
-	if err := RunPipeline(ctx, steps, &pass); err != nil {
-		return err
-	}
-	s.recordRejections(ctx, ac)
-	pass.Rejections = pass.Rejections[len(ac.Rejections):]
-	*ac = pass
-	return nil
-}
-
-func (s *pipeline) mayTakeRerecording(ctx context.Context, ac *AcquisitionContext, err error) bool {
-	return noSourceHasIt(err) && ctx.Err() == nil && ac.Replace.allowsRerecording()
-}
-
-func (s *pipeline) findRerecording(ctx context.Context, ac *AcquisitionContext, originalMBID string) (ports.TrackLabel, bool) {
-	label, found, err := s.rerecordings.FindRerecording(ctx, ports.RerecordingQuery{OriginalMBID: originalMBID})
-	switch {
-	case err != nil:
-		logRerecordingTier(ctx, ac, originalMBID, "", "finder_failed", err)
-	case !found:
-		logRerecordingTier(ctx, ac, originalMBID, "", "none", nil)
-	case label.MBID == ac.Track.CatalogMBID:
-		logRerecordingTier(ctx, ac, originalMBID, label.MBID, "already_the_rerecording", nil)
-	default:
-		return label, true
-	}
-	return ports.TrackLabel{}, false
-}
-
-func logRerecordingTier(ctx context.Context, ac *AcquisitionContext, originalMBID, rerecordingMBID, outcome string, err error) {
-	attrs := []any{logging.KeyTrackID, ac.Track.ID, "original_mbid", originalMBID, "rerecording_mbid", rerecordingMBID, "outcome", outcome}
-	if err != nil {
-		slog.WarnContext(ctx, "acquisition.rerecording_tier", append(attrs, logging.KeyError, redact.LogError(err))...)
-		return
-	}
-	slog.InfoContext(ctx, "acquisition.rerecording_tier", attrs...)
 }
 
 func reportDecision(ac *AcquisitionContext) {
