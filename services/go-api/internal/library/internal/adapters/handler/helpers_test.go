@@ -274,7 +274,7 @@ func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (librar
 }
 
 func postgresTrackRoutes(pool *pgxpool.Pool) chi.Router {
-	repo := library.NewPostgresCatalogTrackRepository(pool, library.NoopDBCallMetrics())
+	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	tracks := library.MustNewTrackHandler(
 		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real),
 		library.NewListTracksService(repo),

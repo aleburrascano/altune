@@ -20,11 +20,7 @@ type (
 	TrackReadWriter       = ports.TrackReadWriter
 )
 
-var (
-	NoopAcquisitionScheduler = ports.NoopAcquisitionScheduler
-	NoopDBCallMetrics        = ports.NoopDBCallMetrics
-	NoopFSCallMetrics        = ports.NoopFSCallMetrics
-)
+var NoopAcquisitionScheduler = ports.NoopAcquisitionScheduler
 
 var (
 	ErrDBTransient                  = ports.ErrDBTransient

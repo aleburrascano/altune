@@ -80,11 +80,11 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 	cfg.AcquisitionDeezerPreviewTimeout = time.Second
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		DBMetrics:  library.NoopDBCallMetrics(),
+		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Config:     cfg,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, library.NoopFSCallMetrics()),
+		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    sources,
 	})
@@ -102,7 +102,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	if err != nil || track.SetDuration(212) != nil {
 		t.Fatalf("new track: %v", err)
 	}
-	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	if _, _, err := repo.Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
@@ -111,10 +111,10 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
-		DBMetrics:  library.NoopDBCallMetrics(),
+		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(musicDir, library.NoopFSCallMetrics()),
+		AudioStore: library.NewFilesystemAudioStore(musicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -177,10 +177,10 @@ func TestNewScheduler_ZeroUpgradeWorkersBuildsNoUpgradeLaneInsteadOfPanicking(t 
 		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir, AcquisitionDeezerPreviewTimeout: time.Second},
 		Pool:       pool,
-		DBMetrics:  library.NoopDBCallMetrics(),
+		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(musicDir, library.NoopFSCallMetrics()),
+		AudioStore: library.NewFilesystemAudioStore(musicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -269,20 +269,20 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
-	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(context.Background(), track); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 
-	trackRepo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
+	trackRepo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir()},
 		Pool:       pool,
-		DBMetrics:  library.NoopDBCallMetrics(),
+		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), library.NoopFSCallMetrics()),
+		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -323,7 +323,7 @@ func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
-	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(context.Background(), track); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
 	t.Cleanup(func() {
@@ -380,10 +380,10 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Transport:  http.DefaultTransport,
 		Config:     cfg,
 		Pool:       pool,
-		DBMetrics:  library.NoopDBCallMetrics(),
+		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), time.Now, download.NewPostgresUpgradeStore(pool), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, library.NoopFSCallMetrics()),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), time.Now, download.NewPostgresUpgradeStore(pool), ids.Real),
+		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{sourceWithNothing{}}},
 	})
@@ -457,7 +457,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
-	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	if _, _, err := repo.Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
@@ -467,10 +467,10 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
-		DBMetrics:  library.NoopDBCallMetrics(),
+		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), library.NoopFSCallMetrics()),
+		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{hang}},
 	})

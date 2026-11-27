@@ -53,7 +53,7 @@ func writeAudio(t *testing.T, dir, ref string) {
 
 func TestCheckWithNoTracksMakesNoRepoCalls(t *testing.T) {
 	repo := &fakeTrackRepo{}
-	store := library.NewFilesystemAudioStore(t.TempDir(), library.NoopFSCallMetrics())
+	store := library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics())
 
 	orphaned := orphans.Check(context.Background(), nil, store)
 	fixed := orphans.Fix(context.Background(), orphaned, repo)
@@ -69,7 +69,7 @@ func TestCheckCountsNothingWhenTheFileExists(t *testing.T) {
 	writeAudio(t, dir, ref)
 	track, repo := readyFixture(t, ref)
 
-	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir, library.NoopFSCallMetrics()))
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics()))
 	fixed := orphans.Fix(context.Background(), orphaned, repo)
 
 	if len(orphaned) != 0 || fixed != 0 || len(repo.updates) != 0 {
@@ -80,7 +80,7 @@ func TestCheckCountsNothingWhenTheFileExists(t *testing.T) {
 func TestCheckReportsMissingFileAndTouchesNoRepo(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(t.TempDir(), library.NoopFSCallMetrics()))
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()))
 
 	if len(orphaned) != 1 || orphaned[0].Id != track.Id {
 		t.Fatalf("orphaned = %+v, want exactly the missing track", orphaned)
@@ -124,7 +124,7 @@ func TestCheckTreatsASiblingUsersFileAsMissing(t *testing.T) {
 	writeAudio(t, dir, uuid.NewString()+"/song.mp3")
 	track, repo := readyFixture(t, ref)
 
-	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir, library.NoopFSCallMetrics()))
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics()))
 	fixed := orphans.Fix(context.Background(), orphaned, repo)
 
 	if len(orphaned) != 1 || fixed != 1 {

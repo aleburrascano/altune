@@ -2,6 +2,7 @@ package audiofiles_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -19,7 +20,7 @@ const maxPresignTTL = time.Hour
 
 func newObjectStore(t *testing.T, cfg *config.Config) library.AudioLinkSigner {
 	t.Helper()
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.New(slog.DiscardHandler), library.NoopFSCallMetrics())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.New(slog.DiscardHandler), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}

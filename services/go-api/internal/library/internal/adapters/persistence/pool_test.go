@@ -95,7 +95,7 @@ func TestPostgresRepos_EachFailureShapeIsClassifiedTransientOrNot(t *testing.T) 
 			}
 			defer cancel()
 
-			err := getMissingTrack(ctx, poolAt(t, tc.addr(t)), library.NoopDBCallMetrics())
+			err := getMissingTrack(ctx, poolAt(t, tc.addr(t)), librarytest.DiscardDBCallMetrics())
 
 			if err == nil {
 				t.Fatal("GetByID succeeded against a failing database")
@@ -117,7 +117,7 @@ func TestPostgresTrackRepo_ADeadlineWhileWaitingForAPooledConnectionIsTransient(
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err = getMissingTrack(ctx, pool, library.NoopDBCallMetrics())
+	err = getMissingTrack(ctx, pool, librarytest.DiscardDBCallMetrics())
 
 	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, library.ErrDBTransient) {
 		t.Fatalf("err = %v, want a transient context.DeadlineExceeded", err)
@@ -132,7 +132,7 @@ func TestPostgresPlaylistRepo_AddTrack_ACancelInsideItsTransactionIsNotTransient
 	pool, trace := tracedPool(t)
 	trace.afterNextQuery(cancel)
 
-	err := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics()).AddTrack(ctx, userId, playlistId, librarytest.NewTrackId())
+	err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).AddTrack(ctx, userId, playlistId, librarytest.NewTrackId())
 
 	if !errors.Is(err, context.Canceled) || errors.Is(err, library.ErrDBTransient) {
 		t.Fatalf("err = %v, want context.Canceled, not transient", err)
@@ -142,7 +142,7 @@ func TestPostgresPlaylistRepo_AddTrack_ACancelInsideItsTransactionIsNotTransient
 func TestPostgresPlaylistRepo_GetWithTracks_NamesATransientFailureOnce(t *testing.T) {
 	pool := poolAt(t, refusedAddr(t))
 
-	_, _, err := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics()).GetWithTracks(context.Background(), librarytest.NewPlaylistId(), sharedids.NewUserId(uuid.New()))
+	_, _, err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).GetWithTracks(context.Background(), librarytest.NewPlaylistId(), sharedids.NewUserId(uuid.New()))
 
 	if !errors.Is(err, library.ErrDBTransient) {
 		t.Fatalf("err = %v, want ErrDBTransient", err)
@@ -440,7 +440,7 @@ func TestPostgresRepos_ABackendTerminatedInsideATransactionIsTransient(t *testin
 	id, userId := librarytest.NewTrackId(), sharedids.NewUserId(uuid.New())
 	calls := []repoCall{
 		{"PostgresCatalogTrackRepository.ReplaceFeaturedArtists", func(ctx context.Context, p *pgxpool.Pool) error {
-			return library.NewPostgresCatalogTrackRepository(p, library.NoopDBCallMetrics()).ReplaceFeaturedArtists(ctx, id, userId, nil)
+			return library.NewPostgresCatalogTrackRepository(p, librarytest.DiscardDBCallMetrics()).ReplaceFeaturedArtists(ctx, id, userId, nil)
 		}},
 	}
 
@@ -495,7 +495,7 @@ func everyRepoMethod(t *testing.T) []repoCall {
 func trackRepoMethods(f repoFixture) []repoCall {
 	u, tr := f.userId, f.track
 	repo := func(p *pgxpool.Pool) *library.PostgresTrackRepository {
-		return library.NewPostgresTrackRepository(p, library.NoopDBCallMetrics())
+		return library.NewPostgresTrackRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	return []repoCall{
 		{"PostgresTrackRepository.Add", func(ctx context.Context, p *pgxpool.Pool) error {
@@ -555,7 +555,7 @@ func trackRepoMethods(f repoFixture) []repoCall {
 func catalogTrackRepoMethods(f repoFixture) []repoCall {
 	u, tr := f.userId, f.track
 	repo := func(p *pgxpool.Pool) *library.PostgresCatalogTrackRepository {
-		return library.NewPostgresCatalogTrackRepository(p, library.NoopDBCallMetrics())
+		return library.NewPostgresCatalogTrackRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	query := library.LibraryQuery{Limit: 10}
 	return []repoCall{
@@ -581,7 +581,7 @@ func playlistRepoMethods(f repoFixture) []repoCall {
 	u, pl, tr := f.userId, f.playlist, f.track
 	ids := []library.TrackId{tr.ID}
 	repo := func(p *pgxpool.Pool) *library.PostgresPlaylistRepository {
-		return library.NewPostgresPlaylistRepository(p, library.NoopDBCallMetrics())
+		return library.NewPostgresPlaylistRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	return []repoCall{
 		{"PostgresPlaylistRepository.AddTrack", func(ctx context.Context, p *pgxpool.Pool) error {
@@ -632,7 +632,7 @@ func playlistRepoMethods(f repoFixture) []repoCall {
 func orphanedAudioRepoMethods(f repoFixture) []repoCall {
 	u, tr := f.userId, f.track
 	repo := func(p *pgxpool.Pool) *library.PostgresOrphanedAudioRepository {
-		return library.NewPostgresOrphanedAudioRepository(p, library.NoopDBCallMetrics())
+		return library.NewPostgresOrphanedAudioRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	return []repoCall{
 		{"PostgresOrphanedAudioRepository.AudioUsage", func(ctx context.Context, p *pgxpool.Pool) error {

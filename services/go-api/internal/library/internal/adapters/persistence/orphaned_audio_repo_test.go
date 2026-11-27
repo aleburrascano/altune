@@ -34,7 +34,7 @@ func addTrackAt(t *testing.T, pool *pgxpool.Pool, userId ids.UserId, audioRef st
 		}
 	}
 	cleanupTrack(t, pool, track.ID, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(context.Background(), track); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 }
@@ -55,7 +55,7 @@ func findOrphan(t *testing.T, repo *library.PostgresOrphanedAudioRepository, aud
 
 func TestPostgresOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
+	repo := library.NewPostgresOrphanedAudioRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	trackId := librarytest.NewTrackId()
@@ -95,7 +95,7 @@ func TestPostgresOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
 
 func TestPostgresOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
+	repo := library.NewPostgresOrphanedAudioRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	stuck, fresh := orphanRefFor(userId), orphanRefFor(userId)
@@ -123,7 +123,7 @@ func TestPostgresOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
 
 func TestPostgresOrphanedAudioRepo_AudioUsage(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
+	repo := library.NewPostgresOrphanedAudioRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 
 	usage := func(ref string, owner ids.UserId) library.AudioUsage {
@@ -182,7 +182,7 @@ func TestPostgresOrphanedAudioRepo_MissingTableIsUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
+	repo := library.NewPostgresOrphanedAudioRepository(pool, librarytest.DiscardDBCallMetrics())
 
 	userId := ids.NewUserId(uuid.New())
 	orphan := library.OrphanedAudio{AudioRef: orphanRefFor(userId), UserId: userId, TrackId: librarytest.NewTrackId()}

@@ -53,7 +53,7 @@ func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userI
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track.ID, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(ctx, track); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(ctx, track); err != nil {
 		t.Fatalf("seedTrackForDB: %v", err)
 	}
 	return track.ID
@@ -72,7 +72,7 @@ func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, us
 	t.Helper()
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)
-	if err := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics()).Create(ctx, pl); err != nil {
+	if err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).Create(ctx, pl); err != nil {
 		t.Fatalf("seedPlaylistForDB: %v", err)
 	}
 	return pl.ID
@@ -80,8 +80,8 @@ func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, us
 
 func seedPlaylistWithTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId sharedids.UserId, n int) (*library.Playlist, []library.TrackId) {
 	t.Helper()
-	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
-	trackRepo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics())
+	trackRepo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)

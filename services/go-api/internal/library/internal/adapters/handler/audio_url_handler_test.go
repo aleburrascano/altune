@@ -145,7 +145,7 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 func TestAudioURLs_ARefusedCatalogDatabaseAnswersTemporarilyUnavailable(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	repo := library.NewPostgresTrackRepository(refusedPool(t), library.NoopDBCallMetrics())
+	repo := library.NewPostgresTrackRepository(refusedPool(t), librarytest.DiscardDBCallMetrics())
 	signer := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
 	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"fmt"
@@ -24,11 +25,11 @@ func runSweepStagingAudio(cfg *config.Config, mode RunMode) error {
 	}
 	defer pool.Close()
 
-	return sweepAudioStore(ctx, cfg, library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), mode)
+	return sweepAudioStore(ctx, cfg, library.NewPostgresTrackRepository(pool, library.NewDBCallMetrics(telemetry.NewRegistry())), mode)
 }
 
 func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, mode RunMode) error {
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NoopFSCallMetrics())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NewFSCallMetrics(telemetry.NewRegistry()))
 	if err != nil {
 		return err
 	}
