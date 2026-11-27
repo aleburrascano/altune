@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { TrackId, WireTrackStatus } from '@shared/catalog';
+import { isReady, type TrackId, type WireTrackStatus } from '@shared/catalog';
+import { nextLifecycle } from '@shared/acquisition/core/acquisitionLifecycle';
 import { isRetryable } from '@shared/failure';
 import { onSignOut } from '@shared/session';
 import {
@@ -33,8 +34,8 @@ type TrackStatusEntries = Pick<TrackStatusState, 'statuses' | 'identities' | 're
 
 const READY_STATUS_LIMIT = 512;
 
-function isReady(status: TrackStatus | undefined): boolean {
-  return status?.acquisitionStatus === 'ready';
+function isReadyStatus(status: TrackStatus | undefined): boolean {
+  return isReady(status?.acquisitionStatus);
 }
 
 function withoutKeys<T>(entries: Record<string, T>, drop: ReadonlySet<string>): Record<string, T> {
@@ -66,7 +67,7 @@ export const useTrackStatusStore = create<TrackStatusState>((set) => ({
   patch: (trackId, status) =>
     set((s) => {
       const statuses = { ...s.statuses, [trackId]: status };
-      if (!isReady(status) || isReady(s.statuses[trackId])) return { statuses };
+      if (!isReadyStatus(status) || isReadyStatus(s.statuses[trackId])) return { statuses };
       return prunedToReadyLimit({
         statuses,
         identities: s.identities,
@@ -131,15 +132,15 @@ export function patchTrackStatus(
 
 export function adoptResponseStatus(trackId: TrackId, status: TrackStatus): TrackStatus {
   const held = useTrackStatusStore.getState().statuses[trackId];
-  if (status.acquisitionStatus === 'pending' && held !== undefined) {
-    if (held.acquisitionStatus !== 'pending') return held;
-  }
+  const state = { status: held?.acquisitionStatus, phase: undefined };
+  const next = nextLifecycle(state, { type: 'response', status: status.acquisitionStatus });
+  if (next === null && held !== undefined) return held;
   patchTrackStatus(trackId, status, 'response');
   return status;
 }
 
 export function isTrackStatusReady(trackId: TrackId): boolean {
-  return isReady(useTrackStatusStore.getState().statuses[trackId]);
+  return isReadyStatus(useTrackStatusStore.getState().statuses[trackId]);
 }
 
 export function removeTrackStatus(trackId: TrackId): void {

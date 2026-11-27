@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ApiError } from '@shared/failure';
-import { asTrackId } from '@shared/catalog';
+import { asTrackId, isFailed, isPending } from '@shared/catalog';
 import type { TrackResponse, DiscoveryResult } from '@shared/catalog';
 import { useDownloadStore, useTrackStatusStore } from '@shared/acquisition';
 import { discoveryKeys, libraryKeys } from '@shared/query';
@@ -172,7 +172,7 @@ describe('useSaveTrack', () => {
     });
 
     describe('useSaveTrack — derived caches', () => {
-      it('invalidates every membership-derived cache once the save lands, and nothing else', async () => {
+      it('invalidates nothing itself once the save lands: track_added_to_library refreshes the derived caches', async () => {
         const { queryClient, wrapper } = setup();
         mockCreateTrack.mockResolvedValue(saved());
 
@@ -181,7 +181,7 @@ describe('useSaveTrack', () => {
           await result.current.mutateAsync({ title: 'Idioteque', artist: 'Radiohead' } as never);
         });
 
-        expect(invalidatedKeys(queryClient)).toEqual(derivedKeys);
+        expect(invalidatedKeys(queryClient)).toEqual([]);
       });
 
       it('invalidates nothing when the save fails', async () => {
@@ -307,8 +307,8 @@ describe('useSaveTrack', () => {
 
     function failedIds(): string[] {
       const { statuses } = useTrackStatusStore.getState();
-      return Object.keys(statuses).filter(
-        (id) => statuses[id as keyof typeof statuses]?.acquisitionStatus === 'failed',
+      return Object.keys(statuses).filter((id) =>
+        isFailed(statuses[id as keyof typeof statuses]?.acquisitionStatus),
       );
     }
 
@@ -341,8 +341,8 @@ describe('useSaveTrack', () => {
       expect(pendingBefore).toHaveLength(2);
       expect(failedIds()).toHaveLength(1);
       const statuses = useTrackStatusStore.getState().statuses;
-      const survivors = Object.keys(statuses).filter(
-        (id) => statuses[id as keyof typeof statuses]?.acquisitionStatus === 'pending',
+      const survivors = Object.keys(statuses).filter((id) =>
+        isPending(statuses[id as keyof typeof statuses]?.acquisitionStatus),
       );
       expect(survivors).toHaveLength(1);
     });

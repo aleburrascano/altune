@@ -491,6 +491,42 @@ describe('module rules point at client/src/README.md', () => {
       0,
     ],
     [
+      'no-restricted-properties',
+      'src/features/library/view/x.ts',
+      "export const f = (c: { invalidateQueries: (o: object) => void }) => c.invalidateQueries({ queryKey: ['a'] });\n",
+      1,
+    ],
+    [
+      'no-restricted-properties',
+      'src/mobile/x.ts',
+      "export const f = (c: { invalidateQueries: (o: object) => void }) => c.invalidateQueries({ queryKey: ['a'] });\n",
+      1,
+    ],
+    [
+      'no-restricted-properties',
+      'src/shared/events/shell/x.ts',
+      "export const f = (c: { invalidateQueries: (o: object) => void }) => c.invalidateQueries({ queryKey: ['a'] });\n",
+      0,
+    ],
+    [
+      'no-restricted-properties',
+      'src/shared/query/shell/x.ts',
+      "export const f = (c: { invalidateQueries: (o: object) => void }) => c.invalidateQueries({ queryKey: ['a'] });\n",
+      0,
+    ],
+    [
+      'no-restricted-properties',
+      'src/shared/events/__tests__/x.test.ts',
+      "export const f = (c: { invalidateQueries: (o: object) => void }) => c.invalidateQueries({ queryKey: ['a'] });\n",
+      0,
+    ],
+    [
+      'no-restricted-properties',
+      'src/shared/events/shell/x.ts',
+      'export const u = process.env.EXPO_PUBLIC_API_URL;\n',
+      1,
+    ],
+    [
       'local/test-imports-through-doors',
       'src/features/player/__tests__/x.test.ts',
       "import { q } from '@features/player/core/queue';\nexport const a = q;\n",
@@ -704,5 +740,50 @@ describe('mobile eslint config bans waiting on the real clock in a test', () => 
       0,
     );
     assert.strictEqual((await clockWaitErrors('jest.setTimeout(20000);', TEST_PATH)).length, 0);
+  });
+});
+
+describe('mobile eslint config asks the acquisition predicate, not the raw status', () => {
+  const PATH = 'src/features/library/view/useTrackMenu.ts';
+  const rawStatusErrors = async (code, filePath = PATH) => {
+    const [result] = await eslint.lintText(code, { filePath });
+    return result.messages.filter(
+      (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('acquisition predicate'),
+    );
+  };
+
+  for (const [name, code] of [
+    [
+      'snake case ===',
+      "export const a = (t: { acquisition_status: string }) => t.acquisition_status === 'ready';",
+    ],
+    [
+      'camel case !==',
+      "export const a = (t: { acquisitionStatus: string }) => t.acquisitionStatus !== 'failed';",
+    ],
+    [
+      'an optional chain',
+      "export const a = (t?: { acquisitionStatus: string }) => t?.acquisitionStatus === 'pending';",
+    ],
+  ]) {
+    it(`reports ${name}`, async () => {
+      assert.strictEqual((await rawStatusErrors(code)).length, 1);
+    });
+  }
+
+  it('allows an unrelated status and a switch', async () => {
+    assert.strictEqual(
+      (await rawStatusErrors("export const a = (s: { status: string }) => s.status === 'ready';"))
+        .length,
+      0,
+    );
+    assert.strictEqual(
+      (
+        await rawStatusErrors(
+          "export const a = (t: { acquisition_status: string }) => { switch (t.acquisition_status) { case 'ready': return 1; default: return 0; } };",
+        )
+      ).length,
+      0,
+    );
   });
 });

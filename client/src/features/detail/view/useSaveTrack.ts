@@ -3,15 +3,18 @@ import { useRef } from 'react';
 
 import { correlationIdOf, describeError, isRetryable } from '@shared/failure';
 import {
-  type TrackId,
   type CreateTrackRequest,
-  type TrackResponse,
   type DiscoveryResult,
+  type TrackId,
+  type TrackResponse,
+  type WireTrackStatus,
   acquisitionOf,
+  isFailed,
+  isPending,
+  isReady,
   toFailed,
   toReady,
   toTrackStatus,
-  type WireTrackStatus,
 } from '@shared/catalog';
 import {
   rememberDownloadMeta,
@@ -22,12 +25,7 @@ import {
   removeTrackStatus,
   trackIdentityKey,
 } from '@shared/acquisition';
-import {
-  invalidateLibraryDerived,
-  removeTrackFromCaches,
-  replaceTrackInCaches,
-  upsertTrackInCaches,
-} from '@shared/events';
+import { removeTrackFromCaches, replaceTrackInCaches, upsertTrackInCaches } from '@shared/events';
 import { useAppMutation } from '@shared/query';
 import { guardedMutationOptions } from '@shared/session';
 import { enqueueCritical } from '@shared/telemetry';
@@ -123,8 +121,8 @@ function recordLibraryAdd(body: CreateTrackRequest, handoff: Handoff): void {
 }
 
 function withStatus(saved: TrackResponse, status: WireTrackStatus): TrackResponse {
-  if (status.acquisitionStatus === 'pending') return saved;
-  if (status.acquisitionStatus === 'ready') return { ...saved, ...toReady() };
+  if (isPending(status.acquisitionStatus)) return saved;
+  if (isReady(status.acquisitionStatus)) return { ...saved, ...toReady() };
   return { ...saved, ...toFailed(null, status.failureMessage) };
 }
 
@@ -133,7 +131,6 @@ function adoptSaved(queryClient: QueryClient, saved: TrackResponse, context: Sav
   replaceTrackInCaches(queryClient, context.optimisticId, withStatus(saved, status));
   removeTrackStatus(context.optimisticId);
   linkTrackIdentity(context.identity, saved.id);
-  invalidateLibraryDerived(queryClient);
 }
 
 function warnSaveFailed(port: DetailPort, error: Error, body: CreateTrackRequest): void {
@@ -200,7 +197,7 @@ function failureState(failure: SaveFailure): Exclude<SaveState, 'disabled'> {
 }
 
 function rememberedFailure(owned: OwnedTrack | null): SaveFailure | null {
-  if (owned?.acquisitionStatus !== 'failed' || owned.failureMessage === null) {
+  if (!isFailed(owned?.acquisitionStatus) || owned.failureMessage === null) {
     return null;
   }
   return {

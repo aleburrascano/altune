@@ -1,6 +1,5 @@
 import type { TrackId, TrackResponse } from '@shared/catalog';
 import { removeTrackStatus } from '@shared/acquisition';
-import { libraryKeys } from '@shared/query';
 
 import type { CacheKey, EventCache } from '@shared/events/core/eventCache';
 import {
@@ -22,19 +21,6 @@ import {
   withPatch,
 } from '@shared/events/shell/trackPatchBatch';
 import { writeFamily } from '@shared/events/shell/writeFamily';
-
-const LIBRARY_DERIVED_KEYS: readonly (readonly string[])[] = [
-  libraryKeys.albumsPrefix,
-  libraryKeys.artistsPrefix,
-  libraryKeys.summary,
-  libraryKeys.lookupPrefix,
-];
-
-export function invalidateLibraryDerived(cache: EventCache): void {
-  for (const queryKey of LIBRARY_DERIVED_KEYS) {
-    void cache.invalidateQueries({ queryKey });
-  }
-}
 
 export function getTrackFromCaches(cache: EventCache, trackId: TrackId): TrackResponse | undefined {
   const cached = TRACK_CACHE_FAMILY_LIST.flatMap((family) =>

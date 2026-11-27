@@ -5,6 +5,7 @@ import {
   useMutation,
   useQueryClient,
   type MutationFunctionContext,
+  type QueryClient,
   type QueryKey,
   type UseMutationOptions,
   type UseMutationResult,
@@ -120,6 +121,8 @@ export function appMutationCache(): MutationCache {
   });
 }
 
+const NO_KEYS: readonly QueryKey[] = [];
+
 type ErrorAlert = { title: string; message: string };
 
 type BaseOptions<TData, TVariables> = {
@@ -170,13 +173,18 @@ function alertAfterRollback<TVariables>(
   showFailureAlert({ surface: action, title, message });
 }
 
+export function refetchWithoutEvent(queryClient: QueryClient, keys: readonly QueryKey[]): void {
+  for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey });
+}
+
 export function useOptimisticMutation<TData, TVariables, TCache>(
   options: OptimisticMutationOptions<TData, TVariables, TCache>,
 ) {
   const queryClient = useQueryClient();
   const { queryKey, alertOnError } = options;
-  const invalidationKeys = (variables: TVariables): readonly QueryKey[] =>
-    options.invalidate?.(variables) ?? [queryKey];
+  function keysNoEventCovers(variables: TVariables): readonly QueryKey[] {
+    return options.invalidate?.(variables) ?? NO_KEYS;
+  }
 
   const writeOptimistic = (previous: TCache | undefined, variables: TVariables): void => {
     if (previous !== undefined) {
@@ -214,7 +222,7 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     onSettled: (_data, _error, variables, context) => {
       if (!takenInThisSession(context)) return undefined;
       return Promise.all(
-        invalidationKeys(variables).map((key) => queryClient.invalidateQueries({ queryKey: key })),
+        keysNoEventCovers(variables).map((key) => queryClient.invalidateQueries({ queryKey: key })),
       );
     },
   });

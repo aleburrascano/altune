@@ -19,6 +19,7 @@ import {
 } from '@features/library/core/libraryFailure';
 import { pagedListControls } from '@features/library/core/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
+import { isPending } from '@shared/catalog';
 
 const TRACKS_PAGE_SIZE = 200;
 const PENDING_POLL_MS = 60_000;
@@ -27,7 +28,7 @@ const MAX_PENDING_POLLS = 10;
 type TracksData = InfiniteData<ListTracksResponse, number>;
 
 function hasPending(page: ListTracksResponse) {
-  return page.items.some((t) => t.acquisition_status === 'pending');
+  return page.items.some((t) => isPending(t.acquisition_status));
 }
 
 function mergePage(old: TracksData | undefined, fresh: ListTracksResponse) {

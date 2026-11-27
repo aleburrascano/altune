@@ -1,9 +1,8 @@
 import {
-  isTrackStatusReady,
   linkTrackIdentity,
   patchTrackStatus,
   trackIdentityKey,
-  isStaleDownloadPhase,
+  isStaleStart,
   startDownload,
   progressDownload,
   completeDownload,
@@ -19,16 +18,16 @@ import { parseTrackResponseLenient } from '@shared/apiClient';
 import { acquisitionOf, toFailed, toPending, toReady, toTrackStatus } from '@shared/catalog';
 import type { TrackId, TrackResponse } from '@shared/catalog';
 import type { JsonObject } from '@shared/files';
-import { libraryKeys, playlistKeys } from '@shared/query';
+import { libraryKeys } from '@shared/query';
 
 import type { EventCache } from '@shared/events/core/eventCache';
 import { asString, type ServerEventHandlers } from '@shared/events/core/serverEventTypes';
 import type { ServerEvent } from '@shared/events/core/sseFrames';
 import { asTrackIdOrNull } from '@shared/events/shell/eventIds';
+import { invalidateForEvent } from '@shared/events/shell/invalidateOnEvent';
 import {
   forgetTrack,
   getTrackFromCaches,
-  invalidateLibraryDerived,
   upsertTrackInCaches,
 } from '@shared/events/shell/trackCachePatch';
 import { scheduleTrackPatch, type TrackPatch } from '@shared/events/shell/trackPatchBatch';
@@ -92,7 +91,7 @@ function addTrack(cache: EventCache, track: TrackResponse): void {
 
 function handleTrackAddedToLibrary(cache: EventCache, event: ServerEvent): void {
   const parsed = parseAddedTrack(event.data);
-  invalidateLibraryDerived(cache);
+  invalidateForEvent(cache, 'track_added_to_library');
   if (parsed.ok) addTrack(cache, parsed.value);
   else refetchTrackLists(cache);
 }
@@ -102,12 +101,7 @@ function handleTrackDeleted(cache: EventCache, event: ServerEvent): void {
   if (trackId) {
     forgetTrack(cache, trackId);
   }
-  invalidateLibraryDerived(cache);
-  void cache.invalidateQueries({ queryKey: playlistKeys.list });
-}
-
-function isStaleStart(trackId: TrackId): boolean {
-  return isTrackStatusReady(trackId) || isStaleDownloadPhase(trackId, 'finding');
+  invalidateForEvent(cache, 'track_deleted');
 }
 
 function handleTrackAcquisitionStarted(cache: EventCache, event: ServerEvent): void {

@@ -1,5 +1,5 @@
 import { waitFor } from '@testing-library/react-native';
-import { asTrackId } from '@shared/catalog';
+import { asTrackId, isReady } from '@shared/catalog';
 import type { QueueStateResponse } from '@shared/apiClient';
 import type { AcquisitionStatus, TrackResponse } from '@shared/catalog';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback';
@@ -297,7 +297,7 @@ describe('showSavedTrackWhileRehydrating', () => {
 
 describe('natural-order rung', () => {
   const isReadyIn = (m: Map<string, TrackResponse>) => (id: string) =>
-    m.get(id)?.acquisition_status === 'ready';
+    isReady(m.get(id)?.acquisition_status);
 
   it('skips the natural rung without a saved natural order', () => {
     const m = mapOf(track('a'));
@@ -375,7 +375,7 @@ describe('play-order rung', () => {
 
 describe('rebuildOnFirstWorkingRungReportingCurrent', () => {
   const isReadyIn = (m: Map<string, TrackResponse>) => (id: string) =>
-    m.get(id)?.acquisition_status === 'ready';
+    isReady(m.get(id)?.acquisition_status);
 
   async function reportedTally(): Promise<Record<string, unknown>> {
     flushPlaybackHealth();

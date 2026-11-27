@@ -1,4 +1,4 @@
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 
 import {
   ApiError,
@@ -24,9 +24,6 @@ type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
 type PlaylistList = { items: PlaylistResponse[] };
 type PlaylistDetail = { name: string; tracks: { id: TrackId }[] };
 type AlertContent = { title: string; message: string };
-type StartedIn = { epoch: number } | undefined;
-type CreateSettled = PlaylistResponse | CreateWithTracksResult | undefined;
-type CreateVariables = string | CreateWithTracksVariables;
 type CreatedInSession = { playlist: PlaylistResponse; trackIds: TrackId[]; epoch: number };
 
 type CreateWithTracksResult =
@@ -147,18 +144,6 @@ function alertCreatedWithTracks(
   if (alert !== null) showFailureAlert({ surface: 'playlist.create_with_tracks', ...alert });
 }
 
-function refreshPlaylistsInSameSession(queryClient: QueryClient) {
-  return (
-    _settled: CreateSettled,
-    _error: Error | null,
-    _variables: CreateVariables,
-    startedIn: StartedIn,
-  ) =>
-    isSameSession(startedIn?.epoch)
-      ? queryClient.invalidateQueries({ queryKey: playlistKeys.list })
-      : undefined;
-}
-
 function createWithTracksAlert(
   result: CreateWithTracksResult,
   requested: number,
@@ -188,20 +173,17 @@ function reinsertTracks<T extends { id: TrackId }>(
 
 export function useCreatePlaylist() {
   const port = usePlaylistsPort();
-  const queryClient = useQueryClient();
   return useAppMutation({
     action: 'playlist.create',
     ...guardedMutationOptions({
       mutationFn: (name: string) => port.createPlaylist({ name }),
       onError: alertCreateFailed,
     }),
-    onSettled: refreshPlaylistsInSameSession(queryClient),
   });
 }
 
 export function useCreatePlaylistWithTracks() {
   const port = usePlaylistsPort();
-  const queryClient = useQueryClient();
   return useAppMutation({
     action: 'playlist.create_with_tracks',
     ...guardedMutationOptions({
@@ -209,7 +191,6 @@ export function useCreatePlaylistWithTracks() {
       onSuccess: alertCreatedWithTracks,
       onError: alertCreateFailed,
     }),
-    onSettled: refreshPlaylistsInSameSession(queryClient),
   });
 }
 
@@ -252,7 +233,6 @@ export function useAddTracksToPlaylist() {
     },
     alertOnError: ({ trackIds }, error) =>
       failureAlert(error, `add the ${countLabel(trackIds.length, 'track')} to the playlist`),
-    invalidate: ({ playlistId }) => [playlistKeys.list, playlistKeys.detail(playlistId)],
   });
 }
 
@@ -266,15 +246,7 @@ export function useRenamePlaylist(playlistId: PlaylistId) {
     revertOptimistic: (current, name, previous) =>
       current.name === name ? { ...current, name: previous.name } : current,
     alertOnError: (_name, error) => failureAlert(error, 'rename the playlist'),
-    invalidate: () => [playlistKeys.detail(playlistId), playlistKeys.list],
   });
-}
-
-function forgetDeletedPlaylist(queryClient: QueryClient, playlistId: PlaylistId) {
-  return (): void => {
-    void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
-    void queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) });
-  };
 }
 
 function alertDeleteFailed(): void {
@@ -287,12 +259,10 @@ function alertDeleteFailed(): void {
 
 export function useDeletePlaylist(playlistId: PlaylistId) {
   const port = usePlaylistsPort();
-  const queryClient = useQueryClient();
   return useAppMutation({
     action: 'playlist.delete',
     ...guardedMutationOptions({
       mutationFn: () => port.deletePlaylist(playlistId),
-      onSuccess: forgetDeletedPlaylist(queryClient, playlistId),
       onError: alertDeleteFailed,
     }),
   });
@@ -315,6 +285,5 @@ export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
     }),
     alertOnError: (trackIds, error) =>
       failureAlert(error, `remove the ${countLabel(trackIds.length, 'track')}`),
-    invalidate: () => [playlistKeys.detail(playlistId), playlistKeys.list],
   });
 }

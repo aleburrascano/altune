@@ -5,7 +5,6 @@ import type { PlaylistDetailResponse, ListTracksResponse, TrackResponse } from '
 import { libraryKeys, playlistKeys } from '@shared/query';
 import {
   getTrackFromCaches,
-  invalidateLibraryDerived,
   removeTrackFromCaches,
   replaceTrackInCaches,
   upsertTrackInCaches,
@@ -25,8 +24,6 @@ import {
   seedTracksPrefix,
 } from '@shared/events/__tests__/trackCacheFixtures';
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition';
-
-import { recordingCache } from '@shared/events/__tests__/recordingCache';
 
 function other(): TrackResponse {
   return makeTrack({ id: asTrackId('other'), title: 'Other' });
@@ -536,21 +533,6 @@ describe('paged offsets stay consistent with the rows the cache holds', () => {
     removeTrackFromCaches(client, asTrackId('optimistic'));
 
     expect(offsets(client)).toEqual([0, 3, 6]);
-  });
-});
-
-describe('invalidateLibraryDerived', () => {
-  it('invalidates every cache derived from library membership, once each', () => {
-    const cache = recordingCache(new QueryClient());
-
-    invalidateLibraryDerived(cache);
-
-    expect(cache.invalidated).toEqual([
-      libraryKeys.albumsPrefix,
-      libraryKeys.artistsPrefix,
-      libraryKeys.summary,
-      libraryKeys.lookupPrefix,
-    ]);
   });
 });
 

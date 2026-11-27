@@ -4,6 +4,7 @@ import type { PinnedStatus } from '@shared/offline';
 
 import { pinnedStatusDisplay } from '@features/library/core/pinnedStatusDisplay';
 import type { AcquisitionStatus, TrackResponse } from '@shared/catalog';
+import { isFailed, isPending } from '@shared/catalog';
 
 export function albumSuffix(album: string | null): string {
   return album != null ? ` · ${album}` : '';
@@ -20,8 +21,8 @@ export function libraryRowAccessibilityLabel({
   canRetry: boolean;
   pinned: PinnedStatus | undefined;
 }): string {
-  const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
-  const failedLabel = track.acquisition_status === 'failed' ? ', failed' : '';
+  const pendingLabel = isPending(track.acquisition_status) ? ', pending' : '';
+  const failedLabel = isFailed(track.acquisition_status) ? ', failed' : '';
   const retryLabel = retrying ? ', retrying' : canRetry ? ', retry available' : '';
   const offlineLabel = pinnedStatusDisplay(pinned).a11ySuffix;
   return `${track.title} by ${track.artist}${albumSuffix(track.album)}${pendingLabel}${failedLabel}${retryLabel}${offlineLabel}`;

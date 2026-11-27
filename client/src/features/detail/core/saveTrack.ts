@@ -3,10 +3,13 @@ import type { ErrorCopy } from '@shared/failure';
 import {
   type CatalogSourceRef,
   type CreateTrackRequest,
-  type TrackResponse,
   type DiscoveryResult,
-  asTrackId,
   type TrackId,
+  type TrackResponse,
+  asTrackId,
+  canRetry,
+  isFailed,
+  isPending,
 } from '@shared/catalog';
 import { trackExtras, type TrackExtras } from '@features/detail/core/trackExtras';
 import type { OwnedTrack } from '@features/detail/core/ownedTrack';
@@ -156,10 +159,10 @@ export function saveControlState(owned: OwnedTrack | null): SaveControlState {
   if (owned === null) {
     return 'add';
   }
-  if (owned.acquisitionStatus === 'failed') {
+  if (isFailed(owned.acquisitionStatus)) {
     return 'failed';
   }
-  if (owned.acquisitionStatus === 'pending') {
+  if (isPending(owned.acquisitionStatus)) {
     return 'saving';
   }
   return 'ready';
@@ -196,7 +199,7 @@ export function saveControlText(state: SaveControlState): string {
 }
 
 export function ownedRetryTrackId(owned: OwnedTrack | null): TrackId | null {
-  if (owned?.acquisitionStatus !== 'failed') {
+  if (owned === null || !canRetry(owned.acquisitionStatus)) {
     return null;
   }
   return isOptimisticTrackId(owned.trackId) ? null : owned.trackId;

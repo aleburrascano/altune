@@ -2,7 +2,6 @@ export {
   captureTrackPlacements,
   forgetTrack,
   getTrackFromCaches,
-  invalidateLibraryDerived,
   removeTrackFromCaches,
   replaceTrackInCaches,
   restoreTrackPlacements,
@@ -38,3 +37,5 @@ export { PLAYLIST_HANDLERS } from '@shared/events/shell/playlistEvents';
 export { SSEClient } from '@shared/events/shell/sseClient';
 export type { StreamIO, StreamRequest } from '@shared/events/shell/sseClient';
 export { isServerEvent, parseChunk } from '@shared/events/core/sseFrames';
+export { EVENT_INVALIDATES } from '@shared/events/core/eventInvalidation';
+export { invalidateForEvent } from '@shared/events/shell/invalidateOnEvent';
