@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 pushing=0
 while read -r _ local_sha _ _; do
   case $local_sha in
@@ -7,8 +9,6 @@ while read -r _ local_sha _ _; do
   esac
 done
 [ $pushing = 1 ] || exit 0
-
-clean_env() { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE "$@"; }
 
 dir=.
 base=
@@ -18,7 +18,7 @@ if [ -f scripts/ci/merge-result.sh ] && git rev-parse --git-dir >/dev/null 2>&1;
   git fetch -q "$remote" main 2>/dev/null || echo "pre-push: could not fetch $remote main, so $base is as of the last fetch"
   if git rev-parse --verify --quiet "$base" >/dev/null && ! git merge-base --is-ancestor "$base" HEAD; then
     mrc=0
-    merged=$(clean_env bash scripts/ci/merge-result.sh "$(pwd)" "$base" HEAD) || mrc=$?
+    merged=$(bash scripts/ci/merge-result.sh "$(pwd)" "$base" HEAD) || mrc=$?
     case $mrc in
       0) ;;
       1) echo "❌ pre-push: this branch conflicts with $base, which is the tree CI checks. Rebase onto it (git rebase $base), fix what conflicts, and push again."; exit 1 ;;
@@ -50,7 +50,7 @@ if [ -f scripts/ci/merge-result.sh ] && git rev-parse --git-dir >/dev/null 2>&1;
 fi
 [ "$dir" != . ] || echo "pre-push: checking this checkout (HEAD and the working tree) against the merge base, not the refs being pushed"
 rc=0
-[ -f "$dir/scripts/precheck.sh" ] && { (cd "$dir" && clean_env CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh --full ${base:+"$base"}) || rc=$?; }
+[ -f "$dir/scripts/precheck.sh" ] && { (cd "$dir" && CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh --full ${base:+"$base"}) || rc=$?; }
 case $rc in
   0) ;;
   3) echo "❌ pre-push: some checks could not run (see the SKIP line or the first line above). Fix what it names, then push again: install a missing tool (bash scripts/ci/go-tools.sh for golangci-lint and govulncheck, bash scripts/worktree-deps.sh client or the folder named for node dependencies, or the tool the SKIP line names), or fetch a missing base (git fetch gitea main)."; exit 1 ;;
