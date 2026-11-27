@@ -4,7 +4,6 @@ import featured "altune/go-api/internal/library/internal/service/featured"
 
 type (
 	FillFeaturedArtistsService = featured.FillFeaturedArtistsService
-	ListFeaturingService       = featured.ListFeaturingService
 )
 
 var (
