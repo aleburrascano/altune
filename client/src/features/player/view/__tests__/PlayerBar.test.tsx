@@ -8,13 +8,10 @@ import { makeIdlePlayback } from '@testing/factories';
 
 import { PlayerBar } from '@features/player';
 import { libraryTrack } from '@features/player/__tests__/fixtures';
+import { createRecordingPlayerNavigation } from '@testing/fakes/player/recordingPlayerNavigation';
+
+const navigation = createRecordingPlayerNavigation();
 const RESTART_THRESHOLD_MS = 3_000;
-
-const mockPush = jest.fn();
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
-}));
 
 const TRACK = libraryTrack();
 const NEXT_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-2') } });
@@ -29,13 +26,14 @@ function renderBar(value: Partial<PlaybackContextValue>) {
     <PlaybackContext.Provider value={merged}>
       <PlayerBar />
     </PlaybackContext.Provider>,
+    { wrapper: navigation.wrapper },
   );
   return merged;
 }
 
 beforeEach(() => {
   useQueueStore.getState().setRepeatMode('off');
-  mockPush.mockClear();
+  navigation.steps.length = 0;
   useQueueStore.getState().loadQueue([TRACK, NEXT_TRACK], 0, null);
 });
 
@@ -128,7 +126,7 @@ describe('PlayerBar — queue and lyrics', () => {
 
     fireEvent.press(screen.getByLabelText('View queue'));
 
-    expect(mockPush).toHaveBeenCalledWith('/player/queue');
+    expect(navigation.steps).toEqual(['queue']);
   });
 
   it('opens the lyrics page', () => {
@@ -136,7 +134,7 @@ describe('PlayerBar — queue and lyrics', () => {
 
     fireEvent.press(screen.getByLabelText('View lyrics'));
 
-    expect(mockPush).toHaveBeenCalledWith('/player/lyrics');
+    expect(navigation.steps).toEqual(['lyrics']);
   });
 });
 
@@ -281,6 +279,6 @@ describe('PlayerBar — opening the full player', () => {
 
     fireEvent.press(screen.getByLabelText(`Open player: ${TRACK.title} by ${TRACK.artist}`));
 
-    expect(mockPush).toHaveBeenCalledWith('/player');
+    expect(navigation.steps).toEqual(['player']);
   });
 });

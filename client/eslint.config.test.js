@@ -578,6 +578,10 @@ describe('mobile eslint config requires a named staleTime policy', () => {
     ['a number', 'export const a = { staleTime: 60000 };'],
     ['Infinity', 'export const a = { staleTime: Infinity };'],
     ['zero', 'export const a = { staleTime: 0 };'],
+    ['a product', 'export const a = { staleTime: 5 * 60_000 };'],
+    ['a negative number', 'export const a = { staleTime: -1 };'],
+    ['Number.POSITIVE_INFINITY', 'export const a = { staleTime: Number.POSITIVE_INFINITY };'],
+    ['a quoted key', "export const a = { ['staleTime']: 1 };"],
   ]) {
     it(`reports ${name}`, async () => {
       assert.ok((await staleLiteralErrors(code)).length >= 1);

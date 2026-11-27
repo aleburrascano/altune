@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
-import { detailKeys } from '@shared/query';
+import { detailKeys, STALE } from '@shared/query';
 
 import {
   contentFailure,
-  DETAIL_CONTENT_STALE_MS,
   DETAIL_LIST_CAP,
   type ContentFailure,
 } from '@features/detail/core/contentStatus';
@@ -127,7 +126,7 @@ function albumTracksQuery(input: AlbumTracksQueryInput) {
     queryKey: detailKeys.albumDiscoveryTracks(source?.provider, source?.external_id),
     queryFn: albumTracksQueryFn(input),
     enabled: input.canFetch && source != null,
-    staleTime: DETAIL_CONTENT_STALE_MS,
+    staleTime: STALE.halfHour,
   };
 }
 

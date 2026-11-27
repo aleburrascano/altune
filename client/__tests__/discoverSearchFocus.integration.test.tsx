@@ -84,7 +84,9 @@ describe('the "/" shortcut and the Discover search box', () => {
       router.push('/library');
     });
     expect(await screen.findByText('elsewhere-screen')).toBeTruthy();
-    expect(screen.getByTestId('discover-screen-body', { includeHiddenElements: true })).toBeTruthy();
+    expect(
+      screen.getByTestId('discover-screen-body', { includeHiddenElements: true }),
+    ).toBeTruthy();
 
     pressSlash();
     await act(async () => {});

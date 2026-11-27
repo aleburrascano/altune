@@ -27,6 +27,10 @@ type UseDebouncedSearchReturn = {
   setQuery: (query: string) => void;
 };
 
+type Commit = { query: string; isExplicit: boolean };
+
+const NO_COMMIT: Commit = { query: '', isExplicit: false };
+
 function clampQuery(text: string): string {
   return clampQueryWords(sliceCodePoints(text, MAX_QUERY_LENGTH));
 }
@@ -36,11 +40,11 @@ export function useDebouncedSearch({
   onExplicitCommit,
 }: UseDebouncedSearchOptions): UseDebouncedSearchReturn {
   const savedState = getSearchState();
-  const [committedQuery, setCommittedQuery] = useState(savedState.query);
+  const [commit, setCommit] = useState<Commit>({ query: savedState.query, isExplicit: false });
   const [inputValue, setInputValue] = useState(savedState.inputValue);
-  const [isExplicitSubmit, setIsExplicitSubmit] = useState(false);
   const debounce = useDebouncedCall(debounceMs);
   const cancelDebounce = debounce.cancel;
+  const { query: committedQuery, isExplicit: isExplicitSubmit } = commit;
 
   useEffect(() => {
     setSearchState(committedQuery, inputValue);
@@ -51,15 +55,13 @@ export function useDebouncedSearch({
       onSignOut(() => {
         cancelDebounce();
         setInputValue('');
-        setCommittedQuery('');
-        setIsExplicitSubmit(false);
+        setCommit(NO_COMMIT);
       }),
     [cancelDebounce],
   );
 
   function dropCommittedQuery(): void {
-    setIsExplicitSubmit(false);
-    setCommittedQuery('');
+    setCommit(NO_COMMIT);
   }
 
   function commitExplicit(query: string): void {
@@ -68,15 +70,13 @@ export function useDebouncedSearch({
       return;
     }
     const isNewCommit = !isExplicitSubmit || query !== committedQuery;
-    setIsExplicitSubmit(true);
-    setCommittedQuery(query);
+    setCommit({ query, isExplicit: true });
     if (isNewCommit) onExplicitCommit?.(query);
   }
 
   function scheduleCommit(query: string): void {
     debounce.schedule(() => {
-      setIsExplicitSubmit(false);
-      setCommittedQuery(query);
+      setCommit({ query, isExplicit: false });
     });
   }
 

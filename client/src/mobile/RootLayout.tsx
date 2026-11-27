@@ -61,6 +61,7 @@ import {
 } from '@shared/ui';
 import { AppChrome } from '@/mobile/frame/AppChrome';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { PlayerNavigationBridge } from '@/mobile/wiring/PlayerNavigationBridge';
 import { httpFeaturePorts, httpOfflinePort } from '@/mobile/wiring/httpFeaturePorts';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';
 import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
@@ -138,9 +139,11 @@ interface PlayerProvidersProps {
 
 function PlayerProviders({ children }: PlayerProvidersProps) {
   return (
-    <NativePlaybackProvider port={trackPlayerPlayback}>
-      <PlaybackProvider>{children}</PlaybackProvider>
-    </NativePlaybackProvider>
+    <PlayerNavigationBridge>
+      <NativePlaybackProvider port={trackPlayerPlayback}>
+        <PlaybackProvider>{children}</PlaybackProvider>
+      </NativePlaybackProvider>
+    </PlayerNavigationBridge>
   );
 }
 

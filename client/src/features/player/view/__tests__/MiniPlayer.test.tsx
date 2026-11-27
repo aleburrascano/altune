@@ -9,10 +9,9 @@ import { MiniPlayer } from '@features/player';
 import { libraryTrack } from '@features/player/__tests__/fixtures';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
+import { createRecordingPlayerNavigation } from '@testing/fakes/player/recordingPlayerNavigation';
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
-}));
+const navigation = createRecordingPlayerNavigation();
 
 const FAILED_TRACK = libraryTrack();
 const NEXT_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-2') } });
@@ -36,6 +35,7 @@ function renderPlayerInError(
     <PlaybackContext.Provider value={value}>
       <Player />
     </PlaybackContext.Provider>,
+    { wrapper: navigation.wrapper },
   );
   return commands;
 }
@@ -76,6 +76,17 @@ describe.each(PLAYERS)('$name — the action offered for a failed track', ({ Pla
   });
 });
 
+describe('MiniPlayer — opening the full player', () => {
+  it('asks the app to open the player when the bar is pressed', () => {
+    navigation.steps.length = 0;
+    renderPlayerInError(MiniPlayer, 'network');
+
+    fireEvent.press(screen.getByTestId('mini-player'));
+
+    expect(navigation.steps).toEqual(['player']);
+  });
+});
+
 beforeEach(() => {
   setWindowWidth(WINDOW_WIDTH.desktop);
 });
@@ -96,6 +107,7 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
       <PlaybackContext.Provider value={value}>
         <MiniPlayer />
       </PlaybackContext.Provider>,
+      { wrapper: navigation.wrapper },
     );
 
     expect(screen.queryByTestId('mini-player')).toBeNull();
@@ -110,6 +122,7 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
       <PlaybackContext.Provider value={value}>
         <MiniPlayer />
       </PlaybackContext.Provider>,
+      { wrapper: navigation.wrapper },
     );
 
     expect(screen.getByTestId('mini-player')).toBeTruthy();
@@ -123,6 +136,7 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
       <PlaybackContext.Provider value={value}>
         <MiniPlayer />
       </PlaybackContext.Provider>,
+      { wrapper: navigation.wrapper },
     );
 
     expect(screen.getByTestId('mini-player')).toBeTruthy();
@@ -151,6 +165,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
       <PlaybackContext.Provider value={value}>
         <MiniPlayer />
       </PlaybackContext.Provider>,
+      { wrapper: navigation.wrapper },
     );
   }
 

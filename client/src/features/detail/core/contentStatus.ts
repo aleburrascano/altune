@@ -5,8 +5,6 @@ import type { DiscoveryProviderStatus } from '@shared/catalog';
 
 export const DETAIL_LIST_CAP = 100;
 
-export const DETAIL_CONTENT_STALE_MS = 30 * 60 * 1000;
-
 function isContentError(
   queryFailed: boolean,
   response: { status: DiscoveryProviderStatus } | null | undefined,

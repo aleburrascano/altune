@@ -2,11 +2,13 @@ import { PlaybackProvider } from '@features/player/view/PlaybackProvider';
 
 export { PlaybackProvider };
 export { SleepTimerBridge } from '@features/player/view/SleepTimerBridge';
-export { MiniPlayer } from '@features/player/ui/MiniPlayer';
-export { PlayerBar } from '@features/player/ui/PlayerBar';
-export { FullPlayer } from '@features/player/ui/FullPlayer';
+export { MiniPlayer } from '@features/player/view/MiniPlayer';
+export { PlayerBar } from '@features/player/view/PlayerBar';
+export { FullPlayer } from '@features/player/view/FullPlayer';
 export { LyricsSheet } from '@features/player/view/LyricsSheet';
-export { QueueSheet, QueueRow } from '@features/player/ui/QueueSheet';
+export { QueueSheet, QueueRow } from '@features/player/view/QueueSheet';
+export { PlayerNavigationProvider } from '@features/player/view/PlayerNavigationProvider';
+export type { PlayerNavigation } from '@features/player/ports/playerNavigation';
 export {
   createStartPlaybackService,
   startPlaybackService,

@@ -1,9 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
-import { discoveryKeys } from '@shared/query';
-
-const LYRICS_STALE_MS = 24 * 60 * 60 * 1000;
+import { discoveryKeys, STALE } from '@shared/query';
 
 export function useLyrics(track: { title: string; artist: string } | null) {
   const title = track?.title ?? '';
@@ -12,6 +10,6 @@ export function useLyrics(track: { title: string; artist: string } | null) {
     queryKey: discoveryKeys.lyrics(title, artist),
     queryFn: ({ signal }) => playbackPort().getLyrics({ title, subtitle: artist }, signal),
     enabled: title.length > 0,
-    staleTime: LYRICS_STALE_MS,
+    staleTime: STALE.day,
   });
 }

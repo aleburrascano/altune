@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useRouter } from 'expo-router';
 import {
   ListMusic,
   Mic2,
@@ -25,6 +24,8 @@ import { Scrubber } from '@features/player/view/Scrubber';
 import { VolumeSlider } from '@features/player/view/web/VolumeSlider';
 import { TransportControls } from '@features/player/view/TransportControls';
 import { usePlaybackTransport } from '@features/player/view/usePlaybackTransport';
+import { usePlayerNavigation } from '@features/player/view/PlayerNavigationProvider';
+import type { PlayerNavigation } from '@features/player/ports/playerNavigation';
 
 type Transport = ReturnType<typeof usePlaybackTransport>;
 type Theme = ReturnType<typeof useTheme>;
@@ -266,12 +267,12 @@ function BarActions({ onLyrics, onQueue, onOptions }: ActionsProps) {
 
 type FooterProps = {
   transport: Transport;
-  router: ReturnType<typeof useRouter>;
+  navigation: PlayerNavigation;
   optionsOpen: boolean;
   setOptionsOpen: (open: boolean) => void;
 };
 
-function BarFooter({ transport, router, optionsOpen, setOptionsOpen }: FooterProps) {
+function BarFooter({ transport, navigation, optionsOpen, setOptionsOpen }: FooterProps) {
   return (
     <>
       <View style={styles.scrubber}>
@@ -283,8 +284,8 @@ function BarFooter({ transport, router, optionsOpen, setOptionsOpen }: FooterPro
       </View>
       <VolumeSlider />
       <BarActions
-        onLyrics={() => router.push('/player/lyrics')}
-        onQueue={() => router.push('/player/queue')}
+        onLyrics={() => navigation.openLyrics()}
+        onQueue={() => navigation.openQueue()}
         onOptions={() => setOptionsOpen(true)}
       />
       <PlayerOptionsSheets open={optionsOpen} onClose={() => setOptionsOpen(false)} />
@@ -304,28 +305,24 @@ function usePlayerBarState() {
   const transport = usePlaybackTransport();
   const [optionsOpen, setOptionsOpen] = useState(false);
   const theme = useTheme();
-  const router = useRouter();
+  const navigation = usePlayerNavigation();
   const barStyle = useBarStyle();
-  return { transport, optionsOpen, setOptionsOpen, theme, router, barStyle };
-}
-
-function openPlayer(router: ReturnType<typeof useRouter>) {
-  return () => router.push('/player');
+  return { transport, optionsOpen, setOptionsOpen, theme, navigation, barStyle };
 }
 
 function BarShell({ state }: { state: ReturnType<typeof usePlayerBarState> }) {
-  const { transport, theme, router, optionsOpen, setOptionsOpen, barStyle } = state;
+  const { transport, theme, navigation, optionsOpen, setOptionsOpen, barStyle } = state;
   return (
     <View testID="player-bar" style={barStyle}>
       <BarHeader
         track={transport.track!}
         line={barStatus(transport)}
-        onOpenPlayer={openPlayer(router)}
+        onOpenPlayer={navigation.openPlayer}
       />
       <BarMiddle transport={transport} theme={theme} />
       <BarFooter
         transport={transport}
-        router={router}
+        navigation={navigation}
         optionsOpen={optionsOpen}
         setOptionsOpen={setOptionsOpen}
       />

@@ -2,7 +2,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoverySuggestion, DiscoverySuggestResponse } from '@shared/catalog';
 import { useDebouncedValue } from '@shared/concurrency';
-import { discoveryKeys } from '@shared/query';
+import { discoveryKeys, STALE } from '@shared/query';
 import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/core/searchPaging';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
@@ -12,8 +12,6 @@ const SUGGEST_DEBOUNCE_MS = 150;
 export const SEARCH_DEBOUNCE_MS = 300;
 
 const SUGGESTION_LIMIT = 5;
-
-const SUGGEST_STALE_MS = 60_000;
 
 const NO_SUGGESTIONS: DiscoverySuggestion[] = [];
 
@@ -45,7 +43,7 @@ function suggestQueryOptions(port: DiscoverPort, query: string, wanted: boolean)
     queryFn: ({ signal }: QueryFunctionContext) =>
       port.suggestDiscovery({ q: query, limit: SUGGESTION_LIMIT }, signal),
     enabled: wanted && isSearchableQuery(query),
-    staleTime: SUGGEST_STALE_MS,
+    staleTime: STALE.minute,
     retry: false,
   };
 }
