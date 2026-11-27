@@ -3081,10 +3081,6 @@ type acquisitionServices struct {
 	*service.ReplaceService
 }
 
-func (s *acquisitionServices) CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
-	return s.AcquireTrackAudioService.CheckInPlace(ctx, track)
-}
-
 type discardingDeleter struct{}
 
 func (discardingDeleter) Delete(context.Context, string) error { return nil }
