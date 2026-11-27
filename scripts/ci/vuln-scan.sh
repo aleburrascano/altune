@@ -10,6 +10,7 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 failed=0
 broken=0
+[ -f "$root/osv-scanner.toml" ] || { echo "vuln-scan: $root/osv-scanner.toml is missing, so the ignore list for known unfixable advisories cannot be read" >&2; exit 2; }
 
 scan_modules() {
   local module rc
@@ -29,6 +30,7 @@ scan_lockfiles() {
   for attempt in 1 2 3; do
     rc=0
     go run "$osv" scan source \
+      --config "$root/osv-scanner.toml" \
       --lockfile services/go-api/go.mod \
       --lockfile services/overseer/go.mod \
       --lockfile pnpm-lock.yaml \
