@@ -15,8 +15,6 @@ import (
 
 type TrackId = ids.TrackId
 
-func NewTrackId() TrackId { return ids.NewTrackId() }
-
 func ParseTrackId(s string) (TrackId, error) { return ids.ParseTrackId(s) }
 
 func TrackIdFromUUID(id [16]byte) TrackId { return ids.TrackIdFromUUID(id) }
@@ -125,9 +123,12 @@ func ValidateText(value, field string) error {
 	return nil
 }
 
-func NewTrack(userId ids.UserId, title, artist, album string, wallClock clock.Func) (*Track, error) {
+func NewTrack(userId ids.UserId, title, artist, album string, wallClock clock.Func, source ids.Source) (*Track, error) {
 	if wallClock == nil {
 		return nil, ErrTrackTimestampClockRequired
+	}
+	if source == nil {
+		return nil, ErrIDSourceRequired
 	}
 	title = strings.TrimSpace(title)
 	if err := validateTrackText(title, "title"); err != nil {
@@ -143,7 +144,7 @@ func NewTrack(userId ids.UserId, title, artist, album string, wallClock clock.Fu
 	}
 	now := wallClock.UTC()
 	return &Track{
-		ID:                   NewTrackId(),
+		ID:                   source.NewTrackId(),
 		UserId:               userId,
 		Title:                title,
 		Artist:               artist,
@@ -213,38 +214,46 @@ const (
 
 var ErrTrackTimestampClockRequired = errors.New("domain: a track needs a clock")
 
+var ErrIDSourceRequired = errors.New("domain: an id source is required")
+
 var ErrIllegalAcquisitionTransition = errors.New("illegal acquisition status transition")
 
 func illegalTransition(op string, from DownloadStatus) error {
 	return fmt.Errorf("%w: %s from %s", ErrIllegalAcquisitionTransition, op, from)
 }
 
-func (t *Track) MarkReady(audioRef string) error {
+func (t *Track) MarkReady(audioRef string, source ids.Source) error {
 	if audioRef == "" {
 		return errors.New("audio_ref required for ready status")
+	}
+	if source == nil {
+		return ErrIDSourceRequired
 	}
 	if t.DownloadStatus == AcquisitionReady && t.AudioRef != nil && *t.AudioRef != audioRef {
 		return illegalTransition("mark ready", t.DownloadStatus)
 	}
-	t.setReadyAudio(audioRef)
+	t.setReadyAudio(audioRef, source)
 	return nil
 }
 
-func (t *Track) ReplaceAudio(audioRef string) error {
+func (t *Track) ReplaceAudio(audioRef string, source ids.Source) error {
 	if audioRef == "" {
 		return errors.New("audio_ref required for ready status")
+	}
+	if source == nil {
+		return ErrIDSourceRequired
 	}
 	if !t.IsStreamable() {
 		return illegalTransition("replace audio", t.DownloadStatus)
 	}
-	t.setReadyAudio(audioRef)
+	t.setReadyAudio(audioRef, source)
 	return nil
 }
 
-func (t *Track) setReadyAudio(audioRef string) {
+func (t *Track) setReadyAudio(audioRef string, source ids.Source) {
 	t.DownloadStatus = AcquisitionReady
 	t.AudioRef = &audioRef
-	t.AudioVersion = ids.NewEntityId().String()
+	t.AudioVersion = source.NewString()
 	t.FailureReason = nil
 	t.AcquisitionStartedAt = nil
 }

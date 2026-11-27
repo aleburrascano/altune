@@ -24,7 +24,7 @@ func runSweepStagingAudio(cfg *config.Config, mode RunMode) error {
 	}
 	defer pool.Close()
 
-	return sweepAudioStore(ctx, cfg, library.NewPostgresTrackRepository(pool), mode)
+	return sweepAudioStore(ctx, cfg, library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), mode)
 }
 
 func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, mode RunMode) error {

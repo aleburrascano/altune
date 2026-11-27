@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -13,11 +14,13 @@ import (
 )
 
 type PostgresLibraryLensRepository struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics ports.DBCallMetrics
 }
 
-func NewPostgresLibraryLensRepository(pool *pgxpool.Pool) *PostgresLibraryLensRepository {
-	return &PostgresLibraryLensRepository{pool: pool}
+func NewPostgresLibraryLensRepository(pool *pgxpool.Pool, metrics ports.DBCallMetrics) *PostgresLibraryLensRepository {
+	requireDBCallMetrics("NewPostgresLibraryLensRepository", metrics)
+	return &PostgresLibraryLensRepository{pool: pool, metrics: metrics}
 }
 
 const (
@@ -87,7 +90,7 @@ func (r *PostgresLibraryLensRepository) ListAlbumsForUser(
 	userId ids.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.AlbumGroup, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	sql := albumSelect
@@ -122,7 +125,7 @@ func (r *PostgresLibraryLensRepository) ListArtistsForUser(
 	userId ids.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.ArtistGroup, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	sql := artistSelect
@@ -169,7 +172,7 @@ func (r *PostgresLibraryLensRepository) ListFilteredForUser(
 	userId ids.UserId,
 	query domain.LibraryQuery,
 ) ([]*domain.Track, int, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	args := make([]any, 0, 4)

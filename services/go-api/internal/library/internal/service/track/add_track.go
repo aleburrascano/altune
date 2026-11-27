@@ -48,14 +48,16 @@ type AddTrackService struct {
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 	now       func() time.Time
+	source    ids.Source
 }
 
 var (
 	ErrCollaboratorRequired = errors.New("track: a required collaborator is missing")
 	ErrClockRequired        = errors.New("track: the service requires a clock")
+	ErrIDSourceRequired     = errors.New("track: the service requires an id source")
 )
 
-func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) (*AddTrackService, error) {
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) (*AddTrackService, error) {
 	switch {
 	case trackRepo == nil:
 		return nil, fmt.Errorf("NewAddTrackService: the track repository: %w", ErrCollaboratorRequired)
@@ -65,12 +67,14 @@ func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publis
 		return nil, fmt.Errorf("NewAddTrackService: the acquisition scheduler: %w", ErrCollaboratorRequired)
 	case now == nil:
 		return nil, fmt.Errorf("NewAddTrackService: %w", ErrClockRequired)
+	case source == nil:
+		return nil, fmt.Errorf("NewAddTrackService: %w", ErrIDSourceRequired)
 	}
-	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now}, nil
+	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now, source: source}, nil
 }
 
-func MustNewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) *AddTrackService {
-	s, err := NewAddTrackService(trackRepo, publisher, scheduler, now)
+func MustNewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) *AddTrackService {
+	s, err := NewAddTrackService(trackRepo, publisher, scheduler, now, source)
 	if err != nil {
 		panic(err)
 	}
@@ -81,7 +85,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	if err := validateAddTrackInput(input, s.now()); err != nil {
 		return nil, err
 	}
-	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album, s.now)
+	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album, s.now, s.source)
 	if err != nil {
 		return nil, err
 	}

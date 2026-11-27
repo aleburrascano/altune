@@ -16,7 +16,7 @@ func TestPostgresJobQueue_QueueWritesRacingACatalogWriteThatChangesAMirroredColu
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	ops := []struct {

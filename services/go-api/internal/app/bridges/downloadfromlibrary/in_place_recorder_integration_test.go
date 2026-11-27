@@ -21,7 +21,7 @@ type readyTrackSpec struct {
 }
 
 func newInPlaceRecorder(pool *pgxpool.Pool) *downloadfromlibrary.InPlaceRecorder {
-	return downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool), download.NewPostgresUpgradeStore(pool))
+	return downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), download.NewPostgresUpgradeStore(pool))
 }
 
 func insertUpgradableTrack(t *testing.T, pool *pgxpool.Pool, spec readyTrackSpec) sharedids.TrackId {

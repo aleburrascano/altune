@@ -569,12 +569,12 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 	store.ErrOnStream = errors.New("not found")
 	sched := &librarytest.Scheduler{}
 	svc := library.NewStreamTrackService(repo, store, sched, &librarytest.Metrics{}, r.Switch(jobs.StreamRecovery), clock.Now)
-	track, err := library.NewTrack(user, "Track", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(user, "Track", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	repo.Seed(track)
-	if err := track.MarkReady("audio/gone.opus"); err != nil {
+	if err := track.MarkReady("audio/gone.opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 

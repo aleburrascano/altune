@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -28,12 +29,12 @@ func addTrackAt(t *testing.T, pool *pgxpool.Pool, userId ids.UserId, audioRef st
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
 	if audioRef != "" {
-		if err := track.MarkReady(audioRef); err != nil {
+		if err := track.MarkReady(audioRef, ids.Real); err != nil {
 			t.Fatal(err)
 		}
 	}
 	cleanupTrack(t, pool, track.ID, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool).Add(context.Background(), track); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 }
@@ -54,10 +55,10 @@ func findOrphan(t *testing.T, repo *library.PostgresOrphanedAudioRepository, aud
 
 func TestPostgresOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresOrphanedAudioRepository(pool)
+	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
-	trackId := library.NewTrackId()
+	trackId := librarytest.NewTrackId()
 	ref := orphanRefFor(userId)
 	cleanupOrphan(t, pool, ref)
 
@@ -94,13 +95,13 @@ func TestPostgresOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
 
 func TestPostgresOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresOrphanedAudioRepository(pool)
+	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	stuck, fresh := orphanRefFor(userId), orphanRefFor(userId)
 	for _, ref := range []string{stuck, fresh} {
 		cleanupOrphan(t, pool, ref)
-		if err := repo.RecordOrphanedAudio(ctx, library.OrphanedAudio{AudioRef: ref, UserId: userId, TrackId: library.NewTrackId()}); err != nil {
+		if err := repo.RecordOrphanedAudio(ctx, library.OrphanedAudio{AudioRef: ref, UserId: userId, TrackId: librarytest.NewTrackId()}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -122,7 +123,7 @@ func TestPostgresOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
 
 func TestPostgresOrphanedAudioRepo_AudioUsage(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresOrphanedAudioRepository(pool)
+	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	usage := func(ref string, owner ids.UserId) library.AudioUsage {
@@ -181,10 +182,10 @@ func TestPostgresOrphanedAudioRepo_MissingTableIsUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	repo := library.NewPostgresOrphanedAudioRepository(pool)
+	repo := library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics())
 
 	userId := ids.NewUserId(uuid.New())
-	orphan := library.OrphanedAudio{AudioRef: orphanRefFor(userId), UserId: userId, TrackId: library.NewTrackId()}
+	orphan := library.OrphanedAudio{AudioRef: orphanRefFor(userId), UserId: userId, TrackId: librarytest.NewTrackId()}
 	_, listErr := repo.ListOrphanedAudio(ctx, 10)
 	for name, err := range map[string]error{
 		"record":  repo.RecordOrphanedAudio(ctx, orphan),

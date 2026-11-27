@@ -44,11 +44,13 @@ func prefixColumns(columns, prefix string) string {
 
 type PostgresTrackRepository struct {
 	pool       *pgxpool.Pool
+	metrics    ports.DBCallMetrics
 	libraryCap int
 }
 
-func NewPostgresTrackRepository(pool *pgxpool.Pool, opts ...func(*PostgresTrackRepository)) *PostgresTrackRepository {
-	r := &PostgresTrackRepository{pool: pool, libraryCap: domain.MaxTracksPerUser}
+func NewPostgresTrackRepository(pool *pgxpool.Pool, metrics ports.DBCallMetrics, opts ...func(*PostgresTrackRepository)) *PostgresTrackRepository {
+	requireDBCallMetrics("NewPostgresTrackRepository", metrics)
+	r := &PostgresTrackRepository{pool: pool, metrics: metrics, libraryCap: domain.MaxTracksPerUser}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -65,7 +67,7 @@ func WithLibraryCap(libraryCap int) func(*PostgresTrackRepository) {
 }
 
 func (r *PostgresTrackRepository) Add(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	stored, created, err := r.addInTx(ctx, track)
@@ -149,7 +151,7 @@ func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 }
 
 func (r *PostgresTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId sharedids.UserId) (*domain.Track, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	row := r.pool.QueryRow(ctx,
@@ -162,7 +164,7 @@ func (r *PostgresTrackRepository) GetByID(ctx context.Context, id domain.TrackId
 }
 
 func (r *PostgresTrackRepository) AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	var inUse bool
@@ -177,7 +179,7 @@ func (r *PostgresTrackRepository) AudioRefInUse(ctx context.Context, audioRef st
 }
 
 func (r *PostgresTrackRepository) CountForUser(ctx context.Context, userId sharedids.UserId, atMost int) (int, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	var held int
@@ -192,7 +194,7 @@ func (r *PostgresTrackRepository) CountForUser(ctx context.Context, userId share
 }
 
 func (r *PostgresTrackRepository) ListForUser(ctx context.Context, userId sharedids.UserId, limit, offset int) ([]*domain.Track, int, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	tracks, total, err := r.listForUser(ctx, userId, limit, offset)
@@ -229,7 +231,7 @@ func (r *PostgresTrackRepository) ListByIDs(ctx context.Context, userId sharedid
 		return nil, nil
 	}
 
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	tracks, err := r.listByIDs(ctx, userId, trackIdUUIDs(ids))
@@ -292,7 +294,7 @@ type rowQuerier interface {
 }
 
 func (r *PostgresTrackRepository) update(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	if fence == 0 {
@@ -383,7 +385,7 @@ WHERE id = $1 AND audio_ref = $2 AND acquisition_status = 'ready'`,
 	fmt.Sprintf(gradeRankSQL, "COALESCE(acquisition_evidence->>'grade', 'D')"))
 
 func (r *PostgresTrackRepository) RecordInPlaceVerdict(ctx context.Context, id domain.TrackId, audioRef string, v ports.InPlaceVerdict) (bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	tag, err := r.pool.Exec(ctx, recordInPlaceVerdictSQL, id.UUID(), audioRef,
@@ -395,7 +397,7 @@ func (r *PostgresTrackRepository) RecordInPlaceVerdict(ctx context.Context, id d
 }
 
 func (r *PostgresTrackRepository) Requeue(ctx context.Context, id domain.TrackId) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	if _, err := r.pool.Exec(ctx,
@@ -413,7 +415,7 @@ func (r *PostgresTrackRepository) Requeue(ctx context.Context, id domain.TrackId
 }
 
 func (r *PostgresTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId sharedids.UserId, trackNumber int) (bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	tag, err := r.pool.Exec(ctx,
@@ -428,7 +430,7 @@ func (r *PostgresTrackRepository) SetTrackNumber(ctx context.Context, id domain.
 }
 
 func (r *PostgresTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId sharedids.UserId) (deleted bool, audioRef *string, err error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	deleted, audioRef, err = r.deleteTrackRow(ctx, id, userId)
@@ -481,7 +483,7 @@ func (r *PostgresTrackRepository) GetByDedupKey(ctx context.Context, userId shar
 }
 
 func (r *PostgresTrackRepository) getTrackByUniqueKey(ctx context.Context, userId sharedids.UserId, column, value string) (*domain.Track, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	track, err := r.findTrackByUniqueKey(ctx, userId, column, value)
@@ -538,7 +540,7 @@ func (r *PostgresTrackRepository) listOwnedTrackRefsPage(
 	userId sharedids.UserId,
 	after uuid.UUID,
 ) ([]domain.OwnedTrackRef, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
@@ -588,7 +590,7 @@ func (r *PostgresTrackRepository) listReadyAudioTracksPage(
 	ctx context.Context,
 	after uuid.UUID,
 ) ([]ports.ReadyAudioTrack, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx, readyAudioTracksPageSQL, after, readyAudioTracksPageSize)
@@ -618,7 +620,7 @@ func scanReadyAudioTrack(row pgx.CollectableRow) (ports.ReadyAudioTrack, error) 
 }
 
 func (r *PostgresTrackRepository) AudioRefsUnderPrefix(ctx context.Context, prefix string) (map[string]bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,

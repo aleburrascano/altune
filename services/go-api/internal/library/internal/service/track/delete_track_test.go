@@ -62,7 +62,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		{
 			name: "non-existent track returns ErrTrackNotFound",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
-				return library.NewTrackId()
+				return librarytest.NewTrackId()
 			},
 			wantErr: library.ErrTrackNotFound,
 		},

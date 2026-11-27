@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/jsoncontract"
 	"encoding/json"
 	"net/http"
@@ -18,7 +19,7 @@ func TestWire_TrackAddedToLibraryEventCarriesTheTrackResponseShape(t *testing.T)
 	repo := library.NewInMemoryTrackRepo()
 	published := &library.InMemoryRecordingPublisher{}
 	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, published, &library.InMemoryScheduler{}, time.Now),
+		library.MustNewAddTrackService(repo, published, &library.InMemoryScheduler{}, time.Now, ids.Real),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
 		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),

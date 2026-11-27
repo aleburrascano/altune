@@ -3,6 +3,7 @@ package orphans_test
 import (
 	"altune/go-api/cmd/api/commands/orphans"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"os"
@@ -32,7 +33,7 @@ var _ library.TrackReadWriter = (*fakeTrackRepo)(nil)
 
 func readyFixture(t *testing.T, ref string) (library.ReadyAudioTrack, *fakeTrackRepo) {
 	t.Helper()
-	id := library.NewTrackId()
+	id := librarytest.NewTrackId()
 	userId := ids.NewUserId(uuid.New())
 	track := &library.Track{ID: id, UserId: userId, DownloadStatus: library.AcquisitionReady, AudioRef: &ref}
 	repo := &fakeTrackRepo{tracks: map[library.TrackId]*library.Track{id: track}}

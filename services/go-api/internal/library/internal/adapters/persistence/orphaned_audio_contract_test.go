@@ -27,10 +27,10 @@ func TestPostgresOrphanedAudioRepo_Contract(t *testing.T) {
 		seed := func(track *library.Track) {
 			t.Helper()
 			cleanupTrack(t, pool, track.ID, track.UserId)
-			if _, _, err := library.NewPostgresTrackRepository(pool).Add(context.Background(), track); err != nil {
+			if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(context.Background(), track); err != nil {
 				t.Fatalf("Add: %v", err)
 			}
 		}
-		return &cleaningOrphanQueue{PostgresOrphanedAudioRepository: library.NewPostgresOrphanedAudioRepository(pool), t: t, pool: pool}, seed
+		return &cleaningOrphanQueue{PostgresOrphanedAudioRepository: library.NewPostgresOrphanedAudioRepository(pool, library.NoopDBCallMetrics()), t: t, pool: pool}, seed
 	})
 }

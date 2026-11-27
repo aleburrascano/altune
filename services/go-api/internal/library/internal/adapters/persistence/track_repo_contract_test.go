@@ -24,7 +24,7 @@ func (r *cleaningTrackRepo) Add(ctx context.Context, track *library.Track) (*lib
 func TestPostgresTrackRepo_LibraryCapContract(t *testing.T) {
 	pool := dbtest.Pool(t)
 	contracttest.TrackRepositoryLibraryCapContract(t, func(t *testing.T, libraryCap int) contracttest.TrackRepositoryUnderTest {
-		repo := library.NewPostgresTrackRepository(pool, library.WithLibraryCap(libraryCap))
+		repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics(), library.WithLibraryCap(libraryCap))
 		return &cleaningTrackRepo{PostgresTrackRepository: repo, t: t, pool: pool}
 	})
 }
@@ -32,6 +32,6 @@ func TestPostgresTrackRepo_LibraryCapContract(t *testing.T) {
 func TestPostgresTrackRepo_Contract(t *testing.T) {
 	pool := dbtest.Pool(t)
 	contracttest.TrackRepositoryContract(t, func(t *testing.T) contracttest.TrackRepositoryUnderTest {
-		return &cleaningTrackRepo{PostgresTrackRepository: library.NewPostgresTrackRepository(pool), t: t, pool: pool}
+		return &cleaningTrackRepo{PostgresTrackRepository: library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), t: t, pool: pool}
 	})
 }

@@ -9,6 +9,7 @@ type (
 
 var (
 	ErrPlaylistClockRequired         = playlist.ErrClockRequired
+	ErrPlaylistIDSourceRequired      = playlist.ErrIDSourceRequired
 	ErrPlaylistCollaboratorRequired  = playlist.ErrCollaboratorRequired
 	MustNewPlaylistLifecycleService  = playlist.MustNewPlaylistLifecycleService
 	MustNewPlaylistMembershipService = playlist.MustNewPlaylistMembershipService

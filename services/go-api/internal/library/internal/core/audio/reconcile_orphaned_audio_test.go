@@ -68,7 +68,7 @@ func TestReconcile_SupersededAudioInsideTheGraceIsKeptAndReusedAudioIsReleasedAf
 	ctx := context.Background()
 	userId := librarytest.UserId()
 	f.store.Seed(orphanRef, []byte("audio"))
-	held := library.OrphanedAudio{AudioRef: orphanRef, UserId: userId, TrackId: library.NewTrackId(), NotBefore: time.Now().Add(time.Hour)}
+	held := library.OrphanedAudio{AudioRef: orphanRef, UserId: userId, TrackId: librarytest.NewTrackId(), NotBefore: time.Now().Add(time.Hour)}
 	if err := f.queue.RecordOrphanedAudio(ctx, held); err != nil {
 		t.Fatal(err)
 	}

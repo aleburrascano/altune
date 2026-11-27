@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/ids/idstest"
 	"altune/go-api/internal/shared/tracklength"
 	"encoding/json"
 	"errors"
@@ -162,7 +163,7 @@ func TestNewTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			track, err := library.NewTrack(userId, tt.title, tt.artist, tt.album, time.Now)
+			track, err := library.NewTrack(userId, tt.title, tt.artist, tt.album, time.Now, ids.Real)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -213,7 +214,7 @@ func TestNewTrack_AcceptsAlbumAtCap(t *testing.T) {
 	t.Parallel()
 	album := strings.Repeat("c", 300)
 
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Track Title", "Artist Name", album, time.Now)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Track Title", "Artist Name", album, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,7 +227,7 @@ func TestNewTrack_StoresTrimmedTitleAndArtist(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
 
-	track, err := library.NewTrack(userId, "  Track Title  ", "\tArtist Name\n", "Album Name", time.Now)
+	track, err := library.NewTrack(userId, "  Track Title  ", "\tArtist Name\n", "Album Name", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -245,11 +246,11 @@ func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
 
-	clean, err := library.NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce", time.Now)
+	clean, err := library.NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack(clean): %v", err)
 	}
-	variant, err := library.NewTrack(userId, "Other Song", "  Beyoncé  ", "  I Am...   Sasha Fierce  ", time.Now)
+	variant, err := library.NewTrack(userId, "Other Song", "  Beyoncé  ", "  I Am...   Sasha Fierce  ", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack(variant): %v", err)
 	}
@@ -268,7 +269,7 @@ func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 func TestSetAlbumArtist_Canonicalizes(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userId, "Song", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(userId, "Song", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -309,7 +310,7 @@ func TestTrack_MarkReady(t *testing.T) {
 			reason := "old failure"
 			track.FailureReason = &reason
 
-			err := track.MarkReady(tt.audioRef)
+			err := track.MarkReady(tt.audioRef, ids.Real)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -357,7 +358,7 @@ func TestTrack_AudioVersion(t *testing.T) {
 
 		seen := make(map[string]bool)
 		for i := 0; i < 100; i++ {
-			if err := track.MarkReady(sameRef); err != nil {
+			if err := track.MarkReady(sameRef, ids.Real); err != nil {
 				t.Fatalf("acquisition %d: %v", i, err)
 			}
 			if seen[track.AudioVersion] {
@@ -371,7 +372,7 @@ func TestTrack_AudioVersion(t *testing.T) {
 		t.Parallel()
 		track := newTestTrack(t)
 
-		if err := track.MarkReady("s3://bucket/track.opus"); err != nil {
+		if err := track.MarkReady("s3://bucket/track.opus", ids.Real); err != nil {
 			t.Fatalf("first acquisition: %v", err)
 		}
 		first := track.AudioVersion
@@ -379,7 +380,7 @@ func TestTrack_AudioVersion(t *testing.T) {
 		if err := track.MarkFailed("download_failed"); err != nil {
 			t.Fatalf("mark failed: %v", err)
 		}
-		if err := track.MarkReady("s3://bucket/track.opus"); err != nil {
+		if err := track.MarkReady("s3://bucket/track.opus", ids.Real); err != nil {
 			t.Fatalf("retry: %v", err)
 		}
 
@@ -444,7 +445,7 @@ func TestTrack_RevertToPending(t *testing.T) {
 	t.Parallel()
 	track := newTestTrack(t)
 
-	if err := track.MarkReady("s3://bucket/track.opus"); err != nil {
+	if err := track.MarkReady("s3://bucket/track.opus", ids.Real); err != nil {
 		t.Fatalf("setup: MarkReady failed: %v", err)
 	}
 
@@ -480,7 +481,7 @@ func TestTrack_SetAcquisitionConfidence(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Song", "Artist", "Album", time.Now)
+			track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Song", "Artist", "Album", time.Now, ids.Real)
 			if err != nil {
 				t.Fatalf("NewTrack: %v", err)
 			}
@@ -560,7 +561,7 @@ func TestTrack_IsStreamable(t *testing.T) {
 func newTestTrack(t *testing.T) *library.Track {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userId, "Test Title", "Test Artist", "Test Album", time.Now)
+	track, err := library.NewTrack(userId, "Test Title", "Test Artist", "Test Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("newTestTrack: unexpected error: %v", err)
 	}
@@ -570,7 +571,7 @@ func newTestTrack(t *testing.T) *library.Track {
 func TestSetAlbum_KeepsTheDedupKeyInStep(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userId, "Crook", "Raf Saperra", "Some Album", time.Now)
+	track, err := library.NewTrack(userId, "Crook", "Raf Saperra", "Some Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -625,7 +626,7 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
 	newTrackErr := func(title, artist, album string) error {
-		_, err := library.NewTrack(userId, title, artist, album, time.Now)
+		_, err := library.NewTrack(userId, title, artist, album, time.Now, ids.Real)
 		return err
 	}
 	tests := []struct {
@@ -656,7 +657,7 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 		{
 			"playlist name",
 			func(s string) error {
-				_, err := library.NewPlaylist(userId, s, time.Unix(0, 0))
+				_, err := library.NewPlaylist(userId, s, time.Unix(0, 0), ids.Real)
 				return err
 			},
 			"playlist name must not contain a NUL byte",
@@ -699,7 +700,7 @@ func markerUserId(t *testing.T) ids.UserId {
 
 func TestNewTrack_SetsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -716,11 +717,11 @@ func TestNewTrack_SetsInFlightMarker(t *testing.T) {
 
 func TestTrack_MarkReady_ClearsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
-	if err := track.MarkReady("s3://bucket/audio.opus"); err != nil {
+	if err := track.MarkReady("s3://bucket/audio.opus", ids.Real); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
 	if track.AcquisitionStartedAt != nil {
@@ -730,7 +731,7 @@ func TestTrack_MarkReady_ClearsInFlightMarker(t *testing.T) {
 
 func TestTrack_MarkFailed_ClearsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -744,7 +745,7 @@ func TestTrack_MarkFailed_ClearsInFlightMarker(t *testing.T) {
 
 func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -854,7 +855,7 @@ func pendingTrack(t *testing.T) *library.Track {
 func readyTrack(t *testing.T) *library.Track {
 	t.Helper()
 	track := newTestTrack(t)
-	if err := track.MarkReady(transitionRef); err != nil {
+	if err := track.MarkReady(transitionRef, ids.Real); err != nil {
 		t.Fatalf("setup MarkReady: %v", err)
 	}
 	return track
@@ -878,9 +879,9 @@ func readyWithoutAudioTrack(t *testing.T) *library.Track {
 }
 
 var transitions = map[string]func(*library.Track) error{
-	"MarkReady":        func(tr *library.Track) error { return tr.MarkReady("s3://bucket/other.opus") },
-	"MarkReadySameRef": func(tr *library.Track) error { return tr.MarkReady(transitionRef) },
-	"ReplaceAudio":     func(tr *library.Track) error { return tr.ReplaceAudio("s3://bucket/other.opus") },
+	"MarkReady":        func(tr *library.Track) error { return tr.MarkReady("s3://bucket/other.opus", ids.Real) },
+	"MarkReadySameRef": func(tr *library.Track) error { return tr.MarkReady(transitionRef, ids.Real) },
+	"ReplaceAudio":     func(tr *library.Track) error { return tr.ReplaceAudio("s3://bucket/other.opus", ids.Real) },
 	"MarkFailed":       func(tr *library.Track) error { return tr.MarkFailed("audio file missing from storage") },
 	"FailAcquisition":  func(tr *library.Track) error { return tr.FailAcquisition("no_match_found") },
 	"RevertToPending":  func(tr *library.Track) error { return tr.RevertToPending(time.Now) },
@@ -971,7 +972,7 @@ const reRecordingMBID = "25d68187-ee71-4f06-9e58-0b49d66bf8a8"
 
 func studioLabelledTrack(t *testing.T) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "It's Only Love", "Bryan Adams", "Reckless", time.Now)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "It's Only Love", "Bryan Adams", "Reckless", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1078,7 +1079,7 @@ func TestTrack_ARelabelledTrackKeepsItsArtistAndDedupsLikeOneAddedUnderTheNewLab
 	if track.DedupKey == studioKey {
 		t.Error("DedupKey still names the studio recording after a relabel")
 	}
-	addedFresh, err := library.NewTrack(track.UserId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love", time.Now)
+	addedFresh, err := library.NewTrack(track.UserId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1196,15 +1197,57 @@ func TestTrack_RecordAudioLengthLeavesTheFlagWhileEitherLengthIsUnknown(t *testi
 }
 
 func TestNewTrack_RefusesANilClock(t *testing.T) {
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", nil)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", nil, ids.Real)
 
 	if !errors.Is(err, library.ErrTrackTimestampClockRequired) || track != nil {
 		t.Fatalf("NewTrack(nil clock) = (%v, %v), want ErrTrackTimestampClockRequired and no track", track, err)
 	}
 }
 
+func TestNewTrack_RefusesANilIDSource(t *testing.T) {
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now, nil)
+
+	if !errors.Is(err, library.ErrIDSourceRequired) || track != nil {
+		t.Fatalf("NewTrack(nil id source) = (%v, %v), want ErrIDSourceRequired and no track", track, err)
+	}
+}
+
+func TestMarkReadyAndReplaceAudio_RefuseANilIDSource(t *testing.T) {
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now, ids.Real)
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+
+	if err := track.MarkReady("s3://bucket/a.opus", nil); !errors.Is(err, library.ErrIDSourceRequired) {
+		t.Errorf("MarkReady(nil id source) = %v, want ErrIDSourceRequired", err)
+	}
+	if err := track.MarkReady("s3://bucket/a.opus", ids.Real); err != nil {
+		t.Fatalf("MarkReady: %v", err)
+	}
+	if err := track.ReplaceAudio("s3://bucket/b.opus", nil); !errors.Is(err, library.ErrIDSourceRequired) {
+		t.Errorf("ReplaceAudio(nil id source) = %v, want ErrIDSourceRequired", err)
+	}
+}
+
+func TestMarkReady_MintsTheAudioVersionFromTheInjectedSource(t *testing.T) {
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now, idstest.Sequence())
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+	if want := track.ID.String(); want != "00000000-0000-0000-0000-000000000001" {
+		t.Fatalf("track id = %s, want the sequence's first draw", want)
+	}
+
+	if err := track.MarkReady("s3://bucket/a.opus", idstest.Sequence()); err != nil {
+		t.Fatalf("MarkReady: %v", err)
+	}
+	if track.AudioVersion != "00000000-0000-0000-0000-000000000001" {
+		t.Errorf("AudioVersion = %q, want the injected source's first draw", track.AudioVersion)
+	}
+}
+
 func TestRevertToPending_RefusesANilClock(t *testing.T) {
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -1220,7 +1263,7 @@ func TestRevertToPending_RefusesANilClock(t *testing.T) {
 func TestNewTrack_StampsAddedAtFromTheInjectedClock(t *testing.T) {
 	pinned := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
 
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", func() time.Time { return pinned })
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", func() time.Time { return pinned }, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -1231,7 +1274,7 @@ func TestNewTrack_StampsAddedAtFromTheInjectedClock(t *testing.T) {
 
 func TestRevertToPending_StampsTheStartFromTheInjectedClock(t *testing.T) {
 	pinned := time.Date(2026, 11, 26, 11, 0, 0, 0, time.UTC)
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}

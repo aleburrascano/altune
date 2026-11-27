@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 )
 
@@ -14,19 +13,18 @@ const dbCallTimeout = 5 * time.Second
 
 var errDBCallTimeout = errors.New("catalog db call exceeded dbCallTimeout")
 
-var dbCallMetrics atomic.Pointer[ports.DBCallMetrics]
+var ErrDBCallMetricsRequired = errors.New("persistence: the repository requires db call metrics")
 
-func SetDBCallMetrics(m ports.DBCallMetrics) {
+func requireDBCallMetrics(name string, m ports.DBCallMetrics) {
 	if m == nil {
-		m = ports.NoopDBCallMetrics()
+		panic(name + ": " + ErrDBCallMetricsRequired.Error())
 	}
-	dbCallMetrics.Store(&m)
 }
 
-func withDBTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+func withDBTimeout(ctx context.Context, metrics ports.DBCallMetrics) (context.Context, context.CancelFunc) {
 	dbCtx, cancel := context.WithTimeoutCause(ctx, dbCallTimeout, errDBCallTimeout)
 	return dbCtx, func() {
-		recordIfDBCallTimedOut(dbCtx)
+		recordIfDBCallTimedOut(dbCtx, metrics)
 		cancel()
 	}
 }
@@ -38,11 +36,8 @@ func classifyDBError(err error) error {
 	return fmt.Errorf("%w: %w", ports.ErrDBTransient, err)
 }
 
-func recordIfDBCallTimedOut(dbCtx context.Context) {
-	if !errors.Is(context.Cause(dbCtx), errDBCallTimeout) {
-		return
-	}
-	if m := dbCallMetrics.Load(); m != nil {
-		(*m).DBCallTimedOut()
+func recordIfDBCallTimedOut(dbCtx context.Context, metrics ports.DBCallMetrics) {
+	if errors.Is(context.Cause(dbCtx), errDBCallTimeout) {
+		metrics.DBCallTimedOut()
 	}
 }

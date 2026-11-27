@@ -75,20 +75,20 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	store := library.NewInMemoryAudioStore()
 	want := &library.Track{Title: "Narrow"}
 
-	got, err := library.NewGetTrackStatusService(stubGetter{track: want}).Execute(ctx, userId, library.NewTrackId())
+	got, err := library.NewGetTrackStatusService(stubGetter{track: want}).Execute(ctx, userId, librarytest.NewTrackId())
 	if err != nil || got != want {
 		t.Fatalf("GetTrackStatus via getter-only port = (%v, %v), want the stub's track", got, err)
 	}
 	if err := library.NewDeleteTrackService(struct {
 		stubDeleter
 		stubAudioRefLookup
-	}{stubDeleter: stubDeleter{deleted: true}}, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)).Execute(ctx, userId, library.NewTrackId()); err != nil {
+	}{stubDeleter: stubDeleter{deleted: true}}, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)).Execute(ctx, userId, librarytest.NewTrackId()); err != nil {
 		t.Fatalf("DeleteTrack via deleter-only port: %v", err)
 	}
 	if _, err := library.NewSetTrackNumberService(struct {
 		stubGetter
 		stubNumberSetter
-	}{}).Execute(ctx, userId, library.NewTrackId(), 7); err != nil {
+	}{}).Execute(ctx, userId, librarytest.NewTrackId(), 7); err != nil {
 		t.Fatalf("SetTrackNumber via setter-only port: %v", err)
 	}
 
@@ -96,7 +96,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 		stubAdder
 		stubCounter
 		stubUpdater
-	}{}, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
+	}{}, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real)
 	_ = library.MustNewAudioURLService(stubBatchGetter{}, store, time.Now, &librarytest.Metrics{})
 	_ = library.MustNewBackfillFeaturedService(stubLister{}, nil, nil, time.Now)
 	_ = library.NewStreamTrackService(struct {
@@ -129,14 +129,14 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 		call func(repo *library.InMemoryTrackRepo) error
 	}{
 		{"stream", func(repo *library.InMemoryTrackRepo) error {
-			_, err := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now).Execute(context.Background(), userId, library.NewTrackId())
+			_, err := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now).Execute(context.Background(), userId, librarytest.NewTrackId())
 			return err
 		}},
 		{"recover", func(repo *library.InMemoryTrackRepo) error {
-			return library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now).RecoverIfMissing(context.Background(), userId, library.NewTrackId())
+			return library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now).RecoverIfMissing(context.Background(), userId, librarytest.NewTrackId())
 		}},
 		{"status", func(repo *library.InMemoryTrackRepo) error {
-			_, err := library.NewGetTrackStatusService(repo).Execute(context.Background(), userId, library.NewTrackId())
+			_, err := library.NewGetTrackStatusService(repo).Execute(context.Background(), userId, librarytest.NewTrackId())
 			return err
 		}},
 	}
@@ -178,7 +178,7 @@ func (l lensErrRepo) ListArtistsForUser(context.Context, ids.UserId, library.Lib
 func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 	ctx := context.Background()
 	userId := librarytest.UserId()
-	playlistId := library.NewPlaylistId()
+	playlistId := librarytest.NewPlaylistId()
 	cause := context.DeadlineExceeded
 	transient := fmt.Errorf("%w: %w", library.ErrDBTransient, cause)
 	permanent := errors.New("relation \"playlists\" does not exist")
@@ -191,20 +191,20 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 		{"playlist list", func(e error) error {
 			repo := library.NewInMemoryPlaylistRepo()
 			repo.ErrOnList = e
-			_, err := library.MustNewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now).List(ctx, userId, 10, 0)
+			_, err := library.MustNewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now, ids.Real).List(ctx, userId, 10, 0)
 			return err
 		}},
 		{"playlist get", func(e error) error {
 			repo := library.NewInMemoryPlaylistRepo()
 			repo.ErrOnGetWithTracks = e
-			_, _, err := library.MustNewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now).Get(ctx, userId, playlistId)
+			_, _, err := library.MustNewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now, ids.Real).Get(ctx, userId, playlistId)
 			return err
 		}},
 		{"playlist rename write", func(e error) error {
 			repo := library.NewInMemoryPlaylistRepo()
 			p := librarytest.SeedPlaylist(t, repo, userId, "before")
 			repo.ErrOnUpdate = e
-			_, _, err := library.MustNewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now).Rename(ctx, userId, p.ID, "after")
+			_, _, err := library.MustNewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now, ids.Real).Rename(ctx, userId, p.ID, "after")
 			return err
 		}},
 		{"membership add track", func(e error) error {

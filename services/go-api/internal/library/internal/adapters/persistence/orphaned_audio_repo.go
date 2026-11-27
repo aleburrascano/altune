@@ -20,15 +20,17 @@ const undefinedTableCode = "42P01"
 var _ ports.OrphanedAudioQueue = (*PostgresOrphanedAudioRepository)(nil)
 
 type PostgresOrphanedAudioRepository struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics ports.DBCallMetrics
 }
 
-func NewPostgresOrphanedAudioRepository(pool *pgxpool.Pool) *PostgresOrphanedAudioRepository {
-	return &PostgresOrphanedAudioRepository{pool: pool}
+func NewPostgresOrphanedAudioRepository(pool *pgxpool.Pool, metrics ports.DBCallMetrics) *PostgresOrphanedAudioRepository {
+	requireDBCallMetrics("NewPostgresOrphanedAudioRepository", metrics)
+	return &PostgresOrphanedAudioRepository{pool: pool, metrics: metrics}
 }
 
 func (r *PostgresOrphanedAudioRepository) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	_, err := r.pool.Exec(ctx,
@@ -44,7 +46,7 @@ func (r *PostgresOrphanedAudioRepository) RecordOrphanedAudio(ctx context.Contex
 }
 
 func (r *PostgresOrphanedAudioRepository) ListOrphanedAudio(ctx context.Context, limit int) ([]ports.OrphanedAudio, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
@@ -80,7 +82,7 @@ func scanOrphanedAudio(row pgx.CollectableRow) (ports.OrphanedAudio, error) {
 }
 
 func (r *PostgresOrphanedAudioRepository) AudioUsage(ctx context.Context, audioRef string, owner ids.UserId) (ports.AudioUsage, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	var referenced, acquiring bool
@@ -102,7 +104,7 @@ func (r *PostgresOrphanedAudioRepository) AudioUsage(ctx context.Context, audioR
 }
 
 func (r *PostgresOrphanedAudioRepository) ResolveOrphanedAudio(ctx context.Context, audioRef string) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	_, err := r.pool.Exec(ctx, `DELETE FROM orphaned_audio WHERE audio_ref = $1`, audioRef)
@@ -110,7 +112,7 @@ func (r *PostgresOrphanedAudioRepository) ResolveOrphanedAudio(ctx context.Conte
 }
 
 func (r *PostgresOrphanedAudioRepository) MarkOrphanedAudioAttempt(ctx context.Context, audioRef, cause string) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	_, err := r.pool.Exec(ctx,

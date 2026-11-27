@@ -13,12 +13,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLedgerPort, svc *download.AcquireTrackAudioService) download.UpgradeLane {
+func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, dbMetrics library.DBCallMetrics, ledger download.TrackLedgerPort, svc *download.AcquireTrackAudioService) download.UpgradeLane {
 	if cfg.AcquisitionUpgradeConcurrency < 1 {
 		return download.NoUpgradeLane()
 	}
 	store := download.NewPostgresUpgradeStore(pool)
-	recorder := downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool), store)
+	recorder := downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool, dbMetrics), store)
 	inPlace, err := download.InPlaceCheckOf(svc, recorder, cfg.AcquisitionUpgradeVerifyPerHour, clock.Now, clock.Sleep)
 	if err != nil {
 		panic(err)

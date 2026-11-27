@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	sharedids "altune/go-api/internal/shared/ids"
@@ -22,7 +23,7 @@ import (
 
 func TestPostgresPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 	otherId := sharedids.NewUserId(uuid.New())
@@ -51,7 +52,7 @@ func TestPostgresPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *
 
 func TestPostgresPlaylistRepo_CreateAndGetByID(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -89,7 +90,7 @@ func TestPostgresPlaylistRepo_CreateAndGetByID(t *testing.T) {
 
 func TestPostgresPlaylistRepo_ListForUser(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -121,7 +122,7 @@ func TestPostgresPlaylistRepo_ListForUser(t *testing.T) {
 
 func TestPostgresPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -162,7 +163,7 @@ func TestPostgresPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T)
 
 func TestPostgresPlaylistRepo_Delete(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -200,8 +201,8 @@ func TestPostgresPlaylistRepo_Delete(t *testing.T) {
 
 func TestPostgresPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
-	trackRepo := library.NewPostgresTrackRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
+	trackRepo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -263,8 +264,8 @@ func TestPostgresPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 
 func TestPostgresPlaylistRepo_ReorderTracks(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
-	trackRepo := library.NewPostgresTrackRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
+	trackRepo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -317,7 +318,7 @@ func TestPostgresPlaylistRepo_ReorderTracks(t *testing.T) {
 
 func TestPostgresPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -340,7 +341,7 @@ func seedFilledPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 	t.Helper()
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)
-	if err := library.NewPostgresPlaylistRepository(pool).Create(ctx, pl); err != nil {
+	if err := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics()).Create(ctx, pl); err != nil {
 		t.Fatalf("Create playlist: %v", err)
 	}
 	ids := seedBulkTracks(ctx, t, pool, userId, n)
@@ -352,7 +353,7 @@ func seedFilledPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 
 func TestPostgresPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -371,7 +372,7 @@ func TestPostgresPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 
 func TestPostgresPlaylistRepo_AddTrack_TakesTheLastSlotThenRefuses(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -392,7 +393,7 @@ func TestPostgresPlaylistRepo_AddTrack_TakesTheLastSlotThenRefuses(t *testing.T)
 
 func TestPostgresPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -412,7 +413,7 @@ func TestPostgresPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testin
 
 func TestPostgresPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -458,8 +459,8 @@ func TestPostgresPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *te
 
 func TestPostgresPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
-	trackRepo := library.NewPostgresTrackRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
+	trackRepo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	victim := sharedids.NewUserId(uuid.New())
 	attacker := sharedids.NewUserId(uuid.New())
@@ -534,7 +535,7 @@ func TestPostgresPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) 
 	}
 
 	t.Run("missing playlist", func(t *testing.T) {
-		err := playlistRepo.AddTrack(ctx, victim, library.NewPlaylistId(), outsider.ID)
+		err := playlistRepo.AddTrack(ctx, victim, librarytest.NewPlaylistId(), outsider.ID)
 		if !errors.Is(err, library.ErrPlaylistNotOwned) {
 			t.Fatalf("AddTrack to missing playlist: err = %v, want catalog.ErrPlaylistNotOwned", err)
 		}
@@ -543,8 +544,8 @@ func TestPostgresPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) 
 
 func TestPostgresPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
-	trackRepo := library.NewPostgresTrackRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
+	trackRepo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -615,7 +616,7 @@ func TestPostgresPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing
 
 func TestPostgresPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -692,7 +693,7 @@ func sameOrder(a []uuid.UUID, b []library.TrackId) bool {
 
 func TestPostgresPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -741,7 +742,7 @@ func TestPostgresPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 
 func TestPostgresPlaylistRepo_ConcurrentReorderTracks_Serialize(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -832,7 +833,7 @@ func assertPositionsAreContiguous(ctx context.Context, t *testing.T, pool *pgxpo
 
 func TestPostgresPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 3)
@@ -853,7 +854,7 @@ func TestPostgresPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t
 
 func TestPostgresPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 3)
@@ -873,7 +874,7 @@ func TestPostgresPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *test
 
 func TestPostgresPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -901,17 +902,17 @@ func addTrackToPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 	t.Helper()
 	tr := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, tr.ID, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool).Add(ctx, tr); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
-	if err := library.NewPostgresPlaylistRepository(pool).AddTrack(ctx, userId, playlistId, tr.ID); err != nil {
+	if err := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics()).AddTrack(ctx, userId, playlistId, tr.ID); err != nil {
 		t.Fatalf("AddTrack: %v", err)
 	}
 }
 
 func TestPostgresPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -946,7 +947,7 @@ func TestPostgresPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
 func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId sharedids.UserId) library.TrackId {
 	t.Helper()
 	tr := newTestTrackForDB(t, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool).Add(ctx, tr); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, tr.ID.UUID()); err != nil {
@@ -957,7 +958,7 @@ func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user
 
 func TestPostgresPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -988,7 +989,7 @@ func TestPostgresPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 
 func TestPostgresPlaylistRepo_Update_RefusesAnotherUsersPlaylist(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresPlaylistRepository(pool)
+	repo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	owner := sharedids.NewUserId(uuid.New())
 	stranger := sharedids.NewUserId(uuid.New())
@@ -1110,8 +1111,8 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 	const n = 40
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, n)
-	svc := library.MustNewPlaylistMembershipService(library.NewPostgresPlaylistRepository(countedPool), library.NewPostgresTrackRepository(pool), events.NoopPublisher(), time.Now)
-	trackRepo := library.NewPostgresTrackRepository(pool)
+	svc := library.MustNewPlaylistMembershipService(library.NewPostgresPlaylistRepository(countedPool, library.NoopDBCallMetrics()), library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), events.NoopPublisher(), time.Now)
+	trackRepo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 
 	parent := t
 	newTrack := func(t *testing.T) library.TrackId {
@@ -1168,7 +1169,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 	t.Run("RemoveTrack of a non-member writes nothing", func(t *testing.T) {
 		counter.reset()
-		if err := svc.RemoveTrack(ctx, userId, pl.ID, library.NewTrackId()); err != nil {
+		if err := svc.RemoveTrack(ctx, userId, pl.ID, librarytest.NewTrackId()); err != nil {
 			t.Fatalf("RemoveTrack(non-member): %v", err)
 		}
 		maxRead, written := counter.snapshot()
@@ -1182,7 +1183,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 		last := len(order) - 1
 		first, second := order[last-6], order[last-2]
 		counter.reset()
-		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{second, first, library.NewTrackId(), second})
+		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{second, first, librarytest.NewTrackId(), second})
 		if err != nil {
 			t.Fatalf("RemoveTracks: %v", err)
 		}
@@ -1233,14 +1234,14 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 func TestPostgresPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 1)
 	tr := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, tr.ID, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool).Add(ctx, tr); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
 
@@ -1276,7 +1277,7 @@ func TestPostgresPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) 
 
 func TestPostgresPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -1312,7 +1313,7 @@ func TestPostgresPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 
 func TestPostgresPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 	pool := dbtest.Pool(t)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 	owner := sharedids.NewUserId(uuid.New())
 	stranger := sharedids.NewUserId(uuid.New())
@@ -1334,7 +1335,7 @@ func TestPostgresPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 		{"owned", pl.ID, owner, true, ids},
 		{"owned and empty", empty.ID, owner, true, []library.TrackId{}},
 		{"foreign", pl.ID, stranger, false, nil},
-		{"missing", library.NewPlaylistId(), owner, false, nil},
+		{"missing", librarytest.NewPlaylistId(), owner, false, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1354,9 +1355,9 @@ func TestPostgresPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 }
 
 func TestPostgresPlaylistRepo_TransientFailuresAreClassified(t *testing.T) {
-	repo := library.NewPostgresPlaylistRepository(unreachablePool(t))
+	repo := library.NewPostgresPlaylistRepository(unreachablePool(t), library.NoopDBCallMetrics())
 	userId := sharedids.NewUserId(uuid.New())
-	playlistId := library.NewPlaylistId()
+	playlistId := librarytest.NewPlaylistId()
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	t.Cleanup(cancel)
 
@@ -1366,7 +1367,7 @@ func TestPostgresPlaylistRepo_TransientFailuresAreClassified(t *testing.T) {
 	}{
 		{"list", func() error { _, err := repo.ListForUser(ctx, userId, 10, 0); return err }},
 		{"get with tracks", func() error { _, _, err := repo.GetWithTracks(ctx, playlistId, userId); return err }},
-		{"add track", func() error { return repo.AddTrack(ctx, userId, playlistId, library.NewTrackId()) }},
+		{"add track", func() error { return repo.AddTrack(ctx, userId, playlistId, librarytest.NewTrackId()) }},
 		{"create", func() error { return repo.Create(ctx, newTestPlaylistForDB(t, userId)) }},
 		{"exists", func() error { _, err := repo.Exists(ctx, playlistId, userId); return err }},
 		{"track order", func() error { _, _, err := repo.GetTrackOrder(ctx, playlistId, userId); return err }},

@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/database"
 	sharedids "altune/go-api/internal/shared/ids"
@@ -18,11 +19,13 @@ type querier interface {
 }
 
 type PostgresFeaturedArtistRepository struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics ports.DBCallMetrics
 }
 
-func NewPostgresFeaturedArtistRepository(pool *pgxpool.Pool) *PostgresFeaturedArtistRepository {
-	return &PostgresFeaturedArtistRepository{pool: pool}
+func NewPostgresFeaturedArtistRepository(pool *pgxpool.Pool, metrics ports.DBCallMetrics) *PostgresFeaturedArtistRepository {
+	requireDBCallMetrics("NewPostgresFeaturedArtistRepository", metrics)
+	return &PostgresFeaturedArtistRepository{pool: pool, metrics: metrics}
 }
 
 func writeTrackFeatured(
@@ -154,7 +157,7 @@ func (r *PostgresFeaturedArtistRepository) ReplaceFeaturedArtists(
 	userId sharedids.UserId,
 	feats []domain.FeaturedArtist,
 ) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	return classifyDBError(r.replaceInTx(ctx, id, userId, feats))
@@ -207,7 +210,7 @@ func (r *PostgresFeaturedArtistRepository) ListTracksFeaturing(
 	userId sharedids.UserId,
 	fa domain.FeaturedArtist,
 ) ([]*domain.Track, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	sql, args := buildFeaturingQuery(userId.UUID(), featuredIdentityKeys(fa))

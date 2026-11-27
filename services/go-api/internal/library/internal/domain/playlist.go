@@ -9,10 +9,6 @@ import (
 
 type PlaylistId struct{ ids.EntityId }
 
-func NewPlaylistId() PlaylistId {
-	return PlaylistId{ids.NewEntityId()}
-}
-
 func ParsePlaylistId(s string) (PlaylistId, error) {
 	id, err := ids.ParseEntityId(s)
 	if err != nil {
@@ -55,14 +51,17 @@ type PlaylistWithSummary struct {
 	Summary  PlaylistSummary
 }
 
-func NewPlaylist(userId ids.UserId, name string, now time.Time) (*Playlist, error) {
+func NewPlaylist(userId ids.UserId, name string, now time.Time, source ids.Source) (*Playlist, error) {
+	if source == nil {
+		return nil, ErrIDSourceRequired
+	}
 	name, err := validatePlaylistName(name)
 	if err != nil {
 		return nil, err
 	}
 	stamp := now.UTC()
 	return &Playlist{
-		ID:        NewPlaylistId(),
+		ID:        PlaylistId{source.NewEntityId()},
 		UserId:    userId,
 		Name:      name,
 		CreatedAt: stamp,

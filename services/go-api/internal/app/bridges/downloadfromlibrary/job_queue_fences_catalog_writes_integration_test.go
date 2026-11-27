@@ -96,7 +96,7 @@ func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	snap := insertFailedTrack(t, pool)
@@ -122,7 +122,7 @@ func TestPostgresJobQueue_ClaimDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	pending := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
@@ -144,7 +144,7 @@ func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPend
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	track := insertReadyTrack(t, pool)
@@ -180,7 +180,7 @@ func TestPostgresJobQueue_ReplaceEnqueueDoesNotMakeACatalogWriteStale(t *testing
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	track := insertReadyTrack(t, pool)
@@ -208,7 +208,7 @@ func TestPostgresJobQueue_SecondEnqueueDoesNotMakeAWriterLoadedBetweenTheTwoStal
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	snap := insertFailedTrack(t, pool)
@@ -232,7 +232,7 @@ func TestPostgresJobQueue_ReclaimOfALapsedLeaseDoesNotMakeACatalogWriteStale(t *
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
@@ -258,7 +258,7 @@ func TestPostgresJobQueue_ClaimOfAReplaceJobDoesNotMakeACatalogWriteStale(t *tes
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	track := insertReadyTrack(t, pool)
@@ -283,7 +283,7 @@ func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *te
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	snap := insertFailedTrack(t, pool)
@@ -320,7 +320,7 @@ func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *te
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	for i := 0; i < 40; i++ {
@@ -363,7 +363,7 @@ func TestPostgresJobQueue_ClaimRacingACatalogWriteCannotTouchTheStartTime(t *tes
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	for i := 0; i < 40; i++ {
@@ -422,7 +422,7 @@ func TestPostgresJobQueue_ARefusedTrackMarkedFailedByTheCatalogIsNotClaimed(t *t
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
@@ -457,7 +457,7 @@ func jobRowExists(t *testing.T, pool *pgxpool.Pool, id ids.TrackId) bool {
 func TestPostgresJobQueue_EnqueueWhoseStatusFlipFailsStillQueuesTheJobAndTheClaimConverges(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
+	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), time.Now, upgradestatetest.New(), ids.Real))
 	requeuer := &flakyRequeuer{inner: ledger}
 	queue := download.MustNewPostgresJobQueue(pool, requeuer)
 	ctx := context.Background()
@@ -486,7 +486,7 @@ func TestPostgresJobQueue_EnqueueWhoseStatusFlipFailsStillQueuesTheJobAndTheClai
 func TestPostgresJobQueue_ClaimWhoseStatusFlipFailsReleasesTheJob(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
+	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), time.Now, upgradestatetest.New(), ids.Real))
 	requeuer := &flakyRequeuer{inner: ledger}
 	queue := download.MustNewPostgresJobQueue(pool, requeuer)
 	ctx := context.Background()
@@ -558,7 +558,7 @@ func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDurin
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics())
 	ctx := context.Background()
 
 	cases := []struct {
@@ -591,5 +591,5 @@ func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDurin
 }
 
 func newQueue(pool *pgxpool.Pool) *download.PostgresJobQueue {
-	return download.MustNewPostgresJobQueue(pool, downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
+	return download.MustNewPostgresJobQueue(pool, downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), time.Now, upgradestatetest.New(), ids.Real))
 }

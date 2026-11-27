@@ -29,6 +29,6 @@ func (r *cleaningPlaylistRepo) SeedTrack(t *testing.T, userId ids.UserId) librar
 func TestPostgresPlaylistRepo_Contract(t *testing.T) {
 	pool := dbtest.Pool(t)
 	contracttest.PlaylistRepositoryContract(t, func(t *testing.T) contracttest.PlaylistRepositoryUnderTest {
-		return &cleaningPlaylistRepo{PostgresPlaylistRepository: library.NewPostgresPlaylistRepository(pool), t: t, pool: pool}
+		return &cleaningPlaylistRepo{PostgresPlaylistRepository: library.NewPostgresPlaylistRepository(pool, library.NoopDBCallMetrics()), t: t, pool: pool}
 	})
 }

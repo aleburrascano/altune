@@ -9,17 +9,23 @@ import (
 	"github.com/google/uuid"
 )
 
-func UserId() ids.UserId {
-	return ids.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+var randomIDs ids.Source = ids.Real
+
+func fixedUserId(fill byte) ids.UserId {
+	var id uuid.UUID
+	for i := range id {
+		id[i] = fill
+	}
+	return ids.NewUserId(id)
 }
 
-func OtherUserId() ids.UserId {
-	return ids.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
-}
+func UserId() ids.UserId { return fixedUserId(0xaa) }
+
+func OtherUserId() ids.UserId { return fixedUserId(0xbb) }
 
 func SeedTrack(t memory.TB, repo *memory.TrackRepo, userId ids.UserId, title, artist, album string) *domain.Track {
 	t.Helper()
-	track, err := domain.NewTrack(userId, title, artist, album, time.Now)
+	track, err := domain.NewTrack(userId, title, artist, album, time.Now, randomIDs)
 	if err != nil {
 		t.Fatalf("seedTrack: %v", err)
 	}
@@ -30,7 +36,7 @@ func SeedTrack(t memory.TB, repo *memory.TrackRepo, userId ids.UserId, title, ar
 func SeedReadyTrack(t memory.TB, repo *memory.TrackRepo, userId ids.UserId, title, artist, album, audioRef string) *domain.Track {
 	t.Helper()
 	track := SeedTrack(t, repo, userId, title, artist, album)
-	if err := track.MarkReady(audioRef); err != nil {
+	if err := track.MarkReady(audioRef, randomIDs); err != nil {
 		t.Fatalf("seedReadyTrack: %v", err)
 	}
 	return track
@@ -38,7 +44,7 @@ func SeedReadyTrack(t memory.TB, repo *memory.TrackRepo, userId ids.UserId, titl
 
 func SeedPlaylist(t memory.TB, repo *memory.PlaylistRepo, userId ids.UserId, name string) *domain.Playlist {
 	t.Helper()
-	playlist, err := domain.NewPlaylist(userId, name, time.Now())
+	playlist, err := domain.NewPlaylist(userId, name, time.Now(), randomIDs)
 	if err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}

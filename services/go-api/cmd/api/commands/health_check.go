@@ -21,7 +21,7 @@ func runHealthCheck(cfg *config.Config, mode RunMode) error {
 	}
 	defer pool.Close()
 
-	return healthCheck(ctx, cfg, library.NewPostgresTrackRepository(pool), mode)
+	return healthCheck(ctx, cfg, library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), mode)
 }
 
 func healthCheck(ctx context.Context, cfg *config.Config, repo *library.PostgresTrackRepository, mode RunMode) error {

@@ -3,6 +3,7 @@ package playbackfromlibrary_test
 import (
 	"altune/go-api/internal/app/bridges/playbackfromlibrary"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -21,7 +22,7 @@ func (f catalogTracksFunc) GetByID(_ context.Context, id library.TrackId, userId
 
 func TestNowPlayingTracks_MapsTheUsersCatalogTrack(t *testing.T) {
 	user := ids.NewUserId(uuid.New())
-	id := library.NewTrackId()
+	id := librarytest.NewTrackId()
 	artwork, duration := "https://img.example/a.jpg", 212.5
 	var askedFor library.TrackId
 	var askedBy ids.UserId
@@ -52,7 +53,7 @@ func TestNowPlayingTracks_MapsTheUsersCatalogTrack(t *testing.T) {
 func TestNowPlayingTracks_AbsentTrackIsNotFound(t *testing.T) {
 	source := playbackfromlibrary.NewNowPlayingTracks(catalogTracksFunc(func(library.TrackId, ids.UserId) (*library.Track, error) { return nil, library.ErrTrackNotFound }))
 
-	got, err := source.NowPlayingTrack(context.Background(), ids.NewUserId(uuid.New()), library.NewTrackId())
+	got, err := source.NowPlayingTrack(context.Background(), ids.NewUserId(uuid.New()), librarytest.NewTrackId())
 	if got != nil || !errors.Is(err, playback.ErrNowPlayingTrackNotFound) {
 		t.Errorf("NowPlayingTrack = (%+v, %v), want no track and ErrNowPlayingTrackNotFound", got, err)
 	}
@@ -62,7 +63,7 @@ func TestNowPlayingTracks_TransientCatalogFailureIsASourceOutage(t *testing.T) {
 	transient := fmt.Errorf("get track: %w", library.ErrDBTransient)
 	source := playbackfromlibrary.NewNowPlayingTracks(catalogTracksFunc(func(library.TrackId, ids.UserId) (*library.Track, error) { return nil, transient }))
 
-	_, err := source.NowPlayingTrack(context.Background(), ids.NewUserId(uuid.New()), library.NewTrackId())
+	_, err := source.NowPlayingTrack(context.Background(), ids.NewUserId(uuid.New()), librarytest.NewTrackId())
 	if !errors.Is(err, playback.ErrTrackSourceUnavailable) || !errors.Is(err, library.ErrDBTransient) {
 		t.Errorf("err = %v, want it to be both ErrTrackSourceUnavailable and catalog's ErrDBTransient", err)
 	}
@@ -72,7 +73,7 @@ func TestNowPlayingTracks_RowErrorIsNotASourceOutage(t *testing.T) {
 	rowErr := errors.New("acquisition status no longer parses")
 	source := playbackfromlibrary.NewNowPlayingTracks(catalogTracksFunc(func(library.TrackId, ids.UserId) (*library.Track, error) { return nil, rowErr }))
 
-	_, err := source.NowPlayingTrack(context.Background(), ids.NewUserId(uuid.New()), library.NewTrackId())
+	_, err := source.NowPlayingTrack(context.Background(), ids.NewUserId(uuid.New()), librarytest.NewTrackId())
 	if !errors.Is(err, rowErr) || errors.Is(err, playback.ErrTrackSourceUnavailable) {
 		t.Errorf("err = %v, want the row error itself, not a source outage", err)
 	}

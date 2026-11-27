@@ -21,14 +21,16 @@ type PlaylistLifecycleService struct {
 	playlistRepo ports.PlaylistLifecycleRepository
 	events       events.Publisher
 	now          func() time.Time
+	source       ids.Source
 }
 
 var (
 	ErrCollaboratorRequired = errors.New("playlist: a required collaborator is missing")
 	ErrClockRequired        = errors.New("playlist: the service requires a clock")
+	ErrIDSourceRequired     = errors.New("playlist: the service requires an id source")
 )
 
-func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time) (*PlaylistLifecycleService, error) {
+func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time, source ids.Source) (*PlaylistLifecycleService, error) {
 	switch {
 	case playlistRepo == nil:
 		return nil, fmt.Errorf("NewPlaylistLifecycleService: the playlist repository: %w", ErrCollaboratorRequired)
@@ -36,12 +38,14 @@ func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository,
 		return nil, fmt.Errorf("NewPlaylistLifecycleService: the events publisher: %w", ErrCollaboratorRequired)
 	case now == nil:
 		return nil, fmt.Errorf("NewPlaylistLifecycleService: %w", ErrClockRequired)
+	case source == nil:
+		return nil, fmt.Errorf("NewPlaylistLifecycleService: %w", ErrIDSourceRequired)
 	}
-	return &PlaylistLifecycleService{playlistRepo: playlistRepo, events: publisher, now: now}, nil
+	return &PlaylistLifecycleService{playlistRepo: playlistRepo, events: publisher, now: now, source: source}, nil
 }
 
-func MustNewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time) *PlaylistLifecycleService {
-	s, err := NewPlaylistLifecycleService(playlistRepo, publisher, now)
+func MustNewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time, source ids.Source) *PlaylistLifecycleService {
+	s, err := NewPlaylistLifecycleService(playlistRepo, publisher, now, source)
 	if err != nil {
 		panic(err)
 	}
@@ -49,7 +53,7 @@ func MustNewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleReposit
 }
 
 func (s *PlaylistLifecycleService) Create(ctx context.Context, userId ids.UserId, name string) (*domain.Playlist, error) {
-	playlist, err := domain.NewPlaylist(userId, name, s.now())
+	playlist, err := domain.NewPlaylist(userId, name, s.now(), s.source)
 	if err != nil {
 		return nil, err
 	}
