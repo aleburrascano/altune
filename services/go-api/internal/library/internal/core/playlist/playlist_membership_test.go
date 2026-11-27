@@ -948,7 +948,7 @@ func TestPlaylistMembershipService_RemoveTrack_LogsActorAndObject(t *testing.T) 
 	}
 
 	svc := library.MustNewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
-	if err := svc.RemoveTrack(librarytest.ActingAs(userId), userId, pl.ID, trackId); err != nil {
+	if err := svc.RemoveTrack(context.Background(), userId, pl.ID, trackId); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -973,7 +973,7 @@ func TestPlaylistMembershipService_RemoveTracks_LogsActorAndObject(t *testing.T)
 	absent := librarytest.NewTrackId()
 
 	svc := library.MustNewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
-	n, err := svc.RemoveTracks(librarytest.ActingAs(userId), userId, pl.ID, []library.TrackId{a, absent, b})
+	n, err := svc.RemoveTracks(context.Background(), userId, pl.ID, []library.TrackId{a, absent, b})
 	if err != nil || n != 2 {
 		t.Fatalf("RemoveTracks = %d, %v; want 2, nil", n, err)
 	}

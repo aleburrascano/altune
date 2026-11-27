@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/database"
 	sharedids "altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
@@ -530,7 +531,7 @@ func (r *PostgresTrackRepository) ListOwnedTrackRefs(
 			return nil, fmt.Errorf("parse owned track ref id: %w", err)
 		}
 	}
-	slog.WarnContext(ctx, "owned track refs truncated at ceiling", "ceiling", maxOwnedTrackRefs)
+	slog.WarnContext(ctx, "owned track refs truncated at ceiling", logging.KeyUserID, userId.UUID(), "ceiling", maxOwnedTrackRefs)
 	return refs, nil
 }
 

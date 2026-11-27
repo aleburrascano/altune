@@ -108,7 +108,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if errors.Is(err, domain.ErrLibraryFull) {
-		slog.WarnContext(ctx, "catalog.library_full", "cap", domain.MaxTracksPerUser)
+		slog.WarnContext(ctx, "catalog.library_full", logging.KeyUserID, userId.String(), "cap", domain.MaxTracksPerUser)
 		return nil, err
 	}
 	if err != nil {
@@ -123,6 +123,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	}
 	slog.InfoContext(ctx, "track added to library",
 		logging.KeyTrackID, track.ID.String(),
+		logging.KeyUserID, userId.String(),
 	)
 	dto := TrackToDTO(track)
 	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
