@@ -251,11 +251,21 @@ func TestSource_AnOutageIsSourceUnavailable(t *testing.T) {
 
 func TestSource_ACancelledCallerIsNotAnOutage(t *testing.T) {
 	hung := make(chan struct{})
-	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	arrived := make(chan struct{}, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-hung
+	}))
 	t.Cleanup(slow.Close)
 	t.Cleanup(func() { close(hung) })
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(30*time.Millisecond, cancel)
+	go func() {
+		<-arrived
+		cancel()
+	}()
 
 	_, err := download.NewYtmSearchSource(clientFor(slow, time.Minute), &recordingDownloader{}).Find(ctx, vibesRequest)
 

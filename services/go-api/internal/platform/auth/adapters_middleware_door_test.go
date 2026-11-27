@@ -21,6 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -494,25 +495,28 @@ func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
 }
 
 func TestMiddleware_ConcurrentFailuresCannotOvershootBurst(t *testing.T) {
-	var calls atomic.Int32
-	release := make(chan struct{})
-	verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
-		calls.Add(1)
-		<-release
-		return ports.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int32
+		release := make(chan struct{})
+		verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
+			calls.Add(1)
+			<-release
+			return ports.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+		})
+		handler, _ := throttledMiddleware(verifier)
+
+		var wg sync.WaitGroup
+		for range 50 {
+			wg.Go(func() { serveBearer(handler, "203.0.113.7:1", "garbage") })
+		}
+		synctest.Wait()
+		close(release)
+		wg.Wait()
+
+		if got := int(calls.Load()); got > testFailureLimits.Burst {
+			t.Fatalf("50 concurrent bogus bearers ran the verifier %d times, want at most %d", got, testFailureLimits.Burst)
+		}
 	})
-	handler, _ := throttledMiddleware(verifier)
-
-	var wg sync.WaitGroup
-	for range 50 {
-		wg.Go(func() { serveBearer(handler, "203.0.113.7:1", "garbage") })
-	}
-	time.AfterFunc(50*time.Millisecond, func() { close(release) })
-	wg.Wait()
-
-	if got := int(calls.Load()); got > testFailureLimits.Burst {
-		t.Fatalf("50 concurrent bogus bearers ran the verifier %d times, want at most %d", got, testFailureLimits.Burst)
-	}
 }
 
 func serveBearer(handler http.Handler, remoteAddr, token string) *httptest.ResponseRecorder {

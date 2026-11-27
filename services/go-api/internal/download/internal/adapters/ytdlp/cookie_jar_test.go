@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -589,16 +590,14 @@ const waitLimit = 5 * time.Second
 
 func waitFor(t *testing.T, what string, done <-chan error, ready func() bool) {
 	t.Helper()
-	deadline := time.After(waitLimit)
-	for !ready() {
+	polltest.Until(t, waitLimit, what, func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("the run returned %v before %s", err, what)
-		case <-deadline:
-			t.Fatalf("still waiting after %v for %s", waitLimit, what)
-		case <-time.After(time.Millisecond):
+		default:
 		}
-	}
+		return ready()
+	})
 }
 
 func returnedWithin(t *testing.T, limit time.Duration, what string, done <-chan error) error {

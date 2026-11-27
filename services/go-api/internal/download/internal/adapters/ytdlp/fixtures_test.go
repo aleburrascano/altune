@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,22 @@ import (
 )
 
 const youTubeWatchURL = "https://youtube.com/watch?v=1"
+
+func cancelOnceFileExists(t *testing.T, path string) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		defer cancel()
+		started := polltest.Within(10*time.Second, func() bool {
+			_, err := os.Stat(path)
+			return err == nil
+		})
+		if !started {
+			t.Errorf("%s never appeared: the command under test never started", path)
+		}
+	}()
+	return ctx
+}
 
 func installYtDlp(t *testing.T, body string) string {
 	t.Helper()

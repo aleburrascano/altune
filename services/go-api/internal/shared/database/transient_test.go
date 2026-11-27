@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"fmt"
@@ -128,7 +129,17 @@ func TestIsTransient_RealPostgresFailures(t *testing.T) {
 		}, true},
 		"query cancelled by the caller": {func(t *testing.T) error {
 			cancellable, cancel := context.WithCancel(ctx)
-			time.AfterFunc(200*time.Millisecond, cancel)
+			go func() {
+				defer cancel()
+				running := polltest.Within(10*time.Second, func() bool {
+					var n int
+					err := killer.QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND query = 'SELECT pg_sleep(10)' AND pid <> pg_backend_pid()").Scan(&n)
+					return err == nil && n > 0
+				})
+				if !running {
+					t.Error("the pg_sleep query never started running")
+				}
+			}()
 			_, err := pool.Exec(cancellable, "SELECT pg_sleep(10)")
 			return err
 		}, false},
