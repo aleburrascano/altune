@@ -92,7 +92,7 @@ func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Tra
 		return r.storedConflict(ctx, track)
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("run transaction: %w", err)
+		return nil, false, fmt.Errorf("add track: %w", err)
 	}
 	return track, true, nil
 }
@@ -762,7 +762,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 func scanTrackColumns(s scanner) (*domain.Track, error) {
 	dest, build := trackScanDest()
 	if err := s.Scan(dest...); err != nil {
-		return nil, fmt.Errorf("scan: %w", err)
+		return nil, fmt.Errorf("scan track: %w", err)
 	}
 	return build()
 }

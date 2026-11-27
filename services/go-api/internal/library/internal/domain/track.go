@@ -15,13 +15,7 @@ import (
 
 type TrackId = ids.TrackId
 
-func ParseTrackId(s string) (TrackId, error) {
-	id, err := ids.ParseTrackId(s)
-	if err != nil {
-		return TrackId{}, fmt.Errorf("parse track id: %w", err)
-	}
-	return id, nil
-}
+var ParseTrackId = ids.ParseTrackId
 
 func TrackIdFromUUID(id [16]byte) TrackId { return ids.TrackIdFromUUID(id) }
 

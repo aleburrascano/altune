@@ -13,7 +13,7 @@ type PlaylistId struct{ ids.EntityId }
 func ParsePlaylistId(s string) (PlaylistId, error) {
 	id, err := ids.ParseEntityId(s)
 	if err != nil {
-		return PlaylistId{}, fmt.Errorf("parse entity id: %w", err)
+		return PlaylistId{}, fmt.Errorf("parse playlist id: %w", err)
 	}
 	return PlaylistId{id}, nil
 }
