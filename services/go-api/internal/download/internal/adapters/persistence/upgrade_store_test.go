@@ -3,10 +3,13 @@ package persistence_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/dbtest"
+	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -58,4 +61,15 @@ func TestPostgresUpgradeStore_RandomRowsAreSelectedExactlyWhenTheGoSpecification
 			rt.Fatalf("row %+v with %+v: SQL selects = %v, Go specification = %v", row, limits, inSQL, want)
 		}
 	})
+}
+
+func TestPostgresUpgradeStore_ASelectionWithoutUpgradableStatusesIsRefusedNotEmpty(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	store := download.NewPostgresUpgradeStore(dbtest.Pool(t))
+
+	_, err := store.Candidates(context.Background(), ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration})
+
+	if !errors.Is(err, persistence.ErrNoUpgradableStatuses) {
+		t.Errorf("Candidates = %v, want ErrNoUpgradableStatuses", err)
+	}
 }

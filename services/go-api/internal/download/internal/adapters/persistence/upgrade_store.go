@@ -74,7 +74,12 @@ func settledGrades() []string {
 	return names
 }
 
+var ErrNoUpgradableStatuses = errors.New("upgrade selection names no upgradable status")
+
 func (s *PostgresUpgradeStore) Candidates(ctx context.Context, selection ports.UpgradeSelection) ([]ports.UpgradeCandidate, error) {
+	if len(selection.Upgradable) == 0 {
+		return nil, ErrNoUpgradableStatuses
+	}
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
