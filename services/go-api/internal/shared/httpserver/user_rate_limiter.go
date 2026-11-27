@@ -17,16 +17,16 @@ type RateLimit struct {
 	Burst int
 }
 
-type UserKeyFunc func(*http.Request) (string, bool)
+type userKeyFunc func(*http.Request) (string, bool)
 
-func UserKey(userID func(context.Context) (ids.UserId, bool)) UserKeyFunc {
+func UserKey(userID func(context.Context) (ids.UserId, bool)) userKeyFunc {
 	return func(r *http.Request) (string, bool) {
 		id, ok := userID(r.Context())
 		return id.String(), ok
 	}
 }
 
-type UserRateLimiter struct {
+type userRateLimiter struct {
 	mu        sync.Mutex
 	limit     RateLimit
 	now       clock.Func
@@ -35,16 +35,16 @@ type UserRateLimiter struct {
 	rotatedAt time.Time
 }
 
-var ErrClockRequired = errors.New("httpserver: the rate limiter requires a clock")
+var errClockRequired = errors.New("httpserver: the rate limiter requires a clock")
 
-func NewUserRateLimiter(limit RateLimit, now clock.Func) (*UserRateLimiter, error) {
+func newUserRateLimiter(limit RateLimit, now clock.Func) (*userRateLimiter, error) {
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, errClockRequired
 	}
 	if limit.Burst < 1 {
 		limit.Burst = 1
 	}
-	return &UserRateLimiter{
+	return &userRateLimiter{
 		limit:   limit,
 		now:     now,
 		active:  make(map[string]*rate.Limiter),
@@ -52,19 +52,19 @@ func NewUserRateLimiter(limit RateLimit, now clock.Func) (*UserRateLimiter, erro
 	}, nil
 }
 
-func MustNewUserRateLimiter(limit RateLimit, now clock.Func) *UserRateLimiter {
-	l, err := NewUserRateLimiter(limit, now)
+func MustNewUserRateLimiter(limit RateLimit, now clock.Func) *userRateLimiter {
+	l, err := newUserRateLimiter(limit, now)
 	if err != nil {
 		panic(err)
 	}
 	return l
 }
 
-func (l *UserRateLimiter) idleTTL() time.Duration {
+func (l *userRateLimiter) idleTTL() time.Duration {
 	return l.limit.Every * time.Duration(l.limit.Burst)
 }
 
-func (l *UserRateLimiter) Allow(key string) (bool, time.Duration) {
+func (l *userRateLimiter) Allow(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -79,7 +79,7 @@ func (l *UserRateLimiter) Allow(key string) (bool, time.Duration) {
 	return false, res.DelayFrom(now)
 }
 
-func (l *UserRateLimiter) bucket(key string) *rate.Limiter {
+func (l *userRateLimiter) bucket(key string) *rate.Limiter {
 	if limiter, ok := l.active[key]; ok {
 		return limiter
 	}
@@ -92,7 +92,7 @@ func (l *UserRateLimiter) bucket(key string) *rate.Limiter {
 	return limiter
 }
 
-func (l *UserRateLimiter) rotate(now time.Time) {
+func (l *userRateLimiter) rotate(now time.Time) {
 	if now.Sub(l.rotatedAt) < l.idleTTL() {
 		return
 	}
@@ -101,7 +101,7 @@ func (l *UserRateLimiter) rotate(now time.Time) {
 	l.active = make(map[string]*rate.Limiter)
 }
 
-func (l *UserRateLimiter) Middleware(userKey UserKeyFunc, refused error, onRefused func()) func(http.Handler) http.Handler {
+func (l *userRateLimiter) Middleware(userKey userKeyFunc, refused error, onRefused func()) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key, ok := userKey(r)

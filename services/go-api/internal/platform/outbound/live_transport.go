@@ -9,13 +9,11 @@ import (
 	"net/http"
 )
 
-var ErrRetryRecorderRequired = errors.New("live transport needs a retry recorder, pass NoRetryRecorder to switch it off")
-
-func NoRetryRecorder(string) {}
+var errRetryRecorderRequired = errors.New("live transport needs a retry recorder, pass a no-op func to switch it off")
 
 func NewLiveTransport(onRetry func(host string)) (http.RoundTripper, error) {
 	if onRetry == nil {
-		return nil, ErrRetryRecorderRequired
+		return nil, errRetryRecorderRequired
 	}
 	o := retry.SystemOptions()
 	o.OnRetry = onRetry

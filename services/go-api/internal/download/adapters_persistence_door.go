@@ -8,7 +8,6 @@ var (
 	NewPostgresCooldownStore   = persistence.NewPostgresCooldownStore
 	MustNewPostgresJobNotifier = persistence.MustNewPostgresJobNotifier
 	MustNewPostgresJobQueue    = persistence.MustNewPostgresJobQueue
-	NewPostgresJobQueue        = persistence.NewPostgresJobQueue
 	NewPostgresOutcomeStore    = persistence.NewPostgresOutcomeStore
 	NewPostgresRejectionStore  = persistence.NewPostgresRejectionStore
 	NewPostgresUpgradeStore    = persistence.NewPostgresUpgradeStore

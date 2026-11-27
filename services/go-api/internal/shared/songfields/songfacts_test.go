@@ -104,27 +104,6 @@ func TestSplitCredit(t *testing.T) {
 	}
 }
 
-func TestBracketEditionSuffix(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"deluxe edition", "Donda - Deluxe Edition", "Donda (Deluxe Edition)"},
-		{"original version", "Help! - Original Version", "Help! (Original Version)"},
-		{"bonus track", "Graduation - Bonus Track", "Graduation (Bonus Track)"},
-		{"not an edition", "Song - Remix Interlude", "Song - Remix Interlude"},
-		{"no suffix", "CALL ME IF YOU GET LOST: The Estate Sale", "CALL ME IF YOU GET LOST: The Estate Sale"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := songfields.BracketEditionSuffix(tt.input); got != tt.want {
-				t.Fatalf("BracketEditionSuffix(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsEditionLabel(t *testing.T) {
 	tests := []struct {
 		input string

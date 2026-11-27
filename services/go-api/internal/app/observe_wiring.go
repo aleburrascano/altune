@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *monitoring.EventTap) error {
+func (a *application) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *monitoring.EventTap) error {
 	if err := a.startObserveSources(ctx, tap); err != nil {
 		return err
 	}
@@ -34,10 +34,10 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 	return nil
 }
 
-func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap) error {
+func (a *application) startObserveSources(ctx context.Context, tap *monitoring.EventTap) error {
 	a.eventFeed = monitoring.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
-	meter, err := NewEvalMeter(&a.jobs, a.evalMeterRunner())
+	meter, err := newEvalMeter(&a.jobs, a.evalMeterRunner())
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap)
 	return nil
 }
 
-func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitoring.EvalMeter, error) {
+func newEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitoring.EvalMeter, error) {
 	meter, err := monitoring.NewEvalMeter(0, clock.Now, clock.NewTicker, run, runner.LeaderContextFor(jobs.EvalMeter))
 	if err != nil {
 		return nil, fmt.Errorf("eval meter: %w", err)
@@ -63,14 +63,14 @@ func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string,
 	})
 }
 
-func (a *App) observeAcquisition() monitoring.AcquisitionReader {
+func (a *application) observeAcquisition() monitoring.AcquisitionReader {
 	if !a.acquisitionOn {
 		return nil
 	}
 	return monitoringfromdownload.NewAcquisitionReader(a.scheduler)
 }
 
-func (a *App) liveMetrics() monitoring.LiveMetrics {
+func (a *application) liveMetrics() monitoring.LiveMetrics {
 	return livemetrics.Live(livemetrics.Sources{
 		Latency:      a.latency,
 		PoolStats:    func() database.PoolStats { return database.ReadPoolStats(a.pool) },
@@ -84,6 +84,6 @@ func (a *App) liveMetrics() monitoring.LiveMetrics {
 	})
 }
 
-func (a *App) evalMeterRunner() monitoring.EvalMeterRunner {
+func (a *application) evalMeterRunner() monitoring.EvalMeterRunner {
 	return monitoringfromsearch.NewEvalMeterRunner(a.buildEvalRunner())
 }

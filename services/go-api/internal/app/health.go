@@ -11,6 +11,6 @@ var buildCommit = "unknown"
 
 func BuildCommit() string { return buildCommit }
 
-func (a *App) dependencyHealth(ctx context.Context) monitoring.DependencyHealth {
+func (a *application) dependencyHealth(ctx context.Context) monitoring.DependencyHealth {
 	return health.Check(ctx, clock.Now, a.probes, health.DefaultProbeTimeout)
 }

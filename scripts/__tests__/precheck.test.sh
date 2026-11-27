@@ -652,6 +652,7 @@ if [ -n "\${GO_RENDEZVOUS:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; the
 fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
+"run ./scripts/lintdoors"*) exit "\${GO_LINTDOORS_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
 "test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi; [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 "mod tidy"*) exit "\${GO_MOD_TIDY_STUB_RC:-0}" ;;
@@ -1015,6 +1016,26 @@ edit_go_file internal/shared/s/s.go
 GO_ARCH_LINT_STUB_RC=1 run_push_scoped
 expect_rc 1
 expect_out "FAIL  go-api architecture"
+
+CASE="a failing lintdoors --exports turns a push red, and --full runs it on the whole tree"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_push_scoped
+expect_rc 0
+expect_log "go run ./scripts/lintdoors --exports ."
+GO_LINTDOORS_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api module doors"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_with_tools
+expect_rc 0
+expect_log "go run ./scripts/lintdoors --exports ."
+GO_LINTDOORS_STUB_RC=1 run_with_tools
+expect_rc 1
+expect_out "FAIL  go-api module doors"
 
 CASE="a change to go.sum is checked for tidiness and a dirty go.sum turns a push red"
 new_repo

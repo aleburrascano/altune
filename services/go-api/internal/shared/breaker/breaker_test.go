@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/shared/breaker"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
-	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,14 +28,10 @@ func (r *recorder) record(_ context.Context, c breaker.Change) {
 	r.changes = append(r.changes, c)
 }
 
-func (r *recorder) kinds() []breaker.Kind {
+func (r *recorder) recorded() []breaker.Change {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var out []breaker.Kind
-	for _, c := range r.changes {
-		out = append(out, c.Kind)
-	}
-	return out
+	return append([]breaker.Change(nil), r.changes...)
 }
 
 func newBreaker() (*breaker.Breaker, *clocktest.Manual, *recorder) {
@@ -179,9 +175,9 @@ func TestBreaker_AProbeSuccessClosesTheCircuitAndResetsTheCount(t *testing.T) {
 	if got := b.Snapshot(); got.Failures != 0 || got.Probing {
 		t.Errorf("snapshot = %+v, want no failures and no probe in flight", got)
 	}
-	want := []breaker.Kind{breaker.Tripped, breaker.Probing, breaker.Recovered}
-	if got := rec.kinds(); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
-		t.Errorf("changes = %v, want %v", got, want)
+	got := rec.recorded()
+	if len(got) != 3 || got[0].Kind != breaker.Tripped || got[1].Kind != breaker.Probing || got[2].Kind != breaker.Recovered {
+		t.Errorf("changes = %v, want tripped, probing, recovered", got)
 	}
 }
 
@@ -303,9 +299,9 @@ func TestBreaker_AnAbandonedProbeLeaseExpiresAfterTheLease(t *testing.T) {
 	if _, ok := b.Allow(context.Background()); ok {
 		t.Error("the new probe did not hold a fresh lease")
 	}
-	kinds := rec.kinds()
-	if len(kinds) == 0 || kinds[len(kinds)-1] != breaker.LeaseExpired {
-		t.Errorf("changes = %v, want the lease expiry reported", kinds)
+	changes := rec.recorded()
+	if len(changes) == 0 || changes[len(changes)-1].Kind != breaker.LeaseExpired {
+		t.Errorf("changes = %v, want the lease expiry reported", changes)
 	}
 }
 
@@ -348,11 +344,16 @@ func TestBreaker_AThresholdBelowOneCountsAsOne(t *testing.T) {
 	}
 }
 
-func TestNew_RefusesAConfigWithoutAClock(t *testing.T) {
-	b, err := breaker.New(breaker.Config{Threshold: 1, OpenFor: time.Hour, ProbeLease: time.Hour})
+func TestMustNew_RefusesAConfigWithoutAClock(t *testing.T) {
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		breaker.MustNew(breaker.Config{Threshold: 1, OpenFor: time.Hour, ProbeLease: time.Hour})
+	}()
 
-	if !errors.Is(err, breaker.ErrClockRequired) || b != nil {
-		t.Fatalf("New(no clock) = (%v, %v), want ErrClockRequired and no breaker", b, err)
+	err, _ := recovered.(error)
+	if err == nil || !strings.Contains(err.Error(), "breaker: the breaker requires a clock") {
+		t.Fatalf("MustNew(no clock) panicked with %v, want the missing-clock error", recovered)
 	}
 }
 

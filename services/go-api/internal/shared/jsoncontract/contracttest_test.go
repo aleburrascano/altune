@@ -2,7 +2,6 @@ package jsoncontract_test
 
 import (
 	"altune/go-api/internal/shared/jsoncontract"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -82,12 +81,20 @@ func TestDrift(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := jsoncontract.Drift(json.RawMessage(tc.fixture), json.RawMessage(tc.body))
-			if len(got) == 0 && len(tc.want) == 0 {
+			rec := assertAgainst(writeFixture(t, tc.fixture), tc.body)
+
+			var want []string
+			for _, w := range tc.want {
+				want = append(want, "fixture.json drifted: "+w)
+			}
+			if rec.fatal != "" {
+				t.Fatalf("fatal %q, want only reported drifts", rec.fatal)
+			}
+			if len(rec.errors) == 0 && len(want) == 0 {
 				return
 			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("drift = %q, want %q", got, tc.want)
+			if !reflect.DeepEqual(rec.errors, want) {
+				t.Errorf("drift = %q, want %q", rec.errors, want)
 			}
 		})
 	}

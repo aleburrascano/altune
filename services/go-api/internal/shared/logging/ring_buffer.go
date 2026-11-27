@@ -41,19 +41,19 @@ type RingBuffer struct {
 
 func (rb *RingBuffer) Dropped() uint64 { return rb.dropped.Load() }
 
-var ErrClockRequired = errors.New("logging: the ring buffer requires a clock")
+var errClockRequired = errors.New("logging: the ring buffer requires a clock")
 
-func MustNewRingBuffer(capacity int, now func() time.Time) *RingBuffer {
-	rb, err := NewRingBuffer(capacity, now)
+func mustNewRingBuffer(capacity int, now func() time.Time) *RingBuffer {
+	rb, err := newRingBuffer(capacity, now)
 	if err != nil {
 		panic(err)
 	}
 	return rb
 }
 
-func NewRingBuffer(capacity int, now func() time.Time) (*RingBuffer, error) {
+func newRingBuffer(capacity int, now func() time.Time) (*RingBuffer, error) {
 	if now == nil {
-		return nil, fmt.Errorf("NewRingBuffer: %w", ErrClockRequired)
+		return nil, fmt.Errorf("NewRingBuffer: %w", errClockRequired)
 	}
 	if capacity < 1 {
 		capacity = 1

@@ -2,13 +2,13 @@ package leader
 
 import "context"
 
-func AdaptLocks[S LockSession](acquire func(context.Context) (S, error)) LockStore {
+func AdaptLocks[S lockSession](acquire func(context.Context) (S, error)) LockStore {
 	return lockSource[S](acquire)
 }
 
-type lockSource[S LockSession] func(context.Context) (S, error)
+type lockSource[S lockSession] func(context.Context) (S, error)
 
-func (a lockSource[S]) Acquire(ctx context.Context) (LockSession, error) {
+func (a lockSource[S]) Acquire(ctx context.Context) (lockSession, error) {
 	session, err := a(ctx)
 	if err != nil {
 		return nil, err

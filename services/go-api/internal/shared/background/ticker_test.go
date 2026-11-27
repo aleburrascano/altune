@@ -72,8 +72,8 @@ func TestEvery_RefusesAMissingTicker(t *testing.T) {
 	err := background.Every(context.Background(), &bg, time.Second, nil, func() { ran.Store(true) })
 	bg.Wait()
 
-	if !errors.Is(err, background.ErrTickerRequired) || !strings.Contains(err.Error(), "background.Every") {
-		t.Errorf("Every(nil ticker) = %v, want ErrTickerRequired naming Every", err)
+	if err == nil || !strings.Contains(err.Error(), "background.Every") || !strings.Contains(err.Error(), "a repeating job needs a ticker") {
+		t.Errorf("Every(nil ticker) = %v, want the missing-ticker error naming Every", err)
 	}
 	if ran.Load() {
 		t.Error("the job ran without a ticker")

@@ -15,20 +15,20 @@ type publishedType struct {
 
 var publishedTypes = []publishedType{
 	{"TypeTrackAddedToLibrary", events.TypeTrackAddedToLibrary, "track_added_to_library"},
-	{"TypeTrackDeleted", events.TypeTrackDeleted, "track_deleted"},
+	{"TypeTrackDeleted", events.TrackDeleted{}.EventType(), "track_deleted"},
 	{"TypeTrackAcquisitionStarted", events.TypeTrackAcquisitionStarted, "track_acquisition_started"},
 	{"TypeTrackAcquisitionProgress", events.TypeTrackAcquisitionProgress, "track_acquisition_progress"},
-	{"TypeTrackAcquisitionCompleted", events.TypeTrackAcquisitionCompleted, "track_acquisition_completed"},
+	{"TypeTrackAcquisitionCompleted", events.TrackAcquisitionCompleted{}.EventType(), "track_acquisition_completed"},
 	{"TypeTrackAcquisitionFailed", events.TypeTrackAcquisitionFailed, "track_acquisition_failed"},
 	{"TypeTrackReplaceFailed", events.TypeTrackReplaceFailed, "track_replace_failed"},
-	{"TypeTrackAddedToPlaylist", events.TypeTrackAddedToPlaylist, "track_added_to_playlist"},
-	{"TypeTracksAddedToPlaylist", events.TypeTracksAddedToPlaylist, "tracks_added_to_playlist"},
-	{"TypeTrackRemovedFromPlaylist", events.TypeTrackRemovedFromPlaylist, "track_removed_from_playlist"},
-	{"TypeTracksRemovedFromPlaylist", events.TypeTracksRemovedFromPlaylist, "tracks_removed_from_playlist"},
-	{"TypePlaylistCreated", events.TypePlaylistCreated, "playlist_created"},
-	{"TypePlaylistDeleted", events.TypePlaylistDeleted, "playlist_deleted"},
+	{"TypeTrackAddedToPlaylist", events.TrackAddedToPlaylist{}.EventType(), "track_added_to_playlist"},
+	{"TypeTracksAddedToPlaylist", events.TracksAddedToPlaylist{}.EventType(), "tracks_added_to_playlist"},
+	{"TypeTrackRemovedFromPlaylist", events.TrackRemovedFromPlaylist{}.EventType(), "track_removed_from_playlist"},
+	{"TypeTracksRemovedFromPlaylist", events.TracksRemovedFromPlaylist{}.EventType(), "tracks_removed_from_playlist"},
+	{"TypePlaylistCreated", events.PlaylistCreated{}.EventType(), "playlist_created"},
+	{"TypePlaylistDeleted", events.PlaylistDeleted{}.EventType(), "playlist_deleted"},
 	{"TypePlaylistRenamed", events.TypePlaylistRenamed, "playlist_renamed"},
-	{"TypePlaylistReordered", events.TypePlaylistReordered, "playlist_reordered"},
+	{"TypePlaylistReordered", events.PlaylistReordered{}.EventType(), "playlist_reordered"},
 }
 
 func TestEventTypes_CarryTheWireValuesClientsSubscribeTo(t *testing.T) {
@@ -53,7 +53,7 @@ func TestEventTypes_NoTwoEventTypesShareAWireValue(t *testing.T) {
 }
 
 func TestEvent_MarshalsTheTypedNameAsTheBareWireString(t *testing.T) {
-	raw, err := json.Marshal(events.Event{Type: events.TypeTrackDeleted})
+	raw, err := json.Marshal(events.Event{Type: events.TrackDeleted{}.EventType()})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}

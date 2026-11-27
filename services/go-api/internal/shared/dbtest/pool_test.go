@@ -13,6 +13,16 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func sharedDatabaseURL(t *testing.T) string {
+	t.Helper()
+	dbtest.RequireIntegration(t)
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		t.Fatal("INTEGRATION=1 needs DATABASE_URL pointing at a migrated Postgres")
+	}
+	return url
+}
+
 func TestPool_ReachesTheIntegrationDatabase(t *testing.T) {
 	pool := dbtest.Pool(t)
 
@@ -94,7 +104,7 @@ func TestPool_RowsAPackageWritesAreInvisibleToTheSharedDatabase(t *testing.T) {
 		t.Fatalf("insert a claimable track: %v", err)
 	}
 
-	shared, err := pgx.Connect(ctx, dbtest.DatabaseURLWithoutSchema(t))
+	shared, err := pgx.Connect(ctx, sharedDatabaseURL(t))
 	if err != nil {
 		t.Fatalf("connect to the shared database: %v", err)
 	}
@@ -120,7 +130,7 @@ func schemaExists(t *testing.T, conn *pgx.Conn, name string) bool {
 
 func TestPool_ANewPackageDropsTestSchemasOlderThanSixHoursAndKeepsRecentOnes(t *testing.T) {
 	ctx := context.Background()
-	shared, err := pgx.Connect(ctx, dbtest.DatabaseURLWithoutSchema(t))
+	shared, err := pgx.Connect(ctx, sharedDatabaseURL(t))
 	if err != nil {
 		t.Fatalf("connect to the shared database: %v", err)
 	}

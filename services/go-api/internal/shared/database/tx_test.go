@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"errors"
 	"testing"
@@ -11,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func probePool(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
+	dbURL := dbtest.DatabaseURL(t)
+	ctx := context.Background()
+	cfg, err := pgxpool.ParseConfig(dbURL)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cfg.MaxConns = 1
+	cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "off"
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return ctx, pool
+}
 
 func txProbeTable(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()

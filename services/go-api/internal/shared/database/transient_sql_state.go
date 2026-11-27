@@ -12,7 +12,7 @@ const (
 	sqlStateClassInsufficientRes = "53"
 )
 
-func IsTransientSQLState(code string) bool {
+func isTransientSQLState(code string) bool {
 	switch code {
 	case sqlStateAdminShutdown, sqlStateCrashShutdown, sqlStateCannotConnectNow,
 		sqlStateSerializationFailure, sqlStateDeadlockDetected:

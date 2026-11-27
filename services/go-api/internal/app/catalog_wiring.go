@@ -66,7 +66,7 @@ type catalogServicesStaging struct {
 	audioURLSvc           *library.AudioLinkService
 }
 
-func (a *App) wireCatalog(
+func (a *application) wireCatalog(
 	ctx context.Context,
 	transport http.RoundTripper,
 	tap *monitoring.EventTap,
@@ -92,7 +92,7 @@ func featuredBridge(disc *search.Discovery) library.FeaturedArtistResolver {
 	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(disc.FeaturedArtists))
 }
 
-func (a *App) wireAudioSources(
+func (a *application) wireAudioSources(
 	ctx context.Context,
 	transport http.RoundTripper,
 	tap *monitoring.EventTap,
@@ -132,14 +132,14 @@ func (a *App) wireAudioSources(
 	return staging, nil
 }
 
-func (a *App) liveTiers(ctx context.Context, transport http.RoundTripper, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
+func (a *application) liveTiers(ctx context.Context, transport http.RoundTripper, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
 	if audioStore == nil {
 		return downloadsetup.SourceOrder{}, download.Verification{}, nil
 	}
 	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient, transport)
 }
 
-func (a *App) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
+func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
 	recording, err := downloadfromsearch.RecordingOptions(disc)
 	if err != nil {
 		return downloadsetup.Deps{}, fmt.Errorf("wire recording resolver: %w", err)
@@ -150,7 +150,7 @@ func (a *App) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTa
 	}, nil
 }
 
-func (a *App) wireCatalogServices(
+func (a *application) wireCatalogServices(
 	tap *monitoring.EventTap,
 	featuredBridge library.FeaturedArtistResolver,
 	audio audioSourcesStaging,
@@ -198,7 +198,7 @@ func addTrackScheduler(scheduler library.AcquisitionScheduler) library.Acquisiti
 	return scheduler
 }
 
-func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
+func (a *application) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
 	featuredArtistHandler := library.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
 
 	var retryH *download.RetryHandler

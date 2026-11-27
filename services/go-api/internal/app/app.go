@@ -24,7 +24,7 @@ import (
 
 const eventIDFloorFile = "altune-event-id-floor"
 
-type App struct {
+type application struct {
 	cfg           *config.Config
 	pool          *pgxpool.Pool
 	probes        health.Probes
@@ -47,8 +47,8 @@ type App struct {
 	background *background.Tracker
 }
 
-func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
-	return &App{
+func New(cfg *config.Config, logRing *logging.RingBuffer) *application {
+	return &application{
 		cfg:     cfg,
 		logRing: logRing,
 		latency: requestmetrics.NewRegistry(),
@@ -56,7 +56,7 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 	}
 }
 
-func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
+func (a *application) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("auth: %w", err)
@@ -65,7 +65,7 @@ func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 	return supaVerifier, nil
 }
 
-func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
+func (a *application) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
 	a.startSourceCanary(ctx, sourcecheck.Probes{
@@ -80,11 +80,11 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 	}
 }
 
-func (a *App) applyDisabledJobs(ctx context.Context) error {
+func (a *application) applyDisabledJobs(ctx context.Context) error {
 	return a.jobs.DisableAtStartup(ctx, a.cfg.DisabledJobs)
 }
 
-func (a *App) applyStartupSwitches(ctx context.Context) error {
+func (a *application) applyStartupSwitches(ctx context.Context) error {
 	if a.cfg.AcquisitionPaused && a.acquisitionOn {
 		a.scheduler.Pause()
 		slog.InfoContext(ctx, "acquisition started paused")

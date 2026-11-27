@@ -19,7 +19,7 @@ const (
 	apiRequestTimeout = 50 * time.Second
 )
 
-func (a *App) mountRoutes(
+func (a *application) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
 	queueHandler *playback.QueueHandler,
@@ -56,7 +56,7 @@ func (a *App) mountRoutes(
 	return r
 }
 
-func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
+func (a *application) newRouter(writeTimeout time.Duration) *chi.Mux {
 	return router.New(router.Settings{
 		WriteTimeout:   writeTimeout,
 		RequestTimeout: apiRequestTimeout,

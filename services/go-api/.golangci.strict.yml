@@ -128,7 +128,7 @@ linters:
       context: scope
       no-mixed-args: false
     testpackage:
-      skip-regexp: ^$
+      skip-regexp: (^|/)export_test\.go$
     forbidigo:
       analyze-types: true
       forbid:

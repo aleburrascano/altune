@@ -75,24 +75,24 @@ var hosts = []host{
 	},
 }
 
-type File struct {
+type linkedFile struct {
 	Provider string
 	ID       string
 	PageURL  string
 }
 
-func Parse(link string) (File, bool) {
+func Parse(link string) (linkedFile, bool) {
 	u, err := url.Parse(strings.TrimSpace(link))
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
-		return File{}, false
+		return linkedFile{}, false
 	}
 	name := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
 	for _, h := range hosts {
 		if id, ok := h.idFrom(name, u.Path); ok {
-			return File{Provider: h.provider, ID: id, PageURL: h.page(id)}, true
+			return linkedFile{Provider: h.provider, ID: id, PageURL: h.page(id)}, true
 		}
 	}
-	return File{}, false
+	return linkedFile{}, false
 }
 
 func (h host) idFrom(hostname, path string) (string, bool) {
@@ -133,17 +133,17 @@ func DownloadURL(provider, id string) (string, bool) {
 	return h.download(id), true
 }
 
-type PageFile struct {
+type pageFile struct {
 	PageURL string
 	File    *regexp.Regexp
 }
 
-func FileOnPage(provider, id string) (PageFile, bool) {
+func FileOnPage(provider, id string) (pageFile, bool) {
 	h, ok := lookup(provider)
 	if !ok || h.retrieval != retrieveByPageScrape || !h.validID.MatchString(id) {
-		return PageFile{}, false
+		return pageFile{}, false
 	}
-	return PageFile{PageURL: h.page(id), File: h.fileOnPage(id)}, true
+	return pageFile{PageURL: h.page(id), File: h.fileOnPage(id)}, true
 }
 
 func lookup(provider string) (host, bool) {

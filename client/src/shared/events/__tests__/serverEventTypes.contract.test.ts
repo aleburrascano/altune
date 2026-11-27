@@ -18,11 +18,11 @@ function findGoApiRoot(): string | null {
 const GO_API_ROOT = findGoApiRoot();
 
 const PAYLOAD_EVENT_TYPE =
-  /\)\s*EventType\(\)\s*(?:events\.)?EventType\s*\{\s*return\s+((?:events\.)?Type\w+)\s*\}/g;
-const GO_STRING_CONSTANT = /^\s*([A-Z]\w*)\s*(?:[A-Za-z_.]\w*\s*)?=\s*"([a-zA-Z_]+)"/gm;
+  /\)\s*EventType\(\)\s*(?:events\.)?EventType\s*\{\s*return\s+((?:events\.)?[Tt]ype\w+)\s*\}/g;
+const GO_STRING_CONSTANT = /^\s*([A-Za-z]\w*)\s*(?:[A-Za-z_.]\w*\s*)?=\s*"([a-zA-Z_]+)"/gm;
 const SSE_LITERAL_EVENT_LINE = /"event:\s*([a-zA-Z_]+)\\n/g;
 const QUOTED_LITERAL = /^"([a-zA-Z_]+)"$/;
-const EXPORTED_CONSTANT = /^(?:\w+\.)?([A-Z]\w*)$/;
+const EXPORTED_CONSTANT = /^(?:\w+\.)?([A-Za-z]\w*)$/;
 
 function listGoSourceFiles(dir: string): string[] {
   const files: string[] = [];

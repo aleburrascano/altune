@@ -2,6 +2,7 @@ package requestmetrics_test
 
 import (
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/platform/requestmetrics/internal/core/registry"
 	"encoding/json"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func TestSnapshot_TalliesStatusClassesPerRoute(t *testing.T) {
 	latency.Observe(route, time.Millisecond, 502)
 
 	got := latency.Snapshot().Routes[route].Status
-	if got != (requestmetrics.StatusClasses{Count2xx: 1, Count4xx: 1, Count5xx: 1}) {
+	if got != (registry.StatusClasses{Count2xx: 1, Count4xx: 1, Count5xx: 1}) {
 		t.Errorf("status classes = %+v, want one each of 2xx, 4xx and 5xx", got)
 	}
 }
@@ -64,8 +65,8 @@ func TestNewRegistry_StartsWithOnlyTheUnmatchedAndOverflowRoutesWhateverAnotherR
 }
 
 func TestSnapshot_SerializesTheRoutesAndBucketsOverseerReads(t *testing.T) {
-	snap := requestmetrics.Snapshot{Routes: map[string]requestmetrics.RouteLatency{
-		"/v1/tracks/{trackId}": {Count: 3, SumMs: 12, Buckets: []requestmetrics.BucketCount{{LeMs: "5", Count: 2}, {LeMs: "+Inf", Count: 1}}},
+	snap := requestmetrics.Snapshot{Routes: map[string]registry.RouteLatency{
+		"/v1/tracks/{trackId}": {Count: 3, SumMs: 12, Buckets: []registry.BucketCount{{LeMs: "5", Count: 2}, {LeMs: "+Inf", Count: 1}}},
 	}}
 
 	raw, err := json.Marshal(snap)
@@ -99,7 +100,7 @@ func TestSnapshot_SerializesTheRoutesAndBucketsOverseerReads(t *testing.T) {
 }
 
 func TestRouteLatency_StatusSerializesUnderStatusKey(t *testing.T) {
-	route := requestmetrics.RouteLatency{Status: requestmetrics.StatusClasses{Count2xx: 7, Count4xx: 3, Count5xx: 1}}
+	route := registry.RouteLatency{Status: registry.StatusClasses{Count2xx: 7, Count4xx: 3, Count5xx: 1}}
 
 	raw, err := json.Marshal(route)
 	if err != nil {

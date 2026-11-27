@@ -8,14 +8,14 @@ import (
 	"strings"
 )
 
-type Tags struct {
+type tags struct {
 	Part   int
 	Labels []string
 }
 
-func ParseTags(title string) Tags {
+func ParseTags(title string) tags {
 	numbered, tokens := withoutVersionNumbers(Tokens(StripFeatureCredits(title)))
-	return Tags{Part: partNumber(StripVersionPhrases(tokens)), Labels: withVersionNumbers(RecordingLabels(title), numbered)}
+	return tags{Part: partNumber(StripVersionPhrases(tokens)), Labels: withVersionNumbers(RecordingLabels(title), numbered)}
 }
 
 const (
@@ -68,7 +68,7 @@ func withVersionNumbers(labels, numbered []string) []string {
 	return labels
 }
 
-func (t Tags) Equal(other Tags) bool {
+func (t tags) Equal(other tags) bool {
 	return t.Part == other.Part && slices.Equal(t.Labels, other.Labels)
 }
 

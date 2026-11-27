@@ -16,7 +16,7 @@ func TestParse_ReadsEachHostsFileLink(t *testing.T) {
 	}
 	for _, c := range cases {
 		got, ok := filelinks.Parse(c.link)
-		if !ok || got != (filelinks.File{Provider: c.provider, ID: c.id, PageURL: c.page}) {
+		if !ok || got.Provider != c.provider || got.ID != c.id || got.PageURL != c.page {
 			t.Errorf("Parse(%q) = %+v, %v", c.link, got, ok)
 		}
 	}
@@ -80,7 +80,7 @@ func TestFileOnPage_AcceptsOnlyThisIDsFileOnTheImgurggCDN(t *testing.T) {
 	if _, ok := filelinks.DownloadURL("imgurgg", "0Q3ydhk"); ok {
 		t.Error("an imgur.gg page must never be handed to the downloader")
 	}
-	if page, ok := filelinks.FileOnPage("pixeldrain", "ozSpSjn7"); ok || page != (filelinks.PageFile{}) {
+	if page, ok := filelinks.FileOnPage("pixeldrain", "ozSpSjn7"); ok || page.PageURL != "" || page.File != nil {
 		t.Errorf("FileOnPage(pixeldrain) = %+v, %v; pixeldrain has a direct download and no page step", page, ok)
 	}
 }
