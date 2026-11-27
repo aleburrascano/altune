@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/telemetry"
 	"bufio"
 	"context"
@@ -95,12 +96,11 @@ func TestDiscovery_AFailedBehavioralRankingRefreshIsLoggedAndCounted(t *testing.
 	cfg.BehavioralRankingEnabled = true
 	run := assembleLogging(t, cfg)
 
-	deadline := time.Now().Add(3 * time.Second)
-	h := jobHealth(t, run.assembly, jobs.BehavioralRankingRefresh)
-	for h.Failures == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
+	var h background.JobHealth
+	polltest.Within(3*time.Second, func() bool {
 		h = jobHealth(t, run.assembly, jobs.BehavioralRankingRefresh)
-	}
+		return h.Failures != 0
+	})
 
 	if h.Failures == 0 || h.LastFailure.IsZero() {
 		t.Fatalf("ranking refresh health = %+v, want a counted failure with its time against an unreachable store", h)

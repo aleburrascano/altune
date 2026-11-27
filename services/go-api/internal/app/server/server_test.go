@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"altune/go-api/internal/app/server"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"net"
 	"net/http"
@@ -35,7 +36,14 @@ func TestNew_AnInFlightRequestFinishesWithALiveContextWhileTheServerDrains(t *te
 	drainCtx, cancelDrain := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancelDrain()
 	go func() { drained <- srv.Shutdown(drainCtx) }()
-	time.Sleep(20 * time.Millisecond)
+	polltest.Until(t, 2*time.Second, "Shutdown to stop accepting connections", func() bool {
+		conn, err := net.Dial("tcp", listener.Addr().String())
+		if err != nil {
+			return true
+		}
+		_ = conn.Close()
+		return false
+	})
 	close(release)
 
 	select {
