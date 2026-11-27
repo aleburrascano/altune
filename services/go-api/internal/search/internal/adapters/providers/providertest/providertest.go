@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -28,11 +27,7 @@ func (t *RedirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	req = req.Clone(req.Context())
 	req.URL.Scheme = "http"
 	req.URL.Host = strings.TrimPrefix(t.TargetURL, "http://")
-	r0, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		return r0, fmt.Errorf("round trip: %w", err)
-	}
-	return r0, nil
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 func NewClient(serverURL string) *http.Client {
@@ -137,11 +132,7 @@ type RewriteTransport struct {
 func (t *RewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.URL.Scheme = "http"
 	req.URL.Host = t.Base[len("http://"):]
-	r0, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		return r0, fmt.Errorf("round trip: %w", err)
-	}
-	return r0, nil
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 type FakeRoundTripper struct {

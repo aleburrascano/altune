@@ -80,7 +80,7 @@ func (s *RecordSearchHistoryService) Record(
 func (s *RecordSearchHistoryService) RecordSubmitted(ctx context.Context, userId ids.UserId, raw string) error {
 	query, err := domain.NewSearchQuery(strings.TrimSpace(raw), domain.AllKinds(), 1)
 	if err != nil {
-		return fmt.Errorf("new search query: %w", err)
+		return fmt.Errorf("%w", err)
 	}
 	queryNorm := textnorm.NormalizeForMatch(domain.SearchText(query.Raw))
 	s.Record(ctx, userId, query, queryNorm, s.now())

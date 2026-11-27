@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/shared/telemetry"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -127,13 +126,11 @@ func (t *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		base = outbound.DefaultTransport()
 	}
 	resp, err := base.RoundTrip(req)
-	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
-		t.counters[providerForHost(hostOf(req))][outcomeFor(resp, err)].Add(1)
+	if errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
+		return resp, err
 	}
-	if err != nil {
-		return resp, fmt.Errorf("round trip: %w", err)
-	}
-	return resp, nil
+	t.counters[providerForHost(hostOf(req))][outcomeFor(resp, err)].Add(1)
+	return resp, err
 }
 
 func hostOf(req *http.Request) string {
