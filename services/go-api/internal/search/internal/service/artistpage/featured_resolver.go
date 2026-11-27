@@ -82,7 +82,7 @@ func logFeaturedFailure(ctx context.Context, source string, err error) {
 func (r *FeaturedArtistResolver) mbFeatured(ctx context.Context, artist, title string) ([]domain.FeaturedArtist, error) {
 	results, err := r.mb.SearchStructured(ctx, artist, title, map[domain.ResultKind]bool{domain.ResultKindTrack: true})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("search structured: %w", err)
 	}
 	for _, res := range results {
 		if res.Kind != domain.ResultKindTrack {
@@ -98,12 +98,16 @@ func (r *FeaturedArtistResolver) mbFeatured(ctx context.Context, artist, title s
 func (r *FeaturedArtistResolver) deezerFeatured(ctx context.Context, artist, title string) ([]domain.FeaturedArtist, error) {
 	id, err := r.deezer.ResolveID(ctx, domain.ResultKindTrack, artist, title)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve id: %w", err)
 	}
 	if id == "" {
 		return nil, nil
 	}
-	return r.deezer.LookupTrackFeatured(ctx, id)
+	r0, err := r.deezer.LookupTrackFeatured(ctx, id)
+	if err != nil {
+		return r0, fmt.Errorf("lookup track featured: %w", err)
+	}
+	return r0, nil
 }
 
 func MergeFeaturedArtists(mb, deezer []domain.FeaturedArtist) []domain.FeaturedArtist {

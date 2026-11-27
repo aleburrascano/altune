@@ -129,7 +129,7 @@ func (f *relatedFanOut) fetchGuardedGroup(
 			return truncateRelated(items), nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("guarded fetch: %w", err)
 		}
 		return f.memoize(lookup, truncateRelated(items)), nil
 	})

@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
+	"fmt"
 	"log/slog"
 )
 
@@ -44,9 +45,13 @@ func NewMusicBrainzAnchoring(anchor ports.MusicBrainzDiscographyAnchor, breaker 
 }
 
 func (a *MusicBrainzAnchoring) releaseGroupTitles(ctx context.Context, mbid string) ([]string, error) {
-	return providerguard.GuardedFetch(ctx, a.breaker, domain.ProviderMusicBrainz, func() ([]string, error) {
+	r0, err := providerguard.GuardedFetch(ctx, a.breaker, domain.ProviderMusicBrainz, func() ([]string, error) {
 		return a.anchor.ReleaseGroupTitles(ctx, mbid)
 	})
+	if err != nil {
+		return r0, fmt.Errorf("guarded fetch: %w", err)
+	}
+	return r0, nil
 }
 
 func (a *MusicBrainzAnchoring) verifyGroups(ctx context.Context, identity ResolvedArtistIdentity, groups []albumgrouping.ReleaseGroup) ([]albumgrouping.ReleaseGroup, bool) {

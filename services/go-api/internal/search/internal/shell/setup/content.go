@@ -20,25 +20,41 @@ func newAlbumService(t *providerTable, breaker *providerguard.CircuitBreaker) (*
 	if err != nil {
 		return nil, err
 	}
-	return artistpage.NewGetAlbumTracksService(t.albumProviders(), featured, fallback, breaker)
+	r0, err := artistpage.NewGetAlbumTracksService(t.albumProviders(), featured, fallback, breaker)
+	if err != nil {
+		return r0, fmt.Errorf("new get album tracks service: %w", err)
+	}
+	return r0, nil
 }
 
 func albumFeaturedEnrichment(deezer provider, breaker *providerguard.CircuitBreaker) (artistpage.FeaturedEnrichment, error) {
 	if deezer.trackFeatured == nil {
 		return artistpage.NoFeaturedEnrichment{}, nil
 	}
-	return artistpage.NewDeezerFeaturedEnrichment(deezer.trackFeatured, breaker)
+	r0, err := artistpage.NewDeezerFeaturedEnrichment(deezer.trackFeatured, breaker)
+	if err != nil {
+		return r0, fmt.Errorf("new deezer featured enrichment: %w", err)
+	}
+	return r0, nil
 }
 
 func albumFallback(deezer provider, breaker *providerguard.CircuitBreaker) (artistpage.AlbumFallback, error) {
 	if deezer.albumFallback == nil {
 		return artistpage.NoAlbumFallback{}, nil
 	}
-	return artistpage.NewSearchAlbumFallback(deezer.albumFallback, breaker)
+	r0, err := artistpage.NewSearchAlbumFallback(deezer.albumFallback, breaker)
+	if err != nil {
+		return r0, fmt.Errorf("new search album fallback: %w", err)
+	}
+	return r0, nil
 }
 
 func newRelatedService(t *providerTable, breaker *providerguard.CircuitBreaker) (*related.GetRelatedTracksService, error) {
-	return related.NewGetRelatedTracksService(t.relatedProviders(), breaker)
+	r0, err := related.NewGetRelatedTracksService(t.relatedProviders(), breaker)
+	if err != nil {
+		return r0, fmt.Errorf("new get related tracks service: %w", err)
+	}
+	return r0, nil
 }
 
 func newArtistService(t *providerTable, s connections.Stores, breaker *providerguard.CircuitBreaker, bg *background.Tracker) (*artistpage.GetArtistContentService, error) {
@@ -54,21 +70,33 @@ func newArtistService(t *providerTable, s connections.Stores, breaker *providerg
 	if err != nil {
 		return nil, fmt.Errorf("build the discography telemetry: %w", err)
 	}
-	return artistpage.NewGetArtistContentService(t.artistProviders(), identity, anchoring, telemetry, breaker)
+	r0, err := artistpage.NewGetArtistContentService(t.artistProviders(), identity, anchoring, telemetry, breaker)
+	if err != nil {
+		return r0, fmt.Errorf("new get artist content service: %w", err)
+	}
+	return r0, nil
 }
 
 func artistIdentity(s connections.Stores) (artistpage.ArtistIdentity, error) {
 	if s.Identities == nil {
 		return artistpage.SeedPathIdentity{}, nil
 	}
-	return artistpage.NewStoreIdentity(s.Identities)
+	r0, err := artistpage.NewStoreIdentity(s.Identities)
+	if err != nil {
+		return r0, fmt.Errorf("new store identity: %w", err)
+	}
+	return r0, nil
 }
 
 func artistAnchoring(musicBrainz provider, breaker *providerguard.CircuitBreaker) (artistpage.Anchoring, error) {
 	if musicBrainz.artistAnchor == nil {
 		return artistpage.NoAnchoring{}, nil
 	}
-	return artistpage.NewMusicBrainzAnchoring(musicBrainz.artistAnchor, breaker)
+	r0, err := artistpage.NewMusicBrainzAnchoring(musicBrainz.artistAnchor, breaker)
+	if err != nil {
+		return r0, fmt.Errorf("new music brainz anchoring: %w", err)
+	}
+	return r0, nil
 }
 
 func newFeaturedArtists(t *providerTable) (*artistpage.FeaturedArtistResolver, error) {
@@ -80,5 +108,9 @@ func newFeaturedArtists(t *providerTable) (*artistpage.FeaturedArtistResolver, e
 	if lookup := t.named(rowDeezer).trackFeatured; lookup != nil {
 		deezer = lookup
 	}
-	return artistpage.NewFeaturedArtistResolver(mb, deezer)
+	r0, err := artistpage.NewFeaturedArtistResolver(mb, deezer)
+	if err != nil {
+		return r0, fmt.Errorf("new featured artist resolver: %w", err)
+	}
+	return r0, nil
 }
