@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"errors"
 	"reflect"
@@ -46,23 +47,30 @@ func TestSearchRecordings_AsksDiscoveryForTracksAloneAsNoUser(t *testing.T) {
 }
 
 func TestSearchRecordings_CarriesEveryFactOfATrackHit(t *testing.T) {
-	searcher := searching(searchtest.NewResult(
+	explicit := true
+	hit := searchtest.NewResult(
 		search.ResultKindTrack,
 		"Drinking in L.A.",
 		searchtest.WithSubtitle("Bran Van 3000"),
 		searchtest.WithISRCCode("CAA509814003"),
 		searchtest.WithRecordingMBID("remix-mbid"),
+		searchtest.WithReleaseMBID("release-mbid"),
+		searchtest.WithUPC("123456789012"),
 		searchtest.WithDuration(236),
 		searchtest.WithAlbum("Glee"),
+		searchtest.WithYear(1997),
+		searchtest.WithExplicit(&explicit),
 		searchtest.WithSources([]search.ProviderLink{{Provider: search.ProviderYouTube, ExternalID: "vid", URL: "https://youtu.be/vid"}}),
-	))
+	)
+	searcher := searching(hit)
 
 	got, err := downloadfromsearch.NewSearch(searcher).SearchRecordings(context.Background(), "q", 10)
 
-	want := []download.SearchedRecording{{
-		Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003", MBID: "remix-mbid", Duration: 236,
-		Sources: []download.ProviderRef{{Provider: download.ProviderYouTube, ExternalID: "vid", URL: "https://youtu.be/vid"}},
-	}}
+	want := []songfields.RecordingIdentity{hit.RecordingIdentity()}
+	if len(got) != 1 || got[0].Album != "Glee" || got[0].Year != 1997 || got[0].ReleaseMBID != "release-mbid" ||
+		got[0].UPC != "123456789012" || got[0].Explicit == nil || !*got[0].Explicit || got[0].DurationSeconds != 236 {
+		t.Errorf("recordings %+v, want album, year, release, barcode, explicit and length to arrive", got)
+	}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("recordings %+v, err %v; want %+v", got, err, want)
 	}
@@ -94,7 +102,7 @@ func TestSearchRecordings_KeepsEveryDiscoveryProviderNameByteForByte(t *testing.
 		t.Fatalf("recordings %+v, err %v; want one source per provider", got, err)
 	}
 	for i, src := range sources {
-		if got, want := string(got[0].Sources[i].Provider), src.Provider.String(); got != want {
+		if got, want := got[0].Sources[i].Provider, src.Provider.String(); got != want {
 			t.Errorf("source %d provider = %q, want %q", i, got, want)
 		}
 	}
@@ -121,7 +129,7 @@ func TestSearchRecordings_KeysSourcesByAcquisitionsProviderConstants(t *testing.
 		t.Fatalf("NewRecordingResolver: %v", err)
 	}
 
-	identity, err := resolver.Resolve(context.Background(), download.RecordingQuery{Title: "Song", Artist: "Artist"})
+	identity, err := resolver.Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist"})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

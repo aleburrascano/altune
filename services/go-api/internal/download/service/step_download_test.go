@@ -16,6 +16,7 @@ import (
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"encoding/json"
 	"errors"
@@ -2977,7 +2978,7 @@ func TestDownloadStep_WhenEveryCandidateIsMuxedTheFirstAcceptedFileIsStored(t *t
 func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReaders(t *testing.T) {
 	const isrc, mbid = "USAAA2400001", "standing-in-the-dark-live"
 	resolver := musicbrainzmatch.NewRecorded(
-		[]ports.SearchedRecording{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, MBID: mbid, Duration: 197}},
+		[]songfields.RecordingIdentity{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, RecordingMBID: mbid, DurationSeconds: 197}},
 		[]ports.ISRCRecording{{MBID: mbid, Duration: 197}}, nil)
 	ac := &service.AcquisitionContext{
 		Track:   service.TrackRef{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, CatalogDuration: 300},

@@ -15,6 +15,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"encoding/json"
 	"errors"
@@ -347,10 +348,10 @@ func inPlaceMatch(recordings ...ports.LinkedRecording) ports.RecordingMatch {
 type stubResolver struct {
 	identity ports.RecordingIdentity
 	err      error
-	queries  []ports.RecordingQuery
+	queries  []songfields.RecordingIdentity
 }
 
-func (r *stubResolver) Resolve(_ context.Context, q ports.RecordingQuery) (ports.RecordingIdentity, error) {
+func (r *stubResolver) Resolve(_ context.Context, q songfields.RecordingIdentity) (ports.RecordingIdentity, error) {
 	r.queries = append(r.queries, q)
 	return r.identity, r.err
 }
@@ -418,8 +419,8 @@ func TestResolveIdentity_PassesTrackMetadataToResolver(t *testing.T) {
 		t.Fatalf("resolver calls = %d, want 1", len(stub.queries))
 	}
 	got := stub.queries[0]
-	want := ports.RecordingQuery{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "X"}
-	if got != want {
+	want := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "X"}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("query = %+v, want %+v", got, want)
 	}
 }
@@ -788,8 +789,29 @@ func TestResolveIdentity_QueryCarriesTheTracksDuration(t *testing.T) {
 
 	service.ResolveIdentity(context.Background(), stub, ac)
 
-	if len(stub.queries) != 1 || stub.queries[0].Duration != 215 {
-		t.Errorf("queries = %+v, want one carrying Duration 215", stub.queries)
+	if len(stub.queries) != 1 || stub.queries[0].DurationSeconds != 215 {
+		t.Errorf("queries = %+v, want one carrying a length of 215 seconds", stub.queries)
+	}
+}
+
+func TestResolveIdentity_QueryCarriesEveryFactTheLibraryKnowsOfTheTrack(t *testing.T) {
+	explicit := true
+	stub := &stubResolver{}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{
+		Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "USUM71915000",
+		Year: 2019, TrackNumber: 3, CatalogDuration: 215, CatalogExplicit: &explicit, CatalogMBID: "mbid-1",
+		CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "42", URL: "https://deezer.example/42"}},
+	}}
+
+	service.ResolveIdentity(context.Background(), stub, ac)
+
+	want := songfields.RecordingIdentity{
+		Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "USUM71915000",
+		Year: 2019, Position: songfields.TrackPosition{Track: 3}, DurationSeconds: 215, Explicit: &explicit, RecordingMBID: "mbid-1",
+		Sources: []songfields.ProviderRef{{Provider: "deezer", ExternalID: "42", URL: "https://deezer.example/42"}},
+	}
+	if len(stub.queries) != 1 || !reflect.DeepEqual(stub.queries[0], want) {
+		t.Errorf("queries = %+v, want one carrying %+v", stub.queries, want)
 	}
 }
 
@@ -1285,7 +1307,7 @@ func TestExecuteReplace_TheStoredLengthIsNotTheTarget(t *testing.T) {
 
 	_ = svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: userId, TrackID: trackId})
 
-	if len(resolver.queries) != 1 || resolver.queries[0].Duration != 0 {
+	if len(resolver.queries) != 1 || resolver.queries[0].DurationSeconds != 0 {
 		t.Errorf("resolver queries = %+v, want one with no length: the stored 112 s is not a target", resolver.queries)
 	}
 	if len(source.requested) == 0 || source.requested[0] != 128 {
@@ -2493,8 +2515,8 @@ func findsGoldenRerecording() *stubRerecordingFinder {
 
 type pinnedRecordingResolver struct{}
 
-func (pinnedRecordingResolver) Resolve(_ context.Context, q ports.RecordingQuery) (ports.RecordingIdentity, error) {
-	return ports.RecordingIdentity{MBID: q.MBID, MBIDs: []string{q.MBID}}, nil
+func (pinnedRecordingResolver) Resolve(_ context.Context, q songfields.RecordingIdentity) (ports.RecordingIdentity, error) {
+	return ports.RecordingIdentity{MBID: q.RecordingMBID, MBIDs: []string{q.RecordingMBID}}, nil
 }
 
 type itsOnlyLoveSources struct {

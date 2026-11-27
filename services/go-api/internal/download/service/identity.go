@@ -19,14 +19,7 @@ func (s *pipeline) resolveIdentity(ctx context.Context, ac *AcquisitionContext) 
 }
 
 func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, ac *AcquisitionContext) {
-	identity, err := recordings.Resolve(ctx, ports.RecordingQuery{
-		Title:    ac.Track.Title,
-		Artist:   ac.Track.Artist,
-		Album:    ac.Track.Album,
-		ISRC:     ac.Track.ISRC,
-		Duration: ac.Track.CatalogDuration,
-		MBID:     ac.Track.CatalogMBID,
-	})
+	identity, err := recordings.Resolve(ctx, ac.Track.RecordingIdentity())
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",
 			logging.KeyTrackID, ac.Track.ID, logging.KeyError, redact.LogError(err))

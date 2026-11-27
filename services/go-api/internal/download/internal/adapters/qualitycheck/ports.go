@@ -8,6 +8,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"errors"
 	"fmt"
@@ -293,7 +294,7 @@ func (p *casePorts) CopyStored(_ context.Context, _, dir string) (string, error)
 
 type copiedIdentity ports.RecordingIdentity
 
-func (c copiedIdentity) Resolve(context.Context, ports.RecordingQuery) (ports.RecordingIdentity, error) {
+func (c copiedIdentity) Resolve(context.Context, songfields.RecordingIdentity) (ports.RecordingIdentity, error) {
 	return ports.RecordingIdentity(c), nil
 }
 

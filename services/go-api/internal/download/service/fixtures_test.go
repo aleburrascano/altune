@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"os"
 	"path/filepath"
@@ -12,10 +13,10 @@ import (
 type resolver struct {
 	identity ports.RecordingIdentity
 	err      error
-	queries  []download.RecordingQuery
+	queries  []songfields.RecordingIdentity
 }
 
-func (r *resolver) Resolve(_ context.Context, q download.RecordingQuery) (ports.RecordingIdentity, error) {
+func (r *resolver) Resolve(_ context.Context, q songfields.RecordingIdentity) (ports.RecordingIdentity, error) {
 	r.queries = append(r.queries, q)
 	return r.identity, r.err
 }

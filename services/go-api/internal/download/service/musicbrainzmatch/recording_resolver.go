@@ -3,6 +3,7 @@ package musicbrainzmatch
 import (
 	"altune/go-api/internal/download/internal/core/tracklength"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/songfields"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/titlemarkers"
 	"context"
@@ -69,8 +70,8 @@ func (r *Resolver) RecordingByMBID(ctx context.Context, mbid string) (acqports.R
 	return r.lookup.RecordingByMBID(ctx, mbid)
 }
 
-func (r *Resolver) Resolve(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
-	if q.MBID != "" {
+func (r *Resolver) Resolve(ctx context.Context, q songfields.RecordingIdentity) (acqports.RecordingIdentity, error) {
+	if q.RecordingMBID != "" {
 		return r.resolvePinned(ctx, q), nil
 	}
 	identity, err := r.resolveFromSearch(ctx, q)
@@ -81,18 +82,18 @@ func (r *Resolver) Resolve(ctx context.Context, q acqports.RecordingQuery) (acqp
 	return anchored, nil
 }
 
-func (r *Resolver) resolvePinned(ctx context.Context, q acqports.RecordingQuery) acqports.RecordingIdentity {
-	identity := r.pinnedIdentity(ctx, q.MBID)
+func (r *Resolver) resolvePinned(ctx context.Context, q songfields.RecordingIdentity) acqports.RecordingIdentity {
+	identity := r.pinnedIdentity(ctx, q.RecordingMBID)
 	searched, err := r.resolveFromSearch(ctx, q)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.pin_search_failed", "pinned_mbid", q.MBID, logging.KeyError, err)
+		slog.WarnContext(ctx, "acquisition.pin_search_failed", "pinned_mbid", q.RecordingMBID, logging.KeyError, err)
 	}
-	if searched.MBID != "" && searched.MBID != q.MBID {
+	if searched.MBID != "" && searched.MBID != q.RecordingMBID {
 		slog.InfoContext(ctx, "acquisition.identity_pin_disagrees",
-			"pinned_mbid", q.MBID, "search_mbid", searched.MBID)
+			"pinned_mbid", q.RecordingMBID, "search_mbid", searched.MBID)
 		return identity
 	}
-	if searched.MBID == q.MBID {
+	if searched.MBID == q.RecordingMBID {
 		identity.Sources = searched.Sources
 	}
 	return identity
@@ -124,8 +125,8 @@ func (r *Resolver) pinnedFacts(ctx context.Context, pin string) (acqports.Record
 	return facts, found
 }
 
-func (r *Resolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity) acqports.RecordingIdentity {
-	lengthDisagrees := durationDisagrees(q.Duration, identity.Duration)
+func (r *Resolver) anchorToISRC(ctx context.Context, q songfields.RecordingIdentity, identity acqports.RecordingIdentity) acqports.RecordingIdentity {
+	lengthDisagrees := durationDisagrees(q.DurationSeconds, identity.Duration)
 	identity.ReferenceDoubted = lengthDisagrees
 	recordings := r.isrcRecordings(ctx, q.ISRC)
 	if len(recordings) == 0 {
@@ -138,15 +139,15 @@ func (r *Resolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, 
 	if lengthDisagrees {
 		slog.InfoContext(ctx, "acquisition.catalog_length_conflict",
 			"isrc", q.ISRC, "mbid", identity.MBID,
-			"catalog_seconds", q.Duration, "reference_seconds", identity.Duration)
+			"catalog_seconds", q.DurationSeconds, "reference_seconds", identity.Duration)
 	}
 	return withReferenceSet(identity, identity.MBID, recordings)
 }
 
-func (r *Resolver) anchorToMismatchedISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity, recordings []acqports.ISRCRecording) acqports.RecordingIdentity {
+func (r *Resolver) anchorToMismatchedISRC(ctx context.Context, q songfields.RecordingIdentity, identity acqports.RecordingIdentity, recordings []acqports.ISRCRecording) acqports.RecordingIdentity {
 	identity.ReferenceDoubted = identity.ReferenceDoubted || identity.MBID != ""
 
-	chosen, ok := closestRecording(recordings, expectedLength(q.Duration, identity.Duration))
+	chosen, ok := closestRecording(recordings, expectedLength(q.DurationSeconds, identity.Duration))
 	if !ok {
 		slog.InfoContext(ctx, "acquisition.isrc_anchor_ambiguous",
 			"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_recordings", len(recordings))
@@ -254,7 +255,7 @@ func closestRecording(recordings []acqports.ISRCRecording, want float64) (acqpor
 	return best, best.MBID != ""
 }
 
-func (r *Resolver) resolveFromSearch(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
+func (r *Resolver) resolveFromSearch(ctx context.Context, q songfields.RecordingIdentity) (acqports.RecordingIdentity, error) {
 	if q.Title == "" || q.Artist == "" {
 		return acqports.RecordingIdentity{}, nil
 	}
@@ -269,7 +270,7 @@ func (r *Resolver) resolveFromSearch(ctx context.Context, q acqports.RecordingQu
 	return toIdentity(best), nil
 }
 
-func (r *Resolver) searchTracks(ctx context.Context, q acqports.RecordingQuery) ([]acqports.SearchedRecording, error) {
+func (r *Resolver) searchTracks(ctx context.Context, q songfields.RecordingIdentity) ([]songfields.RecordingIdentity, error) {
 	results, err := r.search.SearchRecordings(ctx, q.Artist+" "+q.Title, resolveLimit)
 	if err != nil {
 		return nil, fmt.Errorf("resolve recording: %w", err)
@@ -277,25 +278,27 @@ func (r *Resolver) searchTracks(ctx context.Context, q acqports.RecordingQuery) 
 	return results, nil
 }
 
-func pickByISRC(results []acqports.SearchedRecording, isrc string) (acqports.SearchedRecording, bool) {
+func pickByISRC(results []songfields.RecordingIdentity, isrc string) (songfields.RecordingIdentity, bool) {
 	if isrc == "" {
-		return acqports.SearchedRecording{}, false
+		return songfields.RecordingIdentity{}, false
 	}
 	for _, res := range results {
 		if strings.EqualFold(res.ISRC, isrc) {
 			return res, true
 		}
 	}
-	return acqports.SearchedRecording{}, false
+	return songfields.RecordingIdentity{}, false
 }
 
-func pickRecording(results []acqports.SearchedRecording, q acqports.RecordingQuery) (acqports.SearchedRecording, bool) {
+func pickRecording(results []songfields.RecordingIdentity, q songfields.RecordingIdentity) (songfields.RecordingIdentity, bool) {
 	if res, ok := pickByISRC(results, q.ISRC); ok {
 		return res, true
 	}
 	wantTitle := textnorm.NormalizeForMatch(q.Title)
 	wantArtist := textnorm.NormalizeForMatch(q.Artist)
 	wantLabels := titlemarkers.RecordingLabels(q.Title)
+	var best songfields.RecordingIdentity
+	bestAgreement := -1
 	for _, res := range results {
 		if textnorm.NormalizeForMatch(res.Title) != wantTitle || !slices.Equal(titlemarkers.RecordingLabels(res.Title), wantLabels) {
 			continue
@@ -303,20 +306,41 @@ func pickRecording(results []acqports.SearchedRecording, q acqports.RecordingQue
 		if wantArtist != "" && textnorm.NormalizeForMatch(res.Artist) != wantArtist {
 			continue
 		}
-		return res, true
+		if agreed := agreement(res, q); agreed > bestAgreement {
+			best, bestAgreement = res, agreed
+		}
 	}
-	return acqports.SearchedRecording{}, false
+	return best, bestAgreement >= 0
 }
 
-func toIdentity(res acqports.SearchedRecording) acqports.RecordingIdentity {
+func agreement(res, q songfields.RecordingIdentity) int {
+	score := 0
+	if album := textnorm.NormalizeForMatch(q.Album); album != "" && textnorm.NormalizeForMatch(res.Album) == album {
+		score += 4
+	}
+	if q.Explicit != nil && res.Explicit != nil && *q.Explicit == *res.Explicit {
+		score += 2
+	}
+	if q.Year != 0 && res.Year == q.Year {
+		score++
+	}
+	if q.Position.Track != 0 && res.Position.Track == q.Position.Track {
+		score++
+	}
+	return score
+}
+
+func toIdentity(res songfields.RecordingIdentity) acqports.RecordingIdentity {
 	identity := acqports.RecordingIdentity{
 		ISRC:     res.ISRC,
-		MBID:     res.MBID,
-		Duration: res.Duration,
+		MBID:     res.RecordingMBID,
+		Duration: res.DurationSeconds,
 	}
 	for _, src := range res.Sources {
 		if src.ExternalID != "" {
-			identity.Sources = append(identity.Sources, src)
+			identity.Sources = append(identity.Sources, acqports.ProviderRef{
+				Provider: acqports.RecordingProvider(src.Provider), ExternalID: src.ExternalID, URL: src.URL,
+			})
 		}
 	}
 	return identity

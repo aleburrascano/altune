@@ -1,18 +1,12 @@
 package ports
 
-import "context"
-
-type SearchedRecording struct {
-	Title    string
-	Artist   string
-	ISRC     string
-	MBID     string
-	Duration float64
-	Sources  []ProviderRef
-}
+import (
+	"altune/go-api/internal/shared/songfields"
+	"context"
+)
 
 type RecordingSearch interface {
-	SearchRecordings(ctx context.Context, query string, limit int) ([]SearchedRecording, error)
+	SearchRecordings(ctx context.Context, query string, limit int) ([]songfields.RecordingIdentity, error)
 }
 
 type ISRCRecording struct {

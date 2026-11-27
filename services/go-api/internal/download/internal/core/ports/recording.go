@@ -1,6 +1,9 @@
 package ports
 
-import "context"
+import (
+	"altune/go-api/internal/shared/songfields"
+	"context"
+)
 
 type RecordingProvider string
 
@@ -38,15 +41,6 @@ func (r RecordingIdentity) SourceFor(provider RecordingProvider) (ProviderRef, b
 	return ProviderRef{}, false
 }
 
-type RecordingQuery struct {
-	Title    string
-	Artist   string
-	Album    string
-	ISRC     string
-	Duration float64
-	MBID     string
-}
-
 type RecordingFacts struct {
 	MBID           string
 	Title          string
@@ -61,14 +55,14 @@ type RecordingLookup interface {
 }
 
 type RecordingResolver interface {
-	Resolve(ctx context.Context, q RecordingQuery) (RecordingIdentity, error)
+	Resolve(ctx context.Context, q songfields.RecordingIdentity) (RecordingIdentity, error)
 }
 
 func NoopRecordingResolver() RecordingResolver { return noopRecordingResolver{} }
 
 type noopRecordingResolver struct{}
 
-func (noopRecordingResolver) Resolve(context.Context, RecordingQuery) (RecordingIdentity, error) {
+func (noopRecordingResolver) Resolve(context.Context, songfields.RecordingIdentity) (RecordingIdentity, error) {
 	return RecordingIdentity{}, nil
 }
 

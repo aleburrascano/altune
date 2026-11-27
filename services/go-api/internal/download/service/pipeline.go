@@ -16,6 +16,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/songfields"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
 	"context"
 	"errors"
@@ -452,6 +453,24 @@ type TrackRef struct {
 	CatalogSources  []ports.CatalogSource
 
 	AudioSourceURL string
+}
+
+func (t TrackRef) RecordingIdentity() songfields.RecordingIdentity {
+	identity := songfields.RecordingIdentity{
+		Title:           t.Title,
+		Artist:          t.Artist,
+		Album:           t.Album,
+		Year:            t.Year,
+		ISRC:            t.ISRC,
+		RecordingMBID:   t.CatalogMBID,
+		Position:        songfields.TrackPosition{Track: t.TrackNumber},
+		Explicit:        t.CatalogExplicit,
+		DurationSeconds: t.CatalogDuration,
+	}
+	for _, src := range t.CatalogSources {
+		identity.Sources = append(identity.Sources, songfields.ProviderRef{Provider: src.Provider, ExternalID: src.ExternalID, URL: src.URL})
+	}
+	return identity
 }
 
 func (s *pipeline) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {

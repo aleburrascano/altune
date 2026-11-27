@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/service/musicbrainzmatch"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/songfields"
 	"context"
 	"encoding/json"
 	"testing"
@@ -290,7 +291,7 @@ func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 		drinkingRemix = "d3dc2825-20c0-4a4f-a963-baa589049146"
 	)
 	recorded := musicbrainzmatch.NewRecorded(
-		[]ports.SearchedRecording{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, MBID: drinkingRemix, Duration: 236}},
+		[]songfields.RecordingIdentity{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, RecordingMBID: drinkingRemix, DurationSeconds: 236}},
 		[]ports.ISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
 	track := pendingBlindingLights()
 	catalogLength := 236.0
