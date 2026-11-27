@@ -43,6 +43,7 @@ new_repo() {
     printf '#!/usr/bin/env bash\nprintf "secret-scan %%s\\n" "$*" >>"%s/tools.log"\nexit "${SECRET_SCAN_STUB_RC:-0}"\n' "$WORK" >"$WORK/repo/scripts/ci/secret-scan.sh"
     printf '#!/usr/bin/env bash\nprintf "vuln-scan %%s\\n" "$*" >>"%s/tools.log"\nexit "${VULN_SCAN_STUB_RC:-0}"\n' "$WORK" >"$WORK/repo/scripts/ci/vuln-scan.sh"
     printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/repo/scripts/ci/noop-reachable.sh"
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/repo/scripts/library-table-readers.sh"
     mkdir -p "$WORK/repo/services/go-api/cmd/collabcheck"
     printf 'package main\n\nfunc main() {}\n' >"$WORK/repo/services/go-api/cmd/collabcheck/main.go"
     printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/repo/scripts/test-home-tree.sh"
