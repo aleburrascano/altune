@@ -182,11 +182,14 @@ describe('getPlaylist', () => {
   });
 });
 
+const HTTP_OK = 200;
+const HTTP_CREATED = 201;
+
 describe('createPlaylist', () => {
   it('POSTs the name with a JSON content-type', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: playlist() });
 
-    await expect(createPlaylist({ name: 'Focus' })).resolves.toEqual(playlist());
+    await expect(createPlaylist({ name: 'Focus' }, 'create-key')).resolves.toEqual(playlist());
 
     const request = __http.last();
     expect(request.method).toBe('POST');
@@ -195,10 +198,24 @@ describe('createPlaylist', () => {
     expect(JSON.parse(request.body)).toEqual({ name: 'Focus' });
   });
 
+  it('sends the idempotency key as a header', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: playlist() });
+
+    await createPlaylist({ name: 'Focus' }, 'key-from-caller');
+
+    expect(__http.last().headers['Idempotency-Key']).toBe('key-from-caller');
+  });
+
+  it.each([HTTP_OK, HTTP_CREATED])('treats a %i answer as the created playlist', async (status) => {
+    __http.reply('POST /v1/playlists', { status, json: playlist() });
+
+    await expect(createPlaylist({ name: 'Focus' }, 'create-key')).resolves.toEqual(playlist());
+  });
+
   it('rejects with a ContractError when the created playlist lacks an id', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: { ...playlist(), id: undefined } });
 
-    await expect(createPlaylist({ name: 'Focus' })).rejects.toMatchObject({
+    await expect(createPlaylist({ name: 'Focus' }, 'create-key')).rejects.toMatchObject({
       name: 'ContractError',
       at: 'PlaylistResponse.id',
     });

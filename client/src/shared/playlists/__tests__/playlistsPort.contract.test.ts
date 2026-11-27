@@ -154,7 +154,7 @@ describe.each<[string, () => PlaylistsPort]>([
   it('lists a created playlist with a track_count of 0', async () => {
     const port = freshPort();
 
-    await port.createPlaylist({ name: 'a' });
+    await port.createPlaylist({ name: 'a' }, 'create-key');
 
     const page = await port.getPlaylists();
     expect(page.items).toHaveLength(1);
@@ -163,7 +163,7 @@ describe.each<[string, () => PlaylistsPort]>([
 
   it('adds new tracks and refuses a track already in the playlist', async () => {
     const port = freshPort();
-    const { id } = await port.createPlaylist({ name: 'a' });
+    const { id } = await port.createPlaylist({ name: 'a' }, 'create-key');
 
     const first = await port.addTracksToPlaylist(id, { track_ids: [t1, t2] });
     const again = await port.addTracksToPlaylist(id, { track_ids: [t1] });
@@ -175,7 +175,7 @@ describe.each<[string, () => PlaylistsPort]>([
 
   it('reads back the tracks a playlist holds by its id', async () => {
     const port = freshPort();
-    const { id } = await port.createPlaylist({ name: 'a' });
+    const { id } = await port.createPlaylist({ name: 'a' }, 'create-key');
     await port.addTracksToPlaylist(id, { track_ids: [t1, t2] });
 
     const detail = await port.getPlaylist(id);
@@ -185,7 +185,7 @@ describe.each<[string, () => PlaylistsPort]>([
 
   it('rejects reading a playlist that does not exist with a 404 ApiError', async () => {
     const port = freshPort();
-    const { id } = await port.createPlaylist({ name: 'a' });
+    const { id } = await port.createPlaylist({ name: 'a' }, 'create-key');
     await port.deletePlaylist(id);
 
     const read = port.getPlaylist(id);
@@ -196,7 +196,7 @@ describe.each<[string, () => PlaylistsPort]>([
 
   it('lowers track_count by 1 when a track is removed', async () => {
     const port = freshPort();
-    const { id } = await port.createPlaylist({ name: 'a' });
+    const { id } = await port.createPlaylist({ name: 'a' }, 'create-key');
     await port.addTracksToPlaylist(id, { track_ids: [t1, t2] });
 
     await port.removeTracksFromPlaylist(id, { track_ids: [t1] });
@@ -206,7 +206,7 @@ describe.each<[string, () => PlaylistsPort]>([
 
   it('lists the new name after a rename', async () => {
     const port = freshPort();
-    const { id } = await port.createPlaylist({ name: 'a' });
+    const { id } = await port.createPlaylist({ name: 'a' }, 'create-key');
 
     await port.renamePlaylist(id, 'b');
 
@@ -215,7 +215,7 @@ describe.each<[string, () => PlaylistsPort]>([
 
   it('drops a deleted playlist and rejects a second delete with a 404 ApiError', async () => {
     const port = freshPort();
-    const { id } = await port.createPlaylist({ name: 'a' });
+    const { id } = await port.createPlaylist({ name: 'a' }, 'create-key');
 
     await port.deletePlaylist(id);
 
@@ -227,8 +227,8 @@ describe.each<[string, () => PlaylistsPort]>([
 
   it('serves one playlist when limit is 1 over 2 playlists', async () => {
     const port = freshPort();
-    await port.createPlaylist({ name: 'a' });
-    await port.createPlaylist({ name: 'b' });
+    await port.createPlaylist({ name: 'a' }, 'create-key');
+    await port.createPlaylist({ name: 'b' }, 'create-key');
 
     const page = await port.getPlaylists({ limit: 1 });
 

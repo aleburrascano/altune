@@ -66,3 +66,4 @@ export { useSignUp } from '@features/signIn/view/useSignUp';
 export { useUpdatePassword } from '@features/signIn/view/useUpdatePassword';
 export { reportSignInFailure } from '@features/signIn/adapters/http/reportSignInFailure';
 export { isPresent } from '@features/signIn/core/isPresent';
+export { _resetSignInHealthForTest, flushSignInHealth } from '@features/signIn/core/signInHealth';

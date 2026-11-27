@@ -111,6 +111,10 @@ function makeDetail(
   };
 }
 
+type PlaylistCreateRequest = { method: string; path: string; headers: Record<string, string> };
+
+const KEY_PATTERN = /^[0-9a-f-]{36}$/;
+
 function newClient(): ObservedQueryClient {
   return new ObservedQueryClient();
 }
@@ -1622,6 +1626,78 @@ describe('create', () => {
       expect(
         __http.requests.filter((r: { path: string }) => r.path.includes('tracks/batch')),
       ).toHaveLength(0);
+    });
+  });
+
+  describe('a create that is tried again sends the same idempotency key', () => {
+    function keysSent(): (string | undefined)[] {
+      return (__http.requests as PlaylistCreateRequest[])
+        .filter((request) => request.method === 'POST' && request.path === '/v1/playlists')
+        .map((request) => request.headers['Idempotency-Key']);
+    }
+
+    async function createTwice(first: string, second: string) {
+      const { result } = renderHook(() => useCreatePlaylist(), {
+        wrapper: createWrapper(freshClient()),
+      });
+      __http.replyOnce('POST /v1/playlists', { status: 500 });
+      await act(async () => {
+        await result.current.mutateAsync(first).catch(() => undefined);
+      });
+      __http.reply('POST /v1/playlists', { status: 200, json: created('p1', second) });
+      await act(async () => {
+        await result.current.mutateAsync(second);
+      });
+      return result;
+    }
+
+    it('after a failed attempt, creating the same name again reuses the key', async () => {
+      await createTwice('Focus', 'Focus');
+
+      const [first, second] = keysSent();
+      expect(first).toMatch(KEY_PATTERN);
+      expect(second).toBe(first);
+    });
+
+    it('a different name is a different create and gets its own key', async () => {
+      await createTwice('Focus', 'Gym');
+
+      const [first, second] = keysSent();
+      expect(second).not.toBe(first);
+    });
+
+    it('after a success, the next create gets a fresh key', async () => {
+      const result = await createTwice('Focus', 'Focus');
+      __http.reply('POST /v1/playlists', { status: 201, json: created('p2', 'Focus') });
+
+      await act(async () => {
+        await result.current.mutateAsync('Focus');
+      });
+
+      const [, second, third] = keysSent();
+      expect(third).not.toBe(second);
+    });
+
+    it('create with tracks reuses the key for the same name and tracks after a failure', async () => {
+      const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+        wrapper: createWrapper(freshClient()),
+      });
+      const variables = { name: 'Focus', trackIds: [asTrackId('t1')] };
+      __http.replyOnce('POST /v1/playlists', { status: 500 });
+      await act(async () => {
+        await result.current.mutateAsync(variables).catch(() => undefined);
+      });
+      __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
+      __http.reply('POST /v1/playlists/p1/tracks/batch', {
+        status: 200,
+        json: { added: 1, skipped: 0 },
+      });
+      await act(async () => {
+        await result.current.mutateAsync(variables);
+      });
+
+      const [first, second] = keysSent();
+      expect(second).toBe(first);
     });
   });
 

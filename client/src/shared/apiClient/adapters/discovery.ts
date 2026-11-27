@@ -15,6 +15,7 @@ import {
   type ResultSection,
   type SearchHistoryItem,
 } from '@shared/catalog';
+import { clampLimit } from '@shared/apiClient/core/endpointLimits';
 import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import {
   parseArray,
@@ -237,7 +238,7 @@ export async function searchDiscovery(
     qs.set('kinds', params.kinds.join(','));
   }
   if (params.limit !== undefined) {
-    qs.set('limit', String(params.limit));
+    qs.set('limit', String(clampLimit('search', params.limit)));
   }
   if (params.offset !== undefined && params.offset > 0) {
     qs.set('offset', String(params.offset));
@@ -261,7 +262,7 @@ export async function suggestDiscovery(
 ): Promise<DiscoverySuggestResponse> {
   const qs = new URLSearchParams({ q: params.q });
   if (params.limit !== undefined) {
-    qs.set('limit', String(params.limit));
+    qs.set('limit', String(clampLimit('suggest', params.limit)));
   }
   const body = await apiFetch(withQuery('/v1/discovery/suggest', qs), signalInit(signal));
   return parseDiscoverySuggestResponse(body);
@@ -275,7 +276,7 @@ export async function listSearchHistory(
 ): Promise<DiscoverySearchHistoryResponse> {
   const qs = new URLSearchParams();
   if (params?.limit !== undefined) {
-    qs.set('limit', String(params.limit));
+    qs.set('limit', String(clampLimit('search_history', params.limit)));
   }
   const body = await apiFetch(withQuery('/v1/discovery/search-history', qs), signalInit(signal));
   return parseDiscoverySearchHistoryResponse(body);

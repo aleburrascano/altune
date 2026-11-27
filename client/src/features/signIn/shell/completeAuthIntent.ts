@@ -12,6 +12,7 @@ import {
 } from '@features/signIn/core/authIntent';
 import type { AuthLinkIntent, AuthLinkParams } from '@features/signIn/core/parseAuthLink';
 import type { AuthIntents, AuthRouter } from '@features/signIn/ports/authIntents';
+import { recordSignInOk } from '@features/signIn/core/signInHealth';
 import { markRecoveryUnlocked } from '@features/signIn/shell/passwordRecovery';
 import { isPresent } from '@features/signIn/core/isPresent';
 
@@ -133,6 +134,11 @@ function unhandledIntent(_intent: never): AuthIntentResult {
   return refused('unhandled_intent_kind');
 }
 
+function countSignIn(outcome: AuthIntentResult): AuthIntentResult {
+  if (outcome.kind === 'success') recordSignInOk();
+  return outcome;
+}
+
 async function spendCredential(
   intent: Exclude<AuthLinkIntent, { kind: 'ignored' }>,
   router: AuthRouter,
@@ -144,7 +150,7 @@ async function spendCredential(
     case 'confirm':
       return confirmSignUp(intent.params, auth);
     case 'oauth':
-      return exchangeOAuth(intent.params, auth);
+      return countSignIn(await exchangeOAuth(intent.params, auth));
     default:
       return unhandledIntent(intent);
   }

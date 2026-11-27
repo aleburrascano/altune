@@ -1,4 +1,5 @@
 import { apiFetch, setQueryParam, signalInit, withQuery } from '@shared/apiClient/adapters/http';
+import { clampLimit } from '@shared/apiClient/core/endpointLimits';
 import {
   parseListEnvelope,
   asNumber,
@@ -83,7 +84,8 @@ function libraryParams(query: LibraryQuery): URLSearchParams {
   const params = new URLSearchParams();
   setQueryParam(params, 'q', query.q);
   if (query.sort) params.set('sort', query.sort);
-  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.limit !== undefined)
+    params.set('limit', String(clampLimit('library_page', query.limit)));
   if (query.offset !== undefined) params.set('offset', String(query.offset));
   return params;
 }

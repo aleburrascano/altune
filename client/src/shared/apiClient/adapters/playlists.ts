@@ -1,4 +1,5 @@
 import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/adapters/http';
+import { clampLimit } from '@shared/apiClient/core/endpointLimits';
 import {
   asPlaylistId,
   idPathSegment,
@@ -87,7 +88,7 @@ export type PlaylistPage = {
 
 function playlistPageParams(page: PlaylistPage): URLSearchParams {
   const params = new URLSearchParams();
-  if (page.limit !== undefined) params.set('limit', String(page.limit));
+  if (page.limit !== undefined) params.set('limit', String(clampLimit('library_page', page.limit)));
   if (page.offset !== undefined) params.set('offset', String(page.offset));
   return params;
 }
@@ -110,8 +111,17 @@ export async function getPlaylist(
   );
 }
 
-export async function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistResponse> {
-  return parsePlaylistResponse(await apiSend('/v1/playlists', 'POST', body));
+const IDEMPOTENCY_HEADER = 'Idempotency-Key';
+
+export async function createPlaylist(
+  body: CreatePlaylistRequest,
+  idempotencyKey: string,
+): Promise<PlaylistResponse> {
+  return parsePlaylistResponse(
+    await apiSend('/v1/playlists', 'POST', body, {
+      headers: { [IDEMPOTENCY_HEADER]: idempotencyKey },
+    }),
+  );
 }
 
 export async function renamePlaylist(id: PlaylistId, name: string): Promise<PlaylistResponse> {
