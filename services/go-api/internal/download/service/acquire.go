@@ -262,9 +262,9 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId ids.UserId, trackId ids.TrackId, ac *AcquisitionContext) error {
 	defer s.recordRejections(ctx, ac)
 	defer reportDecision(ctx, ac)
-	identityStart := s.now()
-	s.resolveIdentity(ctx, ac)
-	timeStage(ctx, "identity", identityStart, s.now)
+	identityCtx, identityDone := startStage(ctx, s.now, "identity")
+	s.resolveIdentity(identityCtx, ac)
+	identityDone(nil)
 	steps := s.buildSteps(userId, trackId)
 	if err := RunPipeline(ctx, steps, ac); err != nil {
 		if failure := s.takeRerecording(ctx, steps, ac, err); failure != nil {

@@ -2,16 +2,19 @@ package telemetry_test
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -299,4 +302,129 @@ func TestNewClientEvents_RefusesAMissingClock(t *testing.T) {
 		}
 	}()
 	telemetry.NewClientEvents(nil, "k", nil)
+}
+
+func TestStartStageRecordsAChildSpanOfTheRequestAndReturnsTheClockElapsed(t *testing.T) {
+	recorder := recordSpans(t)
+	manual := clocktest.NewManual(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	var elapsed time.Duration
+	router := chi.NewRouter()
+	router.Use(httpserver.ObserveRequests(clock.Now, telemetry.RequestSpan(never)))
+	router.Get("/v1/search", func(_ http.ResponseWriter, r *http.Request) {
+		_, stage := telemetry.StartStage(r.Context(), manual.Func(), "provider.search", attribute.String("provider", "deezer"))
+		manual.Advance(1500 * time.Millisecond)
+		stage.Annotate(attribute.String("provider.status", "ok"))
+		elapsed = stage.End(nil)
+	})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/search", nil))
+
+	spans := recorder.Ended()
+	if len(spans) != 2 {
+		t.Fatalf("spans = %d, want the stage and the request", len(spans))
+	}
+	stage, request := spans[0], spans[1]
+	if stage.Name() != "provider.search" || stage.Parent().SpanID() != request.SpanContext().SpanID() {
+		t.Fatalf("stage = %q with parent %v, want provider.search under the request span", stage.Name(), stage.Parent().SpanID())
+	}
+	got := map[string]string{}
+	for _, kv := range stage.Attributes() {
+		got[string(kv.Key)] = kv.Value.String()
+	}
+	if got["provider"] != "deezer" || got["provider.status"] != "ok" {
+		t.Fatalf("attributes = %v", got)
+	}
+	if elapsed != 1500*time.Millisecond {
+		t.Fatalf("elapsed = %v, want 1.5s from the injected clock", elapsed)
+	}
+}
+
+func TestStageEndMarksTheSpanAsAnErrorWhenTheStageFailed(t *testing.T) {
+	recorder := recordSpans(t)
+	_, stage := telemetry.StartStage(context.Background(), clock.Now, "download.full")
+
+	stage.End(errors.New("source refused"))
+
+	spans := recorder.Ended()
+	if len(spans) != 1 || spans[0].Status().Code != codes.Error || spans[0].Status().Description != "source refused" {
+		t.Fatalf("spans = %+v, want one span marked as an error with the cause", spans)
+	}
+}
+
+func TestStartStageRefusesANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("StartStage(nil clock) did not panic")
+		}
+	}()
+	telemetry.StartStage(context.Background(), nil, "x")
+}
+
+func TestRegistryHandsBackTheSameInstrumentForTheSameName(t *testing.T) {
+	reg := telemetry.NewRegistry()
+
+	reg.Counter("requests_total").Add(2)
+	reg.Counter("requests_total").Add(3)
+	reg.Gauge("breaker_open").Set(1)
+	reg.LabeledCounter("rejections").Add("expired", 1)
+	reg.LabeledCounter("rejections").Add("expired", 1)
+	reg.LabeledCounter("rejections").Add("forged", 1)
+
+	if got := reg.Counter("requests_total").Value(); got != 5 {
+		t.Errorf("counter = %d, want 5", got)
+	}
+	if got := reg.Gauge("breaker_open").Value(); got != 1 {
+		t.Errorf("gauge = %d, want 1", got)
+	}
+	if got := reg.LabeledCounter("rejections").Values(); got["expired"] != 2 || got["forged"] != 1 || len(got) != 2 {
+		t.Errorf("labeled = %v, want expired 2 and forged 1", got)
+	}
+	if reg.Counter("a") == reg.Counter("b") {
+		t.Error("two names share one counter")
+	}
+}
+
+func TestHistogramBucketsAnObservationAtOrBelowItsBound(t *testing.T) {
+	h := telemetry.NewRegistry().Histogram("latency_ms", []int64{10, 100})
+
+	for _, v := range []int64{3, 10, 11, 100, 101, -5} {
+		h.Observe(v)
+	}
+
+	snap := h.Snapshot()
+	if snap.Count != 6 || snap.Sum != 3+10+11+100+101 {
+		t.Errorf("count = %d, sum = %d, want 6 and 225", snap.Count, snap.Sum)
+	}
+	if want := []uint64{3, 2, 1}; snap.Buckets[0] != want[0] || snap.Buckets[1] != want[1] || snap.Buckets[2] != want[2] {
+		t.Errorf("buckets = %v, want %v", snap.Buckets, want)
+	}
+}
+
+func TestNewHistogramRefusesBoundsThatAreNotAscending(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("descending bounds did not panic")
+		}
+	}()
+	telemetry.NewHistogram([]int64{100, 10})
+}
+
+func TestRegistryIsSafeUnderConcurrentUse(t *testing.T) {
+	reg := telemetry.NewRegistry()
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 200 {
+				reg.Counter("c").Add(1)
+				reg.LabeledCounter("l").Add("x", 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := reg.Counter("c").Value(); got != 1600 {
+		t.Errorf("counter = %d, want 1600", got)
+	}
 }

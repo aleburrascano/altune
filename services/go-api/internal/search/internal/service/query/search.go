@@ -302,14 +302,14 @@ func (s *Service) execute(
 		startedAt: startedAt,
 	}
 	stages := resolution.stages
-	favoritesDone := s.timeStage(&stages.favorites)
-	ranked := s.favorites.Lift(ctx, userId, resolution.ranked)
+	favoritesCtx, favoritesDone := s.timeStage(ctx, "favorites", &stages.favorites)
+	ranked := s.favorites.Lift(favoritesCtx, userId, resolution.ranked)
 	favoritesDone()
 
 	var relatedGroups []domain.RelatedGroup
-	relatedDone := s.timeStage(&stages.related)
+	relatedCtx, relatedDone := s.timeStage(ctx, "related", &stages.related)
 	if len(ranked) > 0 {
-		relatedGroups = s.related.Execute(ctx, userId, ranked)
+		relatedGroups = s.related.Execute(relatedCtx, userId, ranked)
 	}
 	relatedDone()
 
@@ -424,8 +424,8 @@ func (s *Service) resolveCold(
 	searchQuery, queryNorm string,
 ) rankedResolution {
 	var stages stageTimings
-	fanOutDone := s.timeStage(&stages.fanOut)
-	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
+	fanOutCtx, fanOutDone := s.timeStage(ctx, "fanout", &stages.fanOut)
+	perProvider, statuses := s.fanOut(fanOutCtx, searchQuery, query.Kinds)
 	fanOutDone()
 	resolution := rankedResolution{
 		ranked:   s.mergeRankEnrich(ctx, perProvider, queryNorm, &stages),
@@ -491,7 +491,7 @@ func (s *Service) mergeRankEnrich(
 	queryNorm string,
 	stages *stageTimings,
 ) []domain.SearchResult {
-	rankDone := s.timeStage(&stages.rank)
+	_, rankDone := s.timeStage(ctx, "rank", &stages.rank)
 	ranked := rank.RankPipelineWith(perProvider, queryNorm, s.ranking.RankOptions())
 
 	for i := range ranked {
@@ -499,8 +499,8 @@ func (s *Service) mergeRankEnrich(
 	}
 	rankDone()
 
-	artworkDone := s.timeStage(&stages.artwork)
-	ranked = s.artwork.Fill(ctx, ranked)
+	artworkCtx, artworkDone := s.timeStage(ctx, "artwork", &stages.artwork)
+	ranked = s.artwork.Fill(artworkCtx, ranked)
 	artworkDone()
 	return ranked
 }

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"time"
 )
@@ -33,8 +34,11 @@ func (noopJobReporter) fetched(_ ports.SourceFormat)              {}
 func (noopJobReporter) stored(_ ports.StoredFile)                 {}
 func (noopJobReporter) decided(_ float64, _ string, _, _ float64) {}
 
-func timeStage(ctx context.Context, stage string, start time.Time, now clock.Func) {
-	jobReporterFrom(ctx).timing(stage, now().Sub(start))
+func startStage(ctx context.Context, now clock.Func, stage string) (context.Context, func(error)) {
+	stageCtx, span := telemetry.StartStage(ctx, now, stage)
+	return stageCtx, func(err error) {
+		jobReporterFrom(ctx).timing(stage, span.End(err))
+	}
 }
 
 func withJobReporter(ctx context.Context, r jobReporter) context.Context {
