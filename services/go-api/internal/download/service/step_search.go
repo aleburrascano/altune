@@ -56,7 +56,7 @@ func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) (FindResul
 	if reporter, ok := s.finder.(outageReportingFinder); ok {
 		r0, err := reporter.FindReportingOutage(ctx, req)
 		if err != nil {
-			return r0, fmt.Errorf("find reporting outage: %w", err)
+			return r0, fmt.Errorf("find candidates: %w", err)
 		}
 		return r0, nil
 	}
