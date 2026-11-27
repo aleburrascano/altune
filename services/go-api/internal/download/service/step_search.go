@@ -33,7 +33,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ Pipe
 	}
 	outage := res.Outage
 
-	ac.FallbackSkipped = res.FallbackSkipped
+	ac.Pass = passAfterSearch(ac.Pass, res)
 	kept, skipped := filterCandidates(ctx, ac, res.Candidates)
 	if len(kept) == 0 && len(skipped) > 0 {
 		slog.InfoContext(ctx, "acquisition.prior_rejections_exhausted",
@@ -95,7 +95,7 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 
 		KnownSourceURL: ac.Track.AudioSourceURL,
 
-		FallbackOnly: ac.FallbackOnly,
+		Tier: tierOf(ac.Pass),
 	}
 }
 
@@ -104,4 +104,30 @@ func searchHintISRC(ac *AcquisitionContext) string {
 		return ac.Track.ISRC
 	}
 	return ac.Identity.ISRC
+}
+
+type SearchPass int
+
+const (
+	PassAllTiers SearchPass = iota
+	PassFallbackSkipped
+	PassFallbackOnly
+)
+
+func tierOf(pass SearchPass) ports.SourceTier {
+	if pass == PassFallbackOnly {
+		return ports.TierFallbackOnly
+	}
+	return ports.TierFirstThenFallback
+}
+
+func passAfterSearch(pass SearchPass, res FindResult) SearchPass {
+	switch {
+	case pass == PassFallbackOnly:
+		return PassFallbackOnly
+	case res.FallbackSkipped:
+		return PassFallbackSkipped
+	default:
+		return PassAllTiers
+	}
 }

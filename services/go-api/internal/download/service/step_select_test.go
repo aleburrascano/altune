@@ -138,7 +138,7 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 	_ = runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
 
 	seen := fallback.seen()
-	if len(seen) != 1 || !seen[0].FallbackOnly {
+	if len(seen) != 1 || seen[0].Tier != ports.TierFallbackOnly {
 		t.Fatalf("fallback requests = %+v, want one fallback-only search after the first tier held only the stored file", seen)
 	}
 }

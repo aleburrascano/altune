@@ -19,8 +19,15 @@ type FindRequest struct {
 
 	KnownSourceURL string
 
-	FallbackOnly bool
+	Tier SourceTier
 }
+
+type SourceTier int
+
+const (
+	TierFirstThenFallback SourceTier = iota
+	TierFallbackOnly
+)
 
 func PrefersExplicit(catalogExplicit *bool) bool {
 	return catalogExplicit == nil || *catalogExplicit

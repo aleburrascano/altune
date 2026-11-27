@@ -251,7 +251,7 @@ func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing
 	if got := len(fallback.seen()); got != 1 {
 		t.Fatalf("fallback finds = %d, want 1: the fallback tier ran", got)
 	}
-	if ac.FallbackSkipped {
-		t.Error("FallbackSkipped = true, want false: the fallback ran, only its candidate is resolved")
+	if ac.Pass == service.PassFallbackSkipped {
+		t.Error("Pass = fallback skipped, want not: the fallback ran, only its candidate is resolved")
 	}
 }
