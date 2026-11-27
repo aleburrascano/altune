@@ -40,7 +40,6 @@ var (
 	ParseAcquisitionStatus    = domain.ParseAcquisitionStatus
 	ParseLibrarySort          = domain.ParseLibrarySort
 	ParsePlaylistId           = domain.ParsePlaylistId
-	ParseTrackId              = domain.ParseTrackId
 	PlaylistIdFromUUID        = domain.PlaylistIdFromUUID
 	SplitFailureReason        = domain.SplitFailureReason
 	TotalDurationSeconds      = domain.TotalDurationSeconds
