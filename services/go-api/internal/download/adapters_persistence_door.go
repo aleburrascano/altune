@@ -6,6 +6,7 @@ type PostgresJobQueue = persistence.PostgresJobQueue
 
 var (
 	NewPostgresCooldownStore   = persistence.NewPostgresCooldownStore
+	NewPostgresDatabase        = persistence.NewDatabase
 	MustNewPostgresJobNotifier = persistence.MustNewPostgresJobNotifier
 	MustNewPostgresJobQueue    = persistence.MustNewPostgresJobQueue
 	NewPostgresOutcomeStore    = persistence.NewPostgresOutcomeStore

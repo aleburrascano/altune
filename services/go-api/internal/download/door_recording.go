@@ -14,7 +14,6 @@ type (
 	RerecordingLookup     = ports.RerecordingLookup
 	RerecordingFinder     = ports.RerecordingFinder
 	SearchedRecording     = ports.SearchedRecording
-	StoredAudioReader     = ports.StoredAudioReader
 	WorkRecording         = ports.WorkRecording
 )
 
