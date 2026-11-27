@@ -18,7 +18,7 @@ type cleaningTrackRepo struct {
 }
 
 func (r *cleaningTrackRepo) Add(ctx context.Context, track *library.Track) (*library.Track, bool, error) {
-	cleanupTrack(r.t, r.pool, track.ID, track.UserId)
+	cleanupTrack(r.t, r.pool, track.ID(), track.UserId())
 	return r.PostgresTrackRepository.Add(ctx, track)
 }
 

@@ -1749,10 +1749,9 @@ func (s *recordingUnreleasedStore) Record(ctx context.Context, key ports.Unrelea
 }
 
 func searchArtist(name, id string) search.SearchResult {
-	return search.SearchResult{
-		Kind: search.ResultKindArtist, Title: name, Confidence: domain.ConfidenceLow,
-		Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id, URL: "https://deezer.com/artist/" + id}},
-	}
+	return memory.NewResult(search.ResultKindArtist, name,
+		memory.WithConfidence(domain.ConfidenceLow),
+		memory.WithSource(search.ProviderDeezer, id, "https://deezer.com/artist/"+id))
 }
 
 func searchAsWarmUp(t *testing.T, store ports.UnreleasedStore, results []search.SearchResult) *httptest.ResponseRecorder {

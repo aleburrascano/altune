@@ -33,11 +33,11 @@ func (s nowPlayingTracks) NowPlayingTrack(ctx context.Context, userId ids.UserId
 		return nil, fmt.Errorf("get by id: %w", err)
 	}
 	return &playback.NowPlayingTrack{
-		Id:                track.ID.String(),
-		Title:             track.Title,
-		Artist:            track.Artist,
-		ArtworkURL:        track.ArtworkURL,
-		DurationSeconds:   track.DurationSeconds,
-		AcquisitionStatus: track.DownloadStatus.String(),
+		Id:                track.ID().String(),
+		Title:             track.Title(),
+		Artist:            track.Artist(),
+		ArtworkURL:        track.ArtworkURL(),
+		DurationSeconds:   track.DurationSeconds(),
+		AcquisitionStatus: track.DownloadStatus().String(),
 	}, nil
 }

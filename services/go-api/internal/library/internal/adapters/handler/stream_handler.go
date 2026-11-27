@@ -94,7 +94,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		"setup_ms", h.now().Sub(start).Milliseconds(),
 	)
 
-	setAudioBodyHeaders(w, *out.Track.AudioRef)
+	setAudioBodyHeaders(w, *out.Track.AudioRef())
 	body := &countedAudioBody{stream: out.Reader}
 	http.ServeContent(w, r, "", time.Time{}, body)
 

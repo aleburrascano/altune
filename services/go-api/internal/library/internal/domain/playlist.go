@@ -171,9 +171,9 @@ func PreviewArtworkURLs(tracks []*Track) []string {
 	urls := []string{}
 	seen := make(map[string]bool)
 	for _, t := range tracks {
-		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(urls) < PreviewArtworkLimit {
-			urls = append(urls, *t.ArtworkURL)
-			seen[*t.ArtworkURL] = true
+		if t.artworkURL != nil && !seen[*t.artworkURL] && len(urls) < PreviewArtworkLimit {
+			urls = append(urls, *t.artworkURL)
+			seen[*t.artworkURL] = true
 		}
 	}
 	return urls

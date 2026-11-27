@@ -104,7 +104,7 @@ func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 
-	err = repo.Update(ctx, loaded, loaded.Version)
+	err = repo.Update(ctx, loaded, loaded.Version())
 	if !errors.Is(err, library.ErrTrackVersionConflict) {
 		t.Fatalf("stale Update = %v, want ErrTrackVersionConflict", err)
 	}
@@ -131,7 +131,7 @@ func TestPostgresJobQueue_ClaimDoesNotMakeACatalogWriteStale(t *testing.T) {
 		t.Fatalf("Claim = %v, want a job", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update loaded before a claim = %v, want nil (a claim writes only the job row)", err)
 	}
 }
@@ -158,7 +158,7 @@ func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPend
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, library.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version()); !errors.Is(err, library.ErrTrackVersionConflict) {
 		t.Fatalf("stale audio-missing Update = %v, want ErrTrackVersionConflict", err)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
@@ -194,7 +194,7 @@ func TestPostgresJobQueue_ReplaceEnqueueDoesNotMakeACatalogWriteStale(t *testing
 		t.Fatalf("Enqueue replace = %v, want nil", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update after a replace enqueue = %v, want nil (a replace enqueue writes only the job row)", err)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "failed" {
@@ -222,7 +222,7 @@ func TestPostgresJobQueue_SecondEnqueueDoesNotMakeAWriterLoadedBetweenTheTwoStal
 		t.Fatalf("second Enqueue = %v", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update loaded between two enqueues = %v, want nil", err)
 	}
 }
@@ -249,7 +249,7 @@ func TestPostgresJobQueue_ReclaimOfALapsedLeaseDoesNotMakeACatalogWriteStale(t *
 		t.Fatalf("reclaim = %v, want the lapsed job", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update loaded before the reclaim = %v, want nil", err)
 	}
 }
@@ -275,7 +275,7 @@ func TestPostgresJobQueue_ClaimOfAReplaceJobDoesNotMakeACatalogWriteStale(t *tes
 		t.Fatalf("Claim = %v, want the replace job", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update loaded before the replace claim = %v, want nil", err)
 	}
 }
@@ -299,7 +299,7 @@ func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *te
 	if _, err := queue.Claim(ctx, time.Minute); err != nil {
 		t.Fatalf("Claim = %v", err)
 	}
-	if err := repo.Update(ctx, stale, stale.Version); !errors.Is(err, library.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, stale, stale.Version()); !errors.Is(err, library.ErrTrackVersionConflict) {
 		t.Fatalf("stale Update = %v, want ErrTrackVersionConflict", err)
 	}
 
@@ -307,10 +307,10 @@ func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *te
 	if err != nil {
 		t.Fatalf("re-read GetByID = %v", err)
 	}
-	if fresh.AcquisitionStartedAt == nil {
+	if fresh.AcquisitionStartedAt() == nil {
 		t.Errorf("re-read AcquisitionStartedAt = nil, want the claim's start time")
 	}
-	if err := repo.Update(ctx, fresh, fresh.Version); err != nil {
+	if err := repo.Update(ctx, fresh, fresh.Version()); err != nil {
 		t.Fatalf("Update after a re-read = %v, want nil", err)
 	}
 	if got := acquisitionStatus(t, pool, snap.ID); got != "pending" {
@@ -346,7 +346,7 @@ func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *te
 			<-start
 			enqueueErr = queue.Enqueue(ctx, track.ID, download.JobKindAcquire, 0)
 		}()
-		go func() { defer wg.Done(); <-start; updateErr = repo.Update(ctx, loaded, loaded.Version) }()
+		go func() { defer wg.Done(); <-start; updateErr = repo.Update(ctx, loaded, loaded.Version()) }()
 		close(start)
 		wg.Wait()
 
@@ -379,17 +379,17 @@ func TestPostgresJobQueue_ClaimRacingACatalogWriteCannotTouchTheStartTime(t *tes
 		if err != nil {
 			t.Fatalf("GetByID = %v", err)
 		}
-		if loaded.AcquisitionStartedAt == nil {
+		if loaded.AcquisitionStartedAt() == nil {
 			t.Fatalf("round %d: a pending track has no start time", i)
 		}
-		want := *loaded.AcquisitionStartedAt
+		want := *loaded.AcquisitionStartedAt()
 
 		var wg sync.WaitGroup
 		var claimErr, updateErr error
 		start := make(chan struct{})
 		wg.Add(2)
 		go func() { defer wg.Done(); <-start; _, claimErr = queue.Claim(ctx, time.Minute) }()
-		go func() { defer wg.Done(); <-start; updateErr = repo.Update(ctx, loaded, loaded.Version) }()
+		go func() { defer wg.Done(); <-start; updateErr = repo.Update(ctx, loaded, loaded.Version()) }()
 		close(start)
 		wg.Wait()
 
@@ -403,8 +403,8 @@ func TestPostgresJobQueue_ClaimRacingACatalogWriteCannotTouchTheStartTime(t *tes
 		if err != nil {
 			t.Fatalf("round %d: re-read = %v", i, err)
 		}
-		if reread.AcquisitionStartedAt == nil || !reread.AcquisitionStartedAt.Equal(want) {
-			t.Fatalf("round %d: AcquisitionStartedAt = %v, want %v untouched by the claim", i, reread.AcquisitionStartedAt, want)
+		if reread.AcquisitionStartedAt() == nil || !reread.AcquisitionStartedAt().Equal(want) {
+			t.Fatalf("round %d: AcquisitionStartedAt = %v, want %v untouched by the claim", i, reread.AcquisitionStartedAt(), want)
 		}
 		_, _ = pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
 	}
@@ -438,7 +438,7 @@ func TestPostgresJobQueue_ARefusedTrackMarkedFailedByTheCatalogIsNotClaimed(t *t
 	if err := loaded.MarkFailed("acquisition_refused"); err != nil {
 		t.Fatalf("MarkFailed = %v", err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update = %v", err)
 	}
 
@@ -592,7 +592,7 @@ func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDurin
 			if err := tc.run(track.ID, job.ClaimNumber); err != nil {
 				t.Fatalf("%s = %v", tc.op, err)
 			}
-			if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+			if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 				t.Errorf("Update loaded before %s = %v, want nil (%s writes only queue columns)", tc.op, err, tc.op)
 			}
 		})

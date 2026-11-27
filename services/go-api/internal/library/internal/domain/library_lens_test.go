@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"strings"
 	"testing"
@@ -68,9 +69,9 @@ func TestFailureMessage(t *testing.T) {
 func TestTotalDurationSeconds(t *testing.T) {
 	seconds := func(f float64) *float64 { return &f }
 	tracks := []*library.Track{
-		{DurationSeconds: seconds(90)},
-		{DurationSeconds: nil},
-		{DurationSeconds: seconds(30.5)},
+		librarytest.RestoreTrack(librarytest.TrackSnapshot{DurationSeconds: seconds(90)}),
+		librarytest.RestoreTrack(librarytest.TrackSnapshot{DurationSeconds: nil}),
+		librarytest.RestoreTrack(librarytest.TrackSnapshot{DurationSeconds: seconds(30.5)}),
 	}
 
 	if got := library.TotalDurationSeconds(tracks); got != 120.5 {

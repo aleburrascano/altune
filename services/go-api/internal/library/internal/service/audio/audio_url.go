@@ -65,7 +65,7 @@ func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, track
 	}
 	byID := make(map[domain.TrackId]*domain.Track, len(tracks))
 	for _, t := range tracks {
-		byID[t.ID] = t
+		byID[t.ID()] = t
 	}
 
 	expiresAt := s.now().Add(audioURLTTL)
@@ -77,13 +77,13 @@ func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, track
 			continue
 		}
 
-		url, err := s.signer.PresignGet(ctx, *track.AudioRef, audioURLTTL)
+		url, err := s.signer.PresignGet(ctx, *track.AudioRef(), audioURLTTL)
 		if err != nil {
 			s.metrics.PresignFailed()
 			slog.WarnContext(ctx, "audio_url.presign_failed", logging.KeyTrackID, id.String(), logging.KeyError, err)
 			continue
 		}
-		out = append(out, ResolvedAudioURL{TrackID: id, URL: url, Version: track.AudioVersion, ExpiresAt: expiresAt})
+		out = append(out, ResolvedAudioURL{TrackID: id, URL: url, Version: track.AudioVersion(), ExpiresAt: expiresAt})
 	}
 	slog.InfoContext(ctx, "audio_url.resolved",
 		"requested", len(trackIds),

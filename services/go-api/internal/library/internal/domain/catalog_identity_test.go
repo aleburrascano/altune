@@ -93,14 +93,14 @@ func TestTrack_SetCatalogIdentity_StoresNormalizedFacts(t *testing.T) {
 	if err := track.SetCatalogIdentity(&mbid, &explicit, sources); err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if track.CatalogMBID == nil || *track.CatalogMBID != validMBID {
-		t.Errorf("CatalogMBID = %v, want %q", track.CatalogMBID, validMBID)
+	if track.CatalogMBID() == nil || *track.CatalogMBID() != validMBID {
+		t.Errorf("CatalogMBID = %v, want %q", track.CatalogMBID(), validMBID)
 	}
-	if track.CatalogExplicit == nil || !*track.CatalogExplicit {
-		t.Errorf("CatalogExplicit = %v, want true", track.CatalogExplicit)
+	if track.CatalogExplicit() == nil || !*track.CatalogExplicit() {
+		t.Errorf("CatalogExplicit = %v, want true", track.CatalogExplicit())
 	}
-	if len(track.CatalogSources) != 1 {
-		t.Errorf("CatalogSources = %+v, want the duplicate dropped", track.CatalogSources)
+	if len(track.CatalogSources()) != 1 {
+		t.Errorf("CatalogSources = %+v, want the duplicate dropped", track.CatalogSources())
 	}
 }
 

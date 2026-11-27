@@ -113,8 +113,8 @@ func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Trac
 	ids := make([]uuid.UUID, len(tracks))
 	byID := make(map[uuid.UUID]*domain.Track, len(tracks))
 	for i, t := range tracks {
-		ids[i] = t.ID.UUID()
-		byID[t.ID.UUID()] = t
+		ids[i] = t.ID().UUID()
+		byID[t.ID().UUID()] = t
 	}
 
 	rows, err := q.Query(ctx,
@@ -132,10 +132,17 @@ func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Trac
 	if err != nil {
 		return fmt.Errorf("scan featured artists: %w", err)
 	}
+	linked := make(map[uuid.UUID][]domain.FeaturedArtist, len(tracks))
 	for _, link := range links {
-		if t := byID[link.TrackID]; t != nil {
-			t.FeaturedArtists = append(t.FeaturedArtists, link.featuredArtist())
+		if byID[link.TrackID] != nil {
+			linked[link.TrackID] = append(linked[link.TrackID], link.featuredArtist())
 		}
+	}
+	for id, feats := range linked {
+		t := byID[id]
+		snapshot := t.Snapshot()
+		snapshot.FeaturedArtists = append(snapshot.FeaturedArtists, feats...)
+		*t = *domain.RestoreTrack(snapshot)
 	}
 	return nil
 }

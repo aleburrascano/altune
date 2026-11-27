@@ -120,7 +120,7 @@ func (rig *audioRig) seedTracks(t *testing.T, user sharedids.UserId, n int) []*l
 }
 
 func (rig *audioRig) stream(user sharedids.UserId, track *library.Track, rangeHdr string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
+	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID().UUID().String()+"/audio", nil)
 	if rangeHdr != "" {
 		req.Header.Set("Range", rangeHdr)
 	}
@@ -130,7 +130,7 @@ func (rig *audioRig) stream(user sharedids.UserId, track *library.Track, rangeHd
 func (rig *audioRig) resolve(user sharedids.UserId, tracks ...*library.Track) *httptest.ResponseRecorder {
 	ids := make([]string, 0, len(tracks))
 	for _, t := range tracks {
-		ids = append(ids, `"`+t.ID.UUID().String()+`"`)
+		ids = append(ids, `"`+t.ID().UUID().String()+`"`)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/audio-urls", strings.NewReader(`{"track_ids":[`+strings.Join(ids, ",")+`]}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -229,7 +229,7 @@ func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 			t.Fatalf("save-all track %d throttled: %d (%s)", i, rec.Code, rec.Body.String())
 		}
 	}
-	batch := map[string][]string{"track_ids": {track.ID.String()}}
+	batch := map[string][]string{"track_ids": {track.ID().String()}}
 	for i := range 40 {
 		if rec := rig.post(t, user, "/playlists/"+playlist.ID.String()+"/tracks/batch", batch); rec.Code != http.StatusOK {
 			t.Fatalf("add-to-playlist %d throttled: %d (%s)", i, rec.Code, rec.Body.String())

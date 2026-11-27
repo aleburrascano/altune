@@ -51,15 +51,15 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		pending := librarytest.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
 		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, &librarytest.Metrics{})
 
-		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID, pending.ID, librarytest.NewTrackId()})
+		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID(), pending.ID(), librarytest.NewTrackId()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(out) != 1 {
 			t.Fatalf("expected 1 url (pending and unknown skipped), got %d", len(out))
 		}
-		if out[0].TrackID != ready.ID {
-			t.Errorf("url track = %v, want %v", out[0].TrackID, ready.ID)
+		if out[0].TrackID != ready.ID() {
+			t.Errorf("url track = %v, want %v", out[0].TrackID, ready.ID())
 		}
 		if out[0].URL != "https://signed.example/audio/ok.opus" {
 			t.Errorf("url = %q, unexpected", out[0].URL)
@@ -67,8 +67,8 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		if !out[0].ExpiresAt.After(time.Now()) {
 			t.Error("expires_at should be in the future")
 		}
-		if out[0].Version != ready.AudioVersion {
-			t.Errorf("version = %q, want %q", out[0].Version, ready.AudioVersion)
+		if out[0].Version != ready.AudioVersion() {
+			t.Errorf("version = %q, want %q", out[0].Version, ready.AudioVersion())
 		}
 		if out[0].Version == "" {
 			t.Error("a ready track must carry a non-empty audio version")
@@ -80,7 +80,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, &librarytest.Metrics{})
 
-		before, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
+		before, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -88,11 +88,11 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		if err := ready.MarkReady("audio/ok.opus", ids.Real); err != nil {
 			t.Fatalf("re-acquire: %v", err)
 		}
-		if err := repo.Update(ctx, ready, ready.Version); err != nil {
+		if err := repo.Update(ctx, ready, ready.Version()); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 
-		after, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
+		after, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -107,13 +107,13 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("a track acquired before the column existed resolves with an empty version", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		ready.AudioVersion = ""
-		if err := repo.Update(ctx, ready, ready.Version); err != nil {
+		librarytest.AmendTrack(ready, func(s *librarytest.TrackSnapshot) { s.AudioVersion = "" })
+		if err := repo.Update(ctx, ready, ready.Version()); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, &librarytest.Metrics{})
 
-		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -145,7 +145,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		svc := library.MustNewAudioURLService(repo, library.NoAudioLinks{}, time.Now, &librarytest.Metrics{})
 
-		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -162,7 +162,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		signer.err = errors.New("boom")
 		svc := library.MustNewAudioURLService(repo, signer, time.Now, metrics)
 
-		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		signer := newRecordingSigner()
 		svc := library.MustNewAudioURLService(repo, signer, func() time.Time { return pinned }, &librarytest.Metrics{})
 
-		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

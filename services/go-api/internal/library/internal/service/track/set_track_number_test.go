@@ -38,14 +38,14 @@ func TestSetTrackNumberService(t *testing.T) {
 		svc := library.NewSetTrackNumberService(repo)
 		foreign := librarytest.SeedTrack(t, repo, librarytest.OtherUserId(), "Theirs", "Artist", "Album")
 
-		for _, id := range []library.TrackId{librarytest.NewTrackId(), foreign.ID} {
+		for _, id := range []library.TrackId{librarytest.NewTrackId(), foreign.ID()} {
 			updated, err := svc.Execute(context.Background(), userId, id, 4)
 			if !errors.Is(err, library.ErrTrackNotFound) || updated {
 				t.Fatalf("Execute = (%v, %v), want (false, ErrTrackNotFound)", updated, err)
 			}
 		}
-		if foreign.TrackNumber != nil {
-			t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber)
+		if foreign.TrackNumber() != nil {
+			t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber())
 		}
 	})
 
@@ -65,25 +65,25 @@ func TestSetTrackNumberService(t *testing.T) {
 		svc := library.NewSetTrackNumberService(repo)
 		track := librarytest.SeedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
 
-		updated, err := svc.Execute(context.Background(), userId, track.ID, 3)
+		updated, err := svc.Execute(context.Background(), userId, track.ID(), 3)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !updated {
 			t.Fatal("expected updated=true on the first fill")
 		}
-		if got := repo.Tracks[track.ID.String()].TrackNumber; got == nil || *got != 3 {
+		if got := repo.Tracks[track.ID().String()].TrackNumber(); got == nil || *got != 3 {
 			t.Fatalf("track number = %v, want 3", got)
 		}
 
-		updated, err = svc.Execute(context.Background(), userId, track.ID, 9)
+		updated, err = svc.Execute(context.Background(), userId, track.ID(), 9)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if updated {
 			t.Fatal("expected updated=false when a number is already set")
 		}
-		if got := repo.Tracks[track.ID.String()].TrackNumber; got == nil || *got != 3 {
+		if got := repo.Tracks[track.ID().String()].TrackNumber(); got == nil || *got != 3 {
 			t.Fatalf("track number changed to %v, want it to stay 3", got)
 		}
 	})

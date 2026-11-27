@@ -35,7 +35,7 @@ func readyFixture(t *testing.T, ref string) (library.ReadyAudioTrack, *fakeTrack
 	t.Helper()
 	id := librarytest.NewTrackId()
 	userId := ids.NewUserId(uuid.New())
-	track := &library.Track{ID: id, UserId: userId, DownloadStatus: library.AcquisitionReady, AudioRef: &ref}
+	track := librarytest.RestoreTrack(librarytest.TrackSnapshot{ID: id, UserId: userId, DownloadStatus: library.AcquisitionReady, AudioRef: &ref})
 	repo := &fakeTrackRepo{tracks: map[library.TrackId]*library.Track{id: track}}
 	return library.ReadyAudioTrack{Id: id, UserId: userId, Title: "T", Artist: "A", AudioRef: ref}, repo
 }
@@ -110,11 +110,11 @@ func TestFixMarksMissingFileFailed(t *testing.T) {
 		t.Fatalf("fixed = %d, updates=%d; want 1 and one update", fixed, len(repo.updates))
 	}
 	got := repo.updates[0]
-	if got.DownloadStatus != library.AcquisitionFailed {
-		t.Errorf("status = %v, want failed", got.DownloadStatus)
+	if got.DownloadStatus() != library.AcquisitionFailed {
+		t.Errorf("status = %v, want failed", got.DownloadStatus())
 	}
-	if got.FailureReason == nil || *got.FailureReason != "Audio file missing from storage (health-check)" {
-		t.Errorf("failure reason = %v, want the health-check reason", got.FailureReason)
+	if got.FailureReason() == nil || *got.FailureReason() != "Audio file missing from storage (health-check)" {
+		t.Errorf("failure reason = %v, want the health-check reason", got.FailureReason())
 	}
 }
 

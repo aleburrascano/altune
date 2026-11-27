@@ -25,7 +25,7 @@ func OtherUserId() ids.UserId { return fixedUserId(0xbb) }
 
 func SeedTrack(t memory.TB, repo *memory.TrackRepo, userId ids.UserId, title, artist, album string) *domain.Track {
 	t.Helper()
-	track, err := domain.NewTrack(userId, title, artist, album, time.Now, randomIDs)
+	track, err := domain.NewTrack(domain.NewTrackInput{UserId: userId, Title: title, Artist: artist, Album: album}, time.Now, randomIDs)
 	if err != nil {
 		t.Fatalf("seedTrack: %v", err)
 	}

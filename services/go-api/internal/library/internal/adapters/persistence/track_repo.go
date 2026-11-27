@@ -77,16 +77,16 @@ var errTrackAlreadyStored = errors.New("a track with the same identity is alread
 
 func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
 	err := database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, lockLibraryOfUserSQL, track.UserId.UUID()); err != nil {
-			return fmt.Errorf("lock the library of user %s: %w", track.UserId.UUID(), err)
+		if _, err := tx.Exec(ctx, lockLibraryOfUserSQL, track.UserId().UUID()); err != nil {
+			return fmt.Errorf("lock the library of user %s: %w", track.UserId().UUID(), err)
 		}
 		if err := insertTrack(ctx, tx, track); err != nil {
 			return err
 		}
-		if err := requireWithinLibraryCap(ctx, tx, track.UserId, r.libraryCap); err != nil {
+		if err := requireWithinLibraryCap(ctx, tx, track.UserId(), r.libraryCap); err != nil {
 			return err
 		}
-		return writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists)
+		return writeTrackFeatured(ctx, tx, track.UserId().UUID(), track.ID().UUID(), track.FeaturedArtists())
 	})
 	if errors.Is(err, errTrackAlreadyStored) {
 		return r.storedConflict(ctx, track)
@@ -125,26 +125,27 @@ const insertTrackSQL = `INSERT INTO tracks (
 	RETURNING id`
 
 func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
-	sources, err := catalogSourcesJSON(track.CatalogSources)
+	s := track.Snapshot()
+	sources, err := catalogSourcesJSON(s.CatalogSources)
 	if err != nil {
-		return fmt.Errorf("insert track %s: %w", track.ID.UUID(), err)
+		return fmt.Errorf("insert track %s: %w", s.ID.UUID(), err)
 	}
 	var returnedID uuid.UUID
 	err = tx.QueryRow(ctx, insertTrackSQL,
-		track.ID.UUID(), track.UserId.UUID(),
-		track.Title, track.Artist, track.Album, track.DurationSeconds,
-		track.AddedAt, track.ArtworkURL, track.DownloadStatus.String(), track.DedupKey,
-		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
-		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
-		track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
-		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
-		track.CatalogMBID, track.CatalogExplicit, sources,
+		s.ID.UUID(), s.UserId.UUID(),
+		s.Title, s.Artist, s.Album, s.DurationSeconds,
+		s.AddedAt, s.ArtworkURL, s.DownloadStatus.String(), s.DedupKey,
+		s.Year, s.Genre, s.TrackNumber, s.AlbumArtist,
+		s.ISRC, s.AudioRef, s.FailureReason, s.AcquisitionProvenance, s.AudioSourceURL,
+		s.AudioVersion, s.AcquisitionStartedAt, s.IdempotencyKey,
+		s.ConfidenceScore, s.EvidenceJSON, s.CatalogDurationSeconds,
+		s.CatalogMBID, s.CatalogExplicit, sources,
 	).Scan(&returnedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errTrackAlreadyStored
 	}
 	if err != nil {
-		return fmt.Errorf("insert track %s: %w", track.ID.UUID(), err)
+		return fmt.Errorf("insert track %s: %w", s.ID.UUID(), err)
 	}
 	return nil
 }
@@ -262,20 +263,21 @@ const updateRelabelColumns = `,
 
 func updateStatement(track *domain.Track, expectedVersion int) (string, []any) {
 	set := updateAcquisitionColumns
+	s := track.Snapshot()
 	args := []any{
-		track.ID.UUID(), track.UserId.UUID(),
-		track.DurationSeconds, track.DownloadStatus.String(), track.AudioRef,
-		track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
-		track.AudioVersion, track.AcquisitionStartedAt,
-		track.ConfidenceScore, track.EvidenceJSON,
-		track.ISRC, track.AudioLengthMismatch,
+		s.ID.UUID(), s.UserId.UUID(),
+		s.DurationSeconds, s.DownloadStatus.String(), s.AudioRef,
+		s.FailureReason, s.AcquisitionProvenance, s.AudioSourceURL,
+		s.AudioVersion, s.AcquisitionStartedAt,
+		s.ConfidenceScore, s.EvidenceJSON,
+		s.ISRC, s.AudioLengthMismatch,
 		expectedVersion,
 	}
 	if track.Relabelled() {
 		set += updateRelabelColumns
 		args = append(args,
-			track.Title, track.Album, track.Year, track.DedupKey,
-			track.CatalogMBID, track.CatalogDurationSeconds)
+			s.Title, s.Album, s.Year, s.DedupKey,
+			s.CatalogMBID, s.CatalogDurationSeconds)
 	}
 	return set, args
 }
@@ -314,21 +316,21 @@ const (
 
 func checkFence(ctx context.Context, q rowQuerier, track *domain.Track, fence int) error {
 	var locked int
-	err := q.QueryRow(ctx, lockTrackForFenceSQL, track.ID.UUID(), track.UserId.UUID()).Scan(&locked)
+	err := q.QueryRow(ctx, lockTrackForFenceSQL, track.ID().UUID(), track.UserId().UUID()).Scan(&locked)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
+		return fmt.Errorf("track %s not found or was deleted", track.ID().String())
 	}
 	if err != nil {
 		return classifyDBError(err)
 	}
 	var current int
-	err = q.QueryRow(ctx, readJobFenceSQL, track.ID.UUID()).Scan(&current)
+	err = q.QueryRow(ctx, readJobFenceSQL, track.ID().UUID()).Scan(&current)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return classifyDBError(err)
 	}
 	if current > 0 && current != fence {
 		return fmt.Errorf("%w: track %s held by attempt %d, caller holds %d",
-			ports.ErrTrackFenceSuperseded, track.ID.String(), current, fence)
+			ports.ErrTrackFenceSuperseded, track.ID().String(), current, fence)
 	}
 	return nil
 }
@@ -348,7 +350,7 @@ func (r *PostgresTrackRepository) updateRow(ctx context.Context, q rowQuerier, t
 	if err != nil {
 		return classifyDBError(err)
 	}
-	track.Version = newVersion
+	track.RecordVersion(newVersion)
 	return nil
 }
 
@@ -356,16 +358,16 @@ func classifyFailedCAS(ctx context.Context, q rowQuerier, track *domain.Track, e
 	var currentVersion int
 	err := q.QueryRow(ctx,
 		`SELECT version FROM tracks WHERE id = $1 AND user_id = $2`,
-		track.ID.UUID(), track.UserId.UUID(),
+		track.ID().UUID(), track.UserId().UUID(),
 	).Scan(&currentVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
+		return fmt.Errorf("track %s not found or was deleted", track.ID().String())
 	}
 	if err != nil {
 		return classifyDBError(err)
 	}
 	return fmt.Errorf("%w: track %s expected version %d, found %d",
-		ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, currentVersion)
+		ports.ErrTrackVersionConflict, track.ID().String(), expectedVersion, currentVersion)
 }
 
 const gradeRankSQL = `array_position(ARRAY['F', 'D', 'C', 'B', 'A', 'A_user'], %s)`
@@ -460,17 +462,17 @@ func (r *PostgresTrackRepository) storedConflict(ctx context.Context, track *dom
 }
 
 func (r *PostgresTrackRepository) resolveConflictingTrack(ctx context.Context, track *domain.Track) (*domain.Track, error) {
-	if track.IdempotencyKey == nil {
-		return r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
+	if track.IdempotencyKey() == nil {
+		return r.GetByDedupKey(ctx, track.UserId(), track.DedupKey())
 	}
-	existing, err := r.GetByIdempotencyKey(ctx, track.UserId, *track.IdempotencyKey)
+	existing, err := r.GetByIdempotencyKey(ctx, track.UserId(), *track.IdempotencyKey())
 	if err == nil {
 		return existing, nil
 	}
 	if !errors.Is(err, domain.ErrTrackNotFound) {
 		return nil, err
 	}
-	return r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
+	return r.GetByDedupKey(ctx, track.UserId(), track.DedupKey())
 }
 
 func (r *PostgresTrackRepository) GetByIdempotencyKey(ctx context.Context, userId sharedids.UserId, idempotencyKey string) (*domain.Track, error) {
@@ -723,7 +725,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			return nil, err
 		}
 
-		return &domain.Track{
+		return domain.RestoreTrack(domain.TrackSnapshot{
 			ID:                     domain.TrackIdFromUUID(id),
 			UserId:                 sharedids.NewUserId(userId),
 			Title:                  title,
@@ -754,7 +756,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			AudioLengthMismatch:    lengthMismatch,
 			Version:                version,
 			AcquisitionFence:       fence,
-		}, nil
+		}), nil
 	}
 	return dest, build
 }

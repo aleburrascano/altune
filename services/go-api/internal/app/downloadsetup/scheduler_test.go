@@ -100,7 +100,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	musicDir := t.TempDir()
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Fixture Song", "Fixture Artist", "", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Fixture Song", Artist: "Fixture Artist", Album: ""}, time.Now, ids.Real)
 	if err != nil || track.SetDuration(212) != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -108,7 +108,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	if _, _, err := repo.Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID().UUID()) })
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: musicDir},
@@ -122,7 +122,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	if err := scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), userID, track.ID(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	return awaitReady(t, repo, track, userID), musicDir, scheduler.Status(t.Context()).Verification
@@ -133,23 +133,23 @@ func awaitReady(t *testing.T, repo *library.PostgresTrackRepository, track *libr
 	var got *library.Track
 	polltest.Within(10*time.Second, func() bool {
 		var err error
-		got, err = repo.GetByID(context.Background(), track.ID, userID)
+		got, err = repo.GetByID(context.Background(), track.ID(), userID)
 		if err != nil {
 			t.Fatalf("read track: %v", err)
 		}
-		return got.DownloadStatus == library.AcquisitionReady
+		return got.DownloadStatus() == library.AcquisitionReady
 	})
 	return *got
 }
 
 func assertReadyWithAudio(t *testing.T, track library.Track, musicDir string) {
 	t.Helper()
-	if track.DownloadStatus != library.AcquisitionReady || track.AudioRef == nil {
-		t.Fatalf("status = %v audioRef = %v, want ready with a ref", track.DownloadStatus, track.AudioRef)
+	if track.DownloadStatus() != library.AcquisitionReady || track.AudioRef() == nil {
+		t.Fatalf("status = %v audioRef = %v, want ready with a ref", track.DownloadStatus(), track.AudioRef())
 	}
-	stored, err := os.Stat(filepath.Join(musicDir, *track.AudioRef))
+	stored, err := os.Stat(filepath.Join(musicDir, *track.AudioRef()))
 	if err != nil || stored.Size() == 0 {
-		t.Fatalf("stored audio %q: size %v err %v", *track.AudioRef, stored, err)
+		t.Fatalf("stored audio %q: size %v err %v", *track.AudioRef(), stored, err)
 	}
 }
 
@@ -195,8 +195,8 @@ func TestNewScheduler_TheFirstTierArtTrackIsTheStoredSource(t *testing.T) {
 	track, musicDir, _ := acquireThroughPostgres(t)
 
 	assertReadyWithAudio(t, track, musicDir)
-	if track.AudioSourceURL == nil || *track.AudioSourceURL != download.ArtTrackURL {
-		t.Fatalf("stored source = %v, want the resolved art track %q", track.AudioSourceURL, download.ArtTrackURL)
+	if track.AudioSourceURL() == nil || *track.AudioSourceURL() != download.ArtTrackURL {
+		t.Fatalf("stored source = %v, want the resolved art track %q", track.AudioSourceURL(), download.ArtTrackURL)
 	}
 }
 
@@ -266,14 +266,14 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Song", "Artist", "Album", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Song", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
 	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID().UUID()) })
 
 	trackRepo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
@@ -289,12 +289,12 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	if err := scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), userID, track.ID(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 
-	polltest.Until(t, 5*time.Second, fmt.Sprintf("an acquisition_outcomes row for track %s (wiring must set SchedulerPorts.Outcomes to the Postgres store)", track.ID), func() bool {
-		return countAcquisitionOutcomeRows(t, pool, track.ID.String()) == 1
+	polltest.Until(t, 5*time.Second, fmt.Sprintf("an acquisition_outcomes row for track %s (wiring must set SchedulerPorts.Outcomes to the Postgres store)", track.ID()), func() bool {
+		return countAcquisitionOutcomeRows(t, pool, track.ID().String()) == 1
 	})
 }
 
@@ -313,7 +313,7 @@ func (sourceWithNothing) Fetch(context.Context, download.AudioCandidate, string)
 func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.TrackId) {
 	t.Helper()
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Song", "Artist", "Album", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Song", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -321,25 +321,25 @@ func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.
 		t.Fatalf("insert track: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID().UUID())
 	})
 	if _, err := pool.Exec(context.Background(), `
 UPDATE tracks SET acquisition_status = 'ready', audio_ref = 'stored.mp3',
 	audio_source_url = 'https://www.youtube.com/watch?v=storedvid01',
 	acquisition_evidence = '{"grade": "C"}'
-WHERE id = $1`, track.ID.UUID()); err != nil {
+WHERE id = $1`, track.ID().UUID()); err != nil {
 		t.Fatalf("mark ready graded C: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE acquisition_jobs SET available_at = NULL WHERE track_id = $1`, track.ID.UUID()); err != nil {
+		`UPDATE acquisition_jobs SET available_at = NULL WHERE track_id = $1`, track.ID().UUID()); err != nil {
 		t.Fatalf("unschedule the finished job: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
 INSERT INTO acquisition_upgrade_state (track_id, evidence) VALUES ($1, '{"in_place_generation": 2}')
-ON CONFLICT (track_id) DO UPDATE SET evidence = EXCLUDED.evidence`, track.ID.UUID()); err != nil {
+ON CONFLICT (track_id) DO UPDATE SET evidence = EXCLUDED.evidence`, track.ID().UUID()); err != nil {
 		t.Fatalf("seed the upgrade state: %v", err)
 	}
-	return userID, track.ID
+	return userID, track.ID()
 }
 
 type upgradeJobState struct {
@@ -443,7 +443,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Hanging Song", "Artist", "", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Hanging Song", Artist: "Artist", Album: ""}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -451,7 +451,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	if _, _, err := repo.Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID().UUID()) })
 	hang := sourceThatHangs{started: make(chan struct{}, 1)}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
@@ -466,7 +466,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	})
 	var shutdown sync.Once
 	t.Cleanup(func() { shutdown.Do(func() { scheduler.Shutdown(context.Background()) }) })
-	if err := scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), userID, track.ID(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	select {

@@ -2,6 +2,7 @@ package artistpage_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/artistpage"
@@ -17,13 +18,10 @@ import (
 )
 
 func catalogAlbum(provider search.ProviderName, id, title string) search.SearchResult {
-	return search.SearchResult{
-		Kind:     search.ResultKindAlbum,
-		Title:    title,
-		Subtitle: "Che",
-		Sources:  []search.ProviderLink{{Provider: provider, ExternalID: id}},
-		Extras:   map[string]any{},
-	}
+	return memory.NewResult(search.ResultKindAlbum, title,
+		memory.WithSubtitle("Che"),
+		memory.WithSource(provider, id, ""),
+		memory.WithExtras(map[string]any{}))
 }
 
 type recordingEventStore struct {
