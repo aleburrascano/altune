@@ -21,14 +21,9 @@ import (
 )
 
 func contentTrack(title string) search.SearchResult {
-	return search.SearchResult{
-		Kind:       search.ResultKindTrack,
-		Title:      title,
-		Confidence: domain.ConfidenceLow,
-		Sources: []search.ProviderLink{
-			{Provider: search.ProviderDeezer, ExternalID: title, URL: "https://deezer.com/" + title},
-		},
-	}
+	return memory.NewResult(search.ResultKindTrack, title,
+		memory.WithConfidence(domain.ConfidenceLow),
+		memory.WithSource(search.ProviderDeezer, title, "https://deezer.com/"+title))
 }
 
 func seedTracks(n int) []search.SearchResult {

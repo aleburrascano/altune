@@ -16,7 +16,7 @@ import (
 )
 
 func relatedTrack(title string) search.SearchResult {
-	return search.SearchResult{Kind: search.ResultKindTrack, Title: title}
+	return memory.NewResult(search.ResultKindTrack, title)
 }
 
 func TestNewGetRelatedTracksService_RefusesAMissingCollaborator(t *testing.T) {
