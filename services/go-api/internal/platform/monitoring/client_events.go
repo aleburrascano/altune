@@ -10,14 +10,11 @@ import (
 	"net/http"
 )
 
-type (
-	ClientEventSink  = handler.ClientEventSink
-	ClientEventStore = ports.ClientEventStore
-)
+type ClientEventStore = ports.ClientEventStore
 
 var NewPostgresClientEventStore = persistence.NewPostgresClientEventStore
 
-func NewClientEventRoutes(store ClientEventStore, sink ClientEventSink, now clock.Func) (http.Handler, error) {
+func NewClientEventRoutes(store ClientEventStore, sink handler.ClientEventSink, now clock.Func) (http.Handler, error) {
 	recorder, err := clientevents.NewRecorder(store, now)
 	if err != nil {
 		return nil, fmt.Errorf("client events: %w", err)

@@ -104,7 +104,7 @@ func TestClientEvents_ATypeAnotherModuleOwnsIsRefusedBeforeAnythingIsStored(t *t
 
 			resp := postClientEvent(t, h, ids.NewUserId(uuid.New()), `{"type":"`+typ+`"}`)
 
-			if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), string(apierror.CodeDiscoveryInvalidEventType.String())) {
+			if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), apierror.CodeDiscoveryInvalidEventType.String()) {
 				t.Errorf("status = %d body = %s, want 400 with the invalid event type code", resp.Code, resp.Body)
 			}
 			if len(rec.recorded) != 0 || len(sink.emitted) != 0 {
