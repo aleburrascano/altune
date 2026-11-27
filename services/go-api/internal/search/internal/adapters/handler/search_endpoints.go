@@ -28,7 +28,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit, ok := parseLimit(w, r, "limit", suggestDefaultLimit, suggestMaxLimit, resetToDefault)
+	limit, ok := parseLimit(w, r, "limit", suggestDefaultLimit, suggestMaxLimit)
 	if !ok {
 		return
 	}
@@ -158,7 +158,7 @@ func (h *DiscoveryHandler) warmUnreleased(ctx context.Context, results []domain.
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {
 	userId := requestuser.UserID(r)
 
-	limit, ok := parseLimit(w, r, "limit", historyDefaultLimit, historyMaxLimit, clampToMax)
+	limit, ok := parseLimit(w, r, "limit", historyDefaultLimit, historyMaxLimit)
 	if !ok {
 		return
 	}

@@ -54,11 +54,33 @@ func ObserveRequests(now clock.Func, observers ...Observer) func(http.Handler) h
 					Duration: now().Sub(start),
 					UserID:   scope.user(),
 				}
-				for i := len(finishers) - 1; i >= 0; i-- {
-					finishGuarded(r.Context(), finishers[i], outcome)
+				all := append(finishers, scope.routeFinishers()...)
+				for i := len(all) - 1; i >= 0; i-- {
+					finishGuarded(r.Context(), all[i], outcome)
 				}
 			}(r)
 			next.ServeHTTP(sw, r)
+		})
+	}
+}
+
+func ObserveRoutes(observers ...Observer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			scope, ok := r.Context().Value(requestScopeKey{}).(*requestScope)
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			for _, observe := range observers {
+				var finish func(Outcome)
+				r, finish = observe(r)
+				if finish != nil {
+					scope.addFinisher(finish)
+				}
+			}
+			scope.setInner(r.Context())
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -78,6 +100,6 @@ func LogRequest(r *http.Request) (*http.Request, func(Outcome)) {
 			logging.KeyDurationMS, o.Duration.Milliseconds(),
 			logging.KeyBytes, o.Bytes,
 		}
-		slog.InfoContext(r.Context(), "request.complete", attrs...)
+		slog.InfoContext(InnermostContext(r.Context()), "request.complete", attrs...)
 	}
 }

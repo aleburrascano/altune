@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/telemetry"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -27,7 +26,6 @@ func New(s Settings) *chi.Mux {
 
 	r.Use(httpserver.CorrelationID)
 	r.Use(httpserver.ObserveRequests(clock.Now,
-		telemetry.RequestSpan(untraced),
 		requestmetrics.Observer(s.Latency.Observe),
 		httpserver.LogRequest,
 	))
@@ -81,15 +79,11 @@ func MountV1(r chi.Router, requestTimeout time.Duration, v1 V1) {
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(V1ResponseHeaders)
 		r.Group(func(r chi.Router) {
-			r.Use(httpserver.RequestTimeout(requestTimeout))
+			r.Use(httpserver.RequestTimeout(requestTimeout), httpserver.ObserveRoutes(telemetry.RequestSpan(spanEveryRequest)))
 			v1.Bounded(r)
 		})
 		r.Group(v1.LongLived)
 	})
 }
 
-func untraced(r *http.Request) bool {
-	path := r.URL.Path
-	return path == "/health" || path == "/v1/events" ||
-		(r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/tracks/") && strings.HasSuffix(path, "/audio"))
-}
+func spanEveryRequest(*http.Request) bool { return false }

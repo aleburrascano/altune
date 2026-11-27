@@ -15,6 +15,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -368,10 +369,16 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: requestmetrics.NewRegistry()})
 	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
 	r.Get("/health", ok)
-	r.Get("/v1/events", ok)
-	r.Get("/v1/tracks/{id}/audio", ok)
-	r.Post("/v1/tracks/{id}/audio", ok)
-	r.Get("/v1/library", ok)
+	router.MountV1(r, time.Minute, router.V1{
+		Bounded: func(r chi.Router) {
+			r.Post("/tracks/{id}/audio", ok)
+			r.Get("/library", ok)
+		},
+		LongLived: func(r chi.Router) {
+			r.Get("/events", ok)
+			r.Get("/tracks/{id}/audio", ok)
+		},
+	})
 
 	for _, req := range []struct {
 		method, path string
@@ -388,6 +395,43 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 		if traced := len(recorder.Ended()) > before; traced != req.traced {
 			t.Errorf("%s %s traced = %v, want %v", req.method, req.path, traced, req.traced)
 		}
+	}
+}
+
+func TestRouter_TheRequestCompleteLineCarriesTheTraceIdOfTracedRoutesOnly(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+	logs := logging.CaptureJSON(t, slog.LevelInfo)
+	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: requestmetrics.NewRegistry()})
+	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
+	router.MountV1(r, time.Minute, router.V1{
+		Bounded:   func(r chi.Router) { r.Get("/library", ok) },
+		LongLived: func(r chi.Router) { r.Get("/events", ok) },
+	})
+
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/library", nil))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/events", nil))
+
+	traceIDs := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil || rec["msg"] != "request.complete" {
+			continue
+		}
+		id, _ := rec["trace_id"].(string)
+		traceIDs[rec["path"].(string)] = id
+	}
+	ended := recorder.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("spans = %d, want one for the bounded route", len(ended))
+	}
+	if want := ended[0].SpanContext().TraceID().String(); traceIDs["/v1/library"] != want {
+		t.Errorf("trace_id on the bounded route's line = %q, want the span's %q", traceIDs["/v1/library"], want)
+	}
+	if got, seen := traceIDs["/v1/events"]; !seen || got != "" {
+		t.Errorf("long-lived route line: seen = %v, trace_id = %q, want a line with no trace_id", seen, got)
 	}
 }
 

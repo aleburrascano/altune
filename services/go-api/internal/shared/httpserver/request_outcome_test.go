@@ -46,6 +46,30 @@ func TestObserveRequests_EveryObserverReadsTheSameOutcomeFromOneMeasurement(t *t
 	}
 }
 
+func TestObserveRoutes_OnlyTheRoutesUnderItAreObservedAndShareTheOneMeasurement(t *testing.T) {
+	var global, routed []httpserver.Outcome
+	router := chi.NewRouter()
+	router.Use(httpserver.ObserveRequests(time.Now, recordingObserver(&global)))
+	router.Group(func(r chi.Router) {
+		r.Use(httpserver.ObserveRoutes(recordingObserver(&routed)))
+		r.Get("/observed", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
+	})
+	router.Get("/plain", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/plain", nil))
+	if len(routed) != 0 {
+		t.Fatalf("a route outside the group was observed: %+v", routed)
+	}
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/observed", nil))
+
+	if len(global) != 2 || len(routed) != 1 {
+		t.Fatalf("global = %d outcomes, routed = %d, want 2 and 1", len(global), len(routed))
+	}
+	if routed[0] != global[1] || routed[0].Route != "/observed" || routed[0].Status != http.StatusAccepted {
+		t.Errorf("routed outcome = %+v, want the global measurement of the same request %+v", routed[0], global[1])
+	}
+}
+
 func TestObserveRequests_FinishersRunInReverseOrderAndAPanickingOneDoesNotStopTheRest(t *testing.T) {
 	var order []string
 	observer := func(name string, boom bool) httpserver.Observer {
