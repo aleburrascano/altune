@@ -11,13 +11,13 @@ var ErrBodyTooLarge = errors.New("outbound response body exceeds the client body
 
 var errBodyCapNotPositive = errors.New("outbound client body cap must be positive")
 
-type ClientOption func(*clientConfig) error
+type clientOption func(*clientConfig) error
 
 type clientConfig struct {
 	bodyCap int64
 }
 
-func WithBodyCap(limit int64) ClientOption {
+func WithBodyCap(limit int64) clientOption {
 	return func(c *clientConfig) error {
 		if limit <= 0 {
 			return errBodyCapNotPositive

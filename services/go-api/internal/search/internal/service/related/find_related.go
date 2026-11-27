@@ -75,8 +75,8 @@ func (s *FindRelatedService) Execute(
 	}
 	groups := dedupRelatedAgainstOrganic(fan.wait(), organicResults)
 
-	stats := s.memo.Stats()
-	slog.InfoContext(ctx, "related.complete", "groups", len(groups), "memoized", fan.memoHits, "memo_hits", stats.Hits, "memo_misses", stats.Misses)
+	hits, misses := s.memo.Stats()
+	slog.InfoContext(ctx, "related.complete", "groups", len(groups), "memoized", fan.memoHits, "memo_hits", hits, "memo_misses", misses)
 	return groups
 }
 

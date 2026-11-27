@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
-type Bucket interface {
+type bucket interface {
 	TokensAt(time.Time) float64
 	Burst() int
 }
 
-type Keyed[K comparable, V Bucket] struct {
+type Keyed[K comparable, V bucket] struct {
 	mu        sync.Mutex
 	ttl       time.Duration
 	max       int
@@ -22,7 +22,7 @@ type Keyed[K comparable, V Bucket] struct {
 	rotatedAt time.Time
 }
 
-func NewKeyed[K comparable, V Bucket](idleAfter time.Duration, maxKeys int, now func() time.Time) *Keyed[K, V] {
+func NewKeyed[K comparable, V bucket](idleAfter time.Duration, maxKeys int, now func() time.Time) *Keyed[K, V] {
 	return &Keyed[K, V]{
 		ttl:     max(idleAfter, time.Nanosecond),
 		max:     max(maxKeys, 1),

@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/shared/parallel"
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -52,10 +54,15 @@ func TestSlots_AcquireGivesUpWhenTheContextEnds(t *testing.T) {
 	}
 }
 
-func TestNewSlots_RefusesALimitBelowOne(t *testing.T) {
+func TestMustNewSlots_RefusesALimitBelowOne(t *testing.T) {
 	for _, n := range []int{0, -1} {
-		if _, err := parallel.NewSlots(n); !errors.Is(err, parallel.ErrSlotsBelowOne) {
-			t.Errorf("NewSlots(%d) error = %v, want ErrSlotsBelowOne", n, err)
-		}
+		func() {
+			defer func() {
+				if got := recover(); got == nil || !strings.Contains(fmt.Sprint(got), "at least one slot") {
+					t.Errorf("MustNewSlots(%d) recovered %v, want a panic naming the one-slot minimum", n, got)
+				}
+			}()
+			parallel.MustNewSlots(n)
+		}()
 	}
 }

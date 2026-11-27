@@ -416,8 +416,8 @@ func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup port
 		}
 	}
 	if len(candidates) > 0 {
-		stats := cache.memo.Stats()
-		slog.InfoContext(ctx, "acquisition.recording_facts_memo", "hits", stats.Hits, "misses", stats.Misses)
+		hits, misses := cache.memo.Stats()
+		slog.InfoContext(ctx, "acquisition.recording_facts_memo", "hits", hits, "misses", misses)
 	}
 	return facts
 }

@@ -6,8 +6,10 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,8 +147,8 @@ func TestUserID(t *testing.T) {
 
 	t.Run("a route without the auth middleware fails closed", func(t *testing.T) {
 		defer func() {
-			if got := recover(); !errors.Is(asError(got), requestuser.ErrNoSignedInUser) {
-				t.Errorf("recovered %v, want requestuser.ErrNoSignedInUser", got)
+			if got := recover(); !strings.Contains(fmt.Sprint(got), "no signed-in user") {
+				t.Errorf("recovered %v, want the no-signed-in-user panic", got)
 			}
 		}()
 
@@ -154,11 +156,6 @@ func TestUserID(t *testing.T) {
 
 		t.Error("UserID returned for a request with no user")
 	})
-}
-
-func asError(v any) error {
-	err, _ := v.(error)
-	return err
 }
 
 func TestClientKey(t *testing.T) {

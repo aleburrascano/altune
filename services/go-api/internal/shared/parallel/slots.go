@@ -6,21 +6,21 @@ import (
 	"fmt"
 )
 
-var ErrSlotsBelowOne = errors.New("a slot pool needs at least one slot")
+var errSlotsBelowOne = errors.New("a slot pool needs at least one slot")
 
 type Slots struct {
 	free chan struct{}
 }
 
-func NewSlots(n int) (*Slots, error) {
+func newSlots(n int) (*Slots, error) {
 	if n < 1 {
-		return nil, fmt.Errorf("%w: got %d", ErrSlotsBelowOne, n)
+		return nil, fmt.Errorf("%w: got %d", errSlotsBelowOne, n)
 	}
 	return &Slots{free: make(chan struct{}, n)}, nil
 }
 
 func MustNewSlots(n int) *Slots {
-	s, err := NewSlots(n)
+	s, err := newSlots(n)
 	if err != nil {
 		panic(err)
 	}

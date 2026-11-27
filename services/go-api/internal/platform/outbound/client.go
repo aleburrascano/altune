@@ -9,7 +9,7 @@ import (
 
 var ErrClientTimeoutRequired = errors.New("outbound client needs a positive timeout")
 
-func NewClient(timeout time.Duration, transport http.RoundTripper, opts ...ClientOption) (*http.Client, error) {
+func NewClient(timeout time.Duration, transport http.RoundTripper, opts ...clientOption) (*http.Client, error) {
 	if timeout <= 0 {
 		return nil, ErrClientTimeoutRequired
 	}
@@ -25,7 +25,7 @@ func NewClient(timeout time.Duration, transport http.RoundTripper, opts ...Clien
 	return &http.Client{Timeout: timeout, Transport: transport}, nil
 }
 
-func MustNewClient(timeout time.Duration, transport http.RoundTripper, opts ...ClientOption) *http.Client {
+func MustNewClient(timeout time.Duration, transport http.RoundTripper, opts ...clientOption) *http.Client {
 	client, err := NewClient(timeout, transport, opts...)
 	if err != nil {
 		panic(err)

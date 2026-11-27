@@ -100,9 +100,9 @@ func TestDoCapped_ReturnsAnErrorStatusWithItsBodyAndNoError(t *testing.T) {
 		_, _ = io.WriteString(w, "short and stout")
 	}))
 	t.Cleanup(srv.Close)
-	req, err := outbound.NewGetRequest(context.Background(), srv.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
 	if err != nil {
-		t.Fatalf("NewGetRequest: %v", err)
+		t.Fatalf("NewRequestWithContext: %v", err)
 	}
 
 	status, body, err := outbound.DoCapped(srv.Client(), req, 5)

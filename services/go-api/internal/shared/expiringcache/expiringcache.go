@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-type Stats struct {
-	Hits, Misses uint64
-}
-
 type Memo[K comparable, V any] struct {
 	mu        sync.Mutex
 	ttl       time.Duration
@@ -50,8 +46,8 @@ func (m *Memo[K, V]) Get(key K) (V, bool) {
 	return value, ok
 }
 
-func (m *Memo[K, V]) Stats() Stats {
-	return Stats{Hits: m.hits.Load(), Misses: m.misses.Load()}
+func (m *Memo[K, V]) Stats() (hits, misses uint64) {
+	return m.hits.Load(), m.misses.Load()
 }
 
 func (m *Memo[K, V]) Peek(key K) (V, bool) {

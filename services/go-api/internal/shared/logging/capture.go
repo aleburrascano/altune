@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-type TB interface {
+type tb interface {
 	Helper()
 	Cleanup(func())
 }
@@ -40,32 +40,32 @@ func (c *Capture) Reset() {
 	c.buf.Reset()
 }
 
-func CaptureText(t TB, level slog.Level) *Capture {
+func CaptureText(t tb, level slog.Level) *Capture {
 	t.Helper()
 	c := &Capture{}
 	UseHandler(t, slog.NewTextHandler(c, &slog.HandlerOptions{Level: level}))
 	return c
 }
 
-func CaptureJSON(t TB, level slog.Level) *Capture {
+func CaptureJSON(t tb, level slog.Level) *Capture {
 	t.Helper()
 	c := &Capture{}
 	UseHandler(t, slog.NewJSONHandler(c, &slog.HandlerOptions{Level: level}))
 	return c
 }
 
-func CaptureRing(t TB, level string) *RingBuffer {
+func CaptureRing(t tb, level string) *RingBuffer {
 	t.Helper()
 	t.Cleanup(Swap(slog.Default()))
 	return Setup(level)
 }
 
-func Silence(t TB) {
+func Silence(t tb) {
 	t.Helper()
 	UseHandler(t, slog.DiscardHandler)
 }
 
-func UseHandler(t TB, h slog.Handler) {
+func UseHandler(t tb, h slog.Handler) {
 	t.Helper()
 	t.Cleanup(Swap(slog.New(h)))
 }

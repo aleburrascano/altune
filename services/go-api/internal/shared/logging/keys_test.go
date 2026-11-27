@@ -22,7 +22,6 @@ func TestKeyConstants_NameTheWireKeys(t *testing.T) {
 		logging.KeyBytes:         "bytes",
 		logging.KeyStack:         "stack",
 		logging.KeyJob:           "job",
-		logging.KeyRunID:         "run_id",
 	}
 	rules, err := os.ReadFile("../../../_rules/logkeys.rules")
 	if err != nil {

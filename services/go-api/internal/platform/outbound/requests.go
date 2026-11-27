@@ -64,7 +64,7 @@ func newRequest(ctx context.Context, method, rawURL string, body io.Reader, opts
 	return req, nil
 }
 
-func NewGetRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http.Request, error) {
+func newGetRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http.Request, error) {
 	return newRequest(ctx, http.MethodGet, rawURL, http.NoBody, opts)
 }
 
@@ -72,7 +72,7 @@ func NewHeadRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*htt
 	return newRequest(ctx, http.MethodHead, rawURL, http.NoBody, opts)
 }
 
-func NewPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...ReqOption) (*http.Request, error) {
+func newPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...ReqOption) (*http.Request, error) {
 	return newRequest(retrysafe.Mark(ctx), http.MethodPost, rawURL, body, opts)
 }
 
@@ -118,7 +118,7 @@ func GetJSON(ctx context.Context, client *http.Client, rawURL string, dst any, o
 }
 
 func GetJSONWithStatus(ctx context.Context, client *http.Client, rawURL string, dst any, opts ...ReqOption) (int, error) {
-	req, err := NewGetRequest(ctx, rawURL, opts...)
+	req, err := newGetRequest(ctx, rawURL, opts...)
 	if err != nil {
 		return 0, err
 	}
@@ -126,7 +126,7 @@ func GetJSONWithStatus(ctx context.Context, client *http.Client, rawURL string, 
 }
 
 func PostJSON(ctx context.Context, client *http.Client, rawURL string, body []byte, dst any, opts ...ReqOption) (int, error) {
-	req, err := NewPostRequest(ctx, rawURL, bytes.NewReader(body), opts...)
+	req, err := newPostRequest(ctx, rawURL, bytes.NewReader(body), opts...)
 	if err != nil {
 		return 0, err
 	}
@@ -153,7 +153,7 @@ func GetBytes(ctx context.Context, client *http.Client, rawURL string, opts ...R
 }
 
 func GetBytesCapped(ctx context.Context, client *http.Client, rawURL string, limit int64, opts ...ReqOption) (int, []byte, error) {
-	req, err := NewGetRequest(ctx, rawURL, opts...)
+	req, err := newGetRequest(ctx, rawURL, opts...)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -195,7 +195,7 @@ func PostBytesCappedOK(ctx context.Context, client *http.Client, rawURL string, 
 }
 
 func PostBytesCapped(ctx context.Context, client *http.Client, rawURL string, body io.Reader, limit int64, opts ...ReqOption) (int, []byte, error) {
-	req, err := NewPostRequest(ctx, rawURL, body, opts...)
+	req, err := newPostRequest(ctx, rawURL, body, opts...)
 	if err != nil {
 		return 0, nil, err
 	}

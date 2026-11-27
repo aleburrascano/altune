@@ -146,8 +146,8 @@ func (s *YouTubeAudioSearcher) inspectCached(ctx context.Context, trackURL strin
 		return inspection{}, err
 	}
 	s.inspections.Put(trackURL, result)
-	stats := s.inspections.Stats()
-	slog.InfoContext(ctx, "acquisition.inspect_memo", "hits", stats.Hits, "misses", stats.Misses)
+	hits, misses := s.inspections.Stats()
+	slog.InfoContext(ctx, "acquisition.inspect_memo", "hits", hits, "misses", misses)
 	return result, nil
 }
 

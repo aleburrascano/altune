@@ -6,8 +6,7 @@ import (
 )
 
 var (
-	ErrTokenExpired   = signedinuser.ErrTokenExpired
-	ErrNoSignedInUser = httpuser.ErrNoSignedInUser
+	ErrTokenExpired = signedinuser.ErrTokenExpired
 )
 
 var (

@@ -183,8 +183,8 @@ func TestMemo_StatsCountEveryGetAsAHitOrAMiss(t *testing.T) {
 	c.advance(2 * time.Hour)
 	absent(t, m, "a")
 
-	if got, want := m.Stats(), (expiringcache.Stats{Hits: 2, Misses: 2}); got != want {
-		t.Errorf("Stats = %+v; want %+v", got, want)
+	if hits, misses := m.Stats(); hits != 2 || misses != 2 {
+		t.Errorf("Stats = (%d, %d); want (2, 2)", hits, misses)
 	}
 }
 
@@ -198,7 +198,7 @@ func TestMemo_PeekServesWithoutCounting(t *testing.T) {
 	if _, ok := m.Peek("b"); ok {
 		t.Error("Peek served an unknown key")
 	}
-	if got := m.Stats(); got != (expiringcache.Stats{}) {
-		t.Errorf("Stats = %+v; want zero after Peek only", got)
+	if hits, misses := m.Stats(); hits != 0 || misses != 0 {
+		t.Errorf("Stats = (%d, %d); want zero after Peek only", hits, misses)
 	}
 }
