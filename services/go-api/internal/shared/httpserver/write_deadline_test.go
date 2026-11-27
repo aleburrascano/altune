@@ -84,9 +84,9 @@ func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 	}))
 
 	conn, br := slowclienttest.Get(t, srv, "/", nil)
-	slowclienttest.Get(t, srv, "/probe", nil)
 	resp := slowclienttest.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
+	slowclienttest.Get(t, srv, "/probe", nil)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil || string(body) != "late frame" {
 		t.Fatalf("body = %q, err = %v; want the frame written after the route deadline", body, err)
