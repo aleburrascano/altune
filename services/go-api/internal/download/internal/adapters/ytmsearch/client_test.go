@@ -227,12 +227,26 @@ func TestClient_AnOutageIsSourceUnavailable(t *testing.T) {
 
 func TestClient_ACancelledCallerIsNotAnOutage(t *testing.T) {
 	hung := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	arrived := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-hung
+	}))
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(hung) })
 	client := clientFor(srv, time.Minute)
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(30*time.Millisecond, cancel)
+	t.Cleanup(cancel)
+	go func() {
+		select {
+		case <-arrived:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 
 	_, searchErr := client.SearchSongs(ctx, "anything")
 	_, watchErr := client.Watch(ctx, "XDC3uH1FSgw")

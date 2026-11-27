@@ -46,32 +46,22 @@ func getMissingTrack(ctx context.Context, pool *pgxpool.Pool, metrics library.DB
 	return err
 }
 
-func cancelledAfter(d time.Duration) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(d, cancel)
-	return ctx, cancel
-}
-
 func TestPostgresRepos_EachFailureShapeIsClassifiedTransientOrNot(t *testing.T) {
 	cases := []struct {
 		name      string
 		addr      func(t *testing.T) string
-		ctx       func() (context.Context, context.CancelFunc)
+		ctx       func(addr string) (context.Context, context.CancelFunc)
 		transient bool
 	}{
 		{"connection refused", refusedAddr, nil, true},
-		{"caller deadline passes while the server hangs", hungAddr, func() (context.Context, context.CancelFunc) {
+		{"caller deadline passes while the server hangs", hungAddr, func(string) (context.Context, context.CancelFunc) {
 			return context.WithTimeout(context.Background(), 200*time.Millisecond)
 		}, true},
-		{"caller cancels while the server hangs", hungAddr, func() (context.Context, context.CancelFunc) {
-			return cancelledAfter(200 * time.Millisecond)
-		}, false},
-		{"caller deadline passes mid-query", silentAfterStartupAddr, func() (context.Context, context.CancelFunc) {
+		{"caller cancels while the server hangs", hungAddr, cancelledOnceEngaged, false},
+		{"caller deadline passes mid-query", silentAfterStartupAddr, func(string) (context.Context, context.CancelFunc) {
 			return context.WithTimeout(context.Background(), 200*time.Millisecond)
 		}, true},
-		{"caller cancels mid-query", silentAfterStartupAddr, func() (context.Context, context.CancelFunc) {
-			return cancelledAfter(200 * time.Millisecond)
-		}, false},
+		{"caller cancels mid-query", silentAfterStartupAddr, cancelledOnceEngaged, false},
 		{"unreadable reply to the startup", garbledStartupAddr, nil, true},
 		{"connection reset mid-query", resettingAddr, nil, true},
 		{"backend terminated mid-query (57P01)", terminatingAddr("57P01"), nil, true},
@@ -89,13 +79,14 @@ func TestPostgresRepos_EachFailureShapeIsClassifiedTransientOrNot(t *testing.T) 
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			addr := tc.addr(t)
 			ctx, cancel := context.Background(), context.CancelFunc(func() {})
 			if tc.ctx != nil {
-				ctx, cancel = tc.ctx()
+				ctx, cancel = tc.ctx(addr)
 			}
 			defer cancel()
 
-			err := getMissingTrack(ctx, poolAt(t, tc.addr(t)), librarytest.DiscardDBCallMetrics())
+			err := getMissingTrack(ctx, poolAt(t, addr), librarytest.DiscardDBCallMetrics())
 
 			if err == nil {
 				t.Fatal("GetByID succeeded against a failing database")
@@ -300,6 +291,36 @@ func refusedAddr(t *testing.T) string {
 	return addr
 }
 
+type engagement struct {
+	once sync.Once
+	done chan struct{}
+}
+
+var engagements sync.Map
+
+func engagementOf(addr string) *engagement {
+	e, _ := engagements.LoadOrStore(addr, &engagement{done: make(chan struct{})})
+	return e.(*engagement)
+}
+
+func markEngaged(conn net.Conn) {
+	e := engagementOf(conn.LocalAddr().String())
+	e.once.Do(func() { close(e.done) })
+}
+
+func cancelledOnceEngaged(addr string) (context.Context, context.CancelFunc) {
+	engagements.Delete(addr)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-engagementOf(addr).done:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
+}
+
 func hungAddr(t *testing.T) string {
 	t.Helper()
 	return fakePGAddr(t, func(conn net.Conn) {
@@ -308,6 +329,7 @@ func hungAddr(t *testing.T) string {
 			if _, err := conn.Read(buf); err != nil {
 				return
 			}
+			markEngaged(conn)
 		}
 	})
 }
@@ -322,6 +344,7 @@ func silentAfterStartupAddr(t *testing.T) string {
 				if _, quit := msg.(*pgproto3.Terminate); quit {
 					return
 				}
+				markEngaged(conn)
 			}
 		}
 	})

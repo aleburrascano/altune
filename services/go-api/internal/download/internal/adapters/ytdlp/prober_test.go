@@ -125,9 +125,9 @@ func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing
 }
 
 func TestFfprobeProber_ValidateDecodable_PropagatesACancelledCaller(t *testing.T) {
-	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.NoopVerifySkipRecorder())
-	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(50*time.Millisecond, cancel)
+	started := filepath.Join(t.TempDir(), "started")
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\ntouch '"+started+"'\nsleep 30\n"), download.NoopVerifySkipRecorder())
+	ctx := cancelOnceFileExists(t, started)
 
 	err := p.ValidateDecodable(ctx, decodedFile)
 

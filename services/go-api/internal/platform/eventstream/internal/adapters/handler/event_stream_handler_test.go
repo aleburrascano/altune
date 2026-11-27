@@ -585,14 +585,15 @@ func (w *blockingFlushWriter) FlushError() error {
 			return errors.New("flush blocked with no deadline")
 		}
 	}
-	if d := time.Until(dl); d > 0 {
-		timer := time.NewTimer(d)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-w.stop:
-			return errors.New("stream closed")
-		}
+	if !time.Now().Before(dl) {
+		return os.ErrDeadlineExceeded
+	}
+	expired, cancel := context.WithDeadline(context.Background(), dl)
+	defer cancel()
+	select {
+	case <-expired.Done():
+	case <-w.stop:
+		return errors.New("stream closed")
 	}
 	return os.ErrDeadlineExceeded
 }
