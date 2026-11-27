@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { guardedMutationOptions } from '@shared/session';
-import { detailKeys, libraryKeys, useAppMutation } from '@shared/query';
+import { detailKeys, libraryKeys, refetchWithoutEvent, useAppMutation } from '@shared/query';
 import type { RetryOptions } from '@features/settings/view/retryOptions';
 import { ContractError, NetworkError } from '@shared/failure';
 import { useSettingsPort } from '@features/settings/view/SettingsPortProvider';
@@ -46,9 +46,11 @@ export function useBackfillFeatured(retryOptions: RetryOptions) {
     ...guardedMutationOptions({
       mutationFn: () => backfillWholeLibrary(port),
       onSuccess: () => {
-        void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
-        void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
-        void queryClient.invalidateQueries({ queryKey: detailKeys.albumTracksPrefix });
+        refetchWithoutEvent(queryClient, [
+          libraryKeys.tracksPrefix,
+          libraryKeys.featuringPrefix,
+          detailKeys.albumTracksPrefix,
+        ]);
       },
     }),
     ...retryOptions,

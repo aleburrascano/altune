@@ -8,6 +8,7 @@ import type { MenuAnchor } from '@shared/ui';
 import type { Selection } from '@features/library/view/useSelection';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { LibraryRow } from '@features/library/view/LibraryRow';
+import { canRetry, isReady } from '@shared/catalog';
 
 export type PlaylistTrackRowProps = {
   track: TrackResponse;
@@ -41,8 +42,8 @@ function selectableProps(p: PlaylistTrackRowProps): Partial<LibraryRowProps> {
 }
 
 function statusProps(p: PlaylistTrackRowProps): Partial<LibraryRowProps> {
-  if (p.track.acquisition_status === 'ready') return { onPlay: p.onPlay };
-  if (p.track.acquisition_status !== 'failed') return {};
+  if (isReady(p.track.acquisition_status)) return { onPlay: p.onPlay };
+  if (!canRetry(p.track.acquisition_status)) return {};
   return { onRetry: () => p.retry.mutate(p.track.id) };
 }
 

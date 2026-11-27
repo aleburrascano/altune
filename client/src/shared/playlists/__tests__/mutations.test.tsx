@@ -559,8 +559,8 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
   );
 });
 
-describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
-  it('invalidates exactly playlistKeys.list and playlistKeys.detail(playlistId), by identity, on success', async () => {
+describe('useAddTracksToPlaylist(): leaves invalidation to the playlist events', () => {
+  it('invalidates nothing itself on success: tracks_added_to_playlist refreshes the list and details', async () => {
     __http.reply('POST /v1/playlists/p1/tracks/batch', {
       status: 200,
       json: { added: 1, skipped: 0 },
@@ -578,13 +578,10 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
       });
     });
 
-    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
-    expect(queryClient.invalidated).toContainEqual({
-      queryKey: playlistKeys.detail(asPlaylistId('p1')),
-    });
+    expect(queryClient.invalidated).toEqual([]);
   });
 
-  it('invalidates the same two keys on failure', async () => {
+  it('invalidates nothing itself on failure either: the optimistic count is rolled back', async () => {
     __http.fail('POST /v1/playlists/p1/tracks/batch');
     const queryClient = newClient();
 
@@ -598,16 +595,13 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
       ).rejects.toThrow();
     });
 
-    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
-    expect(queryClient.invalidated).toContainEqual({
-      queryKey: playlistKeys.detail(asPlaylistId('p1')),
-    });
+    expect(queryClient.invalidated).toEqual([]);
   });
 });
 
-describe('useAddTracksToPlaylist(): replay is not idempotent, and the list invalidation is what bounds it', () => {
-  it('bumps track_count again on a second identical add, re-issuing the list invalidation a real refetch would correct it with', async () => {
-    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+describe('useAddTracksToPlaylist(): replay is not idempotent, and the skipped-tracks reply is what bounds it', () => {
+  it('bumps track_count again on a second identical add, which the server skips and no event follows, so the list is refetched', async () => {
+    __http.replyOnce('POST /v1/playlists/p1/tracks/batch', {
       status: 200,
       json: { added: 2, skipped: 0 },
     });
@@ -627,6 +621,10 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the list inval
         trackIds: [asTrackId('t1'), asTrackId('t2')],
       });
     });
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 0, skipped: 2 },
+    });
     await act(async () => {
       await result.current.mutateAsync({
         playlistId: asPlaylistId('p1'),
@@ -640,7 +638,7 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the list inval
     const listInvalidations = queryClient.invalidated.filter(
       (filters) => filters?.queryKey === playlistKeys.list,
     );
-    expect(listInvalidations).toHaveLength(2);
+    expect(listInvalidations).toHaveLength(1);
   });
 });
 
@@ -852,8 +850,8 @@ describe('useRenamePlaylist(): onError rollback', () => {
   });
 });
 
-describe('useRenamePlaylist(): onSettled invalidation', () => {
-  it('invalidates exactly playlistKeys.detail(playlistId) and playlistKeys.list, by identity', async () => {
+describe('useRenamePlaylist(): leaves invalidation to the playlist events', () => {
+  it('invalidates nothing itself: playlist_renamed patches the name', async () => {
     __http.reply('PATCH /v1/playlists/p1', {
       status: 200,
       json: makePlaylist({ id: asPlaylistId('p1'), name: 'New Name' }),
@@ -868,15 +866,12 @@ describe('useRenamePlaylist(): onSettled invalidation', () => {
       await result.current.mutateAsync('New Name');
     });
 
-    expect(queryClient.invalidated).toContainEqual({
-      queryKey: playlistKeys.detail(asPlaylistId('p1')),
-    });
-    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+    expect(queryClient.invalidated).toEqual([]);
   });
 });
 
-describe('useDeletePlaylist(): onSuccess invalidation', () => {
-  it('invalidates exactly playlistKeys.list and playlistKeys.detail(playlistId), by identity', async () => {
+describe('useDeletePlaylist(): leaves invalidation to the playlist events', () => {
+  it('invalidates nothing itself: playlist_deleted refreshes the list and details', async () => {
     __http.reply('DELETE /v1/playlists/p1', { status: 204 });
     const queryClient = newClient();
 
@@ -888,10 +883,7 @@ describe('useDeletePlaylist(): onSuccess invalidation', () => {
       await result.current.mutateAsync();
     });
 
-    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
-    expect(queryClient.invalidated).toContainEqual({
-      queryKey: playlistKeys.detail(asPlaylistId('p1')),
-    });
+    expect(queryClient.invalidated).toEqual([]);
   });
 });
 
@@ -1149,8 +1141,8 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
   );
 });
 
-describe('useRemoveTracksFromPlaylist(): onSettled invalidation', () => {
-  it('invalidates exactly playlistKeys.detail(playlistId) and playlistKeys.list, by identity', async () => {
+describe('useRemoveTracksFromPlaylist(): leaves invalidation to the playlist events', () => {
+  it('invalidates nothing itself: tracks_removed_from_playlist patches the detail and refreshes the list', async () => {
     __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 1 } });
     const queryClient = newClient();
 
@@ -1162,10 +1154,7 @@ describe('useRemoveTracksFromPlaylist(): onSettled invalidation', () => {
       await result.current.mutateAsync([asTrackId('t1')]);
     });
 
-    expect(queryClient.invalidated).toContainEqual({
-      queryKey: playlistKeys.detail(asPlaylistId('p1')),
-    });
-    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+    expect(queryClient.invalidated).toEqual([]);
   });
 });
 
@@ -1636,8 +1625,8 @@ describe('create', () => {
     });
   });
 
-  describe('onSettled invalidation (:29, :62) — exact key identity', () => {
-    it('useCreatePlaylist invalidates playlistKeys.list, and only that key, on success', async () => {
+  describe('leaves invalidation to the playlist events', () => {
+    it('useCreatePlaylist invalidates nothing itself on success: playlist_created refreshes the list', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylist(), {
@@ -1648,11 +1637,10 @@ describe('create', () => {
         await result.current.mutateAsync('Focus');
       });
 
-      expect(queryClient.invalidated).toHaveLength(1);
-      expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+      expect(queryClient.invalidated).toEqual([]);
     });
 
-    it('useCreatePlaylist invalidates playlistKeys.list even when the create call fails', async () => {
+    it('useCreatePlaylist invalidates nothing itself when the create call fails', async () => {
       __http.reply('POST /v1/playlists', { status: 500 });
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylist(), {
@@ -1663,10 +1651,10 @@ describe('create', () => {
         await result.current.mutateAsync('Focus').catch(() => {});
       });
 
-      expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+      expect(queryClient.invalidated).toEqual([]);
     });
 
-    it('useCreatePlaylistWithTracks invalidates playlistKeys.list, and only that key, even when the add step failed and the playlist was rolled back', async () => {
+    it('useCreatePlaylistWithTracks invalidates nothing itself, even when the add step failed and the playlist was rolled back', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
       __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.reply('DELETE /v1/playlists/p1', { status: 204 });
@@ -1679,8 +1667,7 @@ describe('create', () => {
         await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
       });
 
-      expect(queryClient.invalidated).toHaveLength(1);
-      expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+      expect(queryClient.invalidated).toEqual([]);
     });
   });
 

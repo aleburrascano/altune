@@ -22,6 +22,7 @@ import { LibraryRowSelection } from '@features/library/view/LibraryRowSelection'
 import { libraryRowAccessibilityLabel } from '@features/library/core/libraryRowLabels';
 import { libraryRowWideStyle, WIDE_TRACK_COLUMNS } from '@features/library/view/libraryRowStyle';
 import type { TrackResponse } from '@shared/catalog';
+import { isFailedTrack, isReady } from '@shared/catalog';
 
 type WideRowProps = {
   track: TrackResponse;
@@ -47,7 +48,7 @@ function playTrackHandler(
   onPress: () => void,
 ) {
   return () => {
-    if (track.acquisition_status === 'ready' && onPlay) onPlay();
+    if (isReady(track.acquisition_status) && onPlay) onPlay();
     else onPress();
   };
 }
@@ -99,7 +100,7 @@ function WideRowFailure(props: {
   retrying: boolean;
   onRetry: (() => void) | undefined;
 }): ReactElement | null {
-  if (props.track.acquisition_status !== 'failed') return null;
+  if (!isFailedTrack(props.track)) return null;
   return (
     <LibraryRowFailure track={props.track} retrying={props.retrying} onRetry={props.onRetry} />
   );

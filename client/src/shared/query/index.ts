@@ -9,6 +9,7 @@ export {
 export { createTransientRetryOptions, transientRetryOptions } from '@shared/query/core/retryDelay';
 export {
   useAppMutation,
+  refetchWithoutEvent,
   useOptimisticMutation,
   appMutationCache,
   appQueryCache,

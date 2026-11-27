@@ -19,7 +19,7 @@ export {
 export {
   completeDownload,
   failDownload,
-  isStaleDownloadPhase,
+  isStaleStart,
   progressDownload,
   rememberDownloadMeta,
   startDownload,
@@ -47,8 +47,10 @@ export {
   useTrackIdForIdentity,
   useTrackStatus,
   useTrackStatusStore,
-} from '@shared/acquisition/state/trackStatusStore';
-export type { TrackStatus } from '@shared/acquisition/state/trackStatusStore';
+} from '@shared/acquisition/view/trackStatusStore';
+export type { TrackStatus } from '@shared/acquisition/view/trackStatusStore';
+export { nextLifecycle } from '@shared/acquisition/core/acquisitionLifecycle';
+export type { LifecycleEvent, LifecycleState } from '@shared/acquisition/core/acquisitionLifecycle';
 export { DownloadsBar } from '@shared/acquisition/view/DownloadsBar';
 export { DownloadsSheet } from '@shared/acquisition/view/DownloadsSheet';
 export {

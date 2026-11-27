@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
 import { useDownloadPhase } from '@shared/acquisition';
-import { withFeaturing } from '@shared/catalog';
+import { isFailedTrack, withFeaturing } from '@shared/catalog';
 import { Text, spacing } from '@shared/ui';
 import { LibraryRowFailure } from '@features/library/view/LibraryRowFailure';
 import { acquisitionProgressLabel, albumSuffix } from '@features/library/core/libraryRowLabels';
@@ -43,7 +43,7 @@ export function LibraryRowDetails({
           {progress}
         </Text>
       ) : null}
-      {track.acquisition_status === 'failed' ? (
+      {isFailedTrack(track) ? (
         <LibraryRowFailure track={track} retrying={retrying} onRetry={onRetry} />
       ) : null}
     </>

@@ -19,6 +19,7 @@ import { listContent } from '@features/library/view/listContentStyles';
 import { LibraryRow } from '@features/library/view/LibraryRow';
 import { WideTrackHeader } from '@features/library/view/WideTrackHeader';
 import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
+import { canRetry, isReady } from '@shared/catalog';
 type TracksListHeaderProps = {
   isWide: boolean;
   showShuffle: boolean;
@@ -119,8 +120,8 @@ type SelectionCallbacks = ReturnType<typeof useSelectionCallbacks>;
 
 function rowCallbackProps(track: TrackResponse, calls: TrackCallbacks) {
   return {
-    ...(track.acquisition_status === 'ready' ? { onPlay: calls.play } : null),
-    ...(track.acquisition_status === 'failed' ? { onRetry: calls.retry } : null),
+    ...(isReady(track.acquisition_status) ? { onPlay: calls.play } : null),
+    ...(canRetry(track.acquisition_status) ? { onRetry: calls.retry } : null),
     onPress: calls.press,
     onMore: calls.more,
   };

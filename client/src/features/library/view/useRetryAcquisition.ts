@@ -9,11 +9,12 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import {
+  type AcquisitionTransition,
   type TrackId,
+  acquisitionOf,
+  isPending,
   isSafeId,
   toPending,
-  acquisitionOf,
-  type AcquisitionTransition,
 } from '@shared/catalog';
 import { useAppMutation } from '@shared/query';
 import { forgetTrack, getTrackFromCaches, patchTrackInCaches } from '@shared/events';
@@ -169,7 +170,7 @@ function markPending(queryClient: QueryClient) {
 }
 
 function isStillPending(queryClient: QueryClient, trackId: TrackId): boolean {
-  return getTrackFromCaches(queryClient, trackId)?.acquisition_status === 'pending';
+  return isPending(getTrackFromCaches(queryClient, trackId)?.acquisition_status);
 }
 
 function restorePrior(queryClient: QueryClient, trackId: TrackId, { prior }: PriorAcquisition) {

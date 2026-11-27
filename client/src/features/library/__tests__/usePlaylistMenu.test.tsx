@@ -16,7 +16,6 @@ import {
 } from '@features/library/__tests__/recordingDialogs';
 import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore } from '@shared/offline';
-import { playlistKeys } from '@shared/query';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { PlaylistsPortProvider } from '@shared/playlists';
@@ -116,14 +115,6 @@ describe('usePlaylistDelete', () => {
       await deleteThrough(createMemoryNavigator('/library/playlist/pl1'));
 
       expect(__http.countFor(DELETE_ROUTE)).toBe(1);
-    });
-
-    it('marks the cached playlist list stale so it refetches without the deleted one', async () => {
-      queryClient.setQueryData(playlistKeys.list, { items: [] });
-
-      await deleteThrough(createMemoryNavigator('/library/playlist/pl1'));
-
-      expect(queryClient.getQueryState(playlistKeys.list)?.isInvalidated).toBe(true);
     });
 
     it('pops back to the previous screen when history exists', async () => {

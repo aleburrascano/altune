@@ -4,7 +4,7 @@ import type { Favorite, FavoritesResponse, FavoriteTarget } from '@shared/apiCli
 import { useFavoritesPort } from '@features/discovery/view/FavoritesPortProvider';
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 import { RETRY_TAIL } from '@shared/failure';
-import { discoveryKeys, useAppMutation, STALE } from '@shared/query';
+import { discoveryKeys, refetchWithoutEvent, useAppMutation, STALE } from '@shared/query';
 import { guardedMutationOptions, currentSessionEpoch, isSameSession } from '@shared/session';
 import { showFailureAlert } from '@shared/ui';
 
@@ -141,7 +141,7 @@ function settleLane({ queryClient, target, lane }: LaneRun): void {
   const lanes = lanesOf(queryClient);
   if (lanes.get(targetKey(target)) === lane) lanes.delete(targetKey(target));
   if (lanes.size > 0 || !isSameSession(lane.epoch)) return;
-  void queryClient.invalidateQueries({ queryKey: discoveryKeys.favorites });
+  refetchWithoutEvent(queryClient, [discoveryKeys.favorites]);
 }
 
 async function sendFavorite(port: FavoritesPort, { target, favorite }: SendRequest): Promise<void> {

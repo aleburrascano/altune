@@ -1,6 +1,6 @@
 import { useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
 
-import { useAppMutation, discoveryKeys } from '@shared/query';
+import { useAppMutation, discoveryKeys, refetchWithoutEvent } from '@shared/query';
 
 import { clearSearchHistory } from '@shared/apiClient';
 import type { DiscoverySearchHistoryResponse } from '@shared/catalog';
@@ -31,7 +31,7 @@ function rollbackClear(
   previous: DiscoverySearchHistoryResponse | undefined,
 ) {
   queryClient.setQueryData(discoveryKeys.history, previous);
-  void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
+  refetchWithoutEvent(queryClient, [discoveryKeys.history]);
 }
 
 function clearMutationOptions(queryClient: QueryClient) {

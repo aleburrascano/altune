@@ -10,6 +10,7 @@ import {
 } from '@shared/offline';
 import type { FailureAlert } from '@shared/ui';
 import type { ShowFailure } from '@features/library/core/libraryFailure';
+import { isReady } from '@shared/catalog';
 
 export type LibraryOffline = {
   supported: boolean;
@@ -44,7 +45,7 @@ export function offlineEligibility(
 ): { downloadableIds: TrackId[]; pinnedCount: number; allPinned: boolean } {
   const downloadableIds: TrackId[] = [];
   for (const t of tracks) {
-    if (t.acquisition_status === 'ready') downloadableIds.push(t.id);
+    if (isReady(t.acquisition_status)) downloadableIds.push(t.id);
   }
   const pinnedCount = downloadableIds.filter((id) => statusOf(id) === 'ready').length;
   const allPinned = downloadableIds.length > 0 && pinnedCount === downloadableIds.length;
