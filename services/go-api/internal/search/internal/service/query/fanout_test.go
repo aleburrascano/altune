@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -368,28 +369,32 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 }
 
 func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
-	bg := searchtest.NewTracker(t)
-	slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Millisecond))
-	done := make(chan *search.SearchOutput, 1)
-	go func() { done <- runSearch(t, svc, "humble") }()
-	waitFor(t, slow.started, "the provider call to start")
+	synctest.Test(t, func(t *testing.T) {
+		bg := searchtest.NewTracker(t)
+		slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
+		svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Millisecond))
+		done := make(chan *search.SearchOutput, 1)
+		go func() { done <- runSearch(t, svc, "humble") }()
+		waitFor(t, slow.started, "the provider call to start")
 
-	select {
-	case <-done:
-		t.Fatal("the search answered with nothing while a provider was still working")
-	case <-time.After(50 * time.Millisecond):
-	}
-	close(slow.release)
-
-	select {
-	case out := <-done:
-		if len(out.Results) != 1 {
-			t.Fatalf("results = %v, want the first answer that arrived", memory.Titles(out.Results))
+		time.Sleep(time.Second)
+		synctest.Wait()
+		select {
+		case <-done:
+			t.Fatal("the search answered with nothing while a provider was still working")
+		default:
 		}
-	case <-time.After(time.Second):
-		t.Fatal("search did not answer once the provider did")
-	}
+		close(slow.release)
+
+		select {
+		case out := <-done:
+			if len(out.Results) != 1 {
+				t.Fatalf("results = %v, want the first answer that arrived", memory.Titles(out.Results))
+			}
+		case <-time.After(time.Second):
+			t.Fatal("search did not answer once the provider did")
+		}
+	})
 }
 
 func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {

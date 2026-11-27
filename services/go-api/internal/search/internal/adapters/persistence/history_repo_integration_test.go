@@ -316,6 +316,7 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		t.Fatal("erase never reached its commit")
 	}
 
+	waitingBefore := dbtest.LockWaiters(t, pool)
 	written := make(chan error, 2)
 	go func() {
 		written <- persistence.NewPostgresSearchHistoryRepository(pool).Insert(ctx, &domain.SearchHistoryEntry{
@@ -330,10 +331,11 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		})
 	}()
 
+	dbtest.AwaitLockWaitersBeyond(t, pool, waitingBefore, 2, "both racing writes to queue behind the open erase")
 	select {
 	case err := <-written:
 		t.Fatalf("a write finished while the erase was still open (err %v), want it held until the erase commits", err)
-	case <-time.After(300 * time.Millisecond):
+	default:
 	}
 	gate.open()
 	if err := <-erased; err != nil {

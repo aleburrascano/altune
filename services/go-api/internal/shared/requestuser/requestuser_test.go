@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,17 +79,21 @@ func TestUntilTokenExpiry_EndsAtExpiryWithCause(t *testing.T) {
 }
 
 func TestUntilTokenExpiry_UnknownExpiryEndsOnlyWithParent(t *testing.T) {
-	ctx, cancel := requestuser.UntilTokenExpiry(context.Background())
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := requestuser.UntilTokenExpiry(context.Background())
+		defer cancel()
 
-	select {
-	case <-ctx.Done():
-		t.Fatal("context with no token expiry ended on its own")
-	case <-time.After(50 * time.Millisecond):
-	}
+		time.Sleep(time.Hour)
+		synctest.Wait()
+		select {
+		case <-ctx.Done():
+			t.Fatal("context with no token expiry ended on its own")
+		default:
+		}
 
-	cancel()
-	<-ctx.Done()
+		cancel()
+		<-ctx.Done()
+	})
 }
 
 func TestUntilTokenExpiry_UnknownExpiryEndsWithParent(t *testing.T) {
@@ -109,24 +114,30 @@ func TestUntilTokenExpiry_UnknownExpiryEndsWithParent(t *testing.T) {
 }
 
 func TestUntilTokenExpiry_ExpiryPassingBetweenTicks(t *testing.T) {
-	parent := requestuser.ContextWithTokenExpiry(context.Background(), time.Now().Add(60*time.Millisecond))
-	ctx, cancel := requestuser.UntilTokenExpiry(parent)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		parent := requestuser.ContextWithTokenExpiry(context.Background(), time.Now().Add(60*time.Millisecond))
+		ctx, cancel := requestuser.UntilTokenExpiry(parent)
+		defer cancel()
 
-	select {
-	case <-ctx.Done():
-		t.Fatal("context ended before the token expiry")
-	case <-time.After(20 * time.Millisecond):
-	}
+		time.Sleep(20 * time.Millisecond)
+		synctest.Wait()
+		select {
+		case <-ctx.Done():
+			t.Fatal("context ended before the token expiry")
+		default:
+		}
 
-	select {
-	case <-ctx.Done():
-	case <-time.After(2 * time.Second):
-		t.Fatal("context outlived the token expiry")
-	}
-	if !errors.Is(context.Cause(ctx), requestuser.ErrTokenExpired) {
-		t.Fatalf("cause = %v, want requestuser.ErrTokenExpired", context.Cause(ctx))
-	}
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		select {
+		case <-ctx.Done():
+		default:
+			t.Fatal("context outlived the token expiry")
+		}
+		if !errors.Is(context.Cause(ctx), requestuser.ErrTokenExpired) {
+			t.Fatalf("cause = %v, want requestuser.ErrTokenExpired", context.Cause(ctx))
+		}
+	})
 }
 
 func TestErrTokenExpired_LookAlikeIsNotTheSentinel(t *testing.T) {

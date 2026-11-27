@@ -34,6 +34,8 @@ func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing
 	dbtest.ExclusiveAcquisitionQueue(holder, pool)
 	releaseHolder := sync.OnceFunc(holder.finish)
 
+	alreadyWaiting := dbtest.LockWaiters(t, pool)
+
 	waiter := &cleanupRecorder{TB: t}
 	acquired := make(chan struct{})
 	go func() {
@@ -46,13 +48,15 @@ func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing
 		case <-acquired:
 			waiter.finish()
 		case <-time.After(10 * time.Second):
+			t.Error("the second test never released the acquisition queue request")
 		}
 	})
 
+	dbtest.AwaitLockWaitersBeyond(t, pool, alreadyWaiting, 1, "the second test to queue behind the holder")
 	select {
 	case <-acquired:
 		t.Fatal("a second test got the acquisition queue while the first still held it")
-	case <-time.After(300 * time.Millisecond):
+	default:
 	}
 
 	releaseHolder()

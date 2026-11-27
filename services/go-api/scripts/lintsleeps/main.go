@@ -161,8 +161,11 @@ func scanFile(path string) ([]violation, error) {
 			}
 			if clause, isClause := m.(*ast.CommClause); isClause && clause.Comm != nil {
 				inSelect[clause.Comm] = true
+				if isTest && timePkg != "" && receivesFromAfter(clause.Comm, timePkg) && !endsTheTest(clause.Body) {
+					found = append(found, violation{path, fset.Position(clause.Pos()).Line})
+				}
 			}
-			if stmt, isStmt := m.(*ast.ExprStmt); isStmt && !inSelect[stmt] && isTest && timePkg != "" && isReceiveFromAfter(stmt.X, timePkg) {
+			if stmt, isStmt := m.(ast.Stmt); isStmt && !inSelect[stmt] && isTest && timePkg != "" && receivesFromAfter(stmt, timePkg) {
 				found = append(found, violation{path, fset.Position(m.Pos()).Line})
 				return true
 			}
@@ -191,6 +194,43 @@ func scanFile(path string) ([]violation, error) {
 	}
 	walk(file)
 	return found, nil
+}
+
+func endsTheTest(body []ast.Stmt) bool {
+	ends := false
+	for _, stmt := range body {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.ReturnStmt:
+				ends = true
+			case *ast.CallExpr:
+				ends = ends || failsTheTest(x.Fun)
+			}
+			return !ends
+		})
+	}
+	return ends
+}
+
+func failsTheTest(fun ast.Expr) bool {
+	switch f := fun.(type) {
+	case *ast.SelectorExpr:
+		name := f.Sel.Name
+		return strings.HasPrefix(name, "Fatal") || strings.HasPrefix(name, "Error") || strings.HasPrefix(name, "Skip") || name == "FailNow" || name == "Fail"
+	case *ast.Ident:
+		return f.Name == "panic"
+	}
+	return false
+}
+
+func receivesFromAfter(stmt ast.Stmt, timePkg string) bool {
+	switch s := stmt.(type) {
+	case *ast.ExprStmt:
+		return isReceiveFromAfter(s.X, timePkg)
+	case *ast.AssignStmt:
+		return len(s.Rhs) == 1 && isReceiveFromAfter(s.Rhs[0], timePkg)
+	}
+	return false
 }
 
 func isReceiveFromAfter(e ast.Expr, timePkg string) bool {

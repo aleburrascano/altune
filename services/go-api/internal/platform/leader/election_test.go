@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -520,38 +521,42 @@ func (c *blockingPingConn) touchedAtAll() bool {
 }
 
 func TestElection_ShutdownReleasesOnlyAfterInFlightVerifyFinishes(t *testing.T) {
-	conn := newBlockingPingConn()
-	e := newElection(t, storeOf(conn).locks(), testKey, fastInterval)
-	e.Start(context.Background())
-	conn.pinging.wait(t, 2*time.Second, "the first verify ping")
+	synctest.Test(t, func(t *testing.T) {
+		conn := newBlockingPingConn()
+		e := newElection(t, storeOf(conn).locks(), testKey, fastInterval)
+		e.Start(context.Background())
+		conn.pinging.wait(t, 2*time.Second, "the first verify ping")
 
-	budget, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	returned := make(chan struct{})
-	go func() { defer close(returned); e.Shutdown(budget) }()
+		budget, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		returned := make(chan struct{})
+		go func() { defer close(returned); e.Shutdown(budget) }()
 
-	select {
-	case <-returned:
-		t.Fatal("Shutdown returned on a budget the in-flight verify outlasted")
-	case <-time.After(300 * time.Millisecond):
-	}
-	if conn.usedWhilePinging() {
-		t.Fatal("the held connection went back to the pool while verify's Ping still owned it")
-	}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		select {
+		case <-returned:
+			t.Fatal("Shutdown returned on a budget the in-flight verify outlasted")
+		default:
+		}
+		if conn.usedWhilePinging() {
+			t.Fatal("the held connection went back to the pool while verify's Ping still owned it")
+		}
 
-	close(conn.unblock)
+		close(conn.unblock)
 
-	select {
-	case <-returned:
-	case <-time.After(shutdownLoopBudget):
-		t.Fatal("Shutdown never returned after the in-flight verify finished")
-	}
-	if conn.usedWhilePinging() {
-		t.Fatal("the held connection went back to the pool while verify's Ping still owned it")
-	}
-	if !conn.releasedLock() {
-		t.Fatal("shutdown left the advisory lock held although the loop had finished")
-	}
+		select {
+		case <-returned:
+		case <-time.After(shutdownLoopBudget):
+			t.Fatal("Shutdown never returned after the in-flight verify finished")
+		}
+		if conn.usedWhilePinging() {
+			t.Fatal("the held connection went back to the pool while verify's Ping still owned it")
+		}
+		if !conn.releasedLock() {
+			t.Fatal("shutdown left the advisory lock held although the loop had finished")
+		}
+	})
 }
 
 type lateStore struct {
