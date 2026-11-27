@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"net/http"
 	"slices"
 	"sync"
 )
@@ -12,16 +13,16 @@ type requestScope struct {
 	mu        sync.Mutex
 	userID    string
 	finishers []func(Outcome)
-	inner     context.Context
+	inner     *http.Request
 }
 
-func (s *requestScope) setInner(ctx context.Context) {
+func (s *requestScope) setInner(r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.inner = ctx
+	s.inner = r
 }
 
-func InnermostContext(ctx context.Context) context.Context {
+func innermostContext(ctx context.Context) context.Context {
 	scope, ok := ctx.Value(requestScopeKey{}).(*requestScope)
 	if !ok {
 		return ctx
@@ -31,7 +32,7 @@ func InnermostContext(ctx context.Context) context.Context {
 	if scope.inner == nil {
 		return ctx
 	}
-	return scope.inner
+	return scope.inner.Context()
 }
 
 func (s *requestScope) addFinisher(finish func(Outcome)) {

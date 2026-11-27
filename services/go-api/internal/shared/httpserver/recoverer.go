@@ -21,7 +21,7 @@ func Recoverer(next http.Handler) http.Handler {
 			if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 				panic(rec)
 			}
-			slog.ErrorContext(InnermostContext(r.Context()), "panic.recovered",
+			slog.ErrorContext(innermostContext(r.Context()), "panic.recovered",
 				logging.KeyError, fmt.Sprint(rec),
 				logging.KeyMethod, r.Method,
 				logging.KeyPath, r.URL.Path,

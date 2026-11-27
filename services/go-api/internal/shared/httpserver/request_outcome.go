@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -54,7 +55,7 @@ func ObserveRequests(now clock.Func, observers ...Observer) func(http.Handler) h
 					Duration: now().Sub(start),
 					UserID:   scope.user(),
 				}
-				all := append(finishers, scope.routeFinishers()...)
+				all := slices.Concat(finishers, scope.routeFinishers())
 				for i := len(all) - 1; i >= 0; i-- {
 					finishGuarded(r.Context(), all[i], outcome)
 				}
@@ -79,7 +80,7 @@ func ObserveRoutes(observers ...Observer) func(http.Handler) http.Handler {
 					scope.addFinisher(finish)
 				}
 			}
-			scope.setInner(r.Context())
+			scope.setInner(r)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -100,6 +101,6 @@ func LogRequest(r *http.Request) (*http.Request, func(Outcome)) {
 			logging.KeyDurationMS, o.Duration.Milliseconds(),
 			logging.KeyBytes, o.Bytes,
 		}
-		slog.InfoContext(InnermostContext(r.Context()), "request.complete", attrs...)
+		slog.InfoContext(innermostContext(r.Context()), "request.complete", attrs...)
 	}
 }
