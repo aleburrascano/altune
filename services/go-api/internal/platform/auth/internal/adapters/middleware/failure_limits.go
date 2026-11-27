@@ -15,9 +15,11 @@ type FailureLimits struct {
 	MaxClients int
 }
 
+const failureRefillInterval = 3 * time.Second
+
 var DefaultFailureLimits = FailureLimits{
 	Burst:      20,
-	Refill:     3 * time.Second,
+	Refill:     failureRefillInterval,
 	MaxClients: 10_000,
 }
 

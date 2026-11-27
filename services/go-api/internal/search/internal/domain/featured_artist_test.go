@@ -2,7 +2,10 @@ package domain_test
 
 import (
 	"altune/go-api/internal/search/internal/domain"
+	"strings"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 func TestFeaturedArtist_IdentityKey(t *testing.T) {
@@ -176,4 +179,28 @@ func TestFeaturedFromText(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNormalizeFeaturedName_IsIdempotent(t *testing.T) {
+	t.Parallel()
+	rapid.Check(t, func(t *rapid.T) {
+		name := rapid.String().Draw(t, "name")
+
+		once := domain.NormalizeFeaturedName(name)
+
+		if twice := domain.NormalizeFeaturedName(once); twice != once {
+			t.Fatalf("NormalizeFeaturedName(%q) = %q, normalised again = %q", name, once, twice)
+		}
+	})
+}
+
+func TestNormalizeFeaturedName_IgnoresCaseOfPlainWords(t *testing.T) {
+	t.Parallel()
+	rapid.Check(t, func(t *rapid.T) {
+		name := rapid.StringMatching(`[A-Za-z]{1,12}( [A-Za-z]{1,12}){0,3}`).Draw(t, "name")
+
+		if lower, upper := domain.NormalizeFeaturedName(strings.ToLower(name)), domain.NormalizeFeaturedName(strings.ToUpper(name)); lower != upper {
+			t.Fatalf("case changed the key for %q: %q vs %q", name, lower, upper)
+		}
+	})
 }

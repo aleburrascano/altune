@@ -141,7 +141,9 @@ func (s *DetailsService) lookup(
 		return e, nil
 	}
 
-	_ = s.cache.Set(ctx, kind, mbid, e)
+	if err := s.cache.Set(ctx, kind, mbid, e); err != nil {
+		slog.WarnContext(ctx, "enrichment.cache_set_failed", "kind", kind.String(), "mbid", mbid, logging.KeyError, err)
+	}
 	return e, nil
 }
 

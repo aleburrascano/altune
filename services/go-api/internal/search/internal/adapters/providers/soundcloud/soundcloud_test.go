@@ -998,8 +998,8 @@ func TestSoundCloud_GetArtistAlbums_singlesFailureLogsAWarningNamingTheUser(t *t
 	if !strings.Contains(event, `"level":"WARN"`) {
 		t.Errorf("soundcloud.singles_skipped = %s, want level WARN", event)
 	}
-	if !strings.Contains(event, `"user_id":"909010162"`) && !strings.Contains(event, `"user_id":909010162`) {
-		t.Errorf("soundcloud.singles_skipped = %s, want user_id 909010162", event)
+	if !strings.Contains(event, `"soundcloud_user_id":"909010162"`) && !strings.Contains(event, `"soundcloud_user_id":909010162`) {
+		t.Errorf("soundcloud.singles_skipped = %s, want soundcloud_user_id 909010162", event)
 	}
 	if !strings.Contains(event, `"error":"`) || strings.Contains(event, `"error":""`) {
 		t.Errorf("soundcloud.singles_skipped = %s, want a non-empty error", event)

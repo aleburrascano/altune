@@ -250,7 +250,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
 
-	recorder, err := history.NewRecordSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool), time.Now)
+	recorder, err := history.NewRecordSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool), time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewRecordSearchHistoryService: %v", err)
 	}

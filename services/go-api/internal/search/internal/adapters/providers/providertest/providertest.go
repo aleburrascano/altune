@@ -21,6 +21,8 @@ type RedirectTransport struct {
 	TargetURL string
 }
 
+const slowServerGiveUp = 5 * time.Second
+
 func (t *RedirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.URL.Scheme = "http"
@@ -99,7 +101,7 @@ func CancelMidRequestServer(t *testing.T) (*httptest.Server, context.Context) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		cancel()
-		giveUp, stop := clock.NewTimer(5 * time.Second)
+		giveUp, stop := clock.NewTimer(slowServerGiveUp)
 		defer stop()
 		select {
 		case <-r.Context().Done():

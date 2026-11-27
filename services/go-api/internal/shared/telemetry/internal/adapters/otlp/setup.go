@@ -17,10 +17,12 @@ import (
 )
 
 const (
-	endpointEnv   = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	ScopeName     = "altune/go-api"
-	exportTimeout = 3 * time.Second
-	retryGiveUp   = 10 * time.Second
+	endpointEnv          = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	ScopeName            = "altune/go-api"
+	exportTimeout        = 3 * time.Second
+	retryGiveUp          = 10 * time.Second
+	retryInitialInterval = time.Second
+	retryMaxInterval     = 2 * time.Second
 )
 
 type Service struct {
@@ -65,7 +67,7 @@ func describeService(svc Service) *resource.Resource {
 func newTracerProvider(ctx context.Context, res *resource.Resource) (*sdktrace.TracerProvider, error) {
 	spans, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithTimeout(exportTimeout),
-		otlptracehttp.WithRetry(otlptracehttp.RetryConfig{Enabled: true, InitialInterval: time.Second, MaxInterval: 2 * time.Second, MaxElapsedTime: retryGiveUp}),
+		otlptracehttp.WithRetry(otlptracehttp.RetryConfig{Enabled: true, InitialInterval: retryInitialInterval, MaxInterval: retryMaxInterval, MaxElapsedTime: retryGiveUp}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("otlp trace exporter: %w", err)
@@ -76,7 +78,7 @@ func newTracerProvider(ctx context.Context, res *resource.Resource) (*sdktrace.T
 func newLoggerProvider(ctx context.Context, res *resource.Resource) (*sdklog.LoggerProvider, error) {
 	records, err := otlploghttp.New(ctx,
 		otlploghttp.WithTimeout(exportTimeout),
-		otlploghttp.WithRetry(otlploghttp.RetryConfig{Enabled: true, InitialInterval: time.Second, MaxInterval: 2 * time.Second, MaxElapsedTime: retryGiveUp}),
+		otlploghttp.WithRetry(otlploghttp.RetryConfig{Enabled: true, InitialInterval: retryInitialInterval, MaxInterval: retryMaxInterval, MaxElapsedTime: retryGiveUp}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("otlp log exporter: %w", err)

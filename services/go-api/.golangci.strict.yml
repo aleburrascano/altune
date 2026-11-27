@@ -155,6 +155,8 @@ linters:
           msg: take the caller's ctx; a context root belongs to a main package (cmd, scripts), and work that outlives the request goes through background.Detach (internal/shared/background)
         - pattern: ^time\.(Now|Since|Until|After|AfterFunc|NewTimer|NewTicker|Tick)$
           msg: take the clock as a clock.Func parameter and read it through clock.Now at the composition root (internal/shared/clock), the one home for time
+        - pattern: ^uuid\.New\w*$
+          msg: take an ids.Source parameter and mint through it (internal/shared/ids), the one home for UUIDs, so tests can predict them with idstest.Sequence
         - pattern: ^expvar\.(NewInt|NewFloat|NewString|NewMap|Publish)$
           msg: count through the telemetry.Registry that internal/app creates and passes in (internal/shared/telemetry), the one metrics home
     revive:
@@ -213,6 +215,10 @@ linters:
         linters:
           - forbidigo
         text: 'use of `time\.'
+      - path: (^internal/shared/ids/|/[^/]*test/|_test\.go$)
+        linters:
+          - forbidigo
+        text: 'use of `uuid\.'
       - path: ^(internal/shared/(config|dbtest)/|cmd/|scripts/)
         linters:
           - forbidigo

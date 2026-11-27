@@ -70,8 +70,8 @@ func (r *PostgresQueueStateRepository) runOp(
 	err := run(opCtx)
 	r.recordTimeout(ctx, err)
 	if isUnclassifiedFault(err) {
-		slog.ErrorContext(ctx, "playback.queue_state_op_failed",
-			"op", op, logging.KeyUserID, userId.String(), logging.KeyError, err)
+		slog.ErrorContext(logging.ContextWithSubjectUser(ctx, userId.String()), "playback.queue_state_op_failed",
+			"op", op, logging.KeyError, err)
 	}
 	if !database.IsTransient(err) {
 		return err

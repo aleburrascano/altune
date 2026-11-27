@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
 	"context"
@@ -40,7 +41,9 @@ func signedInAs(userFor func(token string) ids.UserId) func(http.Handler) http.H
 				next.ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(requestuser.ContextWithUserID(r.Context(), userFor(token))))
+			userId := userFor(token)
+			ctx := logging.ContextWithSubjectUser(requestuser.ContextWithUserID(r.Context(), userId), userId.String())
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

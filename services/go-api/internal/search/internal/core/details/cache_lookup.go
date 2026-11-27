@@ -3,10 +3,12 @@ package details
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 )
 
 var ErrDegraded = errors.New("enrichment degraded")
@@ -42,13 +44,17 @@ func CachedLookup[T any](
 	}
 	if !found {
 		if cacheable {
-			_ = cache.SetNegative(ctx, nameKey)
+			if err := cache.SetNegative(ctx, nameKey); err != nil {
+				slog.WarnContext(ctx, "enrichment.cache_set_negative_failed", logging.KeyError, err)
+			}
 		}
 		return empty, nil
 	}
 
 	if cacheable {
-		_ = cache.Set(ctx, nameKey, value)
+		if err := cache.Set(ctx, nameKey, value); err != nil {
+			slog.WarnContext(ctx, "enrichment.cache_set_failed", logging.KeyError, err)
+		}
 	}
 	return value, nil
 }

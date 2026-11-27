@@ -9,10 +9,15 @@ import (
 	"time"
 )
 
+const (
+	audioURLRateInterval   = 250 * time.Millisecond
+	trackWriteRateInterval = 500 * time.Millisecond
+)
+
 var (
 	streamRateLimit        = httpserver.RateLimit{Every: time.Second, Burst: 120}
-	audioURLRateLimit      = httpserver.RateLimit{Every: 250 * time.Millisecond, Burst: 300}
-	trackWriteRateLimit    = httpserver.RateLimit{Every: 500 * time.Millisecond, Burst: 200}
+	audioURLRateLimit      = httpserver.RateLimit{Every: audioURLRateInterval, Burst: 300}
+	trackWriteRateLimit    = httpserver.RateLimit{Every: trackWriteRateInterval, Burst: 200}
 	playlistWriteRateLimit = httpserver.RateLimit{Every: time.Second, Burst: 60}
 )
 

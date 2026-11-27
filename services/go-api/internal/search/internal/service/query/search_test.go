@@ -519,6 +519,7 @@ func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 		"explorationDraw": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ExplorationDraw = nil }),
 		"deadlineTimer":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.DeadlineTimer = nil }),
 		"now":             withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Now = nil }),
+		"ids":             withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.IDs = nil }),
 	} {
 		svc, err := build()
 		if !errors.Is(err, querypkg.ErrCollaboratorRequired) || svc != nil {

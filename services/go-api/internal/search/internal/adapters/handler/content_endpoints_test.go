@@ -97,6 +97,27 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	}
 }
 
+func TestHandleArtistTopTracks_AnOverRangeLimitIsClampedAndLogged(t *testing.T) {
+	ring := captureLogs(t)
+	artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
+		search.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: seedTracks(7)},
+	}
+	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/top-tracks?limit=100", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	record, ok := findRecord(ring, "search.limit_out_of_range")
+	if !ok {
+		t.Fatal("no search.limit_out_of_range line for a clamped limit")
+	}
+	for k, want := range map[string]string{"param": "limit", "requested": "100", "max": "50", "applied": "50"} {
+		if got := record.Attrs[k]; got != want {
+			t.Errorf("attr %s = %q, want %q", k, got, want)
+		}
+	}
+}
+
 func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 	albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
 		search.ProviderDeezer: &memory.AlbumContentProvider{},

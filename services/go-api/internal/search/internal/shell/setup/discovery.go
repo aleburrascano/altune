@@ -14,6 +14,7 @@ import (
 	"altune/go-api/internal/search/internal/service/useractivity"
 	"altune/go-api/internal/search/internal/service/vocabulary"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"fmt"
 	"time"
@@ -124,7 +125,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, err
 	}
-	recordHistory, err := history.NewRecordSearchHistoryService(s.History, clock.Now)
+	recordHistory, err := history.NewRecordSearchHistoryService(s.History, clock.Now, ids.Real)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the history recorder: %w", err)
 	}

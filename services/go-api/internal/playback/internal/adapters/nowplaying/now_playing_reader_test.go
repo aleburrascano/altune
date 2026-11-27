@@ -159,7 +159,7 @@ func TestLookup_MalformedTrackId_EmitsDistinguishableSignal(t *testing.T) {
 	}), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 	user := testUser()
 
-	track, err := reader.Lookup(context.Background(), user, "not-a-uuid")
+	track, err := reader.Lookup(logging.ContextWithSubjectUser(context.Background(), user.String()), user, "not-a-uuid")
 	if !errors.Is(err, playback.ErrNowPlayingTrackNotFound) || track != nil {
 		t.Fatalf("malformed id must degrade to track-absent, got track=%v err=%v", track, err)
 	}
