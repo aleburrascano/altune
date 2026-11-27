@@ -105,6 +105,8 @@ afterEach(() => {
 
 const TAP_RETRY = /Tap Retry\./;
 const COULDNT_SAVE = /Couldn't save this track\./;
+const SERVER_FAULT_BODY = /Something went wrong on our end\./;
+const OFFLINE_BODY = /Check your connection and try again\./;
 const REQUEST_REFUSED = /We could not complete that request\./;
 
 describe('TrackDetailBody save failure', () => {
@@ -121,8 +123,20 @@ describe('TrackDetailBody save failure', () => {
     ]);
     expect(banner().getByText(TAP_RETRY)).toBeTruthy();
     expect(banner().getByText(COULDNT_SAVE)).toBeTruthy();
+    expect(banner().getByText(SERVER_FAULT_BODY)).toBeTruthy();
     expect(saveIsInteractive()).toBe(true);
     expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy();
+  });
+
+  it('says the user is offline when the save never reached the server', async () => {
+    __http.fail('POST /v1/tracks');
+    renderDetail();
+
+    await pressSave();
+
+    await waitFor(() => expect(screen.getByTestId('detail-save-error')).toBeTruthy());
+    expect(banner().getByText(OFFLINE_BODY)).toBeTruthy();
+    expect(banner().getByText(TAP_RETRY)).toBeTruthy();
   });
 
   it('offers no retry and names the refusal when the save failed permanently', async () => {

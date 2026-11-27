@@ -203,8 +203,8 @@ export function ownedRetryTrackId(owned: OwnedTrack | null): TrackId | null {
 }
 
 export function saveFailureBanner(failure: SaveFailure): string {
-  const nextStep = failure.isRetryable ? 'Tap Retry.' : failure.copy.body;
-  return `${failure.copy.title}. ${nextStep}`;
+  const nextStep = failure.isRetryable ? ' Tap Retry.' : '';
+  return `${failure.copy.title}. ${failure.copy.body}${nextStep}`;
 }
 
 export const SAVE_ALL_CONCURRENCY = 4;

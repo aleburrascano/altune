@@ -10,7 +10,12 @@ import {
   HTTP_TOO_MANY_REQUESTS,
   HTTP_UNAUTHORIZED,
 } from '@shared/failure/core/httpStatus';
-import { ApiError, isContractError, isNetworkError } from '@shared/failure/core/errors';
+import {
+  ApiError,
+  NetworkError,
+  isContractError,
+  isNetworkError,
+} from '@shared/failure/core/errors';
 
 export type FailureKind =
   | 'offline'
@@ -144,6 +149,7 @@ function assertNever(code: never): FailureKind {
 
 export function failureKindOf(error: unknown): FailureKind {
   if (isContractError(error)) return 'contract';
+  if (error instanceof NetworkError && error.failure === 'timeout') return 'timeout';
   if (isNetworkError(error)) return 'offline';
   if (!(error instanceof ApiError)) return 'unknown';
   const fromCode = error.code === undefined ? 'unknown' : kindOfCode(error.code);

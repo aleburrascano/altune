@@ -34,6 +34,7 @@ import { runSignOutCleanups } from '@shared/session';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
+const GATEWAY_TIMEOUT_STATUS = 504;
 const COULDNT_ADD_PREFIX = /^Couldn't add the /;
 const COULDNT_REMOVE_PREFIX = /^Couldn't remove the /;
 
@@ -1321,6 +1322,29 @@ describe('create', () => {
       expect(result.current.isError).toBe(false);
       expect(data.addFailed).toBe(true);
       expect(data.playlist).toEqual(created('p2', 'Chill'));
+      expect(__http.countFor('GET /v1/playlists/p2')).toBe(1);
+      expect(__http.countFor('DELETE /v1/playlists/p2')).toBe(0);
+    });
+
+    it('a server timeout on the add never deletes the playlist, since the add may have landed', async () => {
+      __http.reply('POST /v1/playlists', { status: 201, json: created('p2', 'Chill') });
+      __http.reply('POST /v1/playlists/p2/tracks/batch', {
+        status: GATEWAY_TIMEOUT_STATUS,
+        json: { code: 'request.timeout' },
+      });
+      __http.reply('GET /v1/playlists/p2', {
+        json: { ...created('p2', 'Chill'), total_duration_seconds: 0, tracks: [] },
+      });
+      __http.reply('DELETE /v1/playlists/p2', { status: 204 });
+      const queryClient = freshClient();
+      const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+        wrapper: createWrapper(queryClient),
+      });
+
+      await act(async () => {
+        await result.current.mutateAsync({ name: 'Chill', trackIds: [asTrackId('t1')] });
+      });
+
       expect(__http.countFor('GET /v1/playlists/p2')).toBe(1);
       expect(__http.countFor('DELETE /v1/playlists/p2')).toBe(0);
     });

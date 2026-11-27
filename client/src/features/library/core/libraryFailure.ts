@@ -23,7 +23,7 @@ export function classifyLibraryError(error: unknown): LibraryFailure {
   const kind = failureKindOf(error);
   if (kind === 'unauthorized') return 'auth';
   if (kind === 'not-found') return 'not-found';
-  if (kind === 'rate-limited' || kind === 'server') return 'server';
+  if (kind === 'rate-limited' || kind === 'server' || kind === 'timeout') return 'server';
   return 'unknown';
 }
 

@@ -1,6 +1,12 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { ApiError, describeError, failureKindOf, RETRY_TAIL } from '@shared/failure';
+import {
+  ApiError,
+  describeError,
+  failureKindOf,
+  RETRY_TAIL,
+  type FailureKind,
+} from '@shared/failure';
 import type {
   PlaylistId,
   TrackId,
@@ -54,8 +60,17 @@ function leftInPlace(playlist: PlaylistResponse): CreateWithTracksResult {
   return { playlist, added: 0, addFailed: true };
 }
 
+const REFUSAL_KINDS: ReadonlySet<FailureKind> = new Set([
+  'unauthorized',
+  'not-found',
+  'rate-limited',
+  'conflict',
+  'limit-reached',
+  'rejected',
+]);
+
 function isDefiniteRefusal(error: unknown): boolean {
-  return error instanceof ApiError && failureKindOf(error) !== 'server';
+  return error instanceof ApiError && REFUSAL_KINDS.has(failureKindOf(error));
 }
 
 function requestedTracksPresent(detail: PlaylistDetailResponse, trackIds: TrackId[]): number {
