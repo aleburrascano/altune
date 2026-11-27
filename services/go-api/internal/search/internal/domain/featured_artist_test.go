@@ -194,6 +194,15 @@ func TestNormalizeFeaturedName_IsIdempotent(t *testing.T) {
 	})
 }
 
+func TestNormalizeFeaturedName_LowercasingDoesNotLeaveAnUnnormalisedForm(t *testing.T) {
+	t.Parallel()
+	once := domain.NormalizeFeaturedName("Ὰͅ")
+
+	if twice := domain.NormalizeFeaturedName(once); twice != once {
+		t.Fatalf("normalised once = %q, normalised again = %q", once, twice)
+	}
+}
+
 func TestNormalizeFeaturedName_IgnoresCaseOfPlainWords(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {

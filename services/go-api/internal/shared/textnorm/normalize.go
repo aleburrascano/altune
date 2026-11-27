@@ -110,7 +110,8 @@ func stripApostrophes(s string) string {
 }
 
 func FoldName(s string) string {
-	return strings.ToLower(strings.Join(strings.Fields(norm.NFKC.String(s)), " "))
+	lowered := strings.ToLower(norm.NFKC.String(s))
+	return strings.Join(strings.Fields(norm.NFKC.String(lowered)), " ")
 }
 
 func NFKC(s string) string { return norm.NFKC.String(s) }
