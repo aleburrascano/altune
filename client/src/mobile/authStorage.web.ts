@@ -51,7 +51,7 @@ function deleteFromWebStorage(fallback: Map<string, string>, key: string): Promi
   return Promise.resolve();
 }
 
-export function createAuthStorage(): AuthStorage {
+export function createWebAuthStorage(): AuthStorage {
   const unreachableFallback = new Map<string, string>();
 
   return {
@@ -59,4 +59,8 @@ export function createAuthStorage(): AuthStorage {
     setItem: (key, value) => writeWebStorage(unreachableFallback, key, value),
     removeItem: (key) => deleteFromWebStorage(unreachableFallback, key),
   };
+}
+
+export function createAuthStorage(): AuthStorage {
+  return createWebAuthStorage();
 }

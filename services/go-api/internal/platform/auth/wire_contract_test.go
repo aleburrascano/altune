@@ -21,7 +21,7 @@ type wireRejection struct {
 func rejectionWire(t *testing.T, verifierErr error) []byte {
 	t.Helper()
 	next, _ := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, verifierErr), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, verifierErr), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks", nil)
 	req.Header.Set("Authorization", "Bearer contract-fixture-token")
 	rec := httptest.NewRecorder()

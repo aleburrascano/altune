@@ -42,7 +42,7 @@ func newWireRig(t *testing.T) *wireRig {
 	mountTracks(router, tracks, deps, clk.now)
 	mountPlaylists(router, playlists, tracks, clk.now)
 	router.Mount("/library", library.NewLibraryHandler(library.NewLibraryLensService(tracks)).Routes())
-	audio := library.MustNewAudioURLHandler(library.MustNewAudioURLService(tracks, wireSigner{store}, clk.now, library.NoopAudioStoreMetrics()), clk.now)
+	audio := library.MustNewAudioURLHandler(library.MustNewAudioURLService(tracks, wireSigner{store}, clk.now, &librarytest.Metrics{}), clk.now)
 	audio.Routes(router)
 	return &wireRig{router: router, tracks: tracks}
 }

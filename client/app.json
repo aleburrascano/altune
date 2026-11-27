@@ -52,6 +52,7 @@
       "expo-font",
       "expo-secure-store",
       "expo-web-browser",
+      "expo-system-ui",
       "@bacons/apple-targets"
     ],
     "experiments": {
