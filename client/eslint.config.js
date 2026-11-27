@@ -168,7 +168,7 @@ const syntaxBannedEverywhere = [
     selector:
       'BinaryExpression:matches([operator="==="], [operator="!=="]):has(MemberExpression[property.name=/^acquisition(_s|S)tatus$/]) > Literal[value=/^(ready|pending|failed)$/]',
     message:
-      'Ask the acquisition predicate, not the raw status: isReady, isPending, isFailed or canRetry from @shared/catalog; the status moves only through nextLifecycle in @shared/acquisition (see client/src/shared/acquisition/README.md).',
+      'Ask the acquisition predicate, not the raw status: isReady, isPending, isFailed or canRetry from @shared/catalog; whether an acquisition event is stale is nextLifecycle in @shared/acquisition (see client/src/shared/acquisition/README.md).',
   },
   {
     selector:

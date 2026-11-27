@@ -594,12 +594,14 @@ describe('useAddTracksToPlaylist(): leaves invalidation to the playlist events',
         result.current.mutateAsync({ playlistId: asPlaylistId('p1'), trackIds: [asTrackId('t1')] }),
       ).rejects.toThrow();
     });
+
+    expect(queryClient.invalidated).toEqual([]);
   });
 });
 
-describe('useAddTracksToPlaylist(): replay is not idempotent, and the playlist event is what bounds it', () => {
-  it('bumps track_count again on a second identical add, which the tracks_added_to_playlist refetch corrects', async () => {
-    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+describe('useAddTracksToPlaylist(): replay is not idempotent, and the skipped-tracks reply is what bounds it', () => {
+  it('bumps track_count again on a second identical add, which the server skips and no event follows, so the list is refetched', async () => {
+    __http.replyOnce('POST /v1/playlists/p1/tracks/batch', {
       status: 200,
       json: { added: 2, skipped: 0 },
     });
@@ -619,6 +621,10 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the playlist e
         trackIds: [asTrackId('t1'), asTrackId('t2')],
       });
     });
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 0, skipped: 2 },
+    });
     await act(async () => {
       await result.current.mutateAsync({
         playlistId: asPlaylistId('p1'),
@@ -632,7 +638,7 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the playlist e
     const listInvalidations = queryClient.invalidated.filter(
       (filters) => filters?.queryKey === playlistKeys.list,
     );
-    expect(listInvalidations).toHaveLength(0);
+    expect(listInvalidations).toHaveLength(1);
   });
 });
 
@@ -1644,6 +1650,8 @@ describe('create', () => {
       await act(async () => {
         await result.current.mutateAsync('Focus').catch(() => {});
       });
+
+      expect(queryClient.invalidated).toEqual([]);
     });
 
     it('useCreatePlaylistWithTracks invalidates nothing itself, even when the add step failed and the playlist was rolled back', async () => {
@@ -1658,6 +1666,8 @@ describe('create', () => {
       await act(async () => {
         await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
       });
+
+      expect(queryClient.invalidated).toEqual([]);
     });
   });
 

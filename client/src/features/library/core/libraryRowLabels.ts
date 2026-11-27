@@ -33,6 +33,6 @@ export function acquisitionProgressLabel(
   status: AcquisitionStatus,
 ): string | null {
   if (phase != null && phase !== 'failed') return phaseLabel(phase);
-  if (status === 'pending') return 'Pending';
+  if (isPending(status)) return 'Pending';
   return null;
 }

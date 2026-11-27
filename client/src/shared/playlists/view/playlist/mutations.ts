@@ -14,7 +14,12 @@ import type {
   PlaylistResponse,
 } from '@shared/catalog';
 import { countLabel, showFailureAlert } from '@shared/ui';
-import { playlistKeys, useAppMutation, useOptimisticMutation } from '@shared/query';
+import {
+  playlistKeys,
+  refetchWithoutEvent,
+  useAppMutation,
+  useOptimisticMutation,
+} from '@shared/query';
 import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
 import { usePlaylistsPort } from '@shared/playlists/view/PlaylistsPortProvider';
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
@@ -221,6 +226,7 @@ export function useAddTracksToPlaylist() {
     },
     onSuccess: (outcome, { playlistId, trackIds }) => {
       if (outcome.added < trackIds.length) {
+        refetchWithoutEvent(queryClient, [playlistKeys.list]);
         const name = queryClient
           .getQueryData<PlaylistList>(playlistKeys.list)
           ?.items.find((p) => p.id === playlistId)?.name;

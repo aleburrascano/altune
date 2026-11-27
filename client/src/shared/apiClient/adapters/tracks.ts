@@ -15,6 +15,7 @@ import {
   type TrackId,
   ACQUISITION_STATUSES,
   type AcquisitionStatus,
+  isFailed,
   type CreateTrackRequest,
   type FeaturedArtist,
   type ListTracksResponse,
@@ -51,7 +52,7 @@ function decodeAcquisition(
   status: AcquisitionStatus,
   n: TrackNarrowers,
 ): TrackAcquisition {
-  if (status !== 'failed') return { acquisition_status: status, failure_reason: null };
+  if (!isFailed(status)) return { acquisition_status: status, failure_reason: null };
   return {
     acquisition_status: status,
     failure_reason: n.nullableString(r.failure_reason, `${at}.failure_reason`),
