@@ -21,8 +21,8 @@ retry() {
     fi
     echo "go-tools: $label failed on attempt $attempt of $attempts (exit $rc)" >&2
     if [ "$attempt" -lt "$attempts" ]; then
-      echo "go-tools: retrying $label in ${backoff[attempt - 1]}s" >&2
-      sleep "${backoff[attempt - 1]}"
+      echo "go-tools: retrying $label in ${backoff[attempt - 1]:-30}s" >&2
+      sleep "${backoff[attempt - 1]:-30}"
     fi
   done
   echo "go-tools: $label failed after $attempts attempts, giving up" >&2
