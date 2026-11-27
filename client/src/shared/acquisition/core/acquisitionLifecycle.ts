@@ -27,7 +27,7 @@ export function phaseRank(phase: LifecyclePhase): number {
   return PHASE_RANK[phase];
 }
 
-export function isSettledPhase(phase: LifecyclePhase | undefined): boolean {
+function isSettledPhase(phase: LifecyclePhase | undefined): boolean {
   return phase === 'done' || phase === 'failed';
 }
 

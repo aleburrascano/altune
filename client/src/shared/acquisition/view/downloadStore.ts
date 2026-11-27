@@ -8,7 +8,7 @@ import {
 } from '@shared/acquisition/core/acquisitionLifecycle';
 import type { TrackId } from '@shared/catalog';
 import { onSignOut } from '@shared/session';
-import { trackStatusAtCallTime } from '@shared/acquisition/state/trackStatusStore';
+import { trackStatusAtCallTime } from '@shared/acquisition/view/trackStatusStore';
 
 export type DownloadPhase = LifecyclePhase;
 
