@@ -268,7 +268,10 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 		appleMusicArtworkURL(a.Artwork.URL, appleMusicArtworkSize),
 		domain.ProviderLink{Provider: domain.ProviderAppleMusic, ExternalID: al.ID, URL: a.URL},
 		extras)
-	r.RecordType = appleMusicRecordType(a.IsSingle)
+	r.RecordType = domain.RecordTypeAlbum
+	if a.IsSingle {
+		r.RecordType = domain.RecordTypeSingle
+	}
 	r.ReleaseDate = a.ReleaseDate
 	r.TrackCount = a.TrackCount
 	r.UPC = a.UPC
@@ -276,13 +279,6 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 		r.Explicit = domain.BoolPtr(true)
 	}
 	return r
-}
-
-func appleMusicRecordType(isSingle bool) domain.RecordType {
-	if isSingle {
-		return domain.RecordTypeSingle
-	}
-	return domain.RecordTypeAlbum
 }
 
 func mapAppleMusicArtist(ar appleMusicArtist) domain.SearchResult {

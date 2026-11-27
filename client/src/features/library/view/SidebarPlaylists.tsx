@@ -37,7 +37,7 @@ function SidebarPlaylistRow({ playlist, navigator }: RowProps) {
   function onPress(): void {
     navigator.push(`/library/playlist/${playlist.id}`);
   }
-  const { pressableProps } = usePressableInteraction(sidebarItemStyle(theme, false));
+  const { pressableProps } = usePressableInteraction(sidebarItemStyle(theme, 'idle'));
   return (
     <Tappable {...sidebarPlaylistRowProps(playlist, onPress)} {...pressableProps}>
       <SidebarPlaylistLabel name={playlist.name} color={theme.color.textSecondary} />
@@ -78,7 +78,7 @@ function sidebarPlaylistsRetryProps(onRetry: () => void, theme: Theme) {
     onPress: onRetry,
     accessibilityRole: 'button' as const,
     accessibilityLabel: 'Retry loading playlists',
-    style: sidebarItemStyle(theme, false),
+    style: sidebarItemStyle(theme, 'idle'),
   };
 }
 

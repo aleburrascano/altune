@@ -38,7 +38,10 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId ids
 	s.primeEnqueue(trackId, userId)
 
 	if err := s.queue.Enqueue(ctx, trackId, kind, 0); err != nil {
-		return s.handleEnqueueError(ctx, key, trackId, kind, alreadyTracked, err)
+		if !alreadyTracked {
+			s.pending.untrack(key)
+		}
+		return s.enqueueFailed(ctx, trackId, kind, err)
 	}
 	return s.finishEnqueue(ctx, trackId, userId, kind)
 }
@@ -61,10 +64,7 @@ func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trac
 	return nil
 }
 
-func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context, key string, trackId ids.TrackId, kind ports.JobKind, alreadyTracked bool, err error) error {
-	if !alreadyTracked {
-		s.pending.untrack(key)
-	}
+func (s *BackgroundAcquisitionScheduler) enqueueFailed(ctx context.Context, trackId ids.TrackId, kind ports.JobKind, err error) error {
 	if errors.Is(err, acqdomain.ErrJobKindConflict) {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.job_in_flight",

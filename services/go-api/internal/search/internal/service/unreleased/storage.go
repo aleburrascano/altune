@@ -40,7 +40,11 @@ func (c cachedStorage) list(ctx context.Context, s *Service, provider domain.Pro
 	if err != nil {
 		return nil, err
 	}
-	if err := c.cache.Set(ctx, provider, externalID, nameKey, songs, s.cacheTTL(songs, complete)); err != nil {
+	ttl := s.cacheTTL(songs)
+	if !complete {
+		ttl = s.cfg.EmptyTTL
+	}
+	if err := c.cache.Set(ctx, provider, externalID, nameKey, songs, ttl); err != nil {
 		slog.WarnContext(ctx, "unreleased.cache_set_failed", "error", err)
 	}
 	return songs, nil

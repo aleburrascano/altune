@@ -24,10 +24,10 @@ func main() {
 	}
 
 	var (
-		goldenDir      = flag.String("goldens", "", "directory of golden json files (default: the embedded set)")
-		baselinePath   = flag.String("baseline", "", "baselines.json to gate against; a regression exits non-zero")
-		updateBaseline = flag.Bool("update-baselines", false, "overwrite the baseline file with this run's result")
-		verbose        = flag.Bool("v", false, "keep pipeline logging instead of discarding it")
+		goldenDir       = flag.String("goldens", "", "directory of golden json files (default: the embedded set)")
+		baselinePath    = flag.String("baseline", "", "baselines.json to gate against; a regression exits non-zero")
+		updateBaselines = flag.Bool("update-baselines", false, "overwrite the baseline file with this run's result")
+		verbose         = flag.Bool("v", false, "keep pipeline logging instead of discarding it")
 	)
 	flag.Parse()
 
@@ -35,35 +35,21 @@ func main() {
 		logging.Swap(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}
 
-	if err := run(*goldenDir, *baselinePath, *updateBaseline); err != nil {
+	execute := func() error { return run(*goldenDir, *baselinePath) }
+	if *updateBaselines {
+		execute = func() error { return updateBaseline(*goldenDir, *baselinePath) }
+	}
+	if err := execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "acquisitioneval: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(goldenDir, baselinePath string, updateBaseline bool) error {
-	cases, err := loadCases(goldenDir)
+func run(goldenDir, baselinePath string) error {
+	report, err := evaluate(goldenDir)
 	if err != nil {
 		return err
 	}
-	if len(cases) == 0 {
-		return fmt.Errorf("no golden cases found")
-	}
-
-	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), clock.Now, ids.Real, cases))
-	fmt.Print(report.Render())
-
-	if updateBaseline {
-		if baselinePath == "" {
-			return fmt.Errorf("-update-baselines needs -baseline")
-		}
-		if err := report.WriteBaseline(baselinePath); err != nil {
-			return err
-		}
-		fmt.Printf("baseline written to %s\n\n", baselinePath)
-		return nil
-	}
-
 	if baselinePath == "" {
 		return nil
 	}
@@ -81,6 +67,35 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 		fmt.Fprintf(os.Stderr, "REGRESSION: %s\n", r)
 	}
 	return fmt.Errorf("%d regressions against %s", len(regressions), baselinePath)
+}
+
+func updateBaseline(goldenDir, baselinePath string) error {
+	if baselinePath == "" {
+		return fmt.Errorf("-update-baselines needs -baseline")
+	}
+	report, err := evaluate(goldenDir)
+	if err != nil {
+		return err
+	}
+	if err := report.WriteBaseline(baselinePath); err != nil {
+		return err
+	}
+	fmt.Printf("baseline written to %s\n\n", baselinePath)
+	return nil
+}
+
+func evaluate(goldenDir string) (download.EvalReport, error) {
+	cases, err := loadCases(goldenDir)
+	if err != nil {
+		return download.EvalReport{}, err
+	}
+	if len(cases) == 0 {
+		return download.EvalReport{}, fmt.Errorf("no golden cases found")
+	}
+
+	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), clock.Now, ids.Real, cases))
+	fmt.Print(report.Render())
+	return report, nil
 }
 
 func subcommand(args []string) (name string, rest []string) {

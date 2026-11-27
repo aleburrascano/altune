@@ -19,7 +19,17 @@ type Tally struct {
 	Failed         int
 }
 
-func Sweep(ctx context.Context, store library.AudioStore, lister library.AudioAgeLister, refs library.AudioRefPrefixLister, execute bool, now time.Time) (Tally, error) {
+type remove func(ctx context.Context, ref string) error
+
+func Sweep(ctx context.Context, store library.AudioStore, lister library.AudioAgeLister, refs library.AudioRefPrefixLister, now time.Time) (Tally, error) {
+	return sweep(ctx, store.Delete, lister, refs, now)
+}
+
+func Preview(ctx context.Context, lister library.AudioAgeLister, refs library.AudioRefPrefixLister, now time.Time) (Tally, error) {
+	return sweep(ctx, func(context.Context, string) error { return nil }, lister, refs, now)
+}
+
+func sweep(ctx context.Context, remove remove, lister library.AudioAgeLister, refs library.AudioRefPrefixLister, now time.Time) (Tally, error) {
 	objects, err := lister.ListWithAge(ctx, refPrefix)
 	if err != nil {
 		return Tally{}, fmt.Errorf("list staging objects: %w", err)
@@ -32,10 +42,10 @@ func Sweep(ctx context.Context, store library.AudioStore, lister library.AudioAg
 
 	fmt.Printf("\nFound %d object(s) under %q.\n\n", len(objects), refPrefix)
 
-	return sweepObjects(ctx, store, objects, referenced, execute, now), nil
+	return sweepObjects(ctx, remove, objects, referenced, now), nil
 }
 
-func sweepObjects(ctx context.Context, store library.AudioStore, objects []library.ObjectAge, referenced map[string]bool, execute bool, now time.Time) Tally {
+func sweepObjects(ctx context.Context, remove remove, objects []library.ObjectAge, referenced map[string]bool, now time.Time) Tally {
 	var tally Tally
 	for _, obj := range objects {
 		age := now.Sub(obj.LastModified)
@@ -47,7 +57,7 @@ func sweepObjects(ctx context.Context, store library.AudioStore, objects []libra
 			tally.KeptFresh++
 			continue
 		}
-		if !sweepObject(ctx, store, obj, age, execute) {
+		if !sweepObject(ctx, remove, obj, age) {
 			tally.Failed++
 			continue
 		}
@@ -56,12 +66,9 @@ func sweepObjects(ctx context.Context, store library.AudioStore, objects []libra
 	return tally
 }
 
-func sweepObject(ctx context.Context, store library.AudioStore, obj library.ObjectAge, age time.Duration, execute bool) bool {
+func sweepObject(ctx context.Context, remove remove, obj library.ObjectAge, age time.Duration) bool {
 	fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
-	if !execute {
-		return true
-	}
-	if err := store.Delete(ctx, obj.AudioRef); err != nil {
+	if err := remove(ctx, obj.AudioRef); err != nil {
 		fmt.Printf("    FAILED: %v\n", err)
 		return false
 	}

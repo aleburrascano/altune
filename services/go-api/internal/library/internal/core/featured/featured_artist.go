@@ -117,7 +117,11 @@ func (s *FillFeaturedArtistsService) Execute(ctx context.Context, userId ids.Use
 	defer cancel()
 	err := s.run(budgetCtx, userId, res)
 	stoppedOnBudget := res.Truncated && isBudgetSpent(budgetCtx)
-	s.admission.release(userId, !stoppedOnBudget)
+	if stoppedOnBudget {
+		s.admission.release(userId)
+	} else {
+		s.admission.releaseWithCooldown(userId)
+	}
 	if err != nil {
 		return res, err
 	}
@@ -270,13 +274,17 @@ func (a *backfillAdmission) admit(userId ids.UserId) error {
 	return nil
 }
 
-func (a *backfillAdmission) release(userId ids.UserId, startCooldown bool) {
+func (a *backfillAdmission) release(userId ids.UserId) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	delete(a.running, userId)
-	if startCooldown {
-		a.lastFinished[userId] = a.now()
-	}
+}
+
+func (a *backfillAdmission) releaseWithCooldown(userId ids.UserId) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.running, userId)
+	a.lastFinished[userId] = a.now()
 }
 
 func (a *backfillAdmission) pruneExpired() {

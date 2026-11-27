@@ -152,8 +152,11 @@ func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids
 }
 
 func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {
-	reset := evidenceAccepted(c)
-	if len(c.RejectedSourceKeys) == 0 && !reset {
+	evidence := download.KeepEvidence
+	if evidenceAccepted(c) {
+		evidence = download.ResetEvidence
+	}
+	if len(c.RejectedSourceKeys) == 0 && evidence == download.KeepEvidence {
 		return nil
 	}
 	_, err := l.store.GetByID(ctx, id, userId)
@@ -163,7 +166,7 @@ func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, 
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
-	if err := l.state.SettleAcquisition(ctx, id, fence, c.RejectedSourceKeys, reset); err != nil {
+	if err := l.state.SettleAcquisition(ctx, id, fence, c.RejectedSourceKeys, evidence); err != nil {
 		return fmt.Errorf("settle upgrade state: %w", err)
 	}
 	return nil

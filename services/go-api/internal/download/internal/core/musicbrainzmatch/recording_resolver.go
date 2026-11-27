@@ -143,8 +143,7 @@ func (r *Resolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, 
 }
 
 func (r *Resolver) anchorToMismatchedISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity, recordings []acqports.ISRCRecording) acqports.RecordingIdentity {
-	searchMBIDUnregistered := identity.MBID != ""
-	identity.ReferenceDoubted = identity.ReferenceDoubted || searchMBIDUnregistered
+	identity.ReferenceDoubted = identity.ReferenceDoubted || identity.MBID != ""
 
 	chosen, ok := closestRecording(recordings, expectedLength(q.Duration, identity.Duration))
 	if !ok {
@@ -152,7 +151,7 @@ func (r *Resolver) anchorToMismatchedISRC(ctx context.Context, q acqports.Record
 			"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_recordings", len(recordings))
 		return withReferenceSet(identity, identity.MBID, recordings)
 	}
-	logAnchoredToISRC(ctx, q.ISRC, identity.MBID, chosen.MBID, searchMBIDUnregistered)
+	logAnchoredToISRC(ctx, q.ISRC, identity.MBID, chosen.MBID)
 	anchored := adoptRecording(identity, q.ISRC, chosen)
 	return withReferenceSet(anchored, anchored.MBID, recordings)
 }
@@ -166,10 +165,10 @@ func isrcRegistersMBID(recordings []acqports.ISRCRecording, mbid string) bool {
 	return false
 }
 
-func logAnchoredToISRC(ctx context.Context, isrc, searchMBID, isrcMBID string, searchMBIDUnregistered bool) {
+func logAnchoredToISRC(ctx context.Context, isrc, searchMBID, isrcMBID string) {
 	slog.InfoContext(ctx, "acquisition.identity_anchored_to_isrc",
 		"isrc", isrc, "search_mbid", searchMBID, "isrc_mbid", isrcMBID)
-	if searchMBIDUnregistered {
+	if searchMBID != "" {
 		slog.InfoContext(ctx, "acquisition.reference_doubted",
 			"search_mbid", searchMBID, "anchored_mbid", isrcMBID, "isrc", isrc)
 	}

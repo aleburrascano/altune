@@ -18,4 +18,5 @@ var (
 	UntilTokenExpiry       = signedinuser.UntilTokenExpiry
 	UserID                 = httpuser.UserID
 	ClientKey              = httpuser.ClientKey
+	LimitPerUser           = httpuser.LimitPerUser
 )

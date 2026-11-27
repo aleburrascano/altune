@@ -54,13 +54,13 @@ const ProdVerifyWidth = 2
 func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, now clock.Func, opts ...func(*DownloadStep)) (*DownloadStep, error) {
 	const owner = "NewDownloadStep"
 	if err := errors.Join(
-		missingPort(owner, "fetcher", fetcher == nil),
-		missingPort(owner, "identifier", identifier == nil),
-		missingPort(owner, "recording lookup", lookup == nil),
-		missingPort(owner, "prober", prober == nil),
-		missingPort(owner, "skip recorder", skips == nil),
-		missingPort(owner, "download limit", limit == nil),
-		missingPort(owner, "clock", now == nil),
+		missingPort(owner, "fetcher", fetcher),
+		missingPort(owner, "identifier", identifier),
+		missingPort(owner, "recording lookup", lookup),
+		missingPort(owner, "prober", prober),
+		missingPort(owner, "skip recorder", skips),
+		missingPort(owner, "download limit", limit),
+		missingPort(owner, "clock", now),
 		requireWorkspace(owner, workspace),
 	); err != nil {
 		return nil, err

@@ -98,7 +98,7 @@ func TestRunCapture_ExitsTwoWhenNoCandidateLogsPresent(t *testing.T) {
 }
 
 func TestRun_DefaultBehaviourUnaffectedByCaptureSubcommand(t *testing.T) {
-	if err := run("", "", false); err != nil {
+	if err := run("", ""); err != nil {
 		t.Fatalf("default run() (no subcommand) still failed: %v", err)
 	}
 }

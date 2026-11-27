@@ -12,7 +12,7 @@ type TagStep struct {
 }
 
 func NewTagStep(tagger ports.AudioTagger) (*TagStep, error) {
-	if err := missingPort("NewTagStep", "tagger", tagger == nil); err != nil {
+	if err := missingPort("NewTagStep", "tagger", tagger); err != nil {
 		return nil, err
 	}
 	return &TagStep{tagger: tagger}, nil

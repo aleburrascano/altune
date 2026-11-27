@@ -3,8 +3,13 @@ package expiringcache
 import (
 	"container/list"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+type Stats struct {
+	Hits, Misses uint64
+}
 
 type Memo[K comparable, V any] struct {
 	mu        sync.Mutex
@@ -14,6 +19,8 @@ type Memo[K comparable, V any] struct {
 	entries   map[K]*list.Element
 	order     *list.List
 	lastSweep time.Time
+	hits      atomic.Uint64
+	misses    atomic.Uint64
 }
 
 type entry[K comparable, V any] struct {
@@ -34,6 +41,20 @@ func New[K comparable, V any](ttl time.Duration, maxEntries int, now func() time
 }
 
 func (m *Memo[K, V]) Get(key K) (V, bool) {
+	value, ok := m.Peek(key)
+	if ok {
+		m.hits.Add(1)
+	} else {
+		m.misses.Add(1)
+	}
+	return value, ok
+}
+
+func (m *Memo[K, V]) Stats() Stats {
+	return Stats{Hits: m.hits.Load(), Misses: m.misses.Load()}
+}
+
+func (m *Memo[K, V]) Peek(key K) (V, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var zero V

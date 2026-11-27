@@ -12,7 +12,7 @@ import (
 const maxLiveTempAge = AcquireTimeout + 15*time.Minute
 
 func requireWorkspace(owner string, ws ports.ScratchFolder) error {
-	return missingPort(owner, "workspace", ws == nil)
+	return missingPort(owner, "workspace", ws)
 }
 
 func SweepStaleTempDirs(ctx context.Context, ws ports.ScratchFolder, now clock.Func) {

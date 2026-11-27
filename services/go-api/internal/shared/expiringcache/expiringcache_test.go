@@ -172,3 +172,33 @@ func TestMemo_ReadingAnExpiredEntryFreesItsSlot(t *testing.T) {
 	present(t, m, "c", "C")
 	present(t, m, "d", "D")
 }
+
+func TestMemo_StatsCountEveryGetAsAHitOrAMiss(t *testing.T) {
+	c := newClock()
+	m := expiringcache.New[string, int](time.Hour, 4, c.now)
+	absent(t, m, "a")
+	m.Put("a", 1)
+	present(t, m, "a", 1)
+	present(t, m, "a", 1)
+	c.advance(2 * time.Hour)
+	absent(t, m, "a")
+
+	if got, want := m.Stats(), (expiringcache.Stats{Hits: 2, Misses: 2}); got != want {
+		t.Errorf("Stats = %+v; want %+v", got, want)
+	}
+}
+
+func TestMemo_PeekServesWithoutCounting(t *testing.T) {
+	m := expiringcache.New[string, int](time.Hour, 4, newClock().now)
+	m.Put("a", 1)
+
+	if got, ok := m.Peek("a"); !ok || got != 1 {
+		t.Errorf("Peek(a) = %v, %v; want 1, true", got, ok)
+	}
+	if _, ok := m.Peek("b"); ok {
+		t.Error("Peek served an unknown key")
+	}
+	if got := m.Stats(); got != (expiringcache.Stats{}) {
+		t.Errorf("Stats = %+v; want zero after Peek only", got)
+	}
+}

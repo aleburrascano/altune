@@ -19,7 +19,7 @@ type audioDeleter interface {
 type directDeleteOrphans struct{ store audioDeleter }
 
 func DirectDeleteOrphans(store audioDeleter) (ports.OrphanedAudioRecorder, error) {
-	if err := missingPort("DirectDeleteOrphans", "audio store", store == nil); err != nil {
+	if err := missingPort("DirectDeleteOrphans", "audio store", store); err != nil {
 		return nil, err
 	}
 	return directDeleteOrphans{store: store}, nil

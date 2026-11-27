@@ -24,13 +24,9 @@ var (
 type rateLimitMiddleware = func(http.Handler) http.Handler
 
 func newAudioRateLimiter(limit httpserver.RateLimit, now clock.Func) rateLimitMiddleware {
-	return newUserRateLimiter(limit, now, errAudioRateLimited)
+	return requestuser.LimitPerUser(limit, now, errAudioRateLimited, nil)
 }
 
 func newWriteRateLimiter(limit httpserver.RateLimit, now clock.Func) rateLimitMiddleware {
-	return newUserRateLimiter(limit, now, errWriteRateLimited)
-}
-
-func newUserRateLimiter(limit httpserver.RateLimit, now clock.Func, refused error) rateLimitMiddleware {
-	return httpserver.MustNewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), refused, nil)
+	return requestuser.LimitPerUser(limit, now, errWriteRateLimited, nil)
 }

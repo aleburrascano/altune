@@ -62,16 +62,22 @@ func repoRoot() (string, error) {
 	}
 }
 
-func account(s providerfields.Schema, root string, p provider, update bool) ([]string, error) {
+func audit(s providerfields.Schema, root string, p provider) ([]string, error) {
+	return accountEntities(s, root, p, func(*providerfields.Entity, providerfields.Reads) {})
+}
+
+func rewrite(s providerfields.Schema, root string, p provider) ([]string, error) {
+	return accountEntities(s, root, p, (*providerfields.Entity).Account)
+}
+
+func accountEntities(s providerfields.Schema, root string, p provider, prepare func(*providerfields.Entity, providerfields.Reads)) ([]string, error) {
 	reads, err := p.reads(root, s)
 	if err != nil {
 		return nil, err
 	}
 	var problems []string
 	for name, entity := range s.Entities {
-		if update {
-			entity.Account(reads[name])
-		}
+		prepare(entity, reads[name])
 		problems = append(problems, entity.Audit(name, reads[name])...)
 	}
 	return problems, nil

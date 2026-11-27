@@ -136,8 +136,8 @@ func (s *Service) List(ctx context.Context, provider domain.ProviderName, extern
 	return s.storage.list(ctx, s, provider, externalID, artistName, known)
 }
 
-func (s *Service) cacheTTL(songs []domain.UnreleasedSong, complete bool) time.Duration {
-	if len(songs) == 0 || !complete {
+func (s *Service) cacheTTL(songs []domain.UnreleasedSong) time.Duration {
+	if len(songs) == 0 {
 		return s.cfg.EmptyTTL
 	}
 	return s.cfg.TTL

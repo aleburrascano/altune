@@ -160,6 +160,7 @@ linters:
         - name: indent-error-flow
         - name: superfluous-else
         - name: deep-exit
+        - name: flag-parameter
     gocritic:
       enabled-tags:
         - diagnostic
