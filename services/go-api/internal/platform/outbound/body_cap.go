@@ -41,11 +41,8 @@ func newBodyCapTransport(next http.RoundTripper, limit int64) http.RoundTripper 
 
 func (t bodyCapTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.next.RoundTrip(req)
-	if err != nil {
-		return resp, fmt.Errorf("round trip: %w", err)
-	}
-	if resp == nil || resp.Body == nil {
-		return resp, nil
+	if err != nil || resp == nil || resp.Body == nil {
+		return resp, err
 	}
 	if resp.ContentLength > t.limit {
 		_ = resp.Body.Close()
@@ -80,7 +77,7 @@ func (b *cappedBody) Read(p []byte) (int, error) {
 
 func (b *cappedBody) Close() error {
 	if err := b.body.Close(); err != nil {
-		return fmt.Errorf("close: %w", err)
+		return fmt.Errorf("close capped body: %w", err)
 	}
 	return nil
 }

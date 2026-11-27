@@ -75,6 +75,7 @@ linters:
         - '\(context\.Context\)\.Err\(\)'
         - '\(io\.Reader\)\.Read\('
         - '\(net\.Listener\)\.Accept\('
+        - '\(net/http\.RoundTripper\)\.RoundTrip\('
     importas:
       no-unaliased: false
       no-extra-aliases: false

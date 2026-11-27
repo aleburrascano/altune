@@ -213,8 +213,5 @@ func (t budgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			slog.WarnContext(req.Context(), "ytminnertube: could not start the cooldown after a 403", logging.KeyError, coolErr)
 		}
 	}
-	if err != nil {
-		return resp, fmt.Errorf("round trip: %w", err)
-	}
-	return resp, nil
+	return resp, err
 }
