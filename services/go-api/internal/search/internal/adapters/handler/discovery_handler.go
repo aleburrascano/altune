@@ -18,29 +18,32 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type DiscoveryHandler struct {
-	now             clock.Func
-	searchSvc       *query.Service
-	historySvc      *history.ListSearchHistoryService
-	recordHistory   *history.RecordSearchHistoryService
-	clearHistorySvc *history.ClearSearchHistoryService
-	albumSvc        *artistpage.GetAlbumTracksService
-	artistSvc       *artistpage.GetArtistContentService
-	relatedSvc      *related.GetRelatedTracksService
-	unreleasedSvc   UnreleasedReader
-	enrichSvc       Enricher
-	suggestSvc      *vocabulary.SuggestService
-	eventSvc        *useractivity.RecordEventService
-	favoritesSvc    *favorites.FavoritesService
-	clientEvents    ClientEventSink
-	enrichers       DetailEnrichers
-	ownership       OwnershipStamper
+	deprecatedEventHits atomic.Int64
+	now                 clock.Func
+	searchSvc           *query.Service
+	historySvc          *history.ListSearchHistoryService
+	recordHistory       *history.RecordSearchHistoryService
+	clearHistorySvc     *history.ClearSearchHistoryService
+	albumSvc            *artistpage.GetAlbumTracksService
+	artistSvc           *artistpage.GetArtistContentService
+	relatedSvc          *related.GetRelatedTracksService
+	unreleasedSvc       UnreleasedReader
+	enrichSvc           Enricher
+	suggestSvc          *vocabulary.SuggestService
+	eventSvc            *useractivity.RecordEventService
+	favoritesSvc        *favorites.FavoritesService
+	clientEvents        ClientEventSink
+	enrichers           DetailEnrichers
+	ownership           OwnershipStamper
 
 	searchLimiter    func(http.Handler) http.Handler
 	suggestLimiter   func(http.Handler) http.Handler
@@ -187,6 +190,22 @@ const maxFavoriteBodyBytes = 16 << 10
 
 const maxHistoryBodyBytes = 4 << 10
 
+const deprecatedEventsLogEvery = 100
+
+func (h *DiscoveryHandler) handleRecordEventDeprecated(w http.ResponseWriter, r *http.Request) {
+	if hits := h.deprecatedEventHits.Add(1); hits%deprecatedEventsLogEvery == 1 {
+		slog.WarnContext(r.Context(), "discovery.events_route_deprecated",
+			"use", "/v1/telemetry/events", "hits", hits)
+	}
+	h.handleRecordEvent(w, r)
+}
+
+func (h *DiscoveryHandler) TelemetryRoutes() chi.Router {
+	r := chi.NewRouter()
+	r.With(h.eventLimiter, httpserver.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
+	return r
+}
+
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(h.searchLimiter).Get("/search", h.handleSearch)
@@ -194,7 +213,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.With(h.historyLimiter).Get("/search-history", h.handleSearchHistory)
 	r.With(h.historyLimiter, httpserver.MaxBodySize(maxHistoryBodyBytes)).Post("/search-history", h.handleRecordSearchHistory)
 	r.With(h.historyLimiter).Delete("/search-history", h.handleClearSearchHistory)
-	r.With(h.eventLimiter, httpserver.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
+	r.With(h.eventLimiter, httpserver.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEventDeprecated)
 	r.With(h.favoritesLimiter).Get("/favorites", h.handleListFavorites)
 	r.With(h.favoritesLimiter, httpserver.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
 	r.With(h.favoritesLimiter, httpserver.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)

@@ -12,12 +12,30 @@ import (
 )
 
 type Storage interface {
-	persist(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time)
 	list(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error)
 	lookup(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error)
+}
+
+type Background interface {
+	persist(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time)
 	warm(ctx context.Context, s *Service, artists []ArtistToRefresh)
 	due(ctx context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error)
 	search(ctx context.Context, query string) ([]ports.UnreleasedHit, error)
+}
+
+type NoBackground struct{}
+
+func (NoBackground) persist(context.Context, ports.UnreleasedArtistKey, []domain.UnreleasedSong, bool, time.Time) {
+}
+
+func (NoBackground) warm(context.Context, *Service, []ArtistToRefresh) {}
+
+func (NoBackground) due(context.Context, time.Time, int) ([]ports.UnreleasedDueArtist, error) {
+	return nil, nil
+}
+
+func (NoBackground) search(context.Context, string) ([]ports.UnreleasedHit, error) {
+	return []ports.UnreleasedHit{}, nil
 }
 
 type cachedStorage struct{ cache ports.UnreleasedCache }
@@ -27,9 +45,6 @@ func NewCachedStorage(cache ports.UnreleasedCache) (Storage, error) {
 		return nil, fmt.Errorf("%w: cache is nil", ErrCollaboratorRequired)
 	}
 	return cachedStorage{cache: cache}, nil
-}
-
-func (cachedStorage) persist(context.Context, ports.UnreleasedArtistKey, []domain.UnreleasedSong, bool, time.Time) {
 }
 
 func (c cachedStorage) list(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
@@ -62,36 +77,26 @@ func (c cachedStorage) lookup(ctx context.Context, s *Service, provider domain.P
 	return s.awaitJob(ctx, j)
 }
 
-func (cachedStorage) warm(context.Context, *Service, []ArtistToRefresh) {}
+type StoredStorage struct{ store ports.UnreleasedStore }
 
-func (cachedStorage) due(context.Context, time.Time, int) ([]ports.UnreleasedDueArtist, error) {
-	return nil, nil
-}
-
-func (cachedStorage) search(context.Context, string) ([]ports.UnreleasedHit, error) {
-	return []ports.UnreleasedHit{}, nil
-}
-
-type storedStorage struct{ store ports.UnreleasedStore }
-
-func NewStoredStorage(store ports.UnreleasedStore) (Storage, error) {
+func NewStoredStorage(store ports.UnreleasedStore) (*StoredStorage, error) {
 	if store == nil {
 		return nil, fmt.Errorf("%w: store is nil", ErrCollaboratorRequired)
 	}
-	return storedStorage{store: store}, nil
+	return &StoredStorage{store: store}, nil
 }
 
-func (st storedStorage) persist(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) {
+func (st StoredStorage) persist(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) {
 	if err := st.store.Write(ctx, key, songs, complete, startedAt, CurrentBuildVersion); err != nil {
 		slog.WarnContext(ctx, "unreleased.store_write_failed", logging.KeyError, err)
 	}
 }
 
-func (storedStorage) list(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
+func (StoredStorage) list(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
 	return s.Rebuild(ctx, ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}, artistName, known)
 }
 
-func (st storedStorage) lookup(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
+func (st StoredStorage) lookup(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
 	key := ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}
 	songs, version, built := st.storedSongsOrNotBuilt(ctx, key, artistName, known)
 	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, textnorm.NormalizeForIdentity(artistName))
@@ -107,7 +112,7 @@ func (st storedStorage) lookup(ctx context.Context, s *Service, provider domain.
 	return s.awaitJob(ctx, j)
 }
 
-func (st storedStorage) storedSongsOrNotBuilt(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, int, bool) {
+func (st StoredStorage) storedSongsOrNotBuilt(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, int, bool) {
 	if err := st.store.Record(ctx, key, artistName, known); err != nil {
 		slog.WarnContext(ctx, "unreleased.store_record_failed", logging.KeyError, err)
 	}
@@ -119,18 +124,18 @@ func (st storedStorage) storedSongsOrNotBuilt(ctx context.Context, key ports.Unr
 	return songs, version, built
 }
 
-func (st storedStorage) warm(ctx context.Context, s *Service, artists []ArtistToRefresh) {
+func (st StoredStorage) warm(ctx context.Context, s *Service, artists []ArtistToRefresh) {
 	if len(artists) == 0 {
 		return
 	}
 	s.jobs.Track(func() { s.runWarm(ctx, st.store, artists) })
 }
 
-func (st storedStorage) due(ctx context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error) {
+func (st StoredStorage) due(ctx context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error) {
 	return st.store.Due(ctx, now, limit)
 }
 
-func (st storedStorage) search(ctx context.Context, query string) ([]ports.UnreleasedHit, error) {
+func (st StoredStorage) search(ctx context.Context, query string) ([]ports.UnreleasedHit, error) {
 	return st.store.Search(ctx, query, SearchLimit)
 }
 

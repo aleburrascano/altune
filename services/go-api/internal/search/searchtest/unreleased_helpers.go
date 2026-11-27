@@ -21,6 +21,7 @@ func UnreleasedWiring(t testing.TB, cache ports.UnreleasedCache, parts ...Unrele
 	w := unreleased.Wiring{
 		Trackers: unreleased.NoTrackers{},
 		Storage:  storage,
+		Backend:  unreleased.NoBackground{},
 		Shutdown: t.Context().Done(),
 		Jobs:     &background.Tracker{},
 		Timer:    clock.NewTimer,
@@ -39,6 +40,7 @@ func UnreleasedStored(store ports.UnreleasedStore) UnreleasedPart {
 			panic(err)
 		}
 		w.Storage = storage
+		w.Backend = storage
 	}
 }
 

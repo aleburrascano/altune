@@ -36,6 +36,7 @@ type Service struct {
 	trackers ports.TrackerSongs
 	catalog  ports.ArtistCatalogTitles
 	storage  Storage
+	backend  Background
 	cfg      Config
 	newTimer clock.TimerFunc
 	now      clock.Func
@@ -78,6 +79,7 @@ func (NoGenius) SongDetail(context.Context, int) (domain.GeniusSongDetail, error
 type Wiring struct {
 	Trackers ports.TrackerSongs
 	Storage  Storage
+	Backend  Background
 	Shutdown <-chan struct{}
 	Jobs     *background.Tracker
 	Timer    clock.TimerFunc
@@ -90,6 +92,7 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 		"catalog":  catalog == nil,
 		"trackers": w.Trackers == nil,
 		"storage":  w.Storage == nil,
+		"backend":  w.Backend == nil,
 		"jobs":     w.Jobs == nil,
 		"now":      w.Now == nil,
 	} {
@@ -107,6 +110,7 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 		trackers: w.Trackers,
 		catalog:  catalog,
 		storage:  w.Storage,
+		backend:  w.Backend,
 		cfg:      cfg,
 		shutdown: w.Shutdown,
 		jobs:     w.Jobs,
@@ -120,7 +124,7 @@ func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, ar
 	if err != nil {
 		return nil, err
 	}
-	s.storage.persist(ctx, key, songs, complete, startedAt)
+	s.backend.persist(ctx, key, songs, complete, startedAt)
 	return songs, nil
 }
 

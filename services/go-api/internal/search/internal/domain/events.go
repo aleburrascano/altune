@@ -112,6 +112,7 @@ type InteractionEvent struct {
 	QueryNorm        string
 	SearchId         string
 	EventId          string
+	CorrelationId    string
 	ClientOccurredAt time.Time
 	Payload          map[string]any
 }

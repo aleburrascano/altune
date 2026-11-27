@@ -43,7 +43,7 @@ type ArtistToRefresh struct {
 }
 
 func (s *Service) Warm(ctx context.Context, artists []ArtistToRefresh) {
-	s.storage.warm(ctx, s, artists)
+	s.backend.warm(ctx, s, artists)
 }
 
 func (s *Service) cancelOnShutdown(ctx context.Context, cancel context.CancelFunc) (stop func()) {
