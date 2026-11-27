@@ -345,7 +345,7 @@ func TestYtDlpAudioSearcher_Download_ReturnsThePrintedFile(t *testing.T) {
 
 func TestDownload_TimeoutUnderLiveParentIsSourceUnavailable(t *testing.T) {
 	installYtDlp(t, "exec sleep 30")
-	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithDownloadTimeout(100 * time.Millisecond)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep, download.WithYtDlpDownloadTimeout(100*time.Millisecond))
 
 	_, err := s.Download(context.Background(), youTubeWatchURL, t.TempDir())
 
@@ -634,30 +634,28 @@ func recordedArgv(t *testing.T, s *download.YouTubeAudioSearcher, caller ytDlpCa
 func TestYtDlpAudioSearcher_RemoteComponentFlags_PerCaller(t *testing.T) {
 	cases := []struct {
 		name string
-		with func(s *download.YouTubeAudioSearcher) *download.YouTubeAudioSearcher
+		with []func(*download.YouTubeAudioSearcher)
 		want []string
 	}{
 		{
-			"default fetches ejs:github", func(s *download.YouTubeAudioSearcher) *download.YouTubeAudioSearcher { return s },
+			"default fetches ejs:github", nil,
 			[]string{"--js-runtimes", "node", "--remote-components", "ejs:github"},
 		},
 		{
-			"configured spec", func(s *download.YouTubeAudioSearcher) *download.YouTubeAudioSearcher {
-				return s.WithRemoteComponents("ejs:npm")
-			},
-			[]string{"--js-runtimes", "node", "--remote-components", "ejs:npm"},
+			name: "configured spec",
+			with: []func(*download.YouTubeAudioSearcher){download.WithYtDlpRemoteComponents("ejs:npm")},
+			want: []string{"--js-runtimes", "node", "--remote-components", "ejs:npm"},
 		},
 		{
-			"empty spec drops the fetch", func(s *download.YouTubeAudioSearcher) *download.YouTubeAudioSearcher {
-				return s.WithRemoteComponents("")
-			},
-			[]string{"--js-runtimes", "node"},
+			name: "empty spec drops the fetch",
+			with: []func(*download.YouTubeAudioSearcher){download.WithYtDlpRemoteComponents("")},
+			want: []string{"--js-runtimes", "node"},
 		},
 	}
 	for name, caller := range ytDlpCallers {
 		for _, tc := range cases {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
-				argv := recordedArgv(t, tc.with(download.MustNewYtDlpAudioSearcher("", "", "node", time.Now, clock.Sleep)), caller)
+				argv := recordedArgv(t, download.MustNewYtDlpAudioSearcher("", "", "node", time.Now, clock.Sleep, tc.with...), caller)
 				if len(argv) < len(tc.want) || strings.Join(argv[:len(tc.want)], " ") != strings.Join(tc.want, " ") {
 					t.Fatalf("argv = %q, want it to start with %q", argv, tc.want)
 				}
@@ -721,7 +719,7 @@ func TestYtDlpAudioSearcher_POTokenURL_ReachesEveryCaller(t *testing.T) {
 	const potURL = "http://altune-pot:4416"
 	for name, caller := range ytDlpCallers {
 		t.Run(name, func(t *testing.T) {
-			argv := recordedArgv(t, download.MustNewYtDlpAudioSearcher("", "", "node", time.Now, clock.Sleep).WithPOTokenURL(potURL), caller)
+			argv := recordedArgv(t, download.MustNewYtDlpAudioSearcher("", "", "node", time.Now, clock.Sleep, download.WithYtDlpPOTokenURL(potURL)), caller)
 			if !hasFlagValue(argv, "--extractor-args", "youtubepot-bgutilhttp:base_url="+potURL) {
 				t.Fatalf("argv = %q, want --extractor-args youtubepot-bgutilhttp:base_url=%s", argv, potURL)
 			}
@@ -903,7 +901,7 @@ func TestDownloadPreview_ErrorsWhenNoPathIsPrinted(t *testing.T) {
 func TestDownload_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
 	outDir := t.TempDir()
 	installYtDlp(t, stubDownload(outDir))
-	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithDownloadTimeout(0)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep, download.WithYtDlpDownloadTimeout(0))
 
 	if _, err := s.Download(context.Background(), youTubeWatchURL, outDir); err != nil {
 		t.Fatalf("Download error = %v, want nil: a zero timeout must leave the default in place", err)

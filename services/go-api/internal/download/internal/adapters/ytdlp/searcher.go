@@ -62,33 +62,32 @@ type YouTubeAudioSearcher struct {
 
 const defaultRemoteComponents = "ejs:github"
 
-func (s *YouTubeAudioSearcher) WithRemoteComponents(spec string) *YouTubeAudioSearcher {
-	s.remoteComponents = spec
-	return s
+func WithRemoteComponents(spec string) func(*YouTubeAudioSearcher) {
+	return func(s *YouTubeAudioSearcher) { s.remoteComponents = spec }
 }
 
-func (s *YouTubeAudioSearcher) WithPOTokenURL(url string) *YouTubeAudioSearcher {
-	s.potURL = url
-	return s
+func WithPOTokenURL(url string) func(*YouTubeAudioSearcher) {
+	return func(s *YouTubeAudioSearcher) { s.potURL = url }
 }
 
-func (s *YouTubeAudioSearcher) WithEnvironment(name string) *YouTubeAudioSearcher {
-	s.environment = name
-	return s
+func WithEnvironment(name string) func(*YouTubeAudioSearcher) {
+	return func(s *YouTubeAudioSearcher) { s.environment = name }
 }
 
-func (s *YouTubeAudioSearcher) WithDownloadTimeout(timeout time.Duration) *YouTubeAudioSearcher {
-	if timeout > 0 {
-		s.downloadTimeout = timeout
+func WithDownloadTimeout(timeout time.Duration) func(*YouTubeAudioSearcher) {
+	return func(s *YouTubeAudioSearcher) {
+		if timeout > 0 {
+			s.downloadTimeout = timeout
+		}
 	}
-	return s
 }
 
-func (s *YouTubeAudioSearcher) WithCanaryTimeout(timeout time.Duration) *YouTubeAudioSearcher {
-	if timeout > 0 {
-		s.canaryTimeout = timeout
+func WithCanaryTimeout(timeout time.Duration) func(*YouTubeAudioSearcher) {
+	return func(s *YouTubeAudioSearcher) {
+		if timeout > 0 {
+			s.canaryTimeout = timeout
+		}
 	}
-	return s
 }
 
 var (
@@ -96,7 +95,7 @@ var (
 	ErrSearcherSleeperRequired = errors.New("the yt-dlp searcher needs a sleeper")
 )
 
-func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clock.Func, sleep clock.Sleeper) (*YouTubeAudioSearcher, error) {
+func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clock.Func, sleep clock.Sleeper, opts ...func(*YouTubeAudioSearcher)) (*YouTubeAudioSearcher, error) {
 	if err := requirePorts(now, sleep); err != nil {
 		return nil, err
 	}
@@ -112,12 +111,15 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clo
 		previewTimeout:   previewTimeout,
 		canaryTimeout:    canaryTimeout,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
 	s.inspections = expiringcache.New[string, inspection](inspectCacheTTL, inspectCacheMax, now)
 	return s, nil
 }
 
-func MustNewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clock.Func, sleep clock.Sleeper) *YouTubeAudioSearcher {
-	s, err := NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime, now, sleep)
+func MustNewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clock.Func, sleep clock.Sleeper, opts ...func(*YouTubeAudioSearcher)) *YouTubeAudioSearcher {
+	s, err := NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime, now, sleep, opts...)
 	if err != nil {
 		panic(err)
 	}

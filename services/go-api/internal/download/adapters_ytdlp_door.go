@@ -11,6 +11,12 @@ var (
 	MustNewFfprobeProber      = ytdlp.MustNewFfprobeProber
 	NewYtDlpSource            = ytdlp.NewSource
 	MustNewYtDlpAudioSearcher = ytdlp.MustNewYtDlpAudioSearcher
+
+	WithYtDlpRemoteComponents = ytdlp.WithRemoteComponents
+	WithYtDlpPOTokenURL       = ytdlp.WithPOTokenURL
+	WithYtDlpEnvironment      = ytdlp.WithEnvironment
+	WithYtDlpDownloadTimeout  = ytdlp.WithDownloadTimeout
+	WithYtDlpCanaryTimeout    = ytdlp.WithCanaryTimeout
 )
 
 var (

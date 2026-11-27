@@ -210,8 +210,9 @@ func (s tierSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir stri
 
 func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
 	const firstTier, fallback = "https://example.com/first-tier", "https://example.com/fallback"
-	registry := service.NewSourceRegistry(tierSource{name: "first", url: firstTier, broken: true}).
-		WithFallback(tierSource{name: "fallback", url: fallback})
+	registry := service.NewSourceRegistryWithFallback(
+		[]ports.AudioSource{tierSource{name: "first", url: firstTier, broken: true}},
+		[]ports.AudioSource{tierSource{name: "fallback", url: fallback}})
 	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200}}
 	workspace := scratchfiles.New()
 	steps := coreStepsOver(registry, &objectStore{objects: map[string]string{}}, workspace)
