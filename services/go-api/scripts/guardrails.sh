@@ -2,7 +2,9 @@
 set -uo pipefail
 
 GOLANGCI_VERSION="v2.13.2"
-export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+GOVULNCHECK_VERSION="v1.8.0"
+GOTOOLCHAIN="${GOTOOLCHAIN:-go$(awk '/^go /{print $2; exit}' "$(dirname "$0")/../go.mod")}"
+export GOTOOLCHAIN
 
 cd "$(dirname "$0")/.." || exit 1
 GOBIN="$(go env GOPATH)/bin"
@@ -53,7 +55,7 @@ do_fmt_all() {
 
 do_vuln() {
   echo "== govulncheck: reachable CVEs (blocking) =="
-  have govulncheck || go install golang.org/x/vuln/cmd/govulncheck@latest
+  have govulncheck || go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
   govulncheck ./... || rc=1
 }
 
