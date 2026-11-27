@@ -4,6 +4,15 @@ const assert = require('node:assert');
 
 const eslint = new ESLint({ cwd: __dirname });
 
+async function lintExisting(instance, code, options) {
+  const results = await instance.lintText(code, options);
+  const parseError = results[0].messages.find((m) => m.fatal === true);
+  if (parseError) {
+    throw new Error(`config test could not parse ${options.filePath}: ${parseError.message}`);
+  }
+  return results;
+}
+
 const typeAwareRulesOff = Object.fromEntries(
   Object.entries(require('@typescript-eslint/eslint-plugin').rules)
     .filter(([, rule]) => rule.meta.docs.requiresTypeChecking === true)
@@ -11,7 +20,7 @@ const typeAwareRulesOff = Object.fromEntries(
 );
 
 async function noCommentsErrors(filePath, code) {
-  const [result] = await eslint.lintText(code, { filePath });
+  const [result] = await lintExisting(eslint, code, { filePath });
   return result.messages.filter((m) => m.ruleId === 'local/no-comments' && m.severity === 2);
 }
 
@@ -66,7 +75,7 @@ function diffScopedRuleIds(filePath, code, extraEnv = {}) {
 }
 
 async function restrictedImportMessages(filePath, code) {
-  const [result] = await eslint.lintText(code, { filePath });
+  const [result] = await lintExisting(eslint, code, { filePath });
   return result.messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message);
 }
 
@@ -115,7 +124,7 @@ describe('mobile eslint keeps view out of core', () => {
 
   it('allows view/ to import core/', async () => {
     const messages = await restrictedImportMessages(
-      'src/shared/failure/view/Banner.ts',
+      'src/shared/ui/view/failure/ScreenBoundary.tsx',
       "import { x } from '@shared/failure/core/errors';\nexport const y = x;\n",
     );
     assert.strictEqual(messages.length, 0);
@@ -197,7 +206,7 @@ describe('browser globals', () => {
   });
 
   async function globalErrors(filePath, code) {
-    const [result] = await untyped.lintText(code, { filePath });
+    const [result] = await lintExisting(untyped, code, { filePath });
     return result.messages.filter((m) => m.ruleId === 'no-restricted-globals');
   }
 
@@ -255,7 +264,7 @@ describe('browser globals', () => {
 
 describe('mobile eslint config bans relative parent imports', () => {
   async function parentImportErrors(filePath, code) {
-    const [result] = await eslint.lintText(code, { filePath });
+    const [result] = await lintExisting(eslint, code, { filePath });
     return result.messages.filter(
       (m) => m.ruleId === 'local/no-parent-relative-imports' && m.severity === 2,
     );
@@ -281,13 +290,16 @@ describe('mobile eslint config bans relative parent imports', () => {
   it('allows an alias and a sibling import', async () => {
     const code =
       "import a from '@shared/failure/errors';\nimport b from './b';\nexport const c = [a, b];\n";
-    assert.strictEqual((await parentImportErrors('src/shared/failure/x.ts', code)).length, 0);
+    assert.strictEqual(
+      (await parentImportErrors('src/shared/failure/core/describeError.ts', code)).length,
+      0,
+    );
   });
 });
 
 describe('mobile eslint config makes top-level functions declarations', () => {
   async function arrowConstErrors(filePath, code) {
-    const [result] = await eslint.lintText(code, { filePath });
+    const [result] = await lintExisting(eslint, code, { filePath });
     return result.messages.filter(
       (m) => m.ruleId === 'local/top-level-function-declarations' && m.severity === 2,
     );
@@ -317,7 +329,7 @@ describe('mobile eslint config makes top-level functions declarations', () => {
 
 describe('mobile eslint config keeps raw style numbers out of StyleSheet.create', () => {
   async function rawStyleErrors(filePath, code) {
-    const [result] = await eslint.lintText(code, { filePath });
+    const [result] = await lintExisting(eslint, code, { filePath });
     return result.messages.filter(
       (m) => m.ruleId === 'local/no-raw-style-numbers' && m.severity === 2,
     );
@@ -358,7 +370,7 @@ describe('module rules point at client/src/README.md', () => {
   });
 
   async function errors(ruleId, filePath, code) {
-    const [result] = await untyped.lintText(code, { filePath });
+    const [result] = await lintExisting(untyped, code, { filePath });
     return result.messages.filter((m) => m.ruleId === ruleId && m.severity === 2);
   }
 
@@ -573,7 +585,9 @@ describe('mobile eslint config has no warnings', () => {
 });
 
 async function statusLiteralErrors(code) {
-  const [result] = await eslint.lintText(code, { filePath: 'src/shared/query/core/retryDelay.ts' });
+  const [result] = await lintExisting(eslint, code, {
+    filePath: 'src/shared/query/core/retryDelay.ts',
+  });
   return result.messages.filter(
     (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('HTTP status'),
   );
@@ -603,7 +617,9 @@ describe('mobile eslint config bans a bare HTTP status number', () => {
 });
 
 async function staleLiteralErrors(code) {
-  const [result] = await eslint.lintText(code, { filePath: 'src/shared/query/core/retryDelay.ts' });
+  const [result] = await lintExisting(eslint, code, {
+    filePath: 'src/shared/query/core/retryDelay.ts',
+  });
   return result.messages.filter(
     (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('goes stale'),
   );
@@ -633,16 +649,16 @@ describe('mobile eslint config requires a named staleTime policy', () => {
 });
 
 async function clockWaitErrors(code, filePath) {
-  const [result] = await eslint.lintText(code, { filePath });
+  const [result] = await lintExisting(eslint, code, { filePath });
   return result.messages.filter(
     (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('real clock'),
   );
 }
 
 describe('mobile eslint config requires a locale when case folding', () => {
-  const PATH = 'src/shared/acquisition/state/trackStatusStore.ts';
+  const PATH = 'src/shared/acquisition/view/trackStatusStore.ts';
   const foldErrors = async (code) => {
-    const [result] = await eslint.lintText(code, { filePath: PATH });
+    const [result] = await lintExisting(eslint, code, { filePath: PATH });
     return result.messages.filter(
       (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('Case folding'),
     );
@@ -708,7 +724,7 @@ describe('mobile eslint config bans waiting on the real clock in a test', () => 
   });
 
   it('still applies the rules banned everywhere in a test file', async () => {
-    const [result] = await eslint.lintText('export const a = { staleTime: 60000 };', {
+    const [result] = await lintExisting(eslint, 'export const a = { staleTime: 60000 };', {
       filePath: TEST_PATH,
     });
     assert.ok(result.messages.some((m) => m.ruleId === 'no-restricted-syntax'));
@@ -717,7 +733,8 @@ describe('mobile eslint config bans waiting on the real clock in a test', () => 
   it('reports a wait in jest/__tests__ and leaves the Hermes abort check to src', async () => {
     const wait = 'export const a = () => { setTimeout(() => undefined, 0); };';
     assert.ok((await clockWaitErrors(wait, 'jest/__tests__/queryHarness.test.tsx')).length >= 1);
-    const [result] = await eslint.lintText(
+    const [result] = await lintExisting(
+      eslint,
       'export const a = new AbortController().signal.throwIfAborted;',
       {
         filePath: 'jest/__tests__/setup-env.test.ts',
@@ -746,7 +763,7 @@ describe('mobile eslint config bans waiting on the real clock in a test', () => 
 describe('mobile eslint config asks the acquisition predicate, not the raw status', () => {
   const PATH = 'src/features/library/view/useTrackMenu.ts';
   const rawStatusErrors = async (code, filePath = PATH) => {
-    const [result] = await eslint.lintText(code, { filePath });
+    const [result] = await lintExisting(eslint, code, { filePath });
     return result.messages.filter(
       (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('acquisition predicate'),
     );
