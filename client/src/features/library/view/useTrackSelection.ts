@@ -17,6 +17,7 @@ import {
   type TrackMenuOptions,
 } from '@features/library/view/useTrackMenu';
 import type { ShowFailure } from '@features/library/core/libraryFailure';
+import { isReady } from '@shared/catalog';
 
 export type SelectionAction = {
   key: string;
@@ -90,7 +91,7 @@ function queueReady(ready: TrackResponse[], opts: SelectionActionOptions): void 
 }
 
 function queueAction(selected: TrackResponse[], opts: SelectionActionOptions): SelectionAction {
-  const ready = selected.filter((t) => t.acquisition_status === 'ready');
+  const ready = selected.filter((t) => isReady(t.acquisition_status));
   return {
     key: 'queue',
     label: 'Add to Queue',

@@ -3,7 +3,7 @@ import fc from 'fast-check';
 
 import {
   aggregatePhase,
-  isStaleDownloadPhase,
+  isStaleStart,
   useActiveDownloadItems,
   useDownloadStore,
   type DownloadEntry,
@@ -343,9 +343,9 @@ describe('useActiveDownloadItems', () => {
   });
 });
 
-describe('isStaleDownloadPhase', () => {
+describe('isStaleStart', () => {
   it('reports a track with no entry as not stale, whatever the phase asked about', () => {
-    expect(isStaleDownloadPhase(asTrackId('unknown-track'), 'finding')).toBe(false);
+    expect(isStaleStart(asTrackId('unknown-track'))).toBe(false);
   });
 
   it.each<[DownloadPhase, boolean]>([
@@ -357,7 +357,7 @@ describe('isStaleDownloadPhase', () => {
   ])('from %s, a finding event is stale: %s', (from, stale) => {
     seedPhase('t1', from);
 
-    expect(isStaleDownloadPhase(asTrackId('t1'), 'finding')).toBe(stale);
+    expect(isStaleStart(asTrackId('t1'))).toBe(stale);
   });
 });
 

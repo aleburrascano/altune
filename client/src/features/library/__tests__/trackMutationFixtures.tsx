@@ -59,12 +59,6 @@ export function playlist(tracks: TrackResponse[]): PlaylistDetailResponse {
 }
 
 export const TRACKS_KEY = libraryKeys.tracks('', 'added');
-export const LIBRARY_DERIVED = [
-  libraryKeys.albumsPrefix,
-  libraryKeys.artistsPrefix,
-  libraryKeys.summary,
-  libraryKeys.lookupPrefix,
-];
 
 class RecordingQueryClient extends QueryClient {
   readonly invalidated: (QueryKey | undefined)[] = [];

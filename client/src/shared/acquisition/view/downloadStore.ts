@@ -1,11 +1,16 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
-import type { AcquisitionPhase } from '@shared/acquisition/state/stagePhase';
+import {
+  nextLifecycle,
+  phaseRank,
+  type LifecyclePhase,
+} from '@shared/acquisition/core/acquisitionLifecycle';
 import type { TrackId } from '@shared/catalog';
 import { onSignOut } from '@shared/session';
+import { trackStatusAtCallTime } from '@shared/acquisition/view/trackStatusStore';
 
-export type DownloadPhase = Exclude<AcquisitionPhase, 'working'>;
+export type DownloadPhase = LifecyclePhase;
 
 export interface DownloadEntry {
   trackId: TrackId;
@@ -24,14 +29,6 @@ export interface DownloadMeta {
 const FINISHING_DWELL_MS = 500;
 const DONE_HOLD_MS = 1_200;
 const FAILED_HOLD_MS = 4_000;
-
-const PHASE_RANK: Record<DownloadPhase, number> = {
-  finding: 0,
-  downloading: 1,
-  finishing: 2,
-  done: 3,
-  failed: 3,
-};
 
 interface DownloadState {
   entries: Record<string, DownloadEntry>;
@@ -105,9 +102,8 @@ function withoutKey<T>(map: Record<string, T>, key: string): Record<string, T> {
 }
 
 function isStalePhase(cur: DownloadEntry | undefined, phase: DownloadPhase): boolean {
-  if (!cur) return false;
-  if (cur.phase === 'done' || cur.phase === 'failed') return true;
-  return PHASE_RANK[phase] < PHASE_RANK[cur.phase];
+  const state = { status: undefined, phase: cur?.phase };
+  return nextLifecycle(state, { type: 'progress', phase }) === null;
 }
 
 export const useDownloadStore = create<DownloadState>((set, get) => ({
@@ -237,8 +233,10 @@ export function rememberDownloadMeta(trackId: TrackId, meta: DownloadMeta): void
   useDownloadStore.getState().rememberMeta(trackId, meta);
 }
 
-export function isStaleDownloadPhase(trackId: TrackId, phase: DownloadPhase): boolean {
-  return isStalePhase(useDownloadStore.getState().entries[trackId], phase);
+export function isStaleStart(trackId: TrackId): boolean {
+  const status = trackStatusAtCallTime(trackId)?.acquisitionStatus;
+  const phase = useDownloadStore.getState().entries[trackId]?.phase;
+  return nextLifecycle({ status, phase }, { type: 'started' }) === null;
 }
 
 export function progressDownload(
@@ -278,7 +276,7 @@ export function aggregatePhase(items: DownloadEntry[]): DownloadPhase | undefine
   const active = items.filter((e) => e.phase !== 'done');
   if (active.length === 0) return 'done';
   return active.reduce<DownloadPhase>(
-    (min, e) => (PHASE_RANK[e.phase] < PHASE_RANK[min] ? e.phase : min),
+    (min, e) => (phaseRank(e.phase) < phaseRank(min) ? e.phase : min),
     active[0]!.phase,
   );
 }

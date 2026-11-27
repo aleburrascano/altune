@@ -154,7 +154,7 @@ const HTTP_STATUS_BY_NAME =
   'Compare an HTTP status through failureKindOf(error) or a named constant from @shared/failure/core/httpStatus, never a bare number (see client/src/README.md).';
 
 const STALE_BY_NAME =
-  'Say when a query goes stale with a named policy from @shared/query: STALE.untilEvent, STALE.minute, STALE.now or STALE.default, never a bare number, a sum or Infinity (see client/src/shared/query/README.md).';
+  'Say when a query goes stale with a named policy from @shared/query: STALE.untilEvent, STALE.minute, STALE.halfHour, STALE.day, STALE.now or STALE.default, never a bare number, a sum or Infinity (see client/src/shared/query/README.md).';
 
 const syntaxBannedEverywhere = [
   ...abortApisTheHermesPolyfillLacks,
@@ -163,6 +163,12 @@ const syntaxBannedEverywhere = [
       'CallExpression[callee.property.name=/^toLocale(Lower|Upper)Case$/][arguments.length=0]',
     message:
       'Case folding without a locale follows the device (Turkish folds I to a dotless i): pass the locale, or use toLowerCase / toUpperCase for text that is not shown to the user.',
+  },
+  {
+    selector:
+      'BinaryExpression:matches([operator="==="], [operator="!=="]):has(MemberExpression[property.name=/^acquisition(_s|S)tatus$/]) > Literal[value=/^(ready|pending|failed)$/]',
+    message:
+      'Ask the acquisition predicate, not the raw status: isReady, isPending, isFailed or canRetry from @shared/catalog; whether an acquisition event is stale is nextLifecycle in @shared/acquisition (see client/src/shared/acquisition/README.md).',
   },
   {
     selector:
@@ -574,20 +580,38 @@ const testsPassFakesInNeverPatch = {
   },
 };
 
+const ENV_READ_BAN = {
+  object: 'process',
+  property: 'env',
+  message: `Only src/mobile, the composition root, reads process.env and passes the values down. ${READ_THE_RULES}`,
+};
+
+const INVALIDATION_BAN = {
+  property: 'invalidateQueries',
+  message: `A server event is the one home for what changed (EVENT_INVALIDATES in src/shared/events); a mutation patches and rolls back, and where no event exists it names the keys with refetchWithoutEvent from @shared/query. ${READ_THE_RULES}`,
+};
+
+const INVALIDATION_HOMES = ['src/shared/events/**', 'src/shared/query/shell/**'];
+
+const invalidationOnlyInItsHomes = {
+  name: 'invalidationOnlyInItsHomes',
+  files: ['src/**/*.{ts,tsx}'],
+  ignores: [...TEST_FILES, ...INVALIDATION_HOMES],
+  rules: { 'no-restricted-properties': ['error', INVALIDATION_BAN] },
+};
+
 const onlyTheCompositionRootReadsTheEnvironment = {
   name: 'onlyTheCompositionRootReadsTheEnvironment',
   files: ['src/**/*.{ts,tsx}'],
-  ignores: [...TEST_FILES, 'src/mobile/**'],
-  rules: {
-    'no-restricted-properties': [
-      'error',
-      {
-        object: 'process',
-        property: 'env',
-        message: `Only src/mobile, the composition root, reads process.env and passes the values down. ${READ_THE_RULES}`,
-      },
-    ],
-  },
+  ignores: [...TEST_FILES, 'src/mobile/**', ...INVALIDATION_HOMES],
+  rules: { 'no-restricted-properties': ['error', ENV_READ_BAN, INVALIDATION_BAN] },
+};
+
+const compositionRootRuleInTheInvalidationHomes = {
+  name: 'compositionRootRuleInTheInvalidationHomes',
+  files: INVALIDATION_HOMES.map((home) => `${home}/*.{ts,tsx}`),
+  ignores: TEST_FILES,
+  rules: { 'no-restricted-properties': ['error', ENV_READ_BAN] },
 };
 
 const SRC_ONLY = 'src/**/*';
@@ -649,7 +673,9 @@ module.exports = [
   testsPassFakesInNeverPatch,
   testsNeverWaitOnTheClock,
   setupTestsNeverWaitOnTheClock,
+  invalidationOnlyInItsHomes,
   onlyTheCompositionRootReadsTheEnvironment,
+  compositionRootRuleInTheInvalidationHomes,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

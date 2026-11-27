@@ -8,7 +8,7 @@ import {
 
 import type { UnreleasedTrack, UnreleasedTracksResponse } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
-import { sourceIdList } from '@shared/catalog';
+import { isReady, sourceIdList } from '@shared/catalog';
 import { useQueuePlayback } from '@shared/playback';
 import { detailKeys, STALE } from '@shared/query';
 
@@ -147,7 +147,7 @@ function cardState(
   owned: OwnedTrack | null,
   save: SaveState,
 ): UnreleasedCardState {
-  if (owned?.acquisitionStatus === 'ready') return 'play';
+  if (isReady(owned?.acquisitionStatus)) return 'play';
   return isAcquirable(track) ? save : fallbackState(track);
 }
 

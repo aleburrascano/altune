@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import type { DiscoverySearchHistoryResponse } from '@shared/catalog';
 import { isRetryable } from '@shared/failure';
-import { discoveryKeys, useAppMutation } from '@shared/query';
+import { discoveryKeys, refetchWithoutEvent, useAppMutation } from '@shared/query';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory';
 import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
@@ -35,7 +35,7 @@ function useRecordHistoryMutation(): UseMutationResult<void, Error, string, unde
   return useAppMutation({
     action: 'discover.record_search_history',
     mutationFn: (query: string) => port.recordSearchHistory(query),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: discoveryKeys.history }),
+    onSuccess: () => refetchWithoutEvent(queryClient, [discoveryKeys.history]),
   });
 }
 

@@ -9,6 +9,7 @@ import {
 } from '@features/library/view/LibraryRowAccessories';
 import { rowSurfaceStyle } from '@features/library/view/libraryRowStyle';
 import type { TrackResponse } from '@shared/catalog';
+import { isReady } from '@shared/catalog';
 
 export function LibraryRowPlayback({
   track,
@@ -36,7 +37,7 @@ export function LibraryRowPlayback({
       : null;
 
   const playOrOpenTrack = () => {
-    if (track.acquisition_status === 'ready' && onPlay) {
+    if (isReady(track.acquisition_status) && onPlay) {
       onPlay();
       return;
     }

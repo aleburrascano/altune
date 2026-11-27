@@ -17,7 +17,6 @@ import {
   track,
   page,
   TRACKS_KEY,
-  LIBRARY_DERIVED,
   setup,
   pagedIds,
   deferred,
@@ -97,7 +96,7 @@ describe('useDeleteTracks', () => {
   });
 
   describe('useDeleteTracks — derived caches', () => {
-    it('invalidates the membership-derived caches once when any track was deleted (#938)', async () => {
+    it('invalidates nothing itself when a track was deleted: track_deleted refreshes the derived caches (#938)', async () => {
       const { queryClient, wrapper } = setup(ports);
       mockDeleteTrack.mockImplementation((id) =>
         id === 'a' ? Promise.reject(new ApiError(500, 'boom')) : Promise.resolve(),
@@ -107,7 +106,7 @@ describe('useDeleteTracks', () => {
       act(() => result.current.mutate([asTrackId('a'), asTrackId('b'), asTrackId('c')]));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(queryClient.invalidated).toEqual(LIBRARY_DERIVED);
+      expect(queryClient.invalidated).toEqual([]);
     });
 
     it('invalidates nothing when no track was deleted', async () => {
@@ -377,10 +376,7 @@ describe('useDeleteTracks', () => {
 
       expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
       expect(queryClient.invalidated).toEqual(
-        expect.arrayContaining([
-          ...LIBRARY_DERIVED,
-          ...Object.values(TRACK_CACHE_FAMILIES).map((f) => f.prefix),
-        ]),
+        Object.values(TRACK_CACHE_FAMILIES).map((f) => f.prefix),
       );
       expect(warn).toHaveBeenCalledWith(
         '[library] delete cleanup failed',
@@ -427,7 +423,7 @@ describe('useDeleteTracks', () => {
       );
     });
 
-    it('invalidates only the derived keys when no cleanup threw', async () => {
+    it('invalidates nothing when no cleanup threw', async () => {
       const { queryClient, wrapper } = setup(ports);
       mockDeleteTrack.mockResolvedValue(undefined);
 
@@ -435,7 +431,7 @@ describe('useDeleteTracks', () => {
       act(() => result.current.mutate(['a', 'b'].map(asTrackId)));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(queryClient.invalidated).toEqual(LIBRARY_DERIVED);
+      expect(queryClient.invalidated).toEqual([]);
     });
 
     it('skips cleanup and re-sync for a run whose user signed out before the delete returned', async () => {
@@ -785,7 +781,7 @@ describe('useDeleteTrack', () => {
       );
     });
 
-    it('marks the membership-derived caches stale once the delete lands (#938)', async () => {
+    it('invalidates nothing itself once the delete lands: track_deleted refreshes the derived caches (#938)', async () => {
       const { queryClient, wrapper } = setup(ports);
       mockDeleteTrack.mockResolvedValue(undefined);
 
@@ -793,7 +789,7 @@ describe('useDeleteTrack', () => {
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(queryClient.invalidated).toEqual(LIBRARY_DERIVED);
+      expect(queryClient.invalidated).toEqual([]);
     });
 
     it('invalidates nothing when the delete fails and the track is restored', async () => {

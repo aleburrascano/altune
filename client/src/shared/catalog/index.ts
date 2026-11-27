@@ -34,6 +34,11 @@ export type {
 } from '@shared/catalog/core/playlistResponse';
 export {
   acquisitionOf,
+  canRetry,
+  isFailed,
+  isFailedTrack,
+  isPending,
+  isReady,
   toFailed,
   toPending,
   toReady,

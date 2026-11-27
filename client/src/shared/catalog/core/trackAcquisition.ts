@@ -1,9 +1,37 @@
 import type {
+  AcquisitionStatus,
   FailedAcquisition,
   PendingAcquisition,
   ReadyAcquisition,
   TrackAcquisition,
 } from '@shared/catalog/core/trackResponse';
+
+type MaybeStatus = string | null | undefined;
+
+export function isReady<S extends MaybeStatus>(status: S): status is S & 'ready' {
+  return status === 'ready';
+}
+
+export function isPending<S extends MaybeStatus>(status: S): status is S & 'pending' {
+  return status === 'pending';
+}
+
+export function isFailed<S extends MaybeStatus>(status: S): status is S & 'failed' {
+  return status === 'failed';
+}
+
+type CarriesStatus = { acquisition_status: AcquisitionStatus };
+type CarriesFailedStatus = { acquisition_status: 'failed' };
+
+export function isFailedTrack<T extends CarriesStatus>(
+  track: T,
+): track is Extract<T, CarriesFailedStatus> {
+  return isFailed(track.acquisition_status);
+}
+
+export function canRetry<S extends MaybeStatus>(status: S): status is S & 'failed' {
+  return isFailed(status);
+}
 
 export type AcquisitionTransition =
   Required<PendingAcquisition> | Required<ReadyAcquisition> | Required<FailedAcquisition>;

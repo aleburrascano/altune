@@ -10,6 +10,7 @@ import {
 import { pinnedStatusDisplay } from '@features/library/core/pinnedStatusDisplay';
 import type { ShowFailure } from '@features/library/core/libraryFailure';
 import { useReacquireTrack } from '@features/library/view/useRetryAcquisition';
+import { isReady } from '@shared/catalog';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
 
@@ -48,7 +49,7 @@ function offlineItem(trackId: TrackId, opts: TrackMenuItemOptions): ContextMenuI
 }
 
 function queueItems(track: TrackResponse, opts: TrackMenuItemOptions): ContextMenuItem[] {
-  if (track.acquisition_status !== 'ready') return [];
+  if (!isReady(track.acquisition_status)) return [];
   return [
     { label: 'Play Next', onPress: () => opts.queue.playNext(toPlaybackTrack(track)) },
     { label: 'Add to Queue', onPress: () => opts.queue.addToQueue(toPlaybackTrack(track)) },
@@ -63,7 +64,7 @@ function reacquireItems(opts: TrackMenuItemOptions): ContextMenuItem[] {
 }
 
 function optionalItems(track: TrackResponse, opts: TrackMenuItemOptions): ContextMenuItem[] {
-  const ready = track.acquisition_status === 'ready';
+  const ready = isReady(track.acquisition_status);
   const items: ContextMenuItem[] = [];
   if (opts.onAddToPlaylist) items.push({ label: 'Add to Playlist', onPress: opts.onAddToPlaylist });
   if (ready && opts.offline.supported) items.push(offlineItem(track.id, opts));

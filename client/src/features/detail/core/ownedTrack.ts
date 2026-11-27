@@ -2,6 +2,7 @@ import type { TrackId, AcquisitionStatus, DiscoveryResult } from '@shared/catalo
 import type { PlaybackTrack } from '@shared/playback';
 
 import { trackExtras, type TrackExtras } from '@features/detail/core/trackExtras';
+import { isFailed, isReady } from '@shared/catalog';
 
 export type OwnedTrack = { trackId: TrackId } & (
   | { acquisitionStatus: 'failed'; failureMessage: string | null; retryable: boolean }
@@ -14,7 +15,7 @@ export function ownedTrack(
   failureMessage: string | null,
   retryable = true,
 ): OwnedTrack {
-  return acquisitionStatus === 'failed'
+  return isFailed(acquisitionStatus)
     ? { trackId, acquisitionStatus, failureMessage, retryable }
     : { trackId, acquisitionStatus };
 }
@@ -46,7 +47,7 @@ export function splitOwned(tracks: readonly DiscoveryResult[]): OwnedSplit {
     const owned = ownedFromTrackInfo(trackExtras(discovery.extras));
     if (owned === null) {
       unownedCount += 1;
-    } else if (owned.acquisitionStatus === 'ready') {
+    } else if (isReady(owned.acquisitionStatus)) {
       playable.push({ owned, discovery });
     } else {
       acquiringCount += 1;

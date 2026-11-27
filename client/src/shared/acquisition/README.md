@@ -1,1 +1,3 @@
 `acquisition` owns how a track's download progress and retry are tracked and shown.
+
+`nextLifecycle(state, event)` is the one pure table from the state `{ status, phase }` and an event (`started`, `progress`, `completed`, `failed`, `replaceFailed`, `response`) to the next state, or `null` when the event is stale (a start on a ready track, progress that goes backwards, a pending response over a later status). `trackStatusStore` and `downloadStore` both ask it whether an event is stale instead of keeping their own guard. To ask what a status means, call `isReady`, `isPending`, `isFailed` or `canRetry` from `@shared/catalog`; `client/eslint.config.js` fails a comparison of `acquisition_status` or `acquisitionStatus` with `'ready'`, `'pending'` or `'failed'`.

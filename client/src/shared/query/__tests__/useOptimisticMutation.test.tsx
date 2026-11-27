@@ -236,7 +236,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     expect(settled).toBe(true);
   });
 
-  it('invalidates the optimistic key itself when no `invalidate` is given', async () => {
+  it('invalidates nothing when no `invalidate` is given, a server event refreshes the key', async () => {
     const queryClient = newClient();
 
     const { result } = renderHook(
@@ -255,7 +255,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
       await result.current.mutateAsync(1);
     });
 
-    expect(queryClient.invalidated).toEqual([{ queryKey: KEY }]);
+    expect(queryClient.invalidated).toEqual([]);
   });
 });
 
