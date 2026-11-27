@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
@@ -25,12 +26,13 @@ var (
 const (
 	jobRetryBase   = 30 * time.Second
 	jobRetryFactor = 4
+	jobRetrySpread = 0.2
 )
 
-var jobRetryBackoff = backoff.MustUncapped(jobRetryBase, backoff.WithFactor(jobRetryFactor))
+var jobRetryBackoff = backoff.MustUncapped(jobRetryBase, backoff.WithFactor(jobRetryFactor), backoff.WithSpread(jobRetrySpread))
 
-func retryBackoff(attempts int) time.Duration {
-	return jobRetryBackoff.Ceiling(min(attempts, MaxAcquisitionAttempts))
+func retryBackoff(attempts int, unit random.Unit) time.Duration {
+	return jobRetryBackoff.DelayAt(min(attempts, MaxAcquisitionAttempts), unit())
 }
 
 func isTransientFailure(err error) bool {

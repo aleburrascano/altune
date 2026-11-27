@@ -47,13 +47,6 @@ func WithPollInterval(d time.Duration) func(*BackgroundAcquisitionScheduler) {
 
 const fingerprintLookupUnverified = "unverified until the first successful lookup"
 
-func WithVerificationStatus(v ports.Verification) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		s.verification = v
-		s.verificationGiven = true
-	}
-}
-
 type upgradeRunner interface {
 	ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
 }

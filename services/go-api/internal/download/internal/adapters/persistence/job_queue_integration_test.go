@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random/randomtest"
 	"context"
 	"errors"
 	"fmt"
@@ -1230,6 +1231,8 @@ func integrationSchedulerPorts(queue ports.DownloadQueue) download.SchedulerPort
 		FingerprintVerified: func() bool { return false },
 		Timer:               clock.NewTimer,
 		Ticker:              clock.NewTicker,
+		Unit:                randomtest.Fixed(0.5),
+		Verification:        ports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true},
 	}
 }
 

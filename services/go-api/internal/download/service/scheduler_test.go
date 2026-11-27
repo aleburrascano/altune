@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/random/randomtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1957,7 +1958,7 @@ func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *tes
 
 func startVerifiedScheduler(t *testing.T, v acqports.Verification) {
 	t.Helper()
-	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now, service.WithVerificationStatus(v))
+	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now, withTestToolsPresent(v))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 }
 
@@ -3121,6 +3122,35 @@ func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(
 			}
 			if got := acq.refused.Load(); got != 0 {
 				t.Errorf("refused %d times, want 0", got)
+			}
+		})
+	}
+}
+
+func TestBackgroundScheduler_APanickedJobsRetryDelayIsSpreadByTheInjectedUnit(t *testing.T) {
+	cases := []struct {
+		name string
+		unit float64
+		want time.Duration
+	}{
+		{"unit at the low end", 0, 24 * time.Second},
+		{"unit in the middle", 0.5, 30 * time.Second},
+		{"unit above the middle", 0.75, 33 * time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			job := acqports.Job{Kind: acqports.JobKindAcquire, Run: 1, TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New())}
+			queue := newScriptedClaimQueue(job)
+			scheduler := newTestScheduler(panicsAfterClaim{jobRunner: &panickingAcquirer{}}, 1, time.Now,
+				withTestQueue(queue),
+				service.WithPollInterval(time.Millisecond),
+				withTestUpgrades(panickingUpgrader{}, 1),
+				withTestUnit(randomtest.Fixed(tc.unit)))
+			t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+			queue.awaitLeaving(t)
+
+			if got := queue.releaseDelays(); len(got) != 1 || got[0] != tc.want {
+				t.Errorf("release delays = %v, want exactly [%v]", got, tc.want)
 			}
 		})
 	}
