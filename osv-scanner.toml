@@ -1,4 +1,4 @@
 [[IgnoredVulns]]
 id = "GHSA-mrhx-c7xc-m3w5"
-ignoreUntil = 2026-12-26
+effectiveUntil = 2026-12-26
 reason = "Temporary, expires within 30 days. zod 3.25.76 in client/package-lock.json is pinned (^3.25.76) by @expo/cli 57.0.23; the only patched release is zod 4.6.6, a major bump the parent does not allow. Dev-time CLI only. Remove when @expo/cli supports zod 4."
