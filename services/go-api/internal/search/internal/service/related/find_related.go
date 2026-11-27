@@ -67,10 +67,10 @@ func (s *FindRelatedService) Execute(
 		return nil
 	}
 
-	fan := &relatedFanOut{ctx: ctx, lookups: parallel.New("related.lookup", s.perResult*topN), memo: s.memo}
+	fan := &relatedFanOut{lookups: parallel.New("related.lookup", s.perResult*topN), memo: s.memo}
 	for _, result := range organicResults[:topN] {
 		for _, source := range s.sources[result.Kind] {
-			source.dispatch(fan, userId, result)
+			source.dispatch(ctx, fan, userId, result)
 		}
 	}
 	groups := dedupRelatedAgainstOrganic(fan.wait(), organicResults)
@@ -81,7 +81,6 @@ func (s *FindRelatedService) Execute(
 }
 
 type relatedFanOut struct {
-	ctx           context.Context
 	lookups       *parallel.Limited
 	memo          *expiringcache.Memo[relatedMemoKey, []domain.SearchResult]
 	mu            sync.Mutex
@@ -156,12 +155,13 @@ func (f *relatedFanOut) reserveProviderCall() bool {
 }
 
 func (f *relatedFanOut) fetchRelatedGroup(
+	ctx context.Context,
 	lookup relatedGroupLookup,
 	fetch func(ctx context.Context) ([]domain.SearchResult, error),
 ) {
-	f.lookups.Go(f.ctx, func() {
-		defer background.RecoverContext(f.ctx, lookup.panicLog.event, lookup.panicLog.key, lookup.panicLog.value)
-		items, err := fetch(f.ctx)
+	f.lookups.Go(ctx, func() {
+		defer background.RecoverContext(ctx, lookup.panicLog.event, lookup.panicLog.key, lookup.panicLog.value)
+		items, err := fetch(ctx)
 		if err != nil || len(items) == 0 {
 			return
 		}

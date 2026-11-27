@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/download/internal/core/audioverdict"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/tracklength"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
@@ -149,7 +148,7 @@ func (s *AcquireTrackAudioService) storedFiles() storedFileFingerprinter {
 	return storedFileFingerprinter{workspace: s.workspace, reader: s.storedAudio, identifier: s.identifier}
 }
 
-func (s *AcquireTrackAudioService) Execute(ctx context.Context, job jobrun.Job) error {
+func (s *AcquireTrackAudioService) Execute(ctx context.Context, job ports.AcquisitionJob) error {
 	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
 	track, found, err := s.loadTrack(ctx, job.UserID, job.TrackID)
@@ -174,7 +173,7 @@ func (s *AcquireTrackAudioService) observe(ac *AcquisitionContext) {
 	s.contextObserver(ac)
 }
 
-func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
 	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
 	track, found, err := s.loadTrack(ctx, job.UserID, job.TrackID)
@@ -185,14 +184,14 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, job jobru
 	return err
 }
 
-func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, job jobrun.Job, track *ports.TrackSnapshot, gate replacement.ReplacementGate) (replacement.Attempt, error) {
+func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, job ports.AcquisitionJob, track *ports.TrackSnapshot, gate replacement.ReplacementGate) (replacement.Attempt, error) {
 	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
 	ac, err := s.forUpgradeSweep().replaceLoaded(ctx, job, track, gate, neverRetry)
 	return attemptOf(ac, err), err
 }
 
-func (s *AcquireTrackAudioService) acquireBudget(ctx context.Context, job jobrun.Job) (context.Context, context.CancelFunc) {
+func (s *AcquireTrackAudioService) acquireBudget(ctx context.Context, job ports.AcquisitionJob) (context.Context, context.CancelFunc) {
 	ctx = logging.ContextWithSubjectUser(ctx, job.UserID.String())
 	return context.WithTimeoutCause(ctx, s.acquireTimeout, errAcquireBudgetSpent)
 }
@@ -213,7 +212,7 @@ func attemptOf(ac *AcquisitionContext, err error) replacement.Attempt {
 	return attempt
 }
 
-func (s *AcquireTrackAudioService) replaceLoaded(ctx context.Context, job jobrun.Job, track *ports.TrackSnapshot, gate replacement.ReplacementGate, retry retryPolicy) (*AcquisitionContext, error) {
+func (s *AcquireTrackAudioService) replaceLoaded(ctx context.Context, job ports.AcquisitionJob, track *ports.TrackSnapshot, gate replacement.ReplacementGate, retry retryPolicy) (*AcquisitionContext, error) {
 	trackId := track.ID
 	job.TrackID = trackId
 	ac := s.startAcquisition(ctx, job, track)
@@ -245,7 +244,7 @@ func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId ids.Use
 	return track, true, nil
 }
 
-func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, job jobrun.Job, track *ports.TrackSnapshot) *AcquisitionContext {
+func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, job ports.AcquisitionJob, track *ports.TrackSnapshot) *AcquisitionContext {
 	job.Progress().Meta(track.Title, track.Artist, track.Album)
 
 	slog.InfoContext(ctx, "track_acquisition_started",
@@ -394,7 +393,7 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 	return reacquirePolicy{ledger: s.ledger, audioStore: s.audioStore}.reconcile(ctx, track)
 }
 
-func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, job jobrun.Job) {
+func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, job ports.AcquisitionJob) {
 	s.outcomes().refuseQueued(logging.ContextWithSubjectUser(ctx, job.UserID.String()), job)
 }
 

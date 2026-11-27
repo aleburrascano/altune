@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/logging"
+	"context"
 	"log/slog"
 	"time"
 )
@@ -11,10 +12,10 @@ func (s *BackgroundAcquisitionScheduler) workerCount() int {
 	return s.workers
 }
 
-func (s *BackgroundAcquisitionScheduler) Status() ports.Status {
+func (s *BackgroundAcquisitionScheduler) Status(ctx context.Context) ports.Status {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
-	pending, oldestAge, depthKnown := s.pendingDepth()
+	pending, oldestAge, depthKnown := s.pendingDepth(ctx)
 	return ports.Status{
 		InFlight:         int(s.inflightCount.Load()),
 		Pending:          s.pending.size(),
@@ -33,14 +34,14 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.Status {
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) pendingDepth() (int, time.Duration, bool) {
+func (s *BackgroundAcquisitionScheduler) pendingDepth(ctx context.Context) (int, time.Duration, bool) {
 	reader, ok := s.queue.(ports.QueueDepthReader)
 	if !ok {
 		return 0, 0, false
 	}
-	pending, oldestAge, err := reader.PendingDepth(s.baseCtx)
+	pending, oldestAge, err := reader.PendingDepth(ctx)
 	if err != nil {
-		slog.ErrorContext(s.baseCtx, "acquisition.pending_depth_failed", logging.KeyError, err)
+		slog.ErrorContext(ctx, "acquisition.pending_depth_failed", logging.KeyError, err)
 		return 0, 0, false
 	}
 	return pending, oldestAge, true

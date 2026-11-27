@@ -48,12 +48,11 @@ type fanOutRun struct {
 	statuses []domain.ProviderSearchResponse
 	waiting  map[int]bool
 	arrivals chan providerArrival
-	callCtx  context.Context
 	stop     context.CancelFunc
 	running  atomic.Int32
 }
 
-func newFanOutRun(ctx context.Context, providers int) *fanOutRun {
+func newFanOutRun(ctx context.Context, providers int) (*fanOutRun, context.Context) {
 	callCtx, stop := background.DetachCancelable(ctx)
 	if ctx.Err() != nil {
 		stop()
@@ -63,11 +62,10 @@ func newFanOutRun(ctx context.Context, providers int) *fanOutRun {
 		statuses: make([]domain.ProviderSearchResponse, providers),
 		waiting:  make(map[int]bool, providers),
 		arrivals: make(chan providerArrival, providers),
-		callCtx:  callCtx,
 		stop:     stop,
 	}
 	run.running.Store(1)
-	return run
+	return run, callCtx
 }
 
 func (r *fanOutRun) callDone() {
@@ -92,10 +90,10 @@ func (s *Service) fanOutVia(
 	kinds domain.ResultKindSet,
 	answers providerAnswers,
 ) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
-	run := newFanOutRun(ctx, len(s.providers))
+	run, callCtx := newFanOutRun(ctx, len(s.providers))
 	stopWithCaller := context.AfterFunc(ctx, run.stop)
 	for i, provider := range s.providers {
-		s.startProviderCall(ctx, run, i, provider, fanOutRequest{query: searchQuery, kinds: kinds, answers: answers})
+		s.startProviderCall(ctx, callCtx, run, i, provider, fanOutRequest{query: searchQuery, kinds: kinds, answers: answers})
 	}
 	run.callDone()
 
@@ -110,7 +108,7 @@ type fanOutRequest struct {
 	answers providerAnswers
 }
 
-func (s *Service) startProviderCall(ctx context.Context, run *fanOutRun, slot int, provider ports.SearchProvider, req fanOutRequest) {
+func (s *Service) startProviderCall(ctx, callCtx context.Context, run *fanOutRun, slot int, provider ports.SearchProvider, req fanOutRequest) {
 	if cached, hit := req.answers.get(ctx, provider.Name()); hit {
 		run.results[slot], run.statuses[slot] = cached, cachedStatus(provider.Name(), cached)
 		return
@@ -122,7 +120,7 @@ func (s *Service) startProviderCall(ctx context.Context, run *fanOutRun, slot in
 	}
 	run.waiting[slot] = true
 	run.running.Add(1)
-	s.bg.Track(func() { s.callProvider(run.callCtx, run, slot, call, provider, req) })
+	s.bg.Track(func() { s.callProvider(callCtx, run, slot, call, provider, req) })
 }
 
 func (s *Service) callProvider(ctx context.Context, run *fanOutRun, slot int, call providerguard.BreakerCall, provider ports.SearchProvider, req fanOutRequest) {

@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -122,12 +123,12 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		Offset:         result.Offset,
 		HasMore:        result.HasMore,
 	})
-	h.warmUnreleased(result.Results)
+	h.warmUnreleased(r.Context(), result.Results)
 }
 
 const warmArtistLimit = 3
 
-func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
+func (h *DiscoveryHandler) warmUnreleased(ctx context.Context, results []domain.SearchResult) {
 	var artists []unreleased.ArtistToRefresh
 	for _, res := range results {
 		if res.Kind != domain.ResultKindArtist || len(res.Sources) == 0 {
@@ -143,7 +144,7 @@ func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
 			break
 		}
 	}
-	h.unreleasedSvc.Warm(artists)
+	h.unreleasedSvc.Warm(ctx, artists)
 }
 
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {

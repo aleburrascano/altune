@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service/jobrun"
 	"context"
 	"log/slog"
 	"sync/atomic"
@@ -48,7 +47,7 @@ func WithPollInterval(d time.Duration) func(*BackgroundAcquisitionScheduler) {
 const fingerprintLookupUnverified = "unverified until the first successful lookup"
 
 type upgradeRunner interface {
-	ExecuteUpgrade(ctx context.Context, job jobrun.Job) error
+	ExecuteUpgrade(ctx context.Context, job ports.AcquisitionJob) error
 }
 
 type VerifySkipCounter struct{ n atomic.Uint64 }

@@ -6,7 +6,6 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -89,7 +88,7 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 			svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), tt.store,
 				scratchfiles.New(), noVerification(), noStages())
 
-			err := svc.Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID})
+			err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 			if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
 				t.Fatalf("Execute = %v, want %v", err, tt.wantErrIs)

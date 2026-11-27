@@ -19,12 +19,12 @@ func UnreleasedWiring(t testing.TB, cache ports.UnreleasedCache, parts ...Unrele
 		panic(err)
 	}
 	w := unreleased.Wiring{
-		Trackers:  unreleased.NoTrackers{},
-		Storage:   storage,
-		Lifecycle: t.Context(),
-		Jobs:      &background.Tracker{},
-		Timer:     clock.NewTimer,
-		Now:       clock.Now,
+		Trackers: unreleased.NoTrackers{},
+		Storage:  storage,
+		Shutdown: t.Context().Done(),
+		Jobs:     &background.Tracker{},
+		Timer:    clock.NewTimer,
+		Now:      clock.Now,
 	}
 	for _, part := range parts {
 		part(&w)
@@ -43,7 +43,7 @@ func UnreleasedStored(store ports.UnreleasedStore) UnreleasedPart {
 }
 
 func UnreleasedLifecycle(ctx context.Context, jobs *background.Tracker) UnreleasedPart {
-	return func(w *unreleased.Wiring) { w.Lifecycle, w.Jobs = ctx, jobs }
+	return func(w *unreleased.Wiring) { w.Shutdown, w.Jobs = ctx.Done(), jobs }
 }
 
 func UnreleasedTrackers(trackers ports.TrackerSongs) UnreleasedPart {

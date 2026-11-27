@@ -43,6 +43,7 @@ linters:
     - depguard
     - importas
     - contextcheck
+    - containedctx
 
   settings:
     importas:

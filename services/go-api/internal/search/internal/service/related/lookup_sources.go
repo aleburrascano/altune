@@ -20,7 +20,7 @@ func required(name string) error {
 
 type LookupSource interface {
 	resultKind() domain.ResultKind
-	dispatch(fan *relatedFanOut, userId ids.UserId, result domain.SearchResult)
+	dispatch(ctx context.Context, fan *relatedFanOut, userId ids.UserId, result domain.SearchResult)
 }
 
 type libraryMatchesSource struct {
@@ -36,7 +36,7 @@ func LibraryMatches(querier ports.RelationshipQuerier) (LookupSource, error) {
 
 func (libraryMatchesSource) resultKind() domain.ResultKind { return domain.ResultKindTrack }
 
-func (s libraryMatchesSource) dispatch(fan *relatedFanOut, userId ids.UserId, result domain.SearchResult) {
+func (s libraryMatchesSource) dispatch(ctx context.Context, fan *relatedFanOut, userId ids.UserId, result domain.SearchResult) {
 	album := result.Album
 	if album == "" {
 		return
@@ -45,7 +45,7 @@ func (s libraryMatchesSource) dispatch(fan *relatedFanOut, userId ids.UserId, re
 	if fan.serveMemoized(lookup) {
 		return
 	}
-	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
+	fan.fetchRelatedGroup(ctx, lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
 		matches, err := s.querier.FindRelatedByAlbumArtist(ctx, userId, album, result.Subtitle, relatedPerGroup)
 		if err != nil {
 			slog.DebugContext(ctx, "related.library_lookup_failed", logging.KeyError, err)
@@ -72,12 +72,12 @@ func AlbumTracksSource(provider ports.AlbumContentProvider, breaker *providergua
 
 func (albumTracksSource) resultKind() domain.ResultKind { return domain.ResultKindTrack }
 
-func (s albumTracksSource) dispatch(fan *relatedFanOut, _ ids.UserId, result domain.SearchResult) {
+func (s albumTracksSource) dispatch(ctx context.Context, fan *relatedFanOut, _ ids.UserId, result domain.SearchResult) {
 	albumID := result.DeezerAlbumID
 	if albumID == "" {
 		return
 	}
-	fan.fetchGuardedGroup(albumTracksLookup(albumID, result), s.breaker, func(ctx context.Context) ([]domain.SearchResult, error) {
+	fan.fetchGuardedGroup(ctx, albumTracksLookup(albumID, result), s.breaker, func(ctx context.Context) ([]domain.SearchResult, error) {
 		return s.provider.GetAlbumTracks(ctx, domain.CanonicalContentProvider, albumID)
 	})
 }
@@ -99,17 +99,18 @@ func ArtistAlbumsSource(provider ports.ArtistContentProvider, breaker *providerg
 
 func (artistAlbumsSource) resultKind() domain.ResultKind { return domain.ResultKindArtist }
 
-func (s artistAlbumsSource) dispatch(fan *relatedFanOut, _ ids.UserId, result domain.SearchResult) {
+func (s artistAlbumsSource) dispatch(ctx context.Context, fan *relatedFanOut, _ ids.UserId, result domain.SearchResult) {
 	artistID := extractDeezerID(result)
 	if artistID == "" {
 		return
 	}
-	fan.fetchGuardedGroup(artistAlbumsLookup(artistID, result), s.breaker, func(ctx context.Context) ([]domain.SearchResult, error) {
+	fan.fetchGuardedGroup(ctx, artistAlbumsLookup(artistID, result), s.breaker, func(ctx context.Context) ([]domain.SearchResult, error) {
 		return s.provider.GetArtistAlbums(ctx, domain.CanonicalContentProvider, artistID)
 	})
 }
 
 func (f *relatedFanOut) fetchGuardedGroup(
+	ctx context.Context,
 	lookup relatedGroupLookup,
 	breaker *providerguard.CircuitBreaker,
 	call func(ctx context.Context) ([]domain.SearchResult, error),
@@ -120,7 +121,7 @@ func (f *relatedFanOut) fetchGuardedGroup(
 	if !f.reserveProviderCall() {
 		return
 	}
-	f.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
+	f.fetchRelatedGroup(ctx, lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
 		items, err := providerguard.GuardedFetch(ctx, breaker, domain.CanonicalContentProvider, func() ([]domain.SearchResult, error) {
 			return call(ctx)
 		})

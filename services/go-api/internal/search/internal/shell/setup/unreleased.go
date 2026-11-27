@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/shared/clock"
+	"context"
 	"fmt"
 )
 
@@ -17,7 +18,7 @@ type unreleasedServices struct {
 	refresh *unreleased.Service
 }
 
-func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.Stores, artists *artistpage.GetArtistContentService) (unreleasedServices, error) {
+func newUnreleasedServices(ctx context.Context, d connections.Deps, t *providerTable, s connections.Stores, artists *artistpage.GetArtistContentService) (unreleasedServices, error) {
 	songs, lists := t.named(rowGenius).unreleasedSongs, t.named(rowTrackers).unreleasedLists
 	if songs == nil && lists == nil {
 		return unreleasedServices{lookup: handler.NoUnreleased{}}, nil
@@ -30,17 +31,17 @@ func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.S
 	if lists != nil {
 		trackers = lists
 	}
-	storage, refreshes, err := unreleasedStorage(d, s)
+	storage, refreshes, err := unreleasedStorage(ctx, d, s)
 	if err != nil {
 		return unreleasedServices{}, err
 	}
 	lookup, err := unreleased.NewService(genius, artists, d.Unreleased.Tuning, unreleased.Wiring{
-		Trackers:  trackers,
-		Storage:   storage,
-		Lifecycle: d.Lifecycle,
-		Jobs:      d.Background,
-		Timer:     clock.NewTimer,
-		Now:       clock.Now,
+		Trackers: trackers,
+		Storage:  storage,
+		Shutdown: d.Shutdown,
+		Jobs:     d.Background,
+		Timer:    clock.NewTimer,
+		Now:      clock.Now,
 	})
 	if err != nil {
 		return unreleasedServices{}, fmt.Errorf("build the unreleased service: %w", err)
@@ -51,8 +52,8 @@ func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.S
 	return unreleasedServices{lookup: lookup}, nil
 }
 
-func unreleasedStorage(d connections.Deps, s connections.Stores) (unreleased.Storage, bool, error) {
-	if store := unreleasedStore(d, s); store != nil {
+func unreleasedStorage(ctx context.Context, d connections.Deps, s connections.Stores) (unreleased.Storage, bool, error) {
+	if store := unreleasedStore(ctx, d, s); store != nil {
 		storage, err := unreleased.NewStoredStorage(store)
 		if err != nil {
 			return nil, false, fmt.Errorf("build the unreleased store storage: %w", err)
@@ -66,12 +67,12 @@ func unreleasedStorage(d connections.Deps, s connections.Stores) (unreleased.Sto
 	return storage, false, nil
 }
 
-func unreleasedStore(d connections.Deps, s connections.Stores) ports.UnreleasedStore {
+func unreleasedStore(ctx context.Context, d connections.Deps, s connections.Stores) ports.UnreleasedStore {
 	if d.Unreleased.ServeFromCache {
 		return nil
 	}
 	if s.Pool == nil {
-		d.Logger.WarnContext(d.Lifecycle, "unreleased.store_unavailable_using_cache", "reason", "no database pool")
+		d.Logger.WarnContext(ctx, "unreleased.store_unavailable_using_cache", "reason", "no database pool")
 		return nil
 	}
 	return persistence.NewPostgresUnreleasedStore(s.Pool)

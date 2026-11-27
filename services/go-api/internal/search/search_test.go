@@ -393,11 +393,11 @@ func TestNew_WithEveryKeySetDiscogsServesArtwork(t *testing.T) {
 }
 
 func TestNew_RefusesDepsWithoutTheHandlesItNeeds(t *testing.T) {
-	_, err := search.New(search.Deps{})
+	_, err := search.New(t.Context(), search.Deps{})
 	if err == nil {
-		t.Fatal("New accepted deps with no transport, logger or lifecycle")
+		t.Fatal("New accepted deps with no transport or logger")
 	}
-	want := "discovery: deps are missing Lifecycle, Background, Tracker, Logger, Activity, ClientEvents, Transport, CacheOps, ProviderTimeout, ChartTimeout"
+	want := "discovery: deps are missing Background, Tracker, Logger, Activity, ClientEvents, Transport, CacheOps, ProviderTimeout, ChartTimeout"
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
 	}
@@ -407,7 +407,7 @@ func TestNew_NamesOnlyTheHandleThatIsMissing(t *testing.T) {
 	h := newHarness(t, prodLikeProviders())
 	h.deps.ChartTimeout = 0
 
-	_, err := search.New(h.deps)
+	_, err := search.New(t.Context(), h.deps)
 	if err == nil || err.Error() != "discovery: deps are missing ChartTimeout" {
 		t.Errorf("error = %v, want only ChartTimeout named", err)
 	}
@@ -913,7 +913,7 @@ func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 	logs := &bytes.Buffer{}
 	transport := &recordingTransport{}
 	return &harness{t: t, transport: transport, logs: logs, deps: search.Deps{
-		Lifecycle:       ctx,
+		Shutdown:        ctx.Done(),
 		Background:      jobs,
 		Tracker:         searchtest.NewTracker(t),
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{ReplaceAttr: dropTime})),
@@ -938,7 +938,7 @@ func dropTime(_ []string, attr slog.Attr) slog.Attr {
 
 func (h *harness) start() *search.Discovery {
 	h.t.Helper()
-	disc, err := search.New(h.deps)
+	disc, err := search.New(h.t.Context(), h.deps)
 	if err != nil {
 		h.t.Fatalf("New: %v", err)
 	}

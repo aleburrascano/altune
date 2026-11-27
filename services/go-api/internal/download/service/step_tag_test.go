@@ -6,7 +6,6 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -61,7 +60,7 @@ func acquireVerified(t *testing.T, track ports.TrackSnapshot, source ports.Audio
 	t.Helper()
 	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
-	return ledger, svc.Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID})
+	return ledger, svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }
 
 func requireReady(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId, err error) {

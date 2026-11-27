@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
@@ -589,16 +588,16 @@ func TestPostgresJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 
 type panickingAcquirer struct{ runs atomic.Int32 }
 
-func (a *panickingAcquirer) Execute(context.Context, jobrun.Job) error {
+func (a *panickingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
-	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
+func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
+	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *panickingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
+func (a *panickingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) {
 	dbtest.RequireIntegration(t)
@@ -607,7 +606,7 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 	acq := &panickingAcquirer{}
-	scheduler := download.MustNewBackgroundAcquisitionScheduler(download.NewProcessRoot(context.Background()), acq, 1, time.Now, integrationSchedulerPorts(queue),
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(context.Background(), acq, 1, time.Now, integrationSchedulerPorts(queue),
 		service.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1101,7 +1100,7 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 		t.Fatalf("set run attempts: %v", err)
 	}
 	acq := &panickingAcquirer{}
-	scheduler := download.MustNewBackgroundAcquisitionScheduler(download.NewProcessRoot(context.Background()), acq, 1, time.Now, integrationSchedulerPorts(queue),
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(context.Background(), acq, 1, time.Now, integrationSchedulerPorts(queue),
 		service.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1134,7 +1133,7 @@ func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackof
 		t.Fatalf("Enqueue = %v", err)
 	}
 	acq := &panickingAcquirer{}
-	scheduler := download.MustNewBackgroundAcquisitionScheduler(download.NewProcessRoot(context.Background()), acq, 1, time.Now, integrationSchedulerPorts(queue),
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(context.Background(), acq, 1, time.Now, integrationSchedulerPorts(queue),
 		service.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())

@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	length "altune/go-api/internal/download/internal/core/tracklength"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadfailure"
@@ -1714,7 +1713,7 @@ func (s findOnlySource) Fetch(context.Context, ports.AudioCandidate, string) (po
 	return fetchedFrom("", s.fetchErr)
 }
 
-func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (jobrun.Job, error) {
+func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (ports.AcquisitionJob, error) {
 	t.Helper()
 	healthy := findOnlySource{
 		name:       "healthy",
@@ -1723,7 +1722,7 @@ func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (jobrun.J
 	}
 	registry := service.NewSourceRegistry(down, healthy)
 	ctx := context.Background()
-	job := jobrun.Job{Attempt: 1}
+	job := ports.AcquisitionJob{Attempt: 1}
 	ac := &service.AcquisitionContext{Job: job}
 	if _, err := service.NewSearchStep(registry).Execute(ctx, ac, service.PipelineStart{}); err != nil {
 		t.Fatalf("search: %v", err)
@@ -2076,7 +2075,7 @@ func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != downloadfailure.FailureSourceUnavailable {
 		t.Fatalf("failure code = %s, want %s (err=%v)", code, downloadfailure.FailureSourceUnavailable, err)
 	}
-	if !service.WillRetry(jobrun.Job{Attempt: 1}, err) {
+	if !service.WillRetry(ports.AcquisitionJob{Attempt: 1}, err) {
 		t.Fatalf("willRetry = false for %v", err)
 	}
 }

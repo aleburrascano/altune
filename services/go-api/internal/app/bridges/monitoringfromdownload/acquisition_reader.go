@@ -3,10 +3,11 @@ package monitoringfromdownload
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/platform/monitoring"
+	"context"
 )
 
 type DownloadStatusReportSource interface {
-	Status() download.Status
+	Status(context.Context) download.Status
 }
 
 type acquisitionReader struct {
@@ -17,8 +18,8 @@ func NewAcquisitionReader(source DownloadStatusReportSource) monitoring.Acquisit
 	return acquisitionReader{source: source}
 }
 
-func (r acquisitionReader) Status() monitoring.DownloadStatusReport {
-	s := r.source.Status()
+func (r acquisitionReader) Status(ctx context.Context) monitoring.DownloadStatusReport {
+	s := r.source.Status(ctx)
 	return monitoring.DownloadStatusReport{
 		InFlight:         s.InFlight,
 		Succeeded:        s.Succeeded,

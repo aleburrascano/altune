@@ -58,7 +58,7 @@ type DetailEnrichers struct {
 type UnreleasedReader interface {
 	Search(ctx context.Context, query string) ([]ports.UnreleasedHit, error)
 	Lookup(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (unreleased.Lookup, error)
-	Warm(artists []unreleased.ArtistToRefresh)
+	Warm(ctx context.Context, artists []unreleased.ArtistToRefresh)
 }
 
 type NoUnreleased struct{}
@@ -71,7 +71,7 @@ func (NoUnreleased) Lookup(context.Context, domain.ProviderName, string, string,
 	return unreleased.Lookup{}, nil
 }
 
-func (NoUnreleased) Warm([]unreleased.ArtistToRefresh) {}
+func (NoUnreleased) Warm(context.Context, []unreleased.ArtistToRefresh) {}
 
 type ClientEventSink interface {
 	Emit(ctx context.Context, event telemetry.ClientEvent)

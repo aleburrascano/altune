@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
 	"altune/go-api/internal/shared/telemetry"
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,7 +18,7 @@ import (
 )
 
 type Deps struct {
-	Lifecycle       context.Context
+	Shutdown        <-chan struct{}
 	Background      *background.Tracker
 	Tracker         *background.Tracker
 	Logger          *slog.Logger
@@ -69,7 +68,6 @@ type requiredHandle struct {
 
 func (d Deps) requiredHandles() []requiredHandle {
 	return []requiredHandle{
-		{"Lifecycle", d.Lifecycle == nil},
 		{"Background", d.Background == nil},
 		{"Tracker", d.Tracker == nil},
 		{"Logger", d.Logger == nil},
