@@ -1,6 +1,7 @@
 package spotify
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/redact"
@@ -131,7 +132,7 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	if err != nil {
 		return 0, fmt.Errorf("encode the pathfinder %s request: %w", operationName, err)
 	}
-	status, raw, err := providerrequests.PostBytesCappedOK(ctx, a.client, spotifyPathfinderURL, bytes.NewReader(payload), providerrequests.BodyCap, spotifyPathfinderHeaders(sess)...)
+	status, raw, err := outbound.PostBytesCappedOK(ctx, a.client, spotifyPathfinderURL, bytes.NewReader(payload), outbound.BodyCap, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
 		return status, err
 	}

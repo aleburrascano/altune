@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/providerfields"
 	"bytes"
@@ -8,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -91,18 +91,16 @@ func fetch(ctx context.Context, client *http.Client, r request) ([]byte, error) 
 	for name, value := range r.header {
 		req.Header.Set(name, value)
 	}
-	resp, err := client.Do(req)
-	if err != nil {
+	status, body, err := outbound.DoCapped(client, req, responseCap)
+	switch {
+	case err != nil && status == 0:
 		return nil, fmt.Errorf("%s: %w", r.label(req.URL), withoutURL(err))
+	case status != http.StatusOK:
+		return nil, statusError{request: r.label(req.URL), status: status}
+	case err != nil:
+		return nil, err
 	}
-	if resp == nil {
-		return nil, fmt.Errorf("%s: no response", r.label(req.URL))
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, statusError{request: r.label(req.URL), status: resp.StatusCode}
-	}
-	return io.ReadAll(io.LimitReader(resp.Body, responseCap))
+	return body, nil
 }
 
 func pacedFetch(ctx context.Context, client *http.Client, gate *intervalGate, r request) ([]byte, error) {

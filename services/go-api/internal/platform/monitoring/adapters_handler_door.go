@@ -17,7 +17,6 @@ var (
 	DefaultStreamBounds = handler.DefaultStreamBounds
 	Gate                = handler.Gate
 	NewObserveHandler   = handler.NewObserveHandler
-	NoStoreAndNosniff   = handler.NoStoreAndNosniff
 )
 
 const (

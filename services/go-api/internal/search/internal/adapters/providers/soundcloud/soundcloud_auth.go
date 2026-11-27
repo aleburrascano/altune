@@ -1,6 +1,7 @@
 package soundcloud
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -35,7 +36,7 @@ func newClientIDResolver(client *http.Client, now clock.Func) *clientIDResolver 
 const scResolveTimeout = 20 * time.Second
 
 func (r *clientIDResolver) resolve(ctx context.Context) (string, time.Time, error) {
-	html, err := providerrequests.GetText(ctx, r.client, r.siteURL, scMaxBodyBytes, scUserAgent)
+	html, err := outbound.GetText(ctx, r.client, r.siteURL, scMaxBodyBytes, scUserAgent)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("fetch soundcloud home: %w", err)
 	}
@@ -49,7 +50,7 @@ func (r *clientIDResolver) resolve(ctx context.Context) (string, time.Time, erro
 		if ctx.Err() != nil {
 			return "", time.Time{}, ctx.Err()
 		}
-		body, err := providerrequests.GetText(ctx, r.client, assets[i], scMaxBodyBytes, scUserAgent)
+		body, err := outbound.GetText(ctx, r.client, assets[i], scMaxBodyBytes, scUserAgent)
 		if err != nil {
 			continue
 		}

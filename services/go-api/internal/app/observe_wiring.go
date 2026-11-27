@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/app/bridges/monitoringfromsearch"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/livemetrics"
+	"altune/go-api/internal/app/router"
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
@@ -56,7 +57,7 @@ func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitor
 
 func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *monitoring.Handler) {
 	r.Route("/observe", func(or chi.Router) {
-		or.Use(monitoring.NoStoreAndNosniff)
+		or.Use(router.V1ResponseHeaders)
 		or.Use(authMiddleware(verifier))
 		or.Use(monitoring.Gate(principalID))
 		h.Register(or)

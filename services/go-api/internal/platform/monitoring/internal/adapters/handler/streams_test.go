@@ -310,7 +310,7 @@ func TestStreams_SendEventStreamNoCacheAndNosniffHeaders(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 
-			streamRouter(fx.deps, monitoring.NoStoreAndNosniff).ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
+			streamRouter(fx.deps).ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
 
 			want := map[string]string{"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"}
 			for header, value := range want {

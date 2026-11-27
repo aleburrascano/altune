@@ -9,15 +9,24 @@ import (
 
 var ErrClientTimeoutRequired = errors.New("outbound client needs a positive timeout")
 
-func NewClient(timeout time.Duration, transport http.RoundTripper) (*http.Client, error) {
+func NewClient(timeout time.Duration, transport http.RoundTripper, opts ...ClientOption) (*http.Client, error) {
 	if timeout <= 0 {
 		return nil, ErrClientTimeoutRequired
+	}
+	var cfg clientConfig
+	for _, opt := range opts {
+		if err := opt(&cfg); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.bodyCap > 0 {
+		transport = newBodyCapTransport(transport, cfg.bodyCap)
 	}
 	return &http.Client{Timeout: timeout, Transport: transport}, nil
 }
 
-func MustNewClient(timeout time.Duration, transport http.RoundTripper) *http.Client {
-	client, err := NewClient(timeout, transport)
+func MustNewClient(timeout time.Duration, transport http.RoundTripper, opts ...ClientOption) *http.Client {
+	client, err := NewClient(timeout, transport, opts...)
 	if err != nil {
 		panic(err)
 	}

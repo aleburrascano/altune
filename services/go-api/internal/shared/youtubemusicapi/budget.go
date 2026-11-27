@@ -174,7 +174,7 @@ func (b *Budget) CoolDown(ctx context.Context) error {
 
 func (b *Budget) Transport(base http.RoundTripper) http.RoundTripper {
 	if base == nil {
-		base = outbound.DefaultTransport()
+		base = outbound.NewGuardedTransport()
 	}
 	return budgetTransport{budget: b, base: base}
 }

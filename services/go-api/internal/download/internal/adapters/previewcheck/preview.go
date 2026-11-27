@@ -1,6 +1,7 @@
 package previewcheck
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/clock"
@@ -9,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -37,7 +37,6 @@ var deezerPause = backoff.MustCapped(deezerBackoff, deezerBackoff<<(deezerAttemp
 
 var (
 	ErrDeezerThrottled = errors.New("deezer is still throttling after retries")
-	errNoResponse      = errors.New("the http client returned neither a response nor an error")
 )
 
 const (
@@ -251,34 +250,17 @@ func (d *Previews) awaitTurn(ctx context.Context) error {
 	return nil
 }
 
-func newDeezerRequest(ctx context.Context, target string) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, http.NoBody)
-	if err != nil {
-		return nil, fmt.Errorf("build deezer request: %w", err)
-	}
-	req.Header.Set("User-Agent", deezerUserAgent)
-	return req, nil
-}
-
 func (d *Previews) getOnce(ctx context.Context, target string, bodyCap int64) (int, []byte, error) {
 	if err := d.awaitTurn(ctx); err != nil {
 		return 0, nil, err
 	}
-	req, err := newDeezerRequest(ctx, target)
-	if err != nil {
-		return 0, nil, err
-	}
-	resp, err := d.client.Do(req)
+	status, body, err := outbound.GetBytesCapped(ctx, d.client, target, bodyCap, outbound.WithHeader("User-Agent", deezerUserAgent))
+	var statusErr outbound.StatusError
 	switch {
+	case errors.As(err, &statusErr):
+		return status, body, nil
 	case err != nil:
 		return 0, nil, fmt.Errorf("deezer %s: %w", target, err)
-	case resp == nil:
-		return 0, nil, fmt.Errorf("deezer %s: %w", target, errNoResponse)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, bodyCap))
-	if err != nil {
-		return 0, nil, fmt.Errorf("read deezer %s: %w", target, err)
-	}
-	return resp.StatusCode, body, nil
+	return status, body, nil
 }

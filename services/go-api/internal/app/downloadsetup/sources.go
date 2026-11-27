@@ -48,7 +48,7 @@ func CanaryYTMClient(ctx context.Context, cfg *config.Config, redis *goredis.Cli
 }
 
 func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
-	return download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: innerTubeClient(ctx, cfg, redis, transport), Timeout: ytmSearchTimeout})
+	return download.NewYtmSearchFor(innerTubeClient(ctx, cfg, redis, transport))
 }
 
 func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) *http.Client {
