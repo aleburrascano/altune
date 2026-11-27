@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -615,16 +615,12 @@ func TestHandlers_RefusalsAreProblemDocumentsWithACode(t *testing.T) {
 	}
 }
 
-func captureDefaultLog(t *testing.T) *bytes.Buffer {
+func captureDefaultLog(t *testing.T) *logging.Capture {
 	t.Helper()
-	var out bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &out
+	return logging.CaptureJSON(t, slog.LevelInfo)
 }
 
-func logRecords(t *testing.T, out *bytes.Buffer) []map[string]any {
+func logRecords(t *testing.T, out *logging.Capture) []map[string]any {
 	t.Helper()
 	var records []map[string]any
 	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {

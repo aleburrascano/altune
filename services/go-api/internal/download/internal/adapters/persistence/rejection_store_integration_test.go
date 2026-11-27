@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,6 +90,29 @@ func TestPostgresRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testi
 	}
 	if len(keys) != 2 || keys[0] != "source-a" || keys[1] != "source-b" {
 		t.Errorf("ActiveKeys(...) = %v, want [source-a source-b]", keys)
+	}
+}
+
+func TestPostgresRejectionStore_AnUpperCaseTrackIdFindsTheRowRecordedFromTheTypedId(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
+	store := download.NewPostgresRejectionStore(pool)
+	ctx := context.Background()
+	lower := uuid.NewString()
+
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: mustTrackId(strings.ToUpper(lower)).String(), SourceKey: "source-a", Reason: "no_match"},
+	}); err != nil {
+		t.Fatalf("Record(...) = %v, want nil", err)
+	}
+
+	keys, err := activeKeys(store, ctx, strings.ToUpper(lower), time.Now().Add(-30*24*time.Hour))
+	if err != nil {
+		t.Fatalf("Active(...) = %v, want nil", err)
+	}
+	if len(keys) != 1 || keys[0] != "source-a" {
+		t.Errorf("Active(upper-case id) = %v, want [source-a]", keys)
 	}
 }
 
