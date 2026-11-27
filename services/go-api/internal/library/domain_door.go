@@ -27,6 +27,7 @@ var (
 
 var (
 	CleanSearchKeys           = domain.CleanSearchKeys
+	PlausibleYear             = domain.PlausibleYear
 	FailureMessage            = domain.FailureMessage
 	JoinFailureReason         = domain.JoinFailureReason
 	KnownCatalogProviders     = domain.KnownCatalogProviders

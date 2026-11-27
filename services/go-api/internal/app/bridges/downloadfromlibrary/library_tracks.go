@@ -212,6 +212,10 @@ func relabel(ctx context.Context, track *library.Track, given *download.TrackLab
 		return nil
 	}
 	label := *given
+	if label.Year != 0 && !library.PlausibleYear(label.Year, now()) {
+		slog.WarnContext(ctx, "acquisition.relabel_year_dropped", logging.KeyTrackID, track.ID.String(), "year", label.Year)
+		label.Year = 0
+	}
 	oldMBID, oldTitle := "", track.Title
 	if track.CatalogMBID != nil {
 		oldMBID = *track.CatalogMBID

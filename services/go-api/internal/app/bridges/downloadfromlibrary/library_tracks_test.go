@@ -897,6 +897,27 @@ func TestTrackLedger_CompleteWithARelabelStoresTheRecordingActuallyStored(t *tes
 	}
 }
 
+func TestTrackLedger_CompleteWithAnImplausibleRelabelYearStillRelabelsWithoutTheYear(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+	label := goldenRelabel()
+	label.Year = 9999
+
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New(), ids.Real).Complete(context.Background(), track.ID, userId, 0,
+		download.Completion{AudioRef: "ref", Duration: trackLength(t, 194), ISRC: "IETLH2500023", Relabel: label})
+	if err != nil {
+		t.Fatalf("a bad year lost the download: %v", err)
+	}
+
+	got := storedTrack(t, store, track.ID)
+	if !got.Relabelled() || got.Title != "It’s Only Love (classic version)" {
+		t.Errorf("relabel not applied: relabelled=%v title=%q", got.Relabelled(), got.Title)
+	}
+	if got.Year != nil {
+		t.Errorf("Year = %v, want the implausible year dropped", *got.Year)
+	}
+}
+
 func TestTrackLedger_CompleteWithoutARelabelKeepsTheTracksLabels(t *testing.T) {
 	track, userId := studioLabelledTrack(t)
 	store := newFakeStore(track)
