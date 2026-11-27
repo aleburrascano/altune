@@ -6,6 +6,7 @@ import type { FailedAcquisition, TrackFields } from '@shared/catalog';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { LibraryRowFailure } from '@features/library';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -53,7 +54,7 @@ function sentEvents(): SentEvent[] {
 
 async function settleTelemetry(): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
 }
 

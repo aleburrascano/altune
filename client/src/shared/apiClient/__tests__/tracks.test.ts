@@ -21,6 +21,7 @@ import { ContractError, NetworkError, isAbort } from '@shared/failure';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { expectAbortsInFlight } from '@shared/apiClient/__tests__/abortInFlight';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 const { __crypto } = require('expo-crypto');
@@ -163,7 +164,7 @@ describe('getTracks', () => {
     const controller = new AbortController();
 
     const pending = getTracks({ limit: 20, offset: 0, q: 'kid' }, controller.signal);
-    while (__http.requests.length === 0) await new Promise((r) => setTimeout(r, 0));
+    while (__http.requests.length === 0) await flushPromises();
     controller.abort();
 
     await expect(pending).rejects.toThrow();

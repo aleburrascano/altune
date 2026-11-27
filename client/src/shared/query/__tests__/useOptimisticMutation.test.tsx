@@ -8,6 +8,7 @@ import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { useOptimisticMutation } from '@shared/query';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -438,7 +439,7 @@ describe('useOptimisticMutation(): failure_shown surface', () => {
     });
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
     });
     const failureShown = (__http.requests as SentRequest[])
       .filter((request) => request.path === EVENTS_PATH)

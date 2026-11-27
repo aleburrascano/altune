@@ -518,6 +518,34 @@ const PATCHES = [
   ['vi', 'spyOn'],
 ];
 
+const NO_CLOCK_WAITS =
+  'A test never waits on the real clock (setTimeout, setInterval, setImmediate, node:timers): it flushes with flushPromises from @testing/flushPromises, waits on the condition with waitFor, or runs jest.useFakeTimers and advances time (see client/src/README.md).';
+
+const TIMER_NAMES = '/^(setTimeout|setInterval|setImmediate)$/';
+const TIMER_HOSTS = '/^(global|globalThis|window|self)$/';
+const NODE_TIMERS = '/^(node:)?timers(.promises)?$/';
+
+const testsNeverWaitOnTheClock = {
+  name: 'testsNeverWaitOnTheClock',
+  files: ['**/__tests__/**/*.{ts,tsx}'],
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      ...syntaxBannedEverywhere,
+      { selector: `CallExpression[callee.name=${TIMER_NAMES}]`, message: NO_CLOCK_WAITS },
+      {
+        selector: `CallExpression[callee.object.name=${TIMER_HOSTS}][callee.property.name=${TIMER_NAMES}]`,
+        message: NO_CLOCK_WAITS,
+      },
+      { selector: `ImportDeclaration[source.value=${NODE_TIMERS}]`, message: NO_CLOCK_WAITS },
+      {
+        selector: `CallExpression[callee.name='require'][arguments.0.value=${NODE_TIMERS}]`,
+        message: NO_CLOCK_WAITS,
+      },
+    ],
+  },
+};
+
 const testsPassFakesInNeverPatch = {
   name: 'testsPassFakesInNeverPatch',
   files: ['**/__tests__/**/*.{ts,tsx,js}', 'jest/**/*.{ts,tsx,js}'],
@@ -606,6 +634,7 @@ module.exports = [
   jsxOnlyInView,
   testsImportThroughDoors,
   testsPassFakesInNeverPatch,
+  testsNeverWaitOnTheClock,
   onlyTheCompositionRootReadsTheEnvironment,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],

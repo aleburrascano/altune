@@ -1,5 +1,7 @@
 import { NativeQueueTimeoutError, onNativeQueueTimeout, withNativeQueue } from '@features/player';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { resolveAfter } from '@testing/delays';
+import { flushPromises } from '@testing/flushPromises';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
@@ -17,7 +19,8 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
-const flush = (): Promise<void> => new Promise((r) => setImmediate(r));
+const flush = flushPromises;
+const SECOND_OP_DURATION_MS = 1_000;
 
 describe('withNativeQueue — serialising native queue operations', () => {
   it('holds the second operation until the first one settles', async () => {
@@ -112,15 +115,13 @@ describe('withNativeQueue — serialising native queue operations', () => {
     it('starts each op budget when it begins running, not when it was queued', async () => {
       const gate = deferred<void>();
       const first = withNativeQueue(() => gate.promise);
-      const second = withNativeQueue(
-        () => new Promise<string>((resolve) => setTimeout(() => resolve('second'), 1_000)),
-      );
+      const second = withNativeQueue(() => resolveAfter(SECOND_OP_DURATION_MS, 'second'));
 
       await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS - 500);
       gate.resolve();
       await first;
 
-      await jest.advanceTimersByTimeAsync(1_000);
+      await jest.advanceTimersByTimeAsync(SECOND_OP_DURATION_MS);
       await expect(second).resolves.toBe('second');
     });
 

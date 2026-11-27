@@ -22,6 +22,7 @@ import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures'
 import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { resolveAfter } from '@testing/delays';
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 const QUEUE_OP_TIMEOUT_MS = 15_000;
@@ -503,18 +504,14 @@ const nativePlay = TrackPlayer.play as jest.Mock;
 
 let restorePort: (() => void) | null = null;
 
-function after<T>(ms: number, value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
-
 function installSlowMemoryPort(): void {
   const port = createMemoryPlaybackPort({
     audioUrls: { 'trk-1': { url: 'https://cdn.example/trk-1.mp3', version: 'v1' } },
   });
   restorePort = installPlaybackPort({
     ...port,
-    audioRequestHeaders: () => after(HEADERS_MS, {}),
-    fetchAudioUrls: async (ids) => after(PRESIGN_MS, await port.fetchAudioUrls(ids)),
+    audioRequestHeaders: () => resolveAfter(HEADERS_MS, {}),
+    fetchAudioUrls: async (ids) => resolveAfter(PRESIGN_MS, await port.fetchAudioUrls(ids)),
   });
 }
 

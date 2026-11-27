@@ -20,6 +20,7 @@ import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlayb
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { fileSystemDouble } from '@testing/fakes/files/expoFileSystemDouble';
 import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
+import { flushPromises } from '@testing/flushPromises';
 const { __player } = jest.requireMock('react-native-track-player');
 
 const USER_A = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } as Session['user'];
@@ -66,7 +67,7 @@ function remoteHandler(event: string): (data?: unknown) => void {
 
 async function flushNativeQueue(): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
 }
 

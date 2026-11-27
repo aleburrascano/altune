@@ -7,6 +7,7 @@ import type {
 } from '@shared/apiClient';
 import { apiBase } from '@shared/apiConfig';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -122,7 +123,7 @@ describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal', (
     const controller = new AbortController();
 
     const pending = fn({ q: 'radio' }, controller.signal);
-    while (__http.requests.length === 0) await new Promise((r) => setTimeout(r, 0));
+    while (__http.requests.length === 0) await flushPromises();
     controller.abort();
 
     await expect(pending).rejects.toThrow();

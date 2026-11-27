@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 import { createTestQueryClient } from '@testing/queryHarness';
+import { flushPromises } from '@testing/flushPromises';
 
 function Probe({ answer }: { answer: Promise<string> }) {
   const query = useQuery({ queryKey: ['probe'], queryFn: () => answer });
@@ -10,7 +11,7 @@ function Probe({ answer }: { answer: Promise<string> }) {
 }
 
 function nextTick(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return flushPromises();
 }
 
 describe('createTestQueryClient', () => {
