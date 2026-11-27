@@ -61,6 +61,7 @@ linters:
         - providerrequests.ArtworkFailure(
         - database.WrapUnreadable(
         - journey.StepFailed(
+        - journey.Run(
         - providersearch.KindsOutcome(
         - providersearch.SearchAcrossKinds(
         - providerrequests.WithAuthRetry[
