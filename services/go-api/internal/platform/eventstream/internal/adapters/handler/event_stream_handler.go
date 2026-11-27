@@ -95,10 +95,7 @@ func (h *EventStreamHandler) setup(
 	w http.ResponseWriter,
 	r *http.Request,
 ) (*sseConn, <-chan events.Event, func(), bool) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return nil, nil, nil, false
-	}
+	userId := requestuser.UserID(r)
 	if _, ok := w.(http.Flusher); !ok {
 		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeEventStreamUnsupported, "streaming not supported"))
 		return nil, nil, nil, false

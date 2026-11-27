@@ -105,15 +105,6 @@ func TestHandleListTracks(t *testing.T) {
 	}
 }
 
-func TestHandleListTracks_NoAuth(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
-	router := trackRoutes(repo)
-
-	rec := requestAnonymous(t, router, http.MethodGet, "/tracks", nil)
-
-	assertStatus(t, rec, http.StatusUnauthorized)
-}
-
 func TestHandleCreateTrack(t *testing.T) {
 	tests := []struct {
 		name       string

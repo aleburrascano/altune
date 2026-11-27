@@ -1,6 +1,7 @@
 package httpserver_test
 
 import (
+	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
 	"net/http"
@@ -46,6 +47,68 @@ func TestDecodeJSON(t *testing.T) {
 			t.Errorf("problem = %+v, want 400 request.invalid_body", p)
 		}
 	})
+}
+
+func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{"name":"hi","extra":1}`))
+
+	var body struct {
+		Name string `json:"name"`
+	}
+	if ok := httpserver.DecodeJSON(rec, req, &body); ok {
+		t.Fatal("DecodeJSON: got true, want false for an unknown field")
+	}
+	if p := decodeProblem(t, rec); p.Code != "request.invalid_body" || p.Status != http.StatusBadRequest {
+		t.Errorf("problem = %+v, want 400 request.invalid_body", p)
+	}
+}
+
+func TestQueryInt(t *testing.T) {
+	code := apierror.CodeDiscoveryInvalidParam
+	cases := []struct {
+		name   string
+		query  string
+		want   int
+		detail string
+	}{
+		{name: "absent uses the default", query: "", want: 7},
+		{name: "in range", query: "limit=3", want: 3},
+		{name: "lower bound", query: "limit=1", want: 1},
+		{name: "upper bound", query: "limit=10", want: 10},
+		{name: "not an integer", query: "limit=abc", detail: "limit must be an integer"},
+		{name: "fraction", query: "limit=1.5", detail: "limit must be an integer"},
+		{name: "overflow", query: "limit=99999999999999999999", detail: "limit must be an integer"},
+		{name: "below range", query: "limit=0", detail: "limit must be between 1 and 10"},
+		{name: "above range", query: "limit=11", detail: "limit must be between 1 and 10"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/x?"+tc.query, nil)
+
+			got, ok := httpserver.QueryInt(rec, req, "limit", 7, 1, 10, code)
+
+			if tc.detail == "" {
+				if !ok || got != tc.want {
+					t.Fatalf("QueryInt = %d, %v; want %d, true", got, ok, tc.want)
+				}
+				return
+			}
+			if ok {
+				t.Fatalf("QueryInt = %d, true; want a rejection", got)
+			}
+			if p := decodeProblem(t, rec); p.Detail != tc.detail || p.Code != code.String() || p.Status != http.StatusBadRequest {
+				t.Errorf("problem = %+v, want 400 %s %q", p, code, tc.detail)
+			}
+		})
+	}
+}
+
+func TestURLParam(t *testing.T) {
+	if got := httpserver.URLParam(newRequestWithURLParam("id", "abc"), "id"); got != "abc" {
+		t.Errorf("URLParam = %q, want abc", got)
+	}
 }
 
 func TestIdempotencyKey(t *testing.T) {

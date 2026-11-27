@@ -71,10 +71,7 @@ type resolveAudioURLsResponse struct {
 
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 	start := h.now()
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var body resolveAudioURLsRequest
 	if !httpserver.DecodeJSON(w, r, &body) {

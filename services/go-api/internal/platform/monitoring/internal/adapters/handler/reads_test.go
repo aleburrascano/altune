@@ -373,15 +373,32 @@ func TestReadsQuality_ABadWindowDaysIsA400ProblemNotADefault(t *testing.T) {
 	}
 }
 
-func TestReadsQuality_WindowDaysIsClampedToTheMaximum(t *testing.T) {
+func TestReadsQuality_WindowDaysPastTheMaximumIsRejected(t *testing.T) {
+	for _, raw := range []string{"999999999", "366"} {
+		t.Run(raw, func(t *testing.T) {
+			reader := &fakeDiscographyReader{}
+			rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography?window_days="+raw)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), `"code":"observe.invalid_window_days"`) {
+				t.Errorf("body = %s, want code observe.invalid_window_days", rec.Body.String())
+			}
+			if !reader.gotSince.IsZero() {
+				t.Errorf("reader was queried since %v, want no query for a rejected request", reader.gotSince)
+			}
+		})
+	}
+}
+
+func TestReadsQuality_WindowDaysWithinTheBoundsIsUsed(t *testing.T) {
 	cases := []struct {
 		raw  string
 		want int
 	}{
-		{raw: "999999999", want: maxQualityWindowDays},
 		{raw: "1", want: 1},
 		{raw: "365", want: 365},
-		{raw: "366", want: maxQualityWindowDays},
 	}
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {

@@ -18,11 +18,6 @@ import (
 )
 
 func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
-	_, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-
 	q, ok := textParam(w, r, "q")
 	if !ok {
 		return
@@ -55,10 +50,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	q := r.URL.Query().Get("q")
 	if strings.TrimSpace(q) == "" {
@@ -155,10 +147,7 @@ func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
 }
 
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	limit, ok := parseLimit(w, r, "limit", 10, 100, clampToMax)
 	if !ok {
@@ -187,10 +176,7 @@ type RecordSearchHistoryRequest struct {
 }
 
 func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var req RecordSearchHistoryRequest
 	if !httpserver.DecodeJSONWithCode(w, r, &req, apierror.CodeDiscoveryInvalidBody) {
@@ -205,10 +191,7 @@ func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *h
 }
 
 func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
 		slog.WarnContext(r.Context(), "clear search history failed",
@@ -222,10 +205,7 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 }
 
 func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var req DiscoveryEventRequest
 	if !httpserver.DecodeJSONWithCode(w, r, &req, apierror.CodeDiscoveryInvalidBody) {

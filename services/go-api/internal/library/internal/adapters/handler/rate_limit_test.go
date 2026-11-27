@@ -160,17 +160,6 @@ func TestAudioRateLimit_IsPerPrincipalAndPerEndpoint(t *testing.T) {
 	}
 }
 
-func TestAudioRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	rig := newAudioRig(time.Now)
-
-	stream := sendAnonymous(rig.router, httptest.NewRequest(http.MethodGet, "/tracks/"+uuid.NewString()+"/audio", nil))
-	resolve := sendAnonymous(rig.router, httptest.NewRequest(http.MethodPost, "/audio-urls", strings.NewReader(`{"track_ids":[]}`)))
-
-	if stream.Code != http.StatusUnauthorized || resolve.Code != http.StatusUnauthorized {
-		t.Fatalf("missing principal must still be a 401, got stream %d audio-urls %d", stream.Code, resolve.Code)
-	}
-}
-
 func TestAudioRateLimit_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newFakeClock()
 	rig := newAudioRig(clock.now)

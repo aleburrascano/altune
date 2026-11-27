@@ -118,14 +118,6 @@ func discServe(t *testing.T, router chi.Router, method, path string, body io.Rea
 	return rec
 }
 
-func discServeNoAuth(t *testing.T, router chi.Router, method, path string) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(method, path, nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	return rec
-}
-
 func discJsonBody(t *testing.T, v any) *bytes.Buffer {
 	t.Helper()
 	buf := &bytes.Buffer{}
@@ -334,14 +326,6 @@ func TestHandleSearch(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestHandleSearch_NoAuth(t *testing.T) {
-	router := buildDiscoveryRouter(t, &fakeSearchProvider{name: search.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
-
-	rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/search?q=test")
-
-	discAssertStatus(t, rec, http.StatusUnauthorized)
 }
 
 func TestHandleSearch_ResponseShape(t *testing.T) {
@@ -864,16 +848,4 @@ func TestHandleRecordSearchHistory(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("anonymous caller is refused", func(t *testing.T) {
-		historyRepo := &fakeSearchHistoryRepo{}
-		router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
-
-		rec := discServeNoAuth(t, router, http.MethodPost, "/discovery/search-history")
-
-		discAssertStatus(t, rec, http.StatusUnauthorized)
-		if len(historyRepo.entries) != 0 {
-			t.Errorf("history entries = %d, want 0", len(historyRepo.entries))
-		}
-	})
 }

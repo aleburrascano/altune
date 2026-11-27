@@ -12,11 +12,7 @@ import (
 func Gate(principalID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID, ok := requestuser.RequireUserID(w, r)
-			if !ok {
-				return
-			}
-			subject := userID.String()
+			subject := requestuser.UserID(r).String()
 			if !isPrincipal(subject, principalID) {
 				logDenial(r, subject, errPrincipalRequired)
 				httpserver.HandleServiceError(w, r, errPrincipalRequired)

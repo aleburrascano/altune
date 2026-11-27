@@ -13,8 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type ContentFetchResponseDTO struct {
@@ -75,7 +73,7 @@ func withProvider(
 	r *http.Request,
 	call func(ctx context.Context, pn domain.ProviderName, provider, externalID string),
 ) {
-	provider := chi.URLParam(r, "provider")
+	provider := httpserver.URLParam(r, "provider")
 	pn, parseErr := domain.ParseProviderName(provider)
 	if parseErr != nil {
 		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeDiscoveryInvalidProvider, "unknown provider"))
@@ -129,9 +127,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				return
 			}
 			dto := contentFetchToDTO(resp)
-			if userId, hasUser := requestuser.UserIDFromContext(ctx); hasUser {
-				h.enrichAlbumOwnership(ctx, userId, albumTrackItems(albumTitle, dto.Items))
-			}
+			h.enrichAlbumOwnership(ctx, requestuser.UserID(r), albumTrackItems(albumTitle, dto.Items))
 			httpserver.WriteJSON(w, http.StatusOK, dto)
 		})
 }
@@ -263,9 +259,7 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				TopTracks: contentFetchToDTO(tracksResp),
 				Albums:    contentFetchToDTO(albumsResp),
 			}
-			if userId, hasUser := requestuser.UserIDFromContext(ctx); hasUser {
-				h.stampOwnership(ctx, userId, ownableItems(dto.TopTracks.Items))
-			}
+			h.stampOwnership(ctx, requestuser.UserID(r), ownableItems(dto.TopTracks.Items))
 			httpserver.WriteJSON(w, http.StatusOK, dto)
 		})
 }

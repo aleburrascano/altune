@@ -3,10 +3,7 @@ package handler
 import (
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"time"
@@ -40,34 +37,26 @@ func (h *DiscoveryHandler) PublicRoutes(r chi.Router, limit RequestLimit) {
 		Post("/public/auth-failures", h.handleAuthFailure)
 }
 
-func decodeAuthFailure(r *http.Request) (reason, appVersion string, ok bool) {
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	var req authFailureRequest
-	if err := dec.Decode(&req); err != nil {
-		return "", "", false
-	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return "", "", false
-	}
+func validAuthFailure(req authFailureRequest) bool {
 	if req.Reason == nil || req.AppVersion == nil {
-		return "", "", false
+		return false
 	}
 	if _, known := authFailureReasons[*req.Reason]; !known {
-		return "", "", false
+		return false
 	}
-	if !authFailureAppVersion.MatchString(*req.AppVersion) {
-		return "", "", false
-	}
-	return *req.Reason, *req.AppVersion, true
+	return authFailureAppVersion.MatchString(*req.AppVersion)
 }
 
 func (h *DiscoveryHandler) handleAuthFailure(w http.ResponseWriter, r *http.Request) {
-	reason, appVersion, ok := decodeAuthFailure(r)
-	if !ok {
+	var req authFailureRequest
+	if !httpserver.DecodeJSONWithCode(w, r, &req, apierror.CodeAuthFailureInvalidBody) {
+		return
+	}
+	if !validAuthFailure(req) {
 		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeAuthFailureInvalidBody, "invalid request body"))
 		return
 	}
+	reason, appVersion := *req.Reason, *req.AppVersion
 
 	if err := h.eventSvc.RecordAnonymousAuthFailure(r.Context(), reason, appVersion); err != nil {
 		httpserver.HandleServiceError(w, r, fmt.Errorf("record anonymous auth failure %q: %w", reason, err))

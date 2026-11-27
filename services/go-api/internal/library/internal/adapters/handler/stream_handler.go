@@ -65,10 +65,7 @@ func (h *StreamHandler) Routes(r chi.Router) {
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	start := h.now()
 	w = httpserver.ExtendWriteDeadlineOnWrite(h.now, w, h.writeIdleTimeout)
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, ok := httpserver.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
 	if !ok {
@@ -155,10 +152,7 @@ func (b *countedAudioBody) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, ok := httpserver.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
 	if !ok {

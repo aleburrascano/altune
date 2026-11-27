@@ -420,12 +420,6 @@ func TestHandleSuggest(t *testing.T) {
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=x", nil)
 		discAssertStatus(t, rec, http.StatusInternalServerError)
 	})
-
-	t.Run("no auth returns 401", func(t *testing.T) {
-		router := buildSuggestRouter(t, &fakeVocabStore{})
-		rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/suggest?q=x")
-		discAssertStatus(t, rec, http.StatusUnauthorized)
-	})
 }
 
 func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
@@ -586,12 +580,6 @@ func TestHandleClearSearchHistory_RepoErrorReturns500(t *testing.T) {
 
 	rec := discServe(t, router, http.MethodDelete, "/discovery/search-history", nil)
 	discAssertStatus(t, rec, http.StatusInternalServerError)
-}
-
-func TestHandleClearSearchHistory_NoAuthReturns401(t *testing.T) {
-	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, nil)
-	rec := discServeNoAuth(t, router, http.MethodDelete, "/discovery/search-history")
-	discAssertStatus(t, rec, http.StatusUnauthorized)
 }
 
 func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
