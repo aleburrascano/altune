@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync/atomic"
 	"time"
 )
@@ -233,12 +232,9 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers(ctx context.Context
 	if s.upgrades.none {
 		return
 	}
-	queue, ok := s.queue.(ports.UpgradeJobQueue)
-	if !ok {
-		slog.ErrorContext(ctx, "acquisition.upgrade_lane_unavailable", "reason", "the job queue cannot claim upgrade jobs")
-		return
+	claim := func(ctx context.Context) (<-chan struct{}, bool) {
+		return s.claimer.claimFrom(ctx, s.queue.ClaimUpgrade)
 	}
-	claim := func(ctx context.Context) (<-chan struct{}, bool) { return s.claimer.claimFrom(ctx, queue.ClaimUpgrade) }
 	for range s.upgrades.workers {
 		s.runners.Track(func() { s.claimer.runWorker(ctx, claim, s.claimer.lanes.upgrade) })
 	}

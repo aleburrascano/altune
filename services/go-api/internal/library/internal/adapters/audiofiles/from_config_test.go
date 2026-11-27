@@ -52,8 +52,8 @@ func TestFromConfigFailsWhenOCIConfigIsBroken(t *testing.T) {
 	if err == nil {
 		t.Fatalf("broken OCI config must not fall back to a local store, got %v", store)
 	}
-	if store != nil {
-		t.Fatalf("expected nil store alongside error, got %v", store)
+	if store.AudioStore != nil || store.Links != nil || store.Ages != nil {
+		t.Fatalf("expected an empty backend alongside the error, got %v", store)
 	}
 	if !strings.Contains(err.Error(), "OCI S3") {
 		t.Errorf("error %q does not name the OCI cause", err)
@@ -206,8 +206,8 @@ func TestFromConfig_AMisconfiguredStoreFailsFastNamingWhatIsMissing(t *testing.T
 			if err == nil {
 				t.Fatalf("expected startup error for misconfigured audio store, got store=%v", store)
 			}
-			if store != nil {
-				t.Fatalf("expected nil store alongside error, got %v", store)
+			if store.AudioStore != nil || store.Links != nil || store.Ages != nil {
+				t.Fatalf("expected an empty backend alongside the error, got %v", store)
 			}
 			for _, want := range tt.wantContains {
 				if !strings.Contains(err.Error(), want) {

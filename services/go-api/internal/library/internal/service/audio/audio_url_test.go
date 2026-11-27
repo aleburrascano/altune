@@ -22,6 +22,8 @@ func newRecordingSigner() *recordingSigner {
 	return &recordingSigner{InMemoryAudioStore: library.NewInMemoryAudioStore()}
 }
 
+func (s *recordingSigner) SignsLinks() bool { return true }
+
 func (s *recordingSigner) PresignGet(_ context.Context, audioRef string, ttl time.Duration) (string, error) {
 	s.ttls = append(s.ttls, ttl)
 	if s.err != nil {
@@ -141,7 +143,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := library.MustNewAudioURLService(repo, library.NewInMemoryAudioStore(), time.Now, &librarytest.Metrics{})
+		svc := library.MustNewAudioURLService(repo, library.NoAudioLinks{}, time.Now, &librarytest.Metrics{})
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {

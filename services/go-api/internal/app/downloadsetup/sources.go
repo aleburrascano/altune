@@ -21,8 +21,9 @@ const (
 )
 
 type SourceOrder struct {
-	First    []download.AudioSource
-	Fallback []download.AudioSource
+	First      []download.AudioSource
+	Fallback   []download.AudioSource
+	Previewing []download.PreviewingSource
 }
 
 func (t SourceOrder) All() []download.AudioSource {
@@ -79,7 +80,9 @@ func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, 
 	}
 	switch {
 	case cfg.YtDLPEnabled:
-		tiers.Fallback = append(tiers.Fallback, download.NewYtDlpSource(searcher))
+		ytdlp := download.NewYtDlpSource(searcher)
+		tiers.Fallback = append(tiers.Fallback, ytdlp)
+		tiers.Previewing = append(tiers.Previewing, ytdlp)
 	default:
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}

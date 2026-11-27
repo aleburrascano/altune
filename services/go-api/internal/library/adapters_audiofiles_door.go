@@ -7,5 +7,15 @@ const MaxInFlightFilesystemCalls = storage.MaxInFlightFilesystemCalls
 var (
 	NewAudioStoreFromConfig = storage.NewAudioStoreFromConfig
 	NewFilesystemAudioStore = storage.NewFilesystemAudioStore
-	NewScopedAudioStore     = storage.NewScopedAudioStore
+	NewScopedAudioBackend   = storage.NewScopedAudioBackend
+)
+
+type (
+	NoAudioLinks = storage.NoAudioLinks
+	NoAgeListing = storage.NoAgeListing
+)
+
+var (
+	ErrAudioLinksUnsupported = storage.ErrAudioLinksUnsupported
+	ErrAgeListingUnsupported = storage.ErrAgeListingUnsupported
 )

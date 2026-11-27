@@ -29,11 +29,10 @@ type identification struct {
 }
 
 func (s *DownloadStep) previewer(ac *AcquisitionContext, candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
-	source, ok := s.fetcher.(previewSource)
-	if !ok || ac.Identity.MBID == "" {
+	if ac.Identity.MBID == "" {
 		return nil, false
 	}
-	return source.PreviewFetcherFor(candidate)
+	return s.fetcher.PreviewFetcherFor(candidate)
 }
 
 func (s *DownloadStep) previewIdentification(

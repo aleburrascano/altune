@@ -28,6 +28,8 @@ type Job struct {
 type ClaimNumber int
 
 type DownloadQueue interface {
+	UpgradeJobQueue
+	QueueDepthReader
 	Enqueue(ctx context.Context, trackID ids.TrackId, kind JobKind, delay time.Duration) error
 	Claim(ctx context.Context, lease time.Duration) (Job, error)
 	Heartbeat(ctx context.Context, trackID ids.TrackId, fence ClaimNumber, lease time.Duration) error

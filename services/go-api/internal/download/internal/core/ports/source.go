@@ -41,6 +41,11 @@ type AudioSource interface {
 	Fetch(ctx context.Context, candidate AudioCandidate, outDir string) (FetchedAudio, error)
 }
 
+type PreviewingSource interface {
+	AudioSource
+	PreviewFetcher
+}
+
 type FetchedAudio struct {
 	Path   string
 	Format SourceFormat

@@ -24,7 +24,7 @@ type resolveRequest struct {
 	TrackIDs []string `json:"track_ids"`
 }
 
-func audioURLRoutes(store library.AudioStore, opts ...func(*library.AudioURLHandler)) (*library.InMemoryTrackRepo, chi.Router) {
+func audioURLRoutes(store library.AudioLinkSigner, opts ...func(*library.AudioURLHandler)) (*library.InMemoryTrackRepo, chi.Router) {
 	repo := library.NewInMemoryTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
@@ -34,7 +34,7 @@ func audioURLRoutes(store library.AudioStore, opts ...func(*library.AudioURLHand
 
 func resolveOneReadyTrack(t *testing.T, opts ...func(*library.AudioURLHandler)) map[string]any {
 	t.Helper()
-	repo, router := audioURLRoutes(library.NewInMemoryAudioStore(), opts...)
+	repo, router := audioURLRoutes(library.NoAudioLinks{}, opts...)
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
@@ -68,7 +68,7 @@ func unknownTrackIDs(n int) []string {
 }
 
 func TestAudioURLs_TheBatchCapIsTwoHundred(t *testing.T) {
-	_, router := audioURLRoutes(library.NewInMemoryAudioStore())
+	_, router := audioURLRoutes(library.NoAudioLinks{})
 
 	atCap := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap)}))
 	assertStatus(t, atCap, http.StatusOK)
@@ -79,7 +79,7 @@ func TestAudioURLs_TheBatchCapIsTwoHundred(t *testing.T) {
 }
 
 func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
-	_, router := audioURLRoutes(library.NewInMemoryAudioStore())
+	_, router := audioURLRoutes(library.NoAudioLinks{})
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{"not-a-uuid"}}))
 
@@ -88,7 +88,7 @@ func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
 }
 
 func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
-	repo, router := audioURLRoutes(library.NewInMemoryAudioStore())
+	repo, router := audioURLRoutes(library.NoAudioLinks{})
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
@@ -100,6 +100,8 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 type failingSigner struct {
 	*library.InMemoryAudioStore
 }
+
+func (failingSigner) SignsLinks() bool { return true }
 
 func (failingSigner) PresignGet(context.Context, string, time.Duration) (string, error) {
 	return "", errors.New("presign boom")

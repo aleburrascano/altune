@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -138,7 +139,7 @@ func TestSelectStep_LogsOneEvaluationPerScoredCandidate(t *testing.T) {
 	topic.URL = "https://youtube.com/watch?v=topic111111"
 	drm := ports.AudioCandidate{Title: "Song", URL: "sc:drm", Unplayable: ports.UnplayableDRM}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Song (feat. Guest)", Artist: "Artist", CatalogDuration: 200}}
-	searched, err := service.NewSearchStep(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{scored, topic, drm}}).Execute(context.Background(), ac, service.PipelineStart{})
+	searched, err := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{scored, topic, drm}})).Execute(context.Background(), ac, service.PipelineStart{})
 	if err != nil {
 		t.Fatalf("search Execute() = %v", err)
 	}

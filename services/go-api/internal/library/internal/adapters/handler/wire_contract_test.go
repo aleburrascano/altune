@@ -19,6 +19,8 @@ type wireSigner struct {
 	*library.InMemoryAudioStore
 }
 
+func (wireSigner) SignsLinks() bool { return true }
+
 func (wireSigner) PresignGet(_ context.Context, audioRef string, _ time.Duration) (string, error) {
 	return "https://signed.example/" + audioRef + "?sig=abc", nil
 }

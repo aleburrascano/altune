@@ -31,19 +31,21 @@ type AudioLinkService struct {
 
 var ErrClockRequired = errors.New("audio: the audio link service requires a clock")
 
-func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, metrics ports.AudioStoreMetrics) (*AudioLinkService, error) {
+func NewAudioURLService(trackRepo ports.TrackBatchGetter, signer ports.AudioLinkSigner, now clock.Func, metrics ports.AudioStoreMetrics) (*AudioLinkService, error) {
 	if now == nil {
 		return nil, ErrClockRequired
 	}
 	if metrics == nil {
 		panic("audio: NewAudioURLService requires metrics")
 	}
-	signer, canSign := store.(ports.AudioLinkSigner)
-	return &AudioLinkService{trackRepo: trackRepo, signer: signer, canSign: canSign, metrics: metrics, now: now}, nil
+	if signer == nil {
+		panic("audio: NewAudioURLService requires a signer, wire NoAudioLinks when the store cannot sign")
+	}
+	return &AudioLinkService{trackRepo: trackRepo, signer: signer, canSign: signer.SignsLinks(), metrics: metrics, now: now}, nil
 }
 
-func MustNewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, metrics ports.AudioStoreMetrics) *AudioLinkService {
-	s, err := NewAudioURLService(trackRepo, store, now, metrics)
+func MustNewAudioURLService(trackRepo ports.TrackBatchGetter, signer ports.AudioLinkSigner, now clock.Func, metrics ports.AudioStoreMetrics) *AudioLinkService {
+	s, err := NewAudioURLService(trackRepo, signer, now, metrics)
 	if err != nil {
 		panic(err)
 	}

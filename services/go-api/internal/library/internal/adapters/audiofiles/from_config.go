@@ -10,33 +10,38 @@ import (
 
 const ociS3ConfigKeys = 4
 
-func NewAudioStoreFromConfig(cfg *config.Config, logger *slog.Logger, metrics ports.FSCallMetrics) (ports.AudioStore, error) {
-	store, err := unscopedFromConfig(cfg, logger, metrics)
+func NewAudioStoreFromConfig(cfg *config.Config, logger *slog.Logger, metrics ports.FSCallMetrics) (ports.AudioBackend, error) {
+	backend, err := unscopedFromConfig(cfg, logger, metrics)
 	if err != nil {
-		return nil, err
+		return ports.AudioBackend{}, err
 	}
 	if cfg.AudioKeyPrefix == "" {
-		return store, nil
+		return backend, nil
 	}
 	logger.Info("audio store: scoped to key prefix", "prefix", cfg.AudioKeyPrefix)
-	return NewScopedAudioStore(store, cfg.AudioKeyPrefix), nil
+	return NewScopedAudioBackend(backend, cfg.AudioKeyPrefix), nil
 }
 
-func unscopedFromConfig(cfg *config.Config, logger *slog.Logger, metrics ports.FSCallMetrics) (ports.AudioStore, error) {
+func unscopedFromConfig(cfg *config.Config, logger *slog.Logger, metrics ports.FSCallMetrics) (ports.AudioBackend, error) {
 	if missing := missingOCIS3Keys(cfg); len(missing) > 0 && len(missing) < ociS3ConfigKeys {
-		return nil, missingAudioStoreError(missing)
+		return ports.AudioBackend{}, missingAudioStoreError(missing)
 	}
 	if cfg.HasOCIS3() {
-		return ociFromConfig(cfg, logger)
+		store, err := ociFromConfig(cfg, logger)
+		if err != nil {
+			return ports.AudioBackend{}, err
+		}
+		return ports.AudioBackend{AudioStore: store, Links: store, Ages: store}, nil
 	}
 	if cfg.MusicDir != "" {
 		logger.Info("audio store: filesystem", "dir", cfg.MusicDir)
-		return newFilesystemAudioStore(cfg.MusicDir, cfg.MusicDirTimeout, metrics), nil
+		store := newFilesystemAudioStore(cfg.MusicDir, cfg.MusicDirTimeout, metrics)
+		return ports.AudioBackend{AudioStore: store, Links: NoAudioLinks{}, Ages: store}, nil
 	}
-	return nil, missingAudioStoreError(nil)
+	return ports.AudioBackend{}, missingAudioStoreError(nil)
 }
 
-func ociFromConfig(cfg *config.Config, logger *slog.Logger) (ports.AudioStore, error) {
+func ociFromConfig(cfg *config.Config, logger *slog.Logger) (*ObjectStorageAudioStore, error) {
 	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
 		Endpoint:  cfg.OCIS3Endpoint,
 		AccessKey: cfg.OCIS3AccessKey,
