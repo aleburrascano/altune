@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/parallel"
 	"context"
 	"errors"
-	"log/slog"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -125,9 +124,7 @@ func TestGroupWaitIsNilWhenNoTaskPanics(t *testing.T) {
 
 func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("error")
+	return logging.CaptureRing(t, "error")
 }
 
 func onlyRecord(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {

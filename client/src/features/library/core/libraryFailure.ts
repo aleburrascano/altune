@@ -2,6 +2,7 @@ import {
   ApiError,
   ContractError,
   NetworkError,
+  failureKindOf,
   isSessionFetchFailure,
   correlationIdOf,
   RETRY_TAIL,
@@ -19,9 +20,10 @@ export function classifyLibraryError(error: unknown): LibraryFailure {
   if (error instanceof NetworkError || isSessionFetchFailure(error)) return 'network';
   if (error instanceof ContractError) return 'server';
   if (!(error instanceof ApiError)) return 'unknown';
-  if (error.status === 401 || error.status === 403) return 'auth';
-  if (error.status === 404 || error.status === 410) return 'not-found';
-  if (error.status === 429 || error.status >= 500) return 'server';
+  const kind = failureKindOf(error);
+  if (kind === 'unauthorized') return 'auth';
+  if (kind === 'not-found') return 'not-found';
+  if (kind === 'rate-limited' || kind === 'server' || kind === 'timeout') return 'server';
   return 'unknown';
 }
 

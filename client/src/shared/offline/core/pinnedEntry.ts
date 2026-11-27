@@ -82,7 +82,7 @@ function narrowEntry(value: unknown): PinnedEntry | null {
   if (version !== undefined && typeof version !== 'string') return null;
   const trackId = parseTrackId(rawTrackId);
   if (!trackId.ok) return null;
-  return entryOfStatus(trackId.id, status, uri, version);
+  return entryOfStatus(trackId.value, status, uri, version);
 }
 
 export function narrowIndex(parsed: Record<string, unknown>): NarrowedIndex {

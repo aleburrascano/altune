@@ -3,6 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"net/http"
@@ -20,7 +21,7 @@ import (
 
 type assembledRun struct {
 	assembly *app.Assembly
-	logs     *syncBuffer
+	logs     *logging.Capture
 }
 
 func assembleLogging(t *testing.T, cfg *config.Config) assembledRun {
@@ -35,10 +36,7 @@ func assembleWith(t *testing.T, cfg *config.Config, transport http.RoundTripper)
 
 func assembleOn(t *testing.T, cfg *config.Config, pool *pgxpool.Pool, transport http.RoundTripper) assembledRun {
 	t.Helper()
-	logs := &syncBuffer{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 	ctx, cancel := context.WithCancel(t.Context())
 	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: pool, Transport: transport, Tracker: testTracker(t)})
 	if err != nil {

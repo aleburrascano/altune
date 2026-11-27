@@ -210,8 +210,12 @@ func survivingNorms(
 ) []scoredNorm {
 	survivors := make([]scoredNorm, 0, len(candidates))
 	for norm, shared := range candidates {
-		score, matched := q.Score(norm, shared, phoneticSet[norm])
-		if !matched {
+		var score float64
+		if phoneticSet[norm] {
+			score = q.ScorePhonetic(norm, shared)
+		} else if s, matched := q.Score(norm, shared); matched {
+			score = s
+		} else {
 			continue
 		}
 		survivors = append(survivors, scoredNorm{norm: norm, score: score})

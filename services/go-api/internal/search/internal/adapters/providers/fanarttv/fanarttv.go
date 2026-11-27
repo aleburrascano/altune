@@ -1,6 +1,7 @@
 package fanarttv
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/domain"
@@ -43,7 +44,7 @@ func (r *FanartTvArtworkLookup) Resolve(ctx context.Context, kind domain.ResultK
 	}
 	u := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
 	var payload fanartDoc
-	if err := providerrequests.GetJSON(ctx, r.client, u, &payload); err != nil {
+	if err := outbound.GetJSON(ctx, r.client, u, &payload); err != nil {
 		return providerrequests.ArtworkFailure(domain.ProviderKeyFanart, err)
 	}
 

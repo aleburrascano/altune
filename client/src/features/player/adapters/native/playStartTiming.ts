@@ -3,7 +3,7 @@ import { State } from 'react-native-track-player';
 import type { JsonObject } from '@shared/files';
 import { recordEvent } from '@shared/telemetry';
 
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 
 export type PlayTrigger = 'play' | 'queue' | 'resume' | 'remote';
 

@@ -262,7 +262,7 @@ func (s *scan) scanFile(file string) error {
 			v.kind = kindTestSupport
 			s.violations = append(s.violations, v)
 		case sub == "" && module != ownModule:
-			s.recordUse(f, imp, module, outsideFlag(isTest))
+			s.recordUse(f, imp, module, outsideFlag(file))
 		case sub == "" && importer != "internal/"+module:
 			s.recordUse(f, imp, module, usedInside)
 		}
@@ -270,8 +270,8 @@ func (s *scan) scanFile(file string) error {
 	return nil
 }
 
-func outsideFlag(isTest bool) int {
-	if isTest {
+func outsideFlag(file string) int {
+	if strings.HasSuffix(file, "_test.go") {
 		return usedByTests
 	}
 	return usedByProduction

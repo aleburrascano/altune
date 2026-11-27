@@ -1,7 +1,7 @@
 package musicbrainz
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/core/ports"
 	"context"
 	"encoding/json"
@@ -46,9 +46,9 @@ type mbRecordingDetailResponse struct {
 }
 
 func (a *MusicBrainzAdapter) getMB(ctx context.Context, what, path string) (int, []byte, error) {
-	status, rawBody, err := providerrequests.GetBytes(ctx, a.client, musicbrainzAPIBaseURL+path,
-		providerrequests.WithHeader("User-Agent", a.userAgent),
-		providerrequests.WithHeader("Accept", "application/json"))
+	status, rawBody, err := outbound.GetBytes(ctx, a.client, musicbrainzAPIBaseURL+path,
+		outbound.WithHeader("User-Agent", a.userAgent),
+		outbound.WithHeader("Accept", "application/json"))
 	if status == http.StatusNotFound {
 		return status, nil, nil
 	}

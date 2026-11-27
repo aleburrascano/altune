@@ -53,9 +53,10 @@ func (r SearchResult) IdentityMBID() string {
 		return r.ReleaseGroupMBID
 	case ResultKindArtist:
 		return r.ArtistMBID
-	default:
+	case ResultKindUnknown, ResultKindPlaylist:
 		return ""
 	}
+	return ""
 }
 
 func (r SearchResult) EntityMBID() string {

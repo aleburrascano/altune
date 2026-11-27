@@ -57,16 +57,15 @@ func isUsersPick(e entry) bool {
 }
 
 func trueFirst(a, b bool) int {
-	return cmp.Compare(weight(b), weight(a))
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return -1
+	}
+	return 1
 }
 
 func falseFirst(a, b bool) int {
-	return cmp.Compare(weight(a), weight(b))
-}
-
-func weight(holds bool) int {
-	if holds {
-		return 1
-	}
-	return 0
+	return trueFirst(b, a)
 }

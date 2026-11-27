@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
@@ -110,7 +111,7 @@ type retryCause struct {
 
 func (c retryCause) attr() slog.Attr {
 	if c.status != 0 {
-		return slog.Int("status", c.status)
+		return slog.Int(logging.KeyStatus, c.status)
 	}
 	return slog.String("error_class", c.errorClass)
 }

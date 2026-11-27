@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/parallel"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +13,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -26,7 +27,7 @@ var errFilesystemCallPanicked = errors.New("filesystem call panicked")
 type FilesystemAudioStore struct {
 	baseDir   string
 	opTimeout time.Duration
-	gate      *fsGate
+	gate      *parallel.Slots
 }
 
 func NewFilesystemAudioStore(baseDir string) *FilesystemAudioStore {
@@ -37,7 +38,7 @@ func newFilesystemAudioStore(baseDir string, opTimeout time.Duration) *Filesyste
 	if opTimeout <= 0 {
 		opTimeout = storageOpTimeout
 	}
-	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: opTimeout, gate: &fsGate{}}
+	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: opTimeout, gate: parallel.MustNewSlots(MaxInFlightFilesystemCalls)}
 }
 
 func (s *FilesystemAudioStore) Exists(ctx context.Context, audioRef string) (bool, error) {
@@ -92,7 +93,7 @@ func copyThenRemoveAcrossFilesystems(ctx context.Context, sourcePath, destPath s
 		return fmt.Errorf("copy audio into place: %w", err)
 	}
 	if err := os.Remove(sourcePath); err != nil {
-		slog.WarnContext(ctx, "audio_temp_source_remove_failed", "path", sourcePath, "error", err)
+		slog.WarnContext(ctx, "audio_temp_source_remove_failed", logging.KeyPath, sourcePath, logging.KeyError, err)
 	}
 	return nil
 }
@@ -160,7 +161,7 @@ func closeLateAudio(ctx context.Context, late openedAudio) {
 		return
 	}
 	if err := late.file.Close(); err != nil {
-		slog.WarnContext(ctx, "audio_late_open_close_failed", "path", late.file.Name(), "error", err)
+		slog.WarnContext(ctx, "audio_late_open_close_failed", logging.KeyPath, late.file.Name(), logging.KeyError, err)
 	}
 }
 
@@ -260,33 +261,19 @@ type fsCallResult[T any] struct {
 
 const MaxInFlightFilesystemCalls = 64
 
-type fsGate struct {
-	inFlight atomic.Int64
-}
-
-func (g *fsGate) enter() bool {
-	if g.inFlight.Add(1) > MaxInFlightFilesystemCalls {
-		g.inFlight.Add(-1)
-		return false
-	}
-	return true
-}
-
-func (g *fsGate) leave() { g.inFlight.Add(-1) }
-
-func boundedFSCall[T any](ctx context.Context, gate *fsGate, op string, call func() (T, error), discard func(T)) (T, error) {
+func boundedFSCall[T any](ctx context.Context, gate *parallel.Slots, op string, call func() (T, error), discard func(T)) (T, error) {
 	var zero T
 	if err := ctx.Err(); err != nil {
 		return zero, fmt.Errorf("filesystem %s: %w", op, err)
 	}
-	if !gate.enter() {
+	if !gate.TryAcquire() {
 		slog.WarnContext(ctx, "catalog.storage_stalled", "op", op, "in_flight", MaxInFlightFilesystemCalls)
 		return zero, fmt.Errorf("filesystem %s: %w", op, domain.ErrStorageStalled)
 	}
 
 	done := make(chan fsCallResult[T], 1)
 	background.Go(ctx, "catalog.filesystem_call_panic", func() {
-		defer gate.leave()
+		defer gate.Release()
 		res := fsCallResult[T]{err: errFilesystemCallPanicked}
 		defer func() { done <- res }()
 		value, err := call()

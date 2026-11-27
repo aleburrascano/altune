@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"context"
@@ -135,7 +136,7 @@ func (l cookieLease) settle(ctx context.Context, runErr error, stderr string) {
 		err = l.recordSignInFailure(ctx)
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.cookie_jar_update_failed", "run", l.run, "error", redact.LogError(err))
+		slog.WarnContext(ctx, "acquisition.cookie_jar_update_failed", "run", l.run, logging.KeyError, redact.LogError(err))
 	}
 }
 
@@ -277,7 +278,7 @@ func loadSession(ctx context.Context, live string) jarSession {
 		return session
 	}
 	if err := json.Unmarshal(raw, &session); err != nil {
-		slog.ErrorContext(ctx, "ytdlp.cookie_session_unreadable", "error", err)
+		slog.ErrorContext(ctx, "ytdlp.cookie_session_unreadable", logging.KeyError, err)
 		return jarSession{}
 	}
 	return session

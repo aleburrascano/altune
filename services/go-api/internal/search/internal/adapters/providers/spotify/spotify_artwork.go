@@ -1,6 +1,7 @@
 package spotify
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
@@ -43,7 +44,7 @@ func (a *SpotifyArtworkLookup) ResolveByIdentity(ctx context.Context, kind domai
 	var body struct {
 		ThumbnailURL string `json:"thumbnail_url"`
 	}
-	if err := providerrequests.GetJSON(ctx, a.client, u, &body, providerrequests.WithHeader("User-Agent", spotifyOEmbedUserAgent)); err != nil {
+	if err := outbound.GetJSON(ctx, a.client, u, &body, outbound.WithHeader("User-Agent", spotifyOEmbedUserAgent)); err != nil {
 		return providerrequests.ArtworkFailure(domain.ProviderKeySpotify, err)
 	}
 	return upgradeSpotifyImageSize(body.ThumbnailURL), nil
@@ -57,9 +58,10 @@ func spotifyURLSegment(kind domain.ResultKind) string {
 		return "album"
 	case domain.ResultKindTrack:
 		return "track"
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return ""
 	}
+	return ""
 }
 
 func upgradeSpotifyImageSize(url string) string {

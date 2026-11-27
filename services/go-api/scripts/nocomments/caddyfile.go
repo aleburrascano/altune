@@ -250,12 +250,11 @@ func (st *caddyScanState) endComment(end int) error {
 	if !t.commentEscaped && bytes.IndexByte(st.src[t.commentStart:end], '\\') >= 0 {
 		return fmt.Errorf("line %d: a backslash in a comment joins the next line, so the comment can't be removed safely", st.line)
 	}
-	joinedBefore := st.joinedNewline == st.lineStart-1
-	st.spans = append(st.spans, caddyCommentSpan(st.src, st.lineStart, t.commentStart, end, st.line, st.openerSpace+1, joinedBefore))
+	st.spans = append(st.spans, caddyCommentSpan(st.src, st.lineStart, t.commentStart, end, st.line, st.openerSpace+1, st.joinedNewline))
 	return nil
 }
 
-func caddyCommentSpan(src []byte, lineStart, hashPos, end, line, keepFrom int, joinedBefore bool) span {
+func caddyCommentSpan(src []byte, lineStart, hashPos, end, line, keepFrom, joinedNewline int) span {
 	endBeforeCR := end
 	if endBeforeCR > hashPos && src[endBeforeCR-1] == '\r' {
 		endBeforeCR--
@@ -263,7 +262,7 @@ func caddyCommentSpan(src []byte, lineStart, hashPos, end, line, keepFrom int, j
 	if !isBlank(src[lineStart:hashPos]) {
 		return span{max(trimTrailingSpace(src, lineStart, hashPos), keepFrom), endBeforeCR, line}
 	}
-	if joinedBefore {
+	if joinedNewline == lineStart-1 {
 		return span{lineStart, endBeforeCR, line}
 	}
 	consumed := end
@@ -276,16 +275,15 @@ func caddyCommentSpan(src []byte, lineStart, hashPos, end, line, keepFrom int, j
 func caddyAdaptSame(timeout time.Duration, before, after []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	wrapped := false
-	beforeJSON, err := caddyAdapt(ctx, before, wrapped)
+	beforeJSON, err := caddyAdapt(ctx, before)
 	if err != nil && strings.Contains(err.Error(), "must appear in a site block") {
-		wrapped = true
-		beforeJSON, err = caddyAdapt(ctx, before, wrapped)
+		before, after = inSiteBlock(before), inSiteBlock(after)
+		beforeJSON, err = caddyAdapt(ctx, before)
 	}
 	if err != nil {
 		return fmt.Errorf("adapt original: %w", err)
 	}
-	afterJSON, err := caddyAdapt(ctx, after, wrapped)
+	afterJSON, err := caddyAdapt(ctx, after)
 	if err != nil {
 		return fmt.Errorf("adapt stripped: %w", err)
 	}
@@ -295,13 +293,13 @@ func caddyAdaptSame(timeout time.Duration, before, after []byte) error {
 	return nil
 }
 
-func caddyAdapt(ctx context.Context, src []byte, wrapped bool) ([]byte, error) {
+func caddyAdapt(ctx context.Context, config []byte) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "nocomments-caddy-")
 	if err != nil {
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	stubRoot, err := prepareCaddyWorkDir(dir, src, wrapped)
+	stubRoot, err := prepareCaddyWorkDir(dir, config)
 	if err != nil {
 		return nil, err
 	}
@@ -325,11 +323,11 @@ func adaptWithStubs(ctx context.Context, dir, stubRoot string) ([]byte, error) {
 	return nil, fmt.Errorf("caddy adapt: more than %d missing imports", caddyMaxStubs)
 }
 
-func prepareCaddyWorkDir(dir string, src []byte, wrapped bool) (string, error) {
-	config := src
-	if wrapped {
-		config = []byte("http://localhost {\n" + string(src) + "\n}\n")
-	}
+func inSiteBlock(src []byte) []byte {
+	return []byte("http://localhost {\n" + string(src) + "\n}\n")
+}
+
+func prepareCaddyWorkDir(dir string, config []byte) (string, error) {
 	if err := os.WriteFile(filepath.Join(dir, "Caddyfile"), config, 0o600); err != nil {
 		return "", fmt.Errorf("write Caddyfile: %w", err)
 	}

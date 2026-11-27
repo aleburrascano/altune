@@ -3,8 +3,10 @@ package handler
 import (
 	libraryservice "altune/go-api/internal/library/internal/core/libraryviews"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -92,15 +94,7 @@ func pageBounds(r *http.Request) (limit, offset int, err error) {
 }
 
 func optionalIntParam(r *http.Request, name string) (int, error) {
-	raw := r.URL.Query().Get(name)
-	if raw == "" {
-		return 0, nil
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, domain.NewValidationError(name + " must be an integer")
-	}
-	return value, nil
+	return httpserver.ParseQueryInt(r, name, 0, math.MinInt, math.MaxInt, apierror.CodeCatalogValidation)
 }
 
 func formatAddedAt(t time.Time) string {
@@ -108,10 +102,7 @@ func formatAddedAt(t time.Time) string {
 }
 
 func (h *LibraryHandler) handleAlbums(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	query, err := libraryQuery(r)
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)
@@ -139,10 +130,7 @@ func (h *LibraryHandler) handleAlbums(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LibraryHandler) handleArtists(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	query, err := libraryQuery(r)
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)

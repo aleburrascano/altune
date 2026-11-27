@@ -21,11 +21,11 @@ import {
   swapUpcomingToLocal,
   type SwapOutcome,
 } from '@features/player/adapters/native/nativeTrackSwap';
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
-} from '@features/player/domain/playbackHealth';
+} from '@features/player/core/playbackHealth';
 
 const inflight = new Map<string, AbortController>();
 const invalidatedInflight = new Set<string>();
@@ -100,7 +100,7 @@ function upcomingLibraryTrack(
   const track = orderedQueueTracks(useQueueStore.getState())[activeIndex + 1];
   if (!track || track.source.kind !== 'library') return null;
   const parsed = parseTrackId(track.source.trackId);
-  return parsed.ok ? { track, trackId: parsed.id } : null;
+  return parsed.ok ? { track, trackId: parsed.value } : null;
 }
 
 function supersedeAllBut(trackId: TrackId | null): void {
@@ -185,14 +185,14 @@ function downloadFailed(
   return null;
 }
 
-function cacheFileFor(trackId: TrackId, resolved: ResolvedAudio, partial: boolean): File {
-  const build = partial ? buildPartialCacheFileName : buildCacheFileName;
+function cacheFileFor(trackId: TrackId, resolved: ResolvedAudio, kind: 'final' | 'partial'): File {
+  const build = kind === 'partial' ? buildPartialCacheFileName : buildCacheFileName;
   return new File(cacheDir(), build(trackId, resolved.version, extFromUrl(resolved.url)));
 }
 
 function moveIntoCache(trackId: TrackId, resolved: ResolvedAudio, partial: File): File {
   try {
-    const file = cacheFileFor(trackId, resolved, false);
+    const file = cacheFileFor(trackId, resolved, 'final');
     partial.moveSync(file, { overwrite: true });
     return file;
   } catch (err) {
@@ -203,7 +203,7 @@ function moveIntoCache(trackId: TrackId, resolved: ResolvedAudio, partial: File)
 
 async function downloadAndSwap(claimed: ClaimedPrefetch, resolved: ResolvedAudio): Promise<void> {
   const { trackId, controller } = claimed;
-  const partial = atStage('download', () => cacheFileFor(trackId, resolved, true));
+  const partial = atStage('download', () => cacheFileFor(trackId, resolved, 'partial'));
   const downloaded = await atStage('download', () =>
     boundedDownload(resolved.url, partial, controller),
   ).catch((err: unknown) => downloadFailed(claimed, partial, err));

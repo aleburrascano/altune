@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/failure';
+import { ContractError, fail, ok, type Result } from '@shared/failure';
 import { parseDiscoveryResult } from '@shared/apiClient/adapters/discovery';
 import { PROVIDER_STATUSES, sourceIdList } from '@shared/catalog';
 import { apiFetch, setQueryParam, signalInit, withQuery } from '@shared/apiClient/adapters/http';
@@ -341,12 +341,18 @@ function parseOwnershipExtras(value: unknown, at: string): Record<string, unknow
   return value === undefined ? EXTRAS_FROM_A_SERVER_WITHOUT_OWNERSHIP : asRecord(value, at);
 }
 
-function parseOpenUrl(value: unknown, at: string): string | null {
+function parseOpenUrl(value: unknown, at: string): Result<string | null, ContractError> {
   try {
-    return nullableHttpsUrl(value, at);
-  } catch {
-    return null;
+    return ok(nullableHttpsUrl(value, at));
+  } catch (error) {
+    if (error instanceof ContractError) return fail(error);
+    throw error;
   }
+}
+
+function openUrlOrNull(value: unknown, at: string): string | null {
+  const parsed = parseOpenUrl(value, at);
+  return parsed.ok ? parsed.value : null;
 }
 
 function optionalString(value: unknown): string | null {
@@ -361,7 +367,7 @@ function versionExtras(value: unknown): Record<string, unknown> {
 
 function versionFields(r: Record<string, unknown>, title: string): UnreleasedVersion {
   const links = parseAudioLinks(r.audio_links);
-  const open = { open_url: parseOpenUrl(r.open_url, 'UnreleasedVersion.open_url') };
+  const open = { open_url: openUrlOrNull(r.open_url, 'UnreleasedVersion.open_url') };
   const text = { label: optionalString(r.label), quality: optionalString(r.quality) };
   const host = { open_host: optionalString(r.open_host) };
   return { title, ...text, audio_links: links, ...open, ...host, extras: versionExtras(r.extras) };
@@ -395,7 +401,7 @@ function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
     has_media: nullableBoolean(r.has_media, `${at}.has_media`),
     off_streaming: nullableBoolean(r.off_streaming, `${at}.off_streaming`) === true,
     audio_links: parseAudioLinks(r.audio_links),
-    open_url: parseOpenUrl(r.open_url, `${at}.open_url`),
+    open_url: openUrlOrNull(r.open_url, `${at}.open_url`),
     open_host: nullableString(r.open_host, `${at}.open_host`),
     versions: parseVersions(r.versions),
     best_version_title: optionalString(r.best_version_title),

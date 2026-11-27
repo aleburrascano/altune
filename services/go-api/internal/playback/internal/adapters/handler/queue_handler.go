@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/playback/internal/core/queue"
 	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
@@ -102,10 +103,7 @@ type currentTrackResponse struct {
 }
 
 func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var body saveQueueRequest
 	if !httpserver.DecodeJSON(w, r, &body) {
@@ -131,10 +129,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var body saveQueuePositionRequest
 	if !httpserver.DecodeJSON(w, r, &body) {
@@ -155,10 +150,7 @@ func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request
 }
 
 func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	view, err := h.svc.ResumeView(r.Context(), userId)
 	if err != nil {
@@ -172,10 +164,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) handleForget(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	if err := h.svc.Forget(r.Context(), userId); err != nil {
 		writeQueueError(w, r, err)
@@ -190,7 +179,7 @@ const statusClientClosedRequest = 499
 func writeQueueError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
 		slog.InfoContext(r.Context(), "playback.queue_state.client_cancelled",
-			"method", r.Method, "path", r.URL.Path, "error", err)
+			logging.KeyMethod, r.Method, logging.KeyPath, r.URL.Path, logging.KeyError, err)
 		w.WriteHeader(statusClientClosedRequest)
 		return
 	}

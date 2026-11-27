@@ -9,10 +9,10 @@ import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLoc
 import { activeNativeTrackId } from '@features/player/adapters/native/nativeTrack';
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import type { IsSkippable } from '@features/player/ports/nativePlayback';
-import { toWireSource } from '@features/player/domain/queueStateWire';
-import { recordQueueSaveFailure } from '@features/player/domain/playbackHealth';
+import { toWireSource } from '@features/player/core/queueStateWire';
+import { recordQueueSaveFailure } from '@features/player/core/playbackHealth';
 import { savedQueueLists } from '@features/player/domain/queueSaveWindow';
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import { progressSecondsToRoundedMs } from '@features/player/domain/time';
 
 async function currentPositionMsOrZero(): Promise<number> {

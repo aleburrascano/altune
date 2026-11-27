@@ -12,8 +12,8 @@ import {
 } from '@features/player/adapters/native/nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from '@features/player/adapters/native/nativeTrack';
 import { reportLoadFailure } from '@features/player/core/playbackErrorStore';
-import { recordPresignOutcome } from '@features/player/domain/playbackHealth';
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { recordPresignOutcome } from '@features/player/core/playbackHealth';
+import { warnPlayback } from '@features/player/core/playbackError';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
 

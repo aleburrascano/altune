@@ -4,11 +4,10 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -125,16 +124,7 @@ func searchedSpecs(t *testing.T, calls string) []string {
 	return specs
 }
 
-func captureLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &logs
-}
-
-func loggedErrors(t *testing.T, logs *bytes.Buffer, msg string) []string {
+func loggedErrors(t *testing.T, logs *logging.Capture, msg string) []string {
 	t.Helper()
 	var errs []string
 	for line := range strings.Lines(logs.String()) {

@@ -1,6 +1,7 @@
 package idfloor
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -58,7 +59,7 @@ func (f *Floor) trustedCeiling(ctx context.Context, want uint64) uint64 {
 	if !isImplausiblyAhead(ceiling, want) {
 		return ceiling
 	}
-	slog.WarnContext(ctx, "events.id_floor_implausible", "path", f.store.Location(), "ceiling", ceiling, "want", want)
+	slog.WarnContext(ctx, "events.id_floor_implausible", logging.KeyPath, f.store.Location(), "ceiling", ceiling, "want", want)
 	return 0
 }
 
@@ -68,12 +69,12 @@ func (f *Floor) readCeiling(ctx context.Context) uint64 {
 		return 0
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "events.id_floor_unreadable", "path", f.store.Location(), "error", err)
+		slog.WarnContext(ctx, "events.id_floor_unreadable", logging.KeyPath, f.store.Location(), logging.KeyError, err)
 		return 0
 	}
 	ceiling, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
 	if err != nil {
-		slog.WarnContext(ctx, "events.id_floor_corrupt", "path", f.store.Location(), "error", err)
+		slog.WarnContext(ctx, "events.id_floor_corrupt", logging.KeyPath, f.store.Location(), logging.KeyError, err)
 		return 0
 	}
 	return ceiling
@@ -85,7 +86,7 @@ func isImplausiblyAhead(ceiling, want uint64) bool {
 
 func (f *Floor) persistOrWarn(ctx context.Context, ceiling uint64) {
 	if err := f.persist(ceiling); err != nil {
-		slog.WarnContext(ctx, "events.id_floor_unwritable", "path", f.store.Location(), "error", err)
+		slog.WarnContext(ctx, "events.id_floor_unwritable", logging.KeyPath, f.store.Location(), logging.KeyError, err)
 	}
 }
 

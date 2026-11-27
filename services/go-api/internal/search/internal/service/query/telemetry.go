@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"time"
@@ -33,7 +34,11 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page fi
 	if err := ids.GuardNotSystem(run.userId); err != nil {
 		return
 	}
-	payload := searchPerformedPayload(page.shown, shownSignatures(page.fullSlate, page.related), page.explored, explorationRate)
+	payload := searchPerformedPayload(page.shown, shownSignatures(page.fullSlate, page.related))
+	if page.explored {
+		payload["exploration"] = true
+		payload["exploration_rate"] = explorationRate
+	}
 	page.timing.addTo(payload)
 	event := domain.InteractionEvent{
 		OccurredAt: run.startedAt,
@@ -46,17 +51,13 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page fi
 	t.bg.LaunchWithin(parentCtx, "telemetry.emit", emitTimeout, func(ctx context.Context) { t.append(ctx, event) })
 }
 
-func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) map[string]any {
+func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string) map[string]any {
 	payload := map[string]any{
 		"result_count":                   len(shown),
 		domain.PayloadKeyZeroResult:      len(shown) == 0,
 		domain.PayloadKeyTailNoiseTop5:   rank.TailNoiseInTopK(shown, 5),
 		"pipeline_version":               pipelineVersionV2,
 		domain.PayloadKeyShownSignatures: shownSigs,
-	}
-	if explored {
-		payload["exploration"] = true
-		payload["exploration_rate"] = explorationRate
 	}
 	if top := buildShownTop(shown); len(top) > 0 {
 		payload["top"] = top
@@ -68,8 +69,8 @@ func (t *SearchTelemetry) append(ctx context.Context, event domain.InteractionEv
 	if err := t.eventStore.Append(ctx, event); err != nil {
 		slog.WarnContext(ctx, "search.v2.telemetry_emit_failed",
 			"search_id", event.SearchId,
-			"user_id", event.UserId.String(),
-			"error", err)
+			logging.KeyUserID, event.UserId.String(),
+			logging.KeyError, err)
 		return
 	}
 	t.activity.EmitActivity(domain.EventTypeSearchPerformed.String())

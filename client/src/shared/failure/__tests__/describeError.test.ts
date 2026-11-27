@@ -1,7 +1,7 @@
-import { ApiError, ContractError, RETRY_TAIL, describeError } from '@shared/failure';
+import { ApiError, ContractError, NetworkError, RETRY_TAIL, describeError } from '@shared/failure';
 describe('describeError — network vs 5xx vs generic', () => {
   it('maps a transport failure to the offline copy', () => {
-    expect(describeError(new Error('network request failed'))).toEqual({
+    expect(describeError(new NetworkError('transport', 'the API is unreachable'))).toEqual({
       title: 'No connection',
       body: 'Check your connection and try again.',
     });

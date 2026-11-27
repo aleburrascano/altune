@@ -1,9 +1,12 @@
-import { consoleLogger, setLogger, warn } from '@shared/log';
+import { consoleLogger, entryOf, error, setLogger, warn } from '@shared/log';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import type { LoggedLine } from '@testing/fakes/log/inMemoryLogger';
 
-function sinkRecording(lines: LoggedLine[]): Pick<Console, 'warn'> {
+function sinkRecording(lines: LoggedLine[]): Pick<Console, 'warn' | 'error'> {
   return {
+    error: (message: string, ...details: unknown[]) => {
+      lines.push([message, ...details]);
+    },
     warn: (message: string, ...details: unknown[]) => {
       lines.push([message, ...details]);
     },
@@ -61,5 +64,45 @@ describe('recordLogs', () => {
 
   it('records nothing before anything warns', () => {
     expect(recordLogs().text()).toBe('[]');
+  });
+});
+
+describe('error', () => {
+  it('reaches the logger as an error, apart from warnings', () => {
+    const logs = recordLogs();
+
+    error('[area] render failed', 'stack');
+
+    expect(logs.errors).toEqual([['[area] render failed', 'stack']]);
+    expect(logs.warnings).toEqual([]);
+  });
+
+  it('goes to the console error sink by default', () => {
+    const lines: LoggedLine[] = [];
+    setLogger(consoleLogger(sinkRecording(lines)));
+
+    error('[area] render failed');
+
+    expect(lines).toEqual([['[area] render failed']]);
+  });
+});
+
+describe('entryOf', () => {
+  it('splits a leading [tag] from the message', () => {
+    expect(entryOf('warn', '[api] request failed', [1])).toEqual({
+      level: 'warn',
+      tag: 'api',
+      message: 'request failed',
+      details: [1],
+    });
+  });
+
+  it('leaves an untagged message whole', () => {
+    expect(entryOf('error', 'plain', [])).toEqual({
+      level: 'error',
+      tag: undefined,
+      message: 'plain',
+      details: [],
+    });
   });
 });

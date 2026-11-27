@@ -1,7 +1,7 @@
 import type { SignOutResult } from '@shared/auth';
 import type { TextTone } from '@shared/ui';
 import { tracksLabel, LEFTOVER_FILES_LABEL } from '@features/settings/core/downloadStatsModel';
-import { failureCopyForAction } from '@features/settings/core/failureCopyForAction';
+import { describeError } from '@shared/failure';
 import type { RemoveDownloads } from '@features/settings/core/removeDownloads';
 
 export type DangerZoneActionKey = 'downloads' | 'history' | 'sign-out';
@@ -84,7 +84,7 @@ function removeDownloadsAction(downloads: RemoveDownloads): DangerZoneAction {
 function clearHistoryOutcome(
   clearHistory: ClearHistoryState,
 ): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
-  if (clearHistory.isError) return failedOutcome(failureCopyForAction(clearHistory.error));
+  if (clearHistory.isError) return failedOutcome(describeError(clearHistory.error).body);
   return clearHistory.isSuccess ? { status: { label: 'Cleared', tone: 'success' } } : {};
 }
 
@@ -119,7 +119,7 @@ function signOutOutcome(
   signOutState: SignOutResult,
 ): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
   return signOutState.status === 'error'
-    ? failedOutcome(failureCopyForAction(signOutState.error))
+    ? failedOutcome(describeError(signOutState.error).body)
     : {};
 }
 

@@ -1084,8 +1084,8 @@ func (f *fakeUpgradeState) State(context.Context, ids.TrackId) (download.Upgrade
 	return f.snapshot, f.err
 }
 
-func (f *fakeUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, fence download.ClaimNumber, keys []string, reset bool) error {
-	f.settled = append(f.settled, settleCall{fence: fence, keys: keys, reset: reset})
+func (f *fakeUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, fence download.ClaimNumber, keys []string, evidence download.EvidenceFate) error {
+	f.settled = append(f.settled, settleCall{fence: fence, keys: keys, reset: evidence == download.ResetEvidence})
 	return f.err
 }
 

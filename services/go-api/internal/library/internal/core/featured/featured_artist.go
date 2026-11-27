@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -115,14 +116,21 @@ func (s *FillFeaturedArtistsService) Execute(ctx context.Context, userId ids.Use
 	res := &BackfillFeaturedResult{NextOffset: startOffset}
 	budgetCtx, cancel := context.WithTimeoutCause(ctx, s.timeBudget, errBackfillBudgetSpent)
 	defer cancel()
+	stoppedOnBudget := false
+	defer func() {
+		if stoppedOnBudget {
+			s.admission.release(userId)
+		} else {
+			s.admission.releaseWithCooldown(userId)
+		}
+	}()
 	err := s.run(budgetCtx, userId, res)
-	stoppedOnBudget := res.Truncated && isBudgetSpent(budgetCtx)
-	s.admission.release(userId, !stoppedOnBudget)
+	stoppedOnBudget = res.Truncated && isBudgetSpent(budgetCtx)
 	if err != nil {
 		return res, err
 	}
 	slog.InfoContext(ctx, "featured backfill complete",
-		"user_id", userId.String(), "scanned", res.Scanned, "updated", res.Updated, "failed", res.Failed,
+		"scanned", res.Scanned, "updated", res.Updated, "failed", res.Failed,
 		"truncated", res.Truncated, "next_offset", res.NextOffset)
 	return res, nil
 }
@@ -198,7 +206,7 @@ func (s *FillFeaturedArtistsService) backfillTrack(
 	if err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill resolve failed",
-			"track_id", t.ID.String(), "error", err)
+			logging.KeyTrackID, t.ID.String(), logging.KeyError, err)
 		return nil
 	}
 	if len(feats) == 0 {
@@ -207,7 +215,7 @@ func (s *FillFeaturedArtistsService) backfillTrack(
 	if err := s.persist(ctx, t.ID, userId, feats); err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill persist failed",
-			"track_id", t.ID.String(), "error", err)
+			logging.KeyTrackID, t.ID.String(), logging.KeyError, err)
 		return nil
 	}
 	res.Updated++
@@ -270,13 +278,17 @@ func (a *backfillAdmission) admit(userId ids.UserId) error {
 	return nil
 }
 
-func (a *backfillAdmission) release(userId ids.UserId, startCooldown bool) {
+func (a *backfillAdmission) release(userId ids.UserId) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	delete(a.running, userId)
-	if startCooldown {
-		a.lastFinished[userId] = a.now()
-	}
+}
+
+func (a *backfillAdmission) releaseWithCooldown(userId ids.UserId) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.running, userId)
+	a.lastFinished[userId] = a.now()
 }
 
 func (a *backfillAdmission) pruneExpired() {

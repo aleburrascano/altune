@@ -39,21 +39,23 @@ async function connectedClient(request: StreamRequest, onError: (error: unknown)
   return client;
 }
 
+const CORRELATION_ID_SHAPE = /^[0-9a-f]{16}$/;
+
 describe('SSEClient on web', () => {
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it('omits the correlation header, where the API CORS policy would reject the preflight', async () => {
+  it('sends the correlation header, which the API CORS policy allows', async () => {
     const request = new HeaderRecordingRequest();
 
     await connectedClient(request, () => undefined);
 
     expect(request.headers).toContainEqual(['Authorization', 'Bearer token-1']);
-    expect(request.headers.map(([name]) => name)).not.toContain('X-Correlation-ID');
+    expect(request.headers.map(([name]) => name)).toContain('X-Correlation-ID');
   });
 
-  it('reports a connection error without a correlation id', async () => {
+  it('reports a connection error with the correlation id it sent', async () => {
     jest.useFakeTimers();
     const request = new HeaderRecordingRequest();
     const errors: unknown[] = [];
@@ -63,11 +65,14 @@ describe('SSEClient on web', () => {
     client.dispose();
 
     expect(errors).toEqual([
-      expect.objectContaining({ correlationId: null, message: 'SSE connection error' }),
+      expect.objectContaining({
+        correlationId: expect.stringMatching(CORRELATION_ID_SHAPE),
+        message: expect.stringContaining('SSE connection error'),
+      }),
     ]);
   });
 
-  it('reports a refused stream without a correlation id', async () => {
+  it('reports a refused stream with the correlation id it sent', async () => {
     jest.useFakeTimers();
     const request = new HeaderRecordingRequest();
     const errors: unknown[] = [];
@@ -78,7 +83,10 @@ describe('SSEClient on web', () => {
     client.dispose();
 
     expect(errors).toEqual([
-      expect.objectContaining({ correlationId: null, message: 'SSE stream refused (status=502)' }),
+      expect.objectContaining({
+        correlationId: expect.stringMatching(CORRELATION_ID_SHAPE),
+        message: expect.stringContaining('SSE stream refused (status=502'),
+      }),
     ]);
   });
 });

@@ -5,13 +5,12 @@ import (
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
 	"log/slog"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type trackAdmission interface {
@@ -26,10 +25,7 @@ type acquisitionCommand struct {
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, track, ok := c.resolveTrack(w, r, userId)
 	if !ok {
@@ -47,7 +43,7 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request, userId ids.UserId) (ids.TrackId, *ports.TrackSnapshot, bool) {
-	trackId, err := ids.ParseTrackId(chi.URLParam(r, "trackId"))
+	trackId, err := ids.ParseTrackId(httpserver.URLParam(r, "trackId"))
 	if err != nil {
 		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeCatalogInvalidTrackID, "invalid track ID"))
 		return trackId, nil, false
@@ -63,7 +59,7 @@ func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, us
 		return nil, false
 	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), c.logMsg, "error", err, "track_id", trackId.String())
+		slog.ErrorContext(r.Context(), c.logMsg, logging.KeyError, err, logging.KeyTrackID, trackId.String())
 		httpserver.HandleServiceError(w, r, err)
 		return nil, false
 	}

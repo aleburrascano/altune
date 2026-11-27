@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/auth/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/random"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -999,7 +999,7 @@ func TestSupabaseJWTVerifier_StalledBackgroundRefreshFailsWithinTheFetchTimeout(
 	waitFor(t, 15*time.Second, "a stalled background refresh to time out", func() bool { return metrics.jwksFailures.Load() >= 1 })
 }
 
-func warnRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
+func warnRecords(t *testing.T, buf *logging.Capture) []map[string]any {
 	t.Helper()
 	var out []map[string]any
 	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
@@ -1018,15 +1018,12 @@ func warnRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
 }
 
 func TestSupabaseJWTVerifier_InitialJWKSFetchFailureLogsOneWarn(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	buf := logging.CaptureJSON(t, slog.LevelDebug)
 	f, jwks := newRotatingFixture(t)
 	jwks.down.Store(true)
 	verifier := f.newVerifier(t)
 
-	warns := warnRecords(t, &buf)
+	warns := warnRecords(t, buf)
 	if len(warns) != 1 {
 		t.Fatalf("WARN records after failing initial fetch: got %d, want 1: %s", len(warns), buf.String())
 	}
@@ -1041,7 +1038,7 @@ func TestSupabaseJWTVerifier_InitialJWKSFetchFailureLogsOneWarn(t *testing.T) {
 	if _, err := verifier.Verify(t.Context(), f.validToken(t)); err != nil {
 		t.Fatalf("Verify after endpoint recovery: %v", err)
 	}
-	if got := len(warnRecords(t, &buf)); got != 1 {
+	if got := len(warnRecords(t, buf)); got != 1 {
 		t.Fatalf("WARN records after successful fetch: got %d, want still 1: %s", got, buf.String())
 	}
 }

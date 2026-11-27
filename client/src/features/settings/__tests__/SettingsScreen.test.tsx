@@ -53,11 +53,7 @@ describe('settings mutation failures', () => {
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
     await elapsePastTheRetries();
 
-    expect(
-      await backfillRow().findByText(
-        'Could not reach the server — check your connection and try again.',
-      ),
-    ).toBeTruthy();
+    expect(await backfillRow().findByText('Check your connection and try again.')).toBeTruthy();
     expect(backfillRow().getByText('Retry')).toBeTruthy();
     expect(backfillRow().queryByText('Run')).toBeNull();
     expect(backfillRow().queryByText('Done')).toBeNull();
@@ -84,7 +80,11 @@ describe('settings mutation failures', () => {
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
 
-    expect(await backfillRow().findByText('Something went wrong — try again.')).toBeTruthy();
+    expect(
+      await backfillRow().findByText(
+        'This version of Altune is out of date. Update the app to continue.',
+      ),
+    ).toBeTruthy();
     expect(backfillRow().getByText('Retry')).toBeTruthy();
     expect(backfillRow().queryByText(/Updated/)).toBeNull();
   });
@@ -101,7 +101,7 @@ describe('settings mutation failures', () => {
     await elapsePastTheRetries();
 
     expect(
-      await historyRow().findByText('The server had a problem — try again in a few minutes.'),
+      await historyRow().findByText('Something went wrong on our end. Please try again.'),
     ).toBeTruthy();
     expect(historyRow().getByText('Failed')).toBeTruthy();
     expect(historyRow().queryByText('Cleared')).toBeNull();

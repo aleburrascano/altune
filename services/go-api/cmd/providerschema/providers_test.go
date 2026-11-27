@@ -20,7 +20,11 @@ func TestEverySchemaAccountsForEveryField(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		problems, err := account(s, root, p, *updateSchema)
+		account := audit
+		if *updateSchema {
+			account = rewrite
+		}
+		problems, err := account(s, root, p)
 		if err != nil {
 			t.Fatalf("%s: %v", provider, err)
 		}
@@ -41,7 +45,7 @@ func TestAccountFailsWhenTheSchemaLacksAnEntity(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := providerfields.Schema{Entities: map[string]*providerfields.Entity{}}
-	if _, err := account(s, root, providers["applemusic"], false); err == nil {
+	if _, err := audit(s, root, providers["applemusic"]); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -52,7 +56,7 @@ func TestAccountFailsWhenTheSchemaHasAnEntityNobodyAudits(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := providerfields.Schema{Entities: map[string]*providerfields.Entity{"song": {}, "album": {}, "artist": {}, "playlist": {}}}
-	if _, err := account(s, root, providers["applemusic"], false); err == nil {
+	if _, err := audit(s, root, providers["applemusic"]); err == nil {
 		t.Fatal("want an error")
 	}
 }

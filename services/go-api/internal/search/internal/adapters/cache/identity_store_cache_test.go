@@ -3,7 +3,7 @@ package cache_test
 import (
 	"altune/go-api/internal/search/internal/adapters/cache"
 	"altune/go-api/internal/search/internal/domain"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"strings"
@@ -121,10 +121,7 @@ func TestRedisIdentityStore_NilClient_DelegatesToInner(t *testing.T) {
 }
 
 func TestRedisIdentityStore_Lookup_AFailedBackfillIsLoggedAndStillAnswers(t *testing.T) {
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelDebug)
 	inner := &recordingIdentityStore{mbid: "mbid-1", xref: map[domain.ProviderKey]string{"deezer": "9"}, found: true}
 	store := cache.NewRedisIdentityStore(inner, unreachableRedisClient(t))
 

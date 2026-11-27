@@ -43,11 +43,11 @@ func dispatch(cfg *config.Config, logRing *logging.RingBuffer, argv []string) er
 	case "serve":
 		return runServer(cfg, logRing)
 	case "health-check":
-		return reportCommand(commands.RunHealthCheck(cfg, healthCheckMode(cmd, args)))
+		return reportCommand(commands.RunHealthCheck(cfg, runMode(cmd, args, "fix")))
 	case "journey-check":
 		return reportCommand(commands.RunJourneyCheck(cfg))
 	case "sweep-staging-audio":
-		return reportCommand(commands.RunSweepStagingAudio(cfg, parseExecute(cmd, args)))
+		return reportCommand(commands.RunSweepStagingAudio(cfg, runMode(cmd, args, "execute")))
 	default:
 		return fmt.Errorf("unknown command: %s\nUsage: api [serve|health-check|journey-check|sweep-staging-audio]", cmd)
 	}
@@ -79,19 +79,12 @@ func runServer(cfg *config.Config, logRing *logging.RingBuffer) error {
 	return nil
 }
 
-func parseExecute(name string, args []string) bool {
+func runMode(name string, args []string, flagName string) commands.RunMode {
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
-	execute := fs.Bool("execute", false, "apply changes instead of a dry-run")
+	apply := fs.Bool(flagName, false, "apply changes instead of a dry-run")
 	_ = fs.Parse(args)
-	return *execute
-}
-
-func healthCheckMode(name string, args []string) commands.HealthCheckMode {
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
-	fix := fs.Bool("fix", false, "apply fixes instead of a dry-run")
-	_ = fs.Parse(args)
-	if *fix {
-		return commands.HealthCheckFix
+	if *apply {
+		return commands.Apply
 	}
-	return commands.HealthCheckReport
+	return commands.DryRun
 }

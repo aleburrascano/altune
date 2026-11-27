@@ -1,7 +1,7 @@
 package musicbrainz
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/core/ports"
 	"context"
 	"encoding/json"
@@ -19,9 +19,9 @@ func (a *MusicBrainzAdapter) RecordingByMBID(ctx context.Context, mbid string) (
 		return ports.MusicBrainzRecording{}, false, nil
 	}
 	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/recording/%s?inc=isrcs+artist-credits&fmt=json", url.PathEscape(mbid))
-	status, rawBody, err := providerrequests.GetBytes(ctx, a.client, u,
-		providerrequests.WithHeader("User-Agent", a.userAgent),
-		providerrequests.WithHeader("Accept", "application/json"))
+	status, rawBody, err := outbound.GetBytes(ctx, a.client, u,
+		outbound.WithHeader("User-Agent", a.userAgent),
+		outbound.WithHeader("Accept", "application/json"))
 	if status == http.StatusNotFound {
 		return ports.MusicBrainzRecording{}, false, nil
 	}

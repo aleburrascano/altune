@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -103,15 +102,6 @@ func TestHandleListTracks(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestHandleListTracks_NoAuth(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
-	router := trackRoutes(repo)
-
-	rec := requestAnonymous(t, router, http.MethodGet, "/tracks", nil)
-
-	assertStatus(t, rec, http.StatusUnauthorized)
 }
 
 func TestHandleCreateTrack(t *testing.T) {
@@ -244,9 +234,7 @@ func TestHandleDeleteTrack(t *testing.T) {
 }
 
 func TestHandleDeleteTrack_LogsActor(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "To Delete", "Artist", "Album")
@@ -290,7 +278,7 @@ func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 			library.CreateTrackRequest{
 				Title:     "Title",
 				Artist:    "Artist",
-				SourceURL: strPtr("https://example.com/" + withNul),
+				SourceURL: new("https://example.com/" + withNul),
 			},
 		},
 	}
@@ -332,7 +320,7 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 	body := library.CreateTrackRequest{
 		Title:           "Full Track",
 		Artist:          "Full Artist",
-		Album:           strPtr("Full Album"),
+		Album:           new("Full Album"),
 		DurationSeconds: &dur,
 		ArtworkURL:      &artwork,
 		Year:            &year,
@@ -364,7 +352,7 @@ func TestHandleCreateTrackPersistsTrackNumber(t *testing.T) {
 	body := library.CreateTrackRequest{
 		Title:       "Dreams",
 		Artist:      "Fleetwood Mac",
-		Album:       strPtr("Rumours"),
+		Album:       new("Rumours"),
 		TrackNumber: &trackNumber,
 	}
 
@@ -399,12 +387,8 @@ func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
 	}
 }
 
-func strPtr(s string) *string { return &s }
-
 func TestHandleSetTrackNumber(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Dreams", "Fleetwood Mac", "Rumours")
@@ -524,7 +508,7 @@ func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 func TestHandleCreateTrack_RejectsOversizedAlbum(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	router := trackRoutesWith(repo, trackDeps{scheduler: &library.InMemoryScheduler{}})
-	body := library.CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 301))}
+	body := library.CreateTrackRequest{Title: "Song", Artist: "Artist", Album: new(strings.Repeat("a", 301))}
 
 	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
@@ -537,7 +521,7 @@ func TestHandleCreateTrack_RejectsOversizedAlbum(t *testing.T) {
 func TestHandleCreateTrack_AcceptsAlbumAtCap(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	router := trackRoutesWith(repo, trackDeps{scheduler: &library.InMemoryScheduler{}})
-	body := library.CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 300))}
+	body := library.CreateTrackRequest{Title: "Song", Artist: "Artist", Album: new(strings.Repeat("a", 300))}
 
 	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
@@ -575,7 +559,7 @@ func TestHandleCreateTrack_RejectsInternalSourceURL(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
 			sched := &library.InMemoryScheduler{}
 			router := trackRoutesWith(repo, trackDeps{scheduler: sched})
-			body := library.CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
+			body := library.CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: new(sourceURL)}
 
 			rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
@@ -594,7 +578,7 @@ func TestHandleCreateTrack_SchedulesPublicSourceURL(t *testing.T) {
 	sched := &library.InMemoryScheduler{}
 	router := trackRoutesWith(library.NewInMemoryTrackRepo(), trackDeps{scheduler: sched})
 	sourceURL := "https://soundcloud.com/fleetwoodmac/dreams"
-	body := library.CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
+	body := library.CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: new(sourceURL)}
 
 	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 

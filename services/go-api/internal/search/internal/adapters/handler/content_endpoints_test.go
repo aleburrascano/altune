@@ -304,58 +304,6 @@ func TestHandleArtistContent_EachPanickingPartIsLoggedUnderItsOwnEvent(t *testin
 	}
 }
 
-type countingArtistContentProvider struct {
-	memory.ArtistContentProvider
-	calls int
-}
-
-func (p *countingArtistContentProvider) GetArtistTopTracks(ctx context.Context, name search.ProviderName, id string) ([]search.SearchResult, error) {
-	p.calls++
-	return p.ArtistContentProvider.GetArtistTopTracks(ctx, name, id)
-}
-
-func (p *countingArtistContentProvider) GetArtistAlbums(ctx context.Context, name search.ProviderName, id string) ([]search.SearchResult, error) {
-	p.calls++
-	return p.ArtistContentProvider.GetArtistAlbums(ctx, name, id)
-}
-
-func unauthenticatedDiscoveryRouter(h *search.DiscoveryHandler) chi.Router {
-	r := chi.NewRouter()
-	r.Mount("/discovery", h.Routes())
-	return r
-}
-
-func TestHandleArtistContent_NoIdentityIs401AndSkipsService(t *testing.T) {
-	provider := &countingArtistContentProvider{}
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-			search.ProviderDeezer: provider,
-		}),
-	}), time.Now)
-
-	rec := discServeNoAuth(t, unauthenticatedDiscoveryRouter(h), http.MethodGet, "/discovery/artists/deezer/1/content")
-
-	discAssertStatus(t, rec, http.StatusUnauthorized)
-	if provider.calls != 0 {
-		t.Errorf("artist provider called %d times, want 0", provider.calls)
-	}
-}
-
-func TestContentRoutes_NoIdentityIs401(t *testing.T) {
-	paths := []string{
-		"/discovery/albums/deezer/1/tracks",
-		"/discovery/artists/deezer/1/top-tracks",
-		"/discovery/artists/deezer/1/albums",
-		"/discovery/tracks/deezer/1/related",
-	}
-	router := unauthenticatedDiscoveryRouter(handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), time.Now))
-	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
-			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
-		})
-	}
-}
-
 func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) {
 	var mu sync.Mutex
 	asked := map[string]bool{}

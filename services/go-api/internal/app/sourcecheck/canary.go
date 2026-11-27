@@ -3,6 +3,7 @@ package sourcecheck
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -73,9 +74,9 @@ func Run(ctx context.Context, now clock.Func, checks []Check) error {
 func logResult(ctx context.Context, source string, duration time.Duration, err error) {
 	if err != nil {
 		slog.InfoContext(ctx, "acquisition.source_canary",
-			"source", source, "ok", false, "duration", duration.String(), "error", err)
+			"source", source, "ok", false, logging.KeyDurationMS, duration.Milliseconds(), logging.KeyError, err)
 		return
 	}
 	slog.InfoContext(ctx, "acquisition.source_canary",
-		"source", source, "ok", true, "duration", duration.String())
+		"source", source, "ok", true, logging.KeyDurationMS, duration.Milliseconds())
 }

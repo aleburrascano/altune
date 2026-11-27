@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -49,7 +50,7 @@ func (f *SearchAlbumFallback) tracks(ctx context.Context, deezer ports.AlbumCont
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
-			"requested_provider", requested.String(), "query", query, "error", redact.Secrets(err.Error()))
+			"requested_provider", requested.String(), "query", query, logging.KeyError, redact.Secrets(err.Error()))
 		return nil
 	}
 

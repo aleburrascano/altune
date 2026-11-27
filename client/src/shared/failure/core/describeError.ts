@@ -1,9 +1,6 @@
-import {
-  ApiError,
-  isServerFaultStatus,
-  type ContractError,
-  isNetworkError,
-} from '@shared/failure/core/errors';
+import { ApiError } from '@shared/failure/core/errors';
+import { failureKindOf, type FailureKind } from '@shared/failure/core/failureKind';
+import type { ApiErrorCode } from '@shared/failure/core/apiErrorCodes';
 
 export interface ErrorCopy {
   readonly title: string;
@@ -12,52 +9,62 @@ export interface ErrorCopy {
 
 export const RETRY_TAIL = 'Please try again.';
 
-function isServerError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const status = (err as Error & { status?: unknown }).status;
-  return typeof status === 'number' && isServerFaultStatus(status);
+const GENERIC_TITLE = 'Something went wrong';
+
+const COPY_BY_KIND: Readonly<Record<FailureKind, ErrorCopy>> = {
+  contract: {
+    title: 'Update required',
+    body: 'This version of Altune is out of date. Update the app to continue.',
+  },
+  offline: { title: 'No connection', body: 'Check your connection and try again.' },
+  timeout: { title: GENERIC_TITLE, body: `The request took too long. ${RETRY_TAIL}` },
+  server: { title: GENERIC_TITLE, body: `Something went wrong on our end. ${RETRY_TAIL}` },
+  'rate-limited': {
+    title: 'Too many requests',
+    body: 'You are doing that too often. Wait a moment, then try again.',
+  },
+  unauthorized: {
+    title: 'Sign in again',
+    body: 'Your session has expired. Sign in again, then retry.',
+  },
+  'not-found': { title: GENERIC_TITLE, body: 'That is no longer available.' },
+  conflict: { title: GENERIC_TITLE, body: 'That conflicts with what is already saved.' },
+  'limit-reached': { title: GENERIC_TITLE, body: 'You have reached a limit for that.' },
+  rejected: { title: GENERIC_TITLE, body: 'We could not complete that request.' },
+  unknown: { title: GENERIC_TITLE, body: `Something went wrong. ${RETRY_TAIL}` },
+};
+
+const COPY_BY_CODE: Readonly<Partial<Record<ApiErrorCode, ErrorCopy>>> = {
+  'catalog.track_already_in_playlist': {
+    title: 'Already in this playlist',
+    body: 'That track is already in this playlist.',
+  },
+  'catalog.playlist_full': {
+    title: 'Playlist is full',
+    body: 'Remove a track from this playlist to add another.',
+  },
+  'catalog.too_many_playlists': {
+    title: 'Too many playlists',
+    body: 'Delete a playlist to create another.',
+  },
+  'catalog.library_full': {
+    title: 'Library is full',
+    body: 'Remove a track from your library to add another.',
+  },
+  'discovery.favorites_full': {
+    title: 'Favorites are full',
+    body: 'Remove a favorite to add another.',
+  },
+};
+
+function copyForCode(code: ApiErrorCode): ErrorCopy | undefined {
+  return COPY_BY_CODE[code];
 }
 
-const CONTRACT_ERROR_NAME: ContractError['name'] = 'ContractError';
-
-function isContractError(err: unknown): boolean {
-  return err instanceof Error && err.name === CONTRACT_ERROR_NAME;
-}
-
-const UPDATE_REQUIRED_COPY: ErrorCopy = {
-  title: 'Update required',
-  body: 'This version of Altune is out of date. Update the app to continue.',
-};
-const OFFLINE_COPY: ErrorCopy = {
-  title: 'No connection',
-  body: 'Check your connection and try again.',
-};
-const SERVER_FAULT_COPY: ErrorCopy = {
-  title: 'Something went wrong',
-  body: `Something went wrong on our end. ${RETRY_TAIL}`,
-};
-const UNCLASSIFIED_COPY: ErrorCopy = {
-  title: 'Something went wrong',
-  body: `Something went wrong. ${RETRY_TAIL}`,
-};
-
-const RATE_LIMITED_COPY: ErrorCopy = {
-  title: 'Too many requests',
-  body: 'You are doing that too often. Wait a moment, then try again.',
-};
-const REJECTED_COPY: ErrorCopy = {
-  title: 'Something went wrong',
-  body: 'We could not complete that request.',
-};
-
-const HTTP_TOO_MANY_REQUESTS = 429;
-
-export function describeError(err: unknown): ErrorCopy {
-  if (isContractError(err)) return UPDATE_REQUIRED_COPY;
-  if (isNetworkError(err)) return OFFLINE_COPY;
-  if (isServerError(err)) return SERVER_FAULT_COPY;
-  if (err instanceof ApiError) {
-    return err.status === HTTP_TOO_MANY_REQUESTS ? RATE_LIMITED_COPY : REJECTED_COPY;
-  }
-  return UNCLASSIFIED_COPY;
+export function describeError(err: unknown, action?: string): ErrorCopy {
+  const specific =
+    err instanceof ApiError && err.code !== undefined ? copyForCode(err.code) : undefined;
+  const copy = specific ?? COPY_BY_KIND[failureKindOf(err)];
+  if (action === undefined || specific !== undefined) return copy;
+  return { title: `Couldn't ${action}`, body: copy.body };
 }

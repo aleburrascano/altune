@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"sync"
@@ -169,9 +170,7 @@ func (h *captureHandler) messages() []string {
 func captureBreakerLogs(t *testing.T) *captureHandler {
 	t.Helper()
 	h := &captureHandler{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(h))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, h)
 	return h
 }
 

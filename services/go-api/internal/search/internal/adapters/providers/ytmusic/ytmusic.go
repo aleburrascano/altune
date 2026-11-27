@@ -71,7 +71,7 @@ type upstreamStatusCoder interface {
 
 func isAuthChallenge(err error) bool {
 	var status upstreamStatusCoder
-	return errors.As(err, &status) && providerrequests.IsAuthStatus(status.UpstreamStatus())
+	return errors.As(err, &status) && outbound.IsAuthStatus(status.UpstreamStatus())
 }
 
 type YouTubeMusicAdapter struct {

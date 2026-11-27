@@ -3,7 +3,7 @@ package queue_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/ids"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -13,13 +13,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
 type inMemoryQueueRepo struct {
@@ -81,7 +77,7 @@ func (f *fakeNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string)
 	return track, nil
 }
 
-func auditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
+func auditRecord(t *testing.T, logs *logging.Capture, msg string) map[string]any {
 	t.Helper()
 	var found map[string]any
 	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {

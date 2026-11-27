@@ -3,6 +3,7 @@ package details
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -38,7 +39,7 @@ func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (do
 			trackID, err := s.provider.ResolveTrackID(ctx, artist, track)
 			if err != nil {
 				slog.WarnContext(ctx, "lyrics.resolve_failed",
-					"artist", artist, "title", track, "error", err)
+					"artist", artist, "title", track, logging.KeyError, err)
 				return domain.EmptyDeezerLyrics(), false, err
 			}
 			if trackID == "" {
@@ -47,7 +48,7 @@ func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (do
 			l, err := s.provider.Lookup(ctx, trackID)
 			if err != nil {
 				slog.WarnContext(ctx, "lyrics.lookup_failed",
-					"track_id", trackID, "title", track, "error", err)
+					logging.KeyTrackID, trackID, "title", track, logging.KeyError, err)
 				return domain.EmptyDeezerLyrics(), false, err
 			}
 			if l.IsZero() {

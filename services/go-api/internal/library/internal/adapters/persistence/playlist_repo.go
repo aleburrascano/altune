@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"sort"
 	"time"
 
@@ -530,18 +529,15 @@ func requirePlanCoversMembership(ctx context.Context, tx pgx.Tx, playlistId doma
 	if err != nil {
 		return err
 	}
-	if !maps.Equal(uuidSet(planned), members) {
+	if len(planned) != len(members) {
 		return ports.ErrPlaylistChangedDuringReorder
 	}
-	return nil
-}
-
-func uuidSet(ids []uuid.UUID) map[uuid.UUID]bool {
-	set := make(map[uuid.UUID]bool, len(ids))
-	for _, id := range ids {
-		set[id] = true
+	for _, id := range planned {
+		if !members[id] {
+			return ports.ErrPlaylistChangedDuringReorder
+		}
 	}
-	return set
+	return nil
 }
 
 func trackIdUUIDs(ids []domain.TrackId) []uuid.UUID {
@@ -557,7 +553,11 @@ func collectUUIDSet(rows pgx.Rows) (map[uuid.UUID]bool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("collect playlist track ids: %w", err)
 	}
-	return uuidSet(ids), nil
+	set := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set, nil
 }
 
 func inRequestOrder(requested []domain.TrackId, set map[uuid.UUID]bool) []domain.TrackId {

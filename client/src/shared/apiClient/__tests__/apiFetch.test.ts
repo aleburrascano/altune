@@ -223,6 +223,32 @@ describe('the machine-readable error code (ADR-0021) surfaces on ApiError', () =
     expect(branch).toBe('missing-track');
   });
 
+  it('keeps the raw code of a code this build does not know, leaving code undefined', async () => {
+    withSession();
+    __http.reply('GET /v1/tracks/t1', {
+      status: 503,
+      json: { detail: 'later', code: 'brand.new_code' },
+    });
+
+    const error = await apiFetch('/v1/tracks/t1').catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 503, rawCode: 'brand.new_code', detail: 'later' });
+    expect((error as ApiError).code).toBeUndefined();
+  });
+
+  it('carries the problem instance as the correlation id and Retry-After as milliseconds', async () => {
+    withSession();
+    __http.reply('GET /v1/tracks/t1', {
+      status: 429,
+      headers: { 'Retry-After': '7' },
+      json: { detail: 'slow down', instance: 'abc123' },
+    });
+
+    const error = await apiFetch('/v1/tracks/t1').catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 429, correlationId: 'abc123', retryAfterMs: 7000 });
+  });
+
   it('leaves code undefined when the error body omits it, still yielding a usable ApiError', async () => {
     withSession();
     __http.reply('POST /v1/feedback/reports', {

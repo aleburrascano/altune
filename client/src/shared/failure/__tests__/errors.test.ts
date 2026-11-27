@@ -6,7 +6,10 @@ import {
   isRetryable,
   isSessionFetchFailure,
   isNetworkError,
+  kindOfStatus,
 } from '@shared/failure';
+
+const SERVER_FAULT = 500;
 
 describe('isRetryable — consumed by the QueryClient predicate (retry: (n, error) => isRetryable(error) && n < 5)', () => {
   it('ApiError carries the "ApiError" discriminator alongside its status, the same way NetworkError carries "NetworkError"', () => {
@@ -46,11 +49,12 @@ describe('isRetryable — consumed by the QueryClient predicate (retry: (n, erro
     expect(isRetryable(value)).toBe(false);
   });
 
-  describe('law: an ApiError is retryable iff its status is 429 or at least 500', () => {
+  describe('law: an ApiError is retryable iff its status is rate-limited or a server fault', () => {
     it('holds for any generated integer status', () => {
       fc.assert(
         fc.property(fc.integer(), (status) => {
-          const expected = status === 429 || status >= 500;
+          const kind = kindOfStatus(status);
+          const expected = kind === 'rate-limited' || kind === 'server';
           expect(isRetryable(new ApiError(status, 'x'))).toBe(expected);
         }),
       );
@@ -97,89 +101,62 @@ describe('isSessionFetchFailure', () => {
   });
 });
 
-describe('isNetworkError — each regex alternate, independently', () => {
-  it.each([
-    ['a network error', true],
-    ['fetch failed', true],
-    ['request timeout', true],
-    ['connection refused', true],
-    ['unauthorized', false],
-    ['invalid credentials', false],
-    ['', false],
-  ])('Error(%j) -> %s', (message, expected) => {
-    expect(isNetworkError(new Error(message))).toBe(expected);
+describe('isNetworkError — classified by the type of the throw, not by its message', () => {
+  it.each(['timeout', 'transport'] as const)(
+    'a NetworkError of kind %s is a network error',
+    (kind) => {
+      expect(isNetworkError(new NetworkError(kind, 'the API is unreachable'))).toBe(true);
+    },
+  );
+
+  it('a session-read fetch failure from the auth SDK is a network error', () => {
+    expect(isNetworkError({ name: 'AuthRetryableFetchError', message: 'anything' })).toBe(true);
   });
 
-  it('matches regardless of case, for every alternate', () => {
-    expect(isNetworkError(new Error('NETWORK unreachable'))).toBe(true);
-    expect(isNetworkError(new Error('FETCH aborted'))).toBe(true);
-    expect(isNetworkError(new Error('TIMEOUT exceeded'))).toBe(true);
-    expect(isNetworkError(new Error('CONNECTION reset'))).toBe(true);
-  });
-
-  it('matches a keyword appearing anywhere inside a longer message', () => {
-    expect(isNetworkError(new Error('TypeError: Failed to fetch'))).toBe(true);
-  });
+  it.each(['Network request failed', 'Failed to fetch', 'Load failed'])(
+    'the TypeError a runtime fetch throws for "%s" is a network error',
+    (message) => {
+      expect(isNetworkError(new TypeError(message))).toBe(true);
+    },
+  );
 });
 
-describe('isNetworkError — the instanceof Error guard is load-bearing', () => {
-  it('returns false for a plain object whose .message matches the regex but is not an Error', () => {
-    expect(isNetworkError({ message: 'network error' })).toBe(false);
+describe('isNetworkError — message text alone never makes a network error', () => {
+  it.each([
+    'a network error',
+    'fetch failed',
+    'request timeout',
+    'connection refused',
+    'Network request failed',
+  ])('a plain Error saying "%s" is not one', (message) => {
+    expect(isNetworkError(new Error(message))).toBe(false);
   });
 
-  it('returns true for an Error subclass carrying a matching message', () => {
-    class HttpError extends Error {}
-    expect(isNetworkError(new HttpError('connection reset by peer'))).toBe(true);
+  it('a TypeError that is a programming error is not one, even if it mentions fetch', () => {
+    expect(isNetworkError(new TypeError('fetch is not a function'))).toBe(false);
+    expect(
+      isNetworkError(new TypeError("Cannot read properties of undefined (reading 'network')")),
+    ).toBe(false);
+  });
+
+  it('an ApiError is a server response, never transport, whatever its path says', () => {
+    expect(
+      isNetworkError(new ApiError(SERVER_FAULT, 'API /v1/discovery/search?q=network returned 500')),
+    ).toBe(false);
+  });
+
+  it('a message that changes after construction does not change the answer', () => {
+    const err = new Error('boom');
+    err.message = 'Failed to fetch';
+    expect(isNetworkError(err)).toBe(false);
   });
 });
 
 describe('isNetworkError — adversarial catch-block payloads', () => {
   it.each<unknown>(['network', null, undefined, 42, { message: 'timeout' }, ['network']])(
-    '%p is not an Error, so it is never classified as a network error',
+    '%p is not a network error',
     (value) => {
       expect(isNetworkError(value)).toBe(false);
     },
   );
-
-  it('an Error with an empty message does not match', () => {
-    expect(isNetworkError(new Error(''))).toBe(false);
-  });
-});
-
-describe('isNetworkError — an ApiError is a server response, never transport', () => {
-  it.each([
-    '/v1/discovery/search?q=network',
-    '/v1/discovery/search?q=fetch',
-    '/v1/discovery/search?q=timeout',
-    '/v1/discovery/search?q=connection',
-  ])('an ApiError for %s is not a network error', (path) => {
-    expect(isNetworkError(new ApiError(500, `API ${path} returned 500`))).toBe(false);
-  });
-
-  it('separates an ApiError from NetworkError and unwrapped transport messages', () => {
-    const apiError = new ApiError(500, 'API /v1/discovery/search?q=network returned 500');
-    expect(isNetworkError(apiError)).toBe(false);
-    expect(isNetworkError(new NetworkError('transport', 'dropped'))).toBe(true);
-    expect(isNetworkError(new Error('fetch failed'))).toBe(true);
-  });
-});
-
-describe('isNetworkError — undefined, ApiError and a mutated message', () => {
-  const HTTP_BAD_REQUEST = 400;
-
-  it('is false for undefined and true for a timeout', () => {
-    expect(isNetworkError(undefined)).toBe(false);
-    expect(isNetworkError(new Error('timeout'))).toBe(true);
-  });
-
-  it('refuses an ApiError whose message looks like a network failure', () => {
-    expect(isNetworkError(new ApiError(HTTP_BAD_REQUEST, 'network down'))).toBe(false);
-  });
-
-  it('follows an Error whose message changes', () => {
-    const err = new Error('boom');
-    expect(isNetworkError(err)).toBe(false);
-    err.message = 'fetch failed';
-    expect(isNetworkError(err)).toBe(true);
-  });
 });

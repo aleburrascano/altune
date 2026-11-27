@@ -1,12 +1,12 @@
 import { useQueueStore } from '@shared/playback';
 import type { PlaybackErrorKind, PlaybackTrack } from '@shared/playback';
-import { recordPlaybackFailure } from '@features/player/domain/playbackHealth';
+import { recordPlaybackFailure } from '@features/player/core/playbackHealth';
 import { msToSeconds, secondsToMs } from '@features/player/domain/time';
 import {
   redactPlaybackErrorMessage,
   warnPlayback,
   type RedactedPlaybackFailure,
-} from '@features/player/domain/playbackError';
+} from '@features/player/core/playbackError';
 import {
   IDLE_PLAYBACK,
   isSourceStale,

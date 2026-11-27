@@ -1,9 +1,9 @@
 package providers
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -46,42 +46,7 @@ func checkJWKSRedirect(req *http.Request, via []*http.Request) error {
 
 const maxJWKSBodyBytes = 1 << 20
 
-var ErrJWKSBodyTooLarge = fmt.Errorf("JWKS response body exceeds %d bytes", maxJWKSBodyBytes)
-
-type cappedJWKSBodyTransport struct{ base http.RoundTripper }
-
-func (t cappedJWKSBodyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := t.base.RoundTrip(req)
-	if err != nil {
-		return nil, err
-	}
-	resp.Body = &cappedJWKSBody{body: resp.Body, remaining: maxJWKSBodyBytes}
-	return resp, nil
-}
-
-type cappedJWKSBody struct {
-	body      io.ReadCloser
-	remaining int64
-}
-
-func (b *cappedJWKSBody) Read(p []byte) (int, error) {
-	n, err := b.body.Read(b.window(p))
-	b.remaining -= int64(n)
-	if b.remaining < 0 {
-		_ = b.body.Close()
-		return n, ErrJWKSBodyTooLarge
-	}
-	return n, err
-}
-
-func (b *cappedJWKSBody) window(p []byte) []byte {
-	if int64(len(p)) > b.remaining+1 {
-		return p[:b.remaining+1]
-	}
-	return p
-}
-
-func (b *cappedJWKSBody) Close() error { return b.body.Close() }
+var ErrJWKSBodyTooLarge = outbound.ErrBodyTooLarge
 
 func isLoopbackHost(host string) bool {
 	if strings.EqualFold(host, "localhost") {

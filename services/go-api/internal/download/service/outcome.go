@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -64,10 +65,10 @@ func (o outcomeReporter) settle(ctx, jobCtx context.Context, userId ids.UserId, 
 
 func (o outcomeReporter) reportReplaceFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyUserID, userId.String(),
 		"replace", true,
-		"error", redact.LogError(err),
+		logging.KeyError, redact.LogError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
@@ -81,28 +82,28 @@ func (o outcomeReporter) reportReplaceFailure(ctx context.Context, userId ids.Us
 
 func (o outcomeReporter) reportSchedulerCancelledWithoutMarkingFailed(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_cancelled",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
-		"error", redact.LogError(err),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyUserID, userId.String(),
+		logging.KeyError, redact.LogError(err),
 	)
 	return err
 }
 
 func (o outcomeReporter) reportRetryableFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_retryable",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
-		"error", redact.LogError(err),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyUserID, userId.String(),
+		logging.KeyError, redact.LogError(err),
 	)
 	return fmt.Errorf("%w: %w", ErrAcquisitionRetryable, err)
 }
 
 func (o outcomeReporter) reportAcquireFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyUserID, userId.String(),
 		"replace", false,
-		"error", redact.LogError(err),
+		logging.KeyError, redact.LogError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
@@ -123,14 +124,14 @@ func rejectionAwareReason(ctx context.Context, trackId ids.TrackId, err error, a
 		return failureReason(err)
 	}
 	slog.InfoContext(ctx, "acquisition.rejection_summary",
-		"track_id", trackId.String(), "summary", summary)
+		logging.KeyTrackID, trackId.String(), "summary", summary)
 	return downloadfailure.JoinFailureReason(failureCode(err), summary)
 }
 
 func (o outcomeReporter) completed(ctx context.Context, userId ids.UserId, trackId ids.TrackId, audioRef string) {
 	slog.InfoContext(ctx, "track_acquisition_completed",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyUserID, userId.String(),
 		"audio_ref", audioRef,
 	)
 	o.events.Publish(ctx, userId, events.TrackAcquisitionCompleted{
@@ -147,17 +148,17 @@ func (o outcomeReporter) failTrack(ctx context.Context, trackId ids.TrackId, use
 	err := o.ledger.Fail(ctx, trackId, userId, jobFenceFrom(ctx), reason)
 	if errors.Is(err, ports.ErrIllegalTransition) {
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return err
 	}
 	if errors.Is(err, acqdomain.ErrLeaseLost) {
 		slog.InfoContext(ctx, "mark_failed: lease lost, failure not persisted",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return err
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return err
 	}
 	return nil

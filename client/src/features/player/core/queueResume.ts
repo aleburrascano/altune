@@ -11,9 +11,9 @@ import type { QueueSource } from '@shared/playback';
 import {
   recordQueueRebuildOutcome,
   type QueueRebuildRung,
-} from '@features/player/domain/playbackHealth';
+} from '@features/player/core/playbackHealth';
 import { clamp } from '@shared/math';
-import { fromWireSource } from '@features/player/domain/queueStateWire';
+import { fromWireSource } from '@features/player/core/queueStateWire';
 
 function savedCursor(savedTrackIds: readonly string[], savedCurrentIndex: number): number {
   return savedTrackIds[savedCurrentIndex] === undefined ? 0 : savedCurrentIndex;
