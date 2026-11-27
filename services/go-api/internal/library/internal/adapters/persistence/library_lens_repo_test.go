@@ -40,8 +40,6 @@ type libraryTrackSpec struct {
 	addedAt     time.Time
 }
 
-
-
 func titlesOf(ts []*library.Track) []string {
 	out := make([]string, len(ts))
 	for i, tr := range ts {

@@ -137,7 +137,6 @@ func TestIdempotencyKey(t *testing.T) {
 	}
 }
 
-
 func newRequestWithURLParam(name, value string) *http.Request {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add(name, value)

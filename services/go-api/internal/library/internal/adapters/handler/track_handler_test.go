@@ -387,7 +387,6 @@ func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
 	}
 }
 
-
 func TestHandleSetTrackNumber(t *testing.T) {
 	ring := logging.CaptureRing(t, "info")
 

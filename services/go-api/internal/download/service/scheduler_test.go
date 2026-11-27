@@ -68,7 +68,6 @@ func withCatalogLength(t *testing.T, ledger *inmemoryledger.Ledger, track ledger
 	return track
 }
 
-
 func readyWith(ref string) func(*ledgerTrack) {
 	return func(track *ledgerTrack) { makeReady(track, ref) }
 }

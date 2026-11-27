@@ -222,4 +222,3 @@ func slug(s string) string {
 	}
 	return strings.Trim(b.String(), "-")
 }
-
