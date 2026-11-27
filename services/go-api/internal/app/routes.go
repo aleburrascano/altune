@@ -51,6 +51,7 @@ func (a *application) mountRoutes(
 				r.Mount("/playlists", cat.playlistHandler.Routes())
 				r.Mount("/playback", queueHandler.Routes())
 				r.Mount("/discovery", discoveryH.Routes())
+				r.Mount("/telemetry", discoveryH.TelemetryRoutes())
 			})
 		},
 		LongLived: func(r chi.Router) {

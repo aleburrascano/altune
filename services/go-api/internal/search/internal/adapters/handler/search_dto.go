@@ -79,6 +79,7 @@ type DiscoveryEventRequest struct {
 	Type             string         `json:"type"`
 	SearchID         string         `json:"search_id"`
 	EventID          string         `json:"event_id"`
+	CorrelationID    string         `json:"correlation_id"`
 	ClientOccurredAt string         `json:"client_occurred_at"`
 	Payload          map[string]any `json:"payload"`
 	IgnoredQueryNorm string         `json:"query_norm"`

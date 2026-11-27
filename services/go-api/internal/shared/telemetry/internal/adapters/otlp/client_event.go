@@ -24,12 +24,13 @@ var allowedPayloadStrings = map[string]struct{}{
 }
 
 type ClientEvent struct {
-	Type       string
-	EventID    string
-	AppVersion string
-	Platform   string
-	UserID     string
-	Payload    map[string]any
+	Type          string
+	EventID       string
+	CorrelationID string
+	AppVersion    string
+	Platform      string
+	UserID        string
+	Payload       map[string]any
 }
 
 type ClientEvents struct {
@@ -62,6 +63,9 @@ func (c *ClientEvents) attributes(e ClientEvent) []attribute.KeyValue {
 	}
 	if e.EventID != "" {
 		attrs = append(attrs, attribute.String("event.id", e.EventID))
+	}
+	if e.CorrelationID != "" {
+		attrs = append(attrs, attribute.String("correlation.id", clip(e.CorrelationID)))
 	}
 	if len(c.key) > 0 {
 		attrs = append(attrs, attribute.String("user.pseudo_id", c.pseudoID(e.UserID)))

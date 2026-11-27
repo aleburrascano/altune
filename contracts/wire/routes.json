@@ -43,6 +43,7 @@
   "POST /v1/playlists/{}/tracks",
   "POST /v1/playlists/{}/tracks/batch",
   "POST /v1/public/auth-failures",
+  "POST /v1/telemetry/events",
   "POST /v1/tracks",
   "POST /v1/tracks/featured-backfill",
   "POST /v1/tracks/{}/audio/recover",

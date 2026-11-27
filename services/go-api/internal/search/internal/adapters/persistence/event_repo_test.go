@@ -69,6 +69,39 @@ func TestPostgresEventStore_AppendAndRead(t *testing.T) {
 	}
 }
 
+func TestPostgresEventStore_Append_StoresTheCorrelationIdOnlyWhenGiven(t *testing.T) {
+	pool := dbtest.Pool(t)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
+	ctx := context.Background()
+	userId := ids.NewUserId(uuid.New())
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM discovery_events WHERE user_id = $1`, userId.UUID())
+	})
+
+	for _, event := range []domain.InteractionEvent{
+		{UserId: userId, Type: domain.InteractionTypeSkip, CorrelationId: "corr-1", Payload: map[string]any{"dwell_ms": 1}},
+		{UserId: userId, Type: domain.InteractionTypePlay, Payload: map[string]any{"video_id": "a"}},
+	} {
+		if err := store.Append(ctx, event); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+
+	var withID, withoutID *string
+	if err := pool.QueryRow(ctx, `SELECT correlation_id FROM discovery_events WHERE user_id = $1 AND event_type = 'skip'`, userId.UUID()).Scan(&withID); err != nil {
+		t.Fatalf("read skip: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT correlation_id FROM discovery_events WHERE user_id = $1 AND event_type = 'play'`, userId.UUID()).Scan(&withoutID); err != nil {
+		t.Fatalf("read play: %v", err)
+	}
+	if withID == nil || *withID != "corr-1" {
+		t.Errorf("correlation_id = %v, want corr-1", withID)
+	}
+	if withoutID != nil {
+		t.Errorf("correlation_id = %q, want NULL when none was sent", *withoutID)
+	}
+}
+
 func TestPostgresEventStore_NilPayloadAndQuery(t *testing.T) {
 	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool, clock.Now)

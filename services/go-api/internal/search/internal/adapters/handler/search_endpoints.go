@@ -237,6 +237,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		Type:             eventType,
 		SearchId:         req.SearchID,
 		EventId:          req.EventID,
+		CorrelationId:    boundedCorrelationID(req.CorrelationID),
 		ClientOccurredAt: clientOccurredAt,
 		Payload:          req.Payload,
 	}
@@ -249,14 +250,24 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+const maxCorrelationIDLength = 64
+
+func boundedCorrelationID(raw string) string {
+	if len(raw) > maxCorrelationIDLength {
+		return ""
+	}
+	return raw
+}
+
 func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.InteractionType, userId ids.UserId, req DiscoveryEventRequest) {
 	h.clientEvents.Emit(r.Context(), telemetry.ClientEvent{
-		Type:       eventType.String(),
-		EventID:    req.EventID,
-		AppVersion: r.Header.Get(telemetry.AppVersionHeader),
-		Platform:   r.Header.Get(telemetry.PlatformHeader),
-		UserID:     userId.String(),
-		Payload:    req.Payload,
+		Type:          eventType.String(),
+		EventID:       req.EventID,
+		CorrelationID: boundedCorrelationID(req.CorrelationID),
+		AppVersion:    r.Header.Get(telemetry.AppVersionHeader),
+		Platform:      r.Header.Get(telemetry.PlatformHeader),
+		UserID:        userId.String(),
+		Payload:       req.Payload,
 	})
 }
 

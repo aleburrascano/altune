@@ -270,6 +270,17 @@ func TestClientEvents_OmitsEmptyEventID(t *testing.T) {
 	}
 }
 
+func TestClientEvents_CarriesTheCorrelationIdWhenGiven(t *testing.T) {
+	_, attrs := emitOne(t, "", telemetry.ClientEvent{Type: "x", CorrelationID: "corr-1"})
+	if got := attrs["correlation.id"].AsString(); got != "corr-1" {
+		t.Errorf("correlation.id = %q, want corr-1", got)
+	}
+	_, none := emitOne(t, "", telemetry.ClientEvent{Type: "x"})
+	if _, ok := none["correlation.id"]; ok {
+		t.Error("correlation.id must be absent when empty")
+	}
+}
+
 func TestClientEvents_PseudonymisesUser(t *testing.T) {
 	_, attrs := emitOne(t, "k", telemetry.ClientEvent{Type: "x", UserID: "u-123"})
 	id := attrs["user.pseudo_id"].AsString()

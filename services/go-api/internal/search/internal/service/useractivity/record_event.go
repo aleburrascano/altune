@@ -36,6 +36,7 @@ type RecordEventInput struct {
 	Type             domain.InteractionType
 	SearchId         string
 	EventId          string
+	CorrelationId    string
 	ClientOccurredAt time.Time
 	Payload          map[string]any
 }
@@ -168,6 +169,7 @@ func (s *RecordEventService) Execute(ctx context.Context, userId ids.UserId, inp
 		Type:             input.Type,
 		SearchId:         input.SearchId,
 		EventId:          input.EventId,
+		CorrelationId:    input.CorrelationId,
 		ClientOccurredAt: input.ClientOccurredAt,
 		Payload:          input.Payload,
 	}

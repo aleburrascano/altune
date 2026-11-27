@@ -37,7 +37,7 @@ func NewPostgresEventStore(pool *pgxpool.Pool, now clock.Func) *PostgresEventSto
 }
 
 const appendEventSQL = `INSERT INTO discovery_events
-		(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
+		(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at, correlation_id)
 	VALUES ($1, $2::text,
 		CASE WHEN $2::text = $9::text THEN (
 			CASE WHEN EXISTS (
@@ -52,7 +52,7 @@ const appendEventSQL = `INSERT INTO discovery_events
 			ORDER BY sp.occurred_at
 			LIMIT 1
 		) END,
-		$4::uuid, $5, $6, $7, $8)
+		$4::uuid, $5, $6, $7, $8, $10)
 	ON CONFLICT (user_id, event_id) WHERE event_id IS NOT NULL DO NOTHING`
 
 func (r *PostgresEventStore) Append(ctx context.Context, event domain.InteractionEvent) error {
@@ -87,6 +87,11 @@ func (r *PostgresEventStore) Append(ctx context.Context, event domain.Interactio
 		}
 	}
 
+	var correlationID *string
+	if event.CorrelationId != "" {
+		correlationID = &event.CorrelationId
+	}
+
 	var clientOccurredAt *time.Time
 	if !event.ClientOccurredAt.IsZero() {
 		t := event.ClientOccurredAt.UTC()
@@ -100,7 +105,7 @@ func (r *PostgresEventStore) Append(ctx context.Context, event domain.Interactio
 
 	err = execUnderSearchTextLock(ctx, r.pool, event.UserId.UUID(), appendEventSQL,
 		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, eventID, clientOccurredAt, string(payloadJSON), occurredAt,
-		domain.InteractionTypeSearchPerformed.String(),
+		domain.InteractionTypeSearchPerformed.String(), correlationID,
 	)
 	if err != nil {
 		return fmt.Errorf("append telemetry event: %w", err)
