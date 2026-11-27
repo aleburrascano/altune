@@ -63,14 +63,18 @@ printf 'module x\n\ngo 1.26.11\n' >"$WORK/repo/services/go-api/go.mod"
 : >"$WORK/calls.log"
 env -u GOTOOLCHAIN PATH="$WORK/bin:/usr/bin:/bin" bash "$WORK/repo/services/go-api/scripts/guardrails.sh" vuln >"$WORK/out.log" 2>&1
 RC=$?
-[ "$RC" = 2 ] && grep -qF "govulncheck_version are not set" "$WORK/out.log" || fail "a go-tools.sh with no pinned version fails with a clear message and exit 2 (exit $RC): $(cat "$WORK/out.log")"
+if [ "$RC" != 2 ] || ! grep -qF "govulncheck_version are not set" "$WORK/out.log"; then
+  fail "a go-tools.sh with no pinned version fails with a clear message and exit 2 (exit $RC): $(cat "$WORK/out.log")"
+fi
 
 printf 'golangci_version=v9.9.9\ngovulncheck_version=v9.9.9\n' >"$WORK/repo/scripts/ci/go-tools.sh"
 printf 'module x\n' >"$WORK/repo/services/go-api/go.mod"
 : >"$WORK/calls.log"
 env -u GOTOOLCHAIN PATH="$WORK/bin:/usr/bin:/bin" bash "$WORK/repo/services/go-api/scripts/guardrails.sh" vuln >"$WORK/out.log" 2>&1
 RC=$?
-[ "$RC" = 2 ] && grep -qF "has no go line" "$WORK/out.log" || fail "a go.mod with no go line fails with a clear message and exit 2 (exit $RC): $(cat "$WORK/out.log")"
+if [ "$RC" != 2 ] || ! grep -qF "has no go line" "$WORK/out.log"; then
+  fail "a go.mod with no go line fails with a clear message and exit 2 (exit $RC): $(cat "$WORK/out.log")"
+fi
 [ ! -s "$WORK/calls.log" ] || fail "nothing runs when there is no toolchain to pin: $(cat "$WORK/calls.log")"
 
 : >"$WORK/calls.log"
