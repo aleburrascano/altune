@@ -202,9 +202,13 @@ export function ownedRetryTrackId(owned: OwnedTrack | null): TrackId | null {
   return isOptimisticTrackId(owned.trackId) ? null : owned.trackId;
 }
 
+const SENTENCE_END = /[.!?]$/;
+
 export function saveFailureBanner(failure: SaveFailure): string {
+  const { title, body } = failure.copy;
+  const sentence = SENTENCE_END.test(body) ? body : `${body}.`;
   const nextStep = failure.isRetryable ? ' Tap Retry.' : '';
-  return `${failure.copy.title}. ${failure.copy.body}${nextStep}`;
+  return `${title}. ${sentence}${nextStep}`;
 }
 
 export const SAVE_ALL_CONCURRENCY = 4;
