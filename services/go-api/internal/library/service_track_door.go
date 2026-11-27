@@ -7,8 +7,6 @@ type (
 	AddTrackService       = track.AddTrackService
 	DeleteTrackService    = track.DeleteTrackService
 	FeaturedArtistDTO     = track.FeaturedArtistDTO
-	GetTrackStatusService = track.GetTrackStatusService
-	ListTracksService     = track.ListTracksService
 	SetTrackNumberService = track.SetTrackNumberService
 )
 
