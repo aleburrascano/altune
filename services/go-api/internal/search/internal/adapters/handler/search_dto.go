@@ -94,6 +94,8 @@ type SuggestResponse struct {
 	Suggestions []SuggestionDTO `json:"suggestions"`
 }
 
+const addedExtraFields = 9
+
 func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	sources := make([]SourceRefDTO, len(sr.Sources))
 	for i, s := range sr.Sources {
@@ -103,7 +105,7 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 			URL:        s.URL,
 		}
 	}
-	extras := make(map[string]any, len(sr.Extras)+9)
+	extras := make(map[string]any, len(sr.Extras)+addedExtraFields)
 	for k, v := range sr.Extras {
 		extras[k] = v
 	}

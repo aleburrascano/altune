@@ -559,13 +559,15 @@ func matchKind(path string) (kind, bool, error) {
 	return kind{}, false, nil
 }
 
+const headSniffBytes = 512
+
 func readHead(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	buf := make([]byte, 512)
+	buf := make([]byte, headSniffBytes)
 	n, err := f.Read(buf)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err

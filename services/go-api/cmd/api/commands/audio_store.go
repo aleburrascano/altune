@@ -22,8 +22,10 @@ func openPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
+const summaryRuleWidth = 50
+
 func printSummary(heading string) {
-	fmt.Printf("\n%s\n", strings.Repeat("=", 50))
+	fmt.Printf("\n%s\n", strings.Repeat("=", summaryRuleWidth))
 	fmt.Println(heading)
 }
 

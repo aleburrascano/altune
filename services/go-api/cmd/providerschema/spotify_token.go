@@ -130,8 +130,10 @@ func (spotify *spotifySession) clientTokenBody(ctx context.Context, _ string) (j
 	}})
 }
 
+const deviceIDBytes = 16
+
 func spotifyClientTokenPayload() ([]byte, error) {
-	deviceID := make([]byte, 16)
+	deviceID := make([]byte, deviceIDBytes)
 	_, _ = rand.Read(deviceID)
 	return json.Marshal(map[string]any{
 		"client_data": map[string]any{

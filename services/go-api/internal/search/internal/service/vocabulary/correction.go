@@ -143,7 +143,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 func pickBestCorrection(ctx context.Context, queryNorm string, candidates []domain.SpellingHintsEntry) *CorrectionResult {
 	var best *CorrectionResult
 	bestDist := len([]rune(queryNorm)) + 1
-	maxDist := maxCorrectionDist(queryNorm)
+	maxDist := domain.MaxEditDistance(queryNorm)
 
 	for _, c := range candidates {
 		if c.TermNorm == queryNorm || textnorm.NormalizeForMatch(c.Term) == queryNorm {
@@ -171,19 +171,3 @@ func logCandidate(ctx context.Context, queryNorm string, c domain.SpellingHintsE
 	)
 }
 
-const (
-	shortQueryRunes  = 4
-	mediumQueryRunes = 8
-	longQueryEdits   = 3
-)
-
-func maxCorrectionDist(query string) int {
-	n := len([]rune(query))
-	if n <= shortQueryRunes {
-		return 1
-	}
-	if n <= mediumQueryRunes {
-		return 2
-	}
-	return longQueryEdits
-}

@@ -12,6 +12,7 @@ const (
 	stcoEntryWidth   = 4
 	co64EntryWidth   = 8
 	chunkTableHeader = 16
+	versionFlagsSize = 4
 )
 
 type box struct {
@@ -55,8 +56,8 @@ func freeformAtom(name, value string) []byte {
 		copy(out[4:], kind)
 		return append(out, payload...)
 	}
-	mean := leaf("mean", append(make([]byte, 4), "com.apple.iTunes"...))
-	nameBox := leaf("name", append(make([]byte, 4), name...))
+	mean := leaf("mean", append(make([]byte, versionFlagsSize), "com.apple.iTunes"...))
+	nameBox := leaf("name", append(make([]byte, versionFlagsSize), name...))
 	payload := leaf("data", append([]byte{0, 0, 0, 1, 0, 0, 0, 0}, value...))
 	return leaf("----", append(append(mean, nameBox...), payload...))
 }

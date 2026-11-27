@@ -342,6 +342,11 @@ func provenIdentity(a, b domain.SearchResult) (proven domain.SearchResult, ok bo
 	}
 }
 
+const (
+	versionToleranceFloorSeconds = 5
+	versionToleranceFraction     = 0.03
+)
+
 func sameVersionIdentity(a, b domain.SearchResult) bool {
 	title := textnorm.NormalizeForIdentity(a.Title)
 	if title == "" || title != textnorm.NormalizeForIdentity(b.Title) {
@@ -350,7 +355,7 @@ func sameVersionIdentity(a, b domain.SearchResult) bool {
 	if a.Duration == 0 || b.Duration == 0 {
 		return true
 	}
-	tolerance := math.Max(5, 0.03*math.Max(float64(a.Duration), float64(b.Duration)))
+	tolerance := math.Max(versionToleranceFloorSeconds, versionToleranceFraction*math.Max(float64(a.Duration), float64(b.Duration)))
 	return math.Abs(float64(a.Duration-b.Duration)) <= tolerance
 }
 

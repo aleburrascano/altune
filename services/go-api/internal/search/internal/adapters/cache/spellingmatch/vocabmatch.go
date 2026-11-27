@@ -35,7 +35,7 @@ func (q Query) Trigrams() []string { return q.trigrams }
 
 func (q Query) Score(candidate string, sharedTrigrams int) (float64, bool) {
 	dist := textnorm.LevenshteinDistance(q.norm, candidate)
-	if dist > maxEditDistance(q.norm) {
+	if dist > domain.MaxEditDistance(q.norm) {
 		return 0, false
 	}
 	return q.combine(candidate, sharedTrigrams, dist, 0), true
@@ -60,23 +60,6 @@ func jaccardCoefficient(shared, totalA, totalB int) float64 {
 		return 0
 	}
 	return float64(shared) / float64(union)
-}
-
-const (
-	shortQueryRunes  = 4
-	mediumQueryRunes = 8
-	longQueryEdits   = 3
-)
-
-func maxEditDistance(query string) int {
-	n := len([]rune(query))
-	if n <= shortQueryRunes {
-		return 1
-	}
-	if n <= mediumQueryRunes {
-		return 2
-	}
-	return longQueryEdits
 }
 
 func editSimilarity(a, b string, dist int) float64 {
