@@ -350,12 +350,12 @@ func (r *PlaylistRepo) SeedWithTracks(t TB, playlist *domain.Playlist, tracks []
 	t.Helper()
 	r.Playlists[playlist.ID.String()] = playlist
 	for _, track := range tracks {
-		r.Tracks.Tracks[track.ID.String()] = track
-		if holdsTrack(playlist.Tracks, track.ID) {
+		r.Tracks.Tracks[track.ID().String()] = track
+		if holdsTrack(playlist.Tracks, track.ID()) {
 			continue
 		}
-		if err := playlist.AddTrack(track.ID, playlist.UpdatedAt); err != nil {
-			t.Fatalf("seed track %s into playlist %s: %v", track.ID, playlist.ID, err)
+		if err := playlist.AddTrack(track.ID(), playlist.UpdatedAt); err != nil {
+			t.Fatalf("seed track %s into playlist %s: %v", track.ID(), playlist.ID, err)
 		}
 	}
 }

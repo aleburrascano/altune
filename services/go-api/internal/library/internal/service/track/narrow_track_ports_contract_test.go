@@ -73,7 +73,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	ctx := context.Background()
 	userId := librarytest.UserId()
 	store := library.NewInMemoryAudioStore()
-	want := &library.Track{Title: "Narrow"}
+	want := librarytest.RestoreTrack(librarytest.TrackSnapshot{Title: "Narrow"})
 
 	got, err := library.NewGetTrackStatusService(stubGetter{track: want}).Execute(ctx, userId, librarytest.NewTrackId())
 	if err != nil || got != want {
@@ -213,7 +213,7 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 			trRepo := library.NewInMemoryTrackRepo()
 			track := librarytest.SeedTrack(t, trRepo, userId, "T", "A", "B")
 			plRepo.ErrOnAddTrack = e
-			return library.MustNewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now).AddTrack(ctx, userId, p.ID, track.ID)
+			return library.MustNewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now).AddTrack(ctx, userId, p.ID, track.ID())
 		}},
 		{"membership reorder", func(e error) error {
 			plRepo := library.NewInMemoryPlaylistRepo()

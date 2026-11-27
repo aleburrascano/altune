@@ -49,7 +49,7 @@ func (f *orphanFixture) orphan(t *testing.T, ref string) {
 	track := librarytest.SeedReadyTrack(t, f.repo, librarytest.UserId(), "Title", "Artist", "Album", ref)
 	f.store.Seed(ref, []byte("audio"))
 	f.store.ErrOnDelete = errors.New("storage unavailable")
-	if err := f.del.Execute(context.Background(), librarytest.UserId(), track.ID); !errors.Is(err, library.ErrAudioOrphaned) {
+	if err := f.del.Execute(context.Background(), librarytest.UserId(), track.ID()); !errors.Is(err, library.ErrAudioOrphaned) {
 		t.Fatalf("delete err = %v, want ErrAudioOrphaned", err)
 	}
 	f.store.ErrOnDelete = nil
@@ -96,11 +96,11 @@ func TestReconcile_SupersededAudioInsideTheGraceIsKeptAndReusedAudioIsReleasedAf
 func (f *orphanFixture) assertReferencedAudioIntact(t *testing.T) {
 	t.Helper()
 	for _, track := range f.repo.Tracks {
-		if track.AudioRef == nil {
+		if track.AudioRef() == nil {
 			continue
 		}
-		if _, ok := f.store.Files[*track.AudioRef]; !ok {
-			t.Errorf("sweep deleted %q, still referenced by track %s", *track.AudioRef, track.ID)
+		if _, ok := f.store.Files[*track.AudioRef()]; !ok {
+			t.Errorf("sweep deleted %q, still referenced by track %s", *track.AudioRef(), track.ID())
 		}
 	}
 }

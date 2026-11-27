@@ -51,14 +51,14 @@ func TestPostgresJobQueue_QueueWritesRacingACatalogWriteThatChangesAMirroredColu
 					t.Fatalf("GetByID = %v", err)
 				}
 				changed := time.Now().Add(-time.Duration(i+1) * time.Second)
-				loaded.AcquisitionStartedAt = &changed
+				librarytest.AmendTrack(loaded, func(s *librarytest.TrackSnapshot) { s.AcquisitionStartedAt = &changed })
 
 				var wg sync.WaitGroup
 				var opErr, updateErr error
 				start := make(chan struct{})
 				wg.Add(2)
 				go func() { defer wg.Done(); <-start; opErr = op.run(track.ID) }()
-				go func() { defer wg.Done(); <-start; updateErr = repo.Update(ctx, loaded, loaded.Version) }()
+				go func() { defer wg.Done(); <-start; updateErr = repo.Update(ctx, loaded, loaded.Version()) }()
 				close(start)
 				wg.Wait()
 

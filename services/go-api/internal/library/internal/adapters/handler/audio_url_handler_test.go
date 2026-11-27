@@ -37,7 +37,7 @@ func resolveOneReadyTrack(t *testing.T, opts ...func(*library.AudioURLHandler)) 
 	repo, router := audioURLRoutes(library.NoAudioLinks{}, opts...)
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
-	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
+	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID().UUID().String()}}))
 
 	assertStatus(t, rec, http.StatusOK)
 	var resp map[string]any
@@ -91,7 +91,7 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	repo, router := audioURLRoutes(library.NoAudioLinks{})
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
-	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
+	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID().UUID().String()}}))
 
 	assertStatus(t, rec, http.StatusOK)
 	assertAudioCacheControl(t, rec, "private, no-store")
@@ -119,7 +119,7 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, failingSigner{library.NewInMemoryAudioStore()}, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 
 	const inbound = "trace-abc12345"
-	req := httptest.NewRequest(http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
+	req := httptest.NewRequest(http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID().UUID().String()}}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Correlation-ID", inbound)
 	rec := sendAs(router, req, librarytest.UserId())

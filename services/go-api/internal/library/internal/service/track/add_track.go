@@ -81,7 +81,19 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	if err := validateAddTrackInput(input, s.now()); err != nil {
 		return nil, err
 	}
-	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album, s.now, s.source)
+	track, err := domain.NewTrack(domain.NewTrackInput{
+		UserId:          userId,
+		Title:           input.Title,
+		Artist:          input.Artist,
+		Album:           input.Album,
+		ArtworkURL:      input.ArtworkURL,
+		Year:            input.Year,
+		Genre:           input.Genre,
+		TrackNumber:     input.TrackNumber,
+		ISRC:            input.ISRC,
+		FeaturedArtists: input.FeaturedArtists,
+		IdempotencyKey:  input.IdempotencyKey,
+	}, s.now, s.source)
 	if err != nil {
 		return nil, fmt.Errorf("new track: %w", err)
 	}
@@ -95,16 +107,9 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	if err := track.SetCatalogIdentity(input.CatalogMBID, input.CatalogExplicit, sources); err != nil {
 		return nil, fmt.Errorf("set catalog identity: %w", err)
 	}
-	track.ArtworkURL = input.ArtworkURL
-	track.Year = input.Year
-	track.Genre = input.Genre
-	track.TrackNumber = input.TrackNumber
 	if input.AlbumArtist != nil {
 		track.SetAlbumArtist(*input.AlbumArtist)
 	}
-	track.ISRC = input.ISRC
-	track.FeaturedArtists = input.FeaturedArtists
-	track.IdempotencyKey = input.IdempotencyKey
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if errors.Is(err, domain.ErrLibraryFull) {
@@ -122,7 +127,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 		return &AddTrackOutput{Track: track, Created: false}, nil
 	}
 	slog.InfoContext(ctx, "track added to library",
-		logging.KeyTrackID, track.ID.String(),
+		logging.KeyTrackID, track.ID().String(),
 	)
 	dto := TrackToDTO(track)
 	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
@@ -143,24 +148,24 @@ func ScheduleBounded(ctx context.Context, scheduler ports.AcquisitionScheduler, 
 }
 
 func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId ids.UserId, track *domain.Track, sourceURL string) {
-	slog.InfoContext(ctx, "acquisition.scheduled", logging.KeyTrackID, track.ID.String())
-	schedErr := ScheduleBounded(ctx, s.scheduler, userId, track.ID, sourceURL)
+	slog.InfoContext(ctx, "acquisition.scheduled", logging.KeyTrackID, track.ID().String())
+	schedErr := ScheduleBounded(ctx, s.scheduler, userId, track.ID(), sourceURL)
 	if schedErr == nil {
 		return
 	}
 	slog.WarnContext(ctx, "acquisition.schedule_refused",
-		logging.KeyTrackID, track.ID.String(), logging.KeyError, schedErr)
+		logging.KeyTrackID, track.ID().String(), logging.KeyError, schedErr)
 	failed := *track
-	expectedVersion := failed.Version
+	expectedVersion := failed.Version()
 	_ = failed.MarkFailed(string(domain.FailureAcquisitionRefused))
 	if err := s.trackRepo.Update(ctx, &failed, expectedVersion); err != nil {
 		slog.ErrorContext(ctx, "acquisition.schedule_refused_persist_failed",
-			logging.KeyTrackID, track.ID.String(), logging.KeyError, err)
+			logging.KeyTrackID, track.ID().String(), logging.KeyError, err)
 		return
 	}
 	*track = failed
 	s.events.Publish(ctx, userId, events.TrackAcquisitionFailed{
-		TrackID: track.ID.String(),
+		TrackID: track.ID().String(),
 		Reason:  string(domain.FailureAcquisitionRefused),
 	})
 }
@@ -184,8 +189,11 @@ func validateAddTrackNumbers(input AddTrackInput, now time.Time) error {
 	}); err != nil {
 		return err
 	}
-	if input.Year != nil && !domain.PlausibleYear(*input.Year, now) {
-		return domain.NewValidationError("year is implausible")
+	if input.Year == nil {
+		return nil
+	}
+	if err := domain.ValidateYear(*input.Year, now); err != nil {
+		return fmt.Errorf("validate year: %w", err)
 	}
 	return nil
 }

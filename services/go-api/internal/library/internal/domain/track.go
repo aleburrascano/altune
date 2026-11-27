@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 )
@@ -60,44 +61,44 @@ func ParseAcquisitionStatus(s string) (DownloadStatus, error) {
 }
 
 type Track struct {
-	ID              TrackId
-	UserId          ids.UserId
-	Title           string
-	Artist          string
-	Album           string
-	DurationSeconds *float64
-	AddedAt         time.Time
-	ArtworkURL      *string
-	DownloadStatus  DownloadStatus
-	DedupKey        string
-	IdempotencyKey  *string
-	Year            *int
-	Genre           *string
-	TrackNumber     *int
-	AlbumArtist     *string
-	ISRC            *string
-	AudioRef        *string
-	AudioVersion    string
-	FailureReason   *string
-	FeaturedArtists []FeaturedArtist
+	id              TrackId
+	userId          ids.UserId
+	title           string
+	artist          string
+	album           string
+	durationSeconds *float64
+	addedAt         time.Time
+	artworkURL      *string
+	downloadStatus  DownloadStatus
+	dedupKey        string
+	idempotencyKey  *string
+	year            *int
+	genre           *string
+	trackNumber     *int
+	albumArtist     *string
+	isrc            *string
+	audioRef        *string
+	audioVersion    string
+	failureReason   *string
+	featuredArtists []FeaturedArtist
 
-	AcquisitionProvenance *string
-	AudioSourceURL        *string
+	acquisitionProvenance *string
+	audioSourceURL        *string
 
-	ConfidenceScore *float64
-	EvidenceJSON    json.RawMessage
+	confidenceScore *float64
+	evidenceJSON    json.RawMessage
 
-	CatalogDurationSeconds *float64
-	CatalogMBID            *string
-	CatalogExplicit        *bool
-	CatalogSources         []CatalogSource
-	AudioLengthMismatch    bool
+	catalogDurationSeconds *float64
+	catalogMBID            *string
+	catalogExplicit        *bool
+	catalogSources         []CatalogSource
+	audioLengthMismatch    bool
 
-	AcquisitionStartedAt *time.Time
+	acquisitionStartedAt *time.Time
 
-	Version int
+	version int
 
-	AcquisitionFence int
+	acquisitionFence int
 
 	relabelled bool
 }
@@ -123,36 +124,62 @@ func ValidateText(value, field string) error {
 	return nil
 }
 
-func NewTrack(userId ids.UserId, title, artist, album string, wallClock clock.Func, source ids.Source) (*Track, error) {
+type NewTrackInput struct {
+	UserId          ids.UserId
+	Title           string
+	Artist          string
+	Album           string
+	ArtworkURL      *string
+	Year            *int
+	Genre           *string
+	TrackNumber     *int
+	ISRC            *string
+	FeaturedArtists []FeaturedArtist
+	IdempotencyKey  *string
+}
+
+func NewTrack(in NewTrackInput, wallClock clock.Func, source ids.Source) (*Track, error) {
 	if wallClock == nil {
 		return nil, ErrTrackTimestampClockRequired
 	}
 	if source == nil {
 		return nil, ErrIDSourceRequired
 	}
-	title = strings.TrimSpace(title)
+	title := strings.TrimSpace(in.Title)
 	if err := validateTrackText(title, "title"); err != nil {
 		return nil, err
 	}
-	artist = canonicalizeField(artist)
+	artist := canonicalizeField(in.Artist)
 	if err := validateTrackText(artist, "artist"); err != nil {
 		return nil, err
 	}
-	resolved := resolveAlbum(album, title)
+	resolved := resolveAlbum(in.Album, title)
 	if err := validateTrackText(resolved, "album"); err != nil {
 		return nil, err
 	}
+	if in.Year != nil {
+		if err := ValidateYear(*in.Year, wallClock()); err != nil {
+			return nil, err
+		}
+	}
 	now := wallClock.UTC()
 	return &Track{
-		ID:                   source.NewTrackId(),
-		UserId:               userId,
-		Title:                title,
-		Artist:               artist,
-		Album:                resolved,
-		AddedAt:              now,
-		DownloadStatus:       AcquisitionPending,
-		AcquisitionStartedAt: &now,
-		DedupKey:             computeDedupKey(title, artist, resolved),
+		id:                   source.NewTrackId(),
+		userId:               in.UserId,
+		title:                title,
+		artist:               artist,
+		album:                resolved,
+		addedAt:              now,
+		downloadStatus:       AcquisitionPending,
+		acquisitionStartedAt: &now,
+		dedupKey:             computeDedupKey(title, artist, resolved),
+		artworkURL:           in.ArtworkURL,
+		year:                 in.Year,
+		genre:                in.Genre,
+		trackNumber:          in.TrackNumber,
+		isrc:                 in.ISRC,
+		featuredArtists:      in.FeaturedArtists,
+		idempotencyKey:       in.IdempotencyKey,
 	}, nil
 }
 
@@ -191,17 +218,17 @@ func resolveAlbum(album, title string) string {
 }
 
 func (t *Track) SetAlbum(album string) {
-	t.Album = resolveAlbum(album, t.Title)
-	t.DedupKey = computeDedupKey(t.Title, t.Artist, t.Album)
+	t.album = resolveAlbum(album, t.title)
+	t.dedupKey = computeDedupKey(t.title, t.artist, t.album)
 }
 
 func (t *Track) SetAlbumArtist(albumArtist string) {
 	canonical := canonicalizeField(albumArtist)
 	if canonical == "" {
-		t.AlbumArtist = nil
+		t.albumArtist = nil
 		return
 	}
-	t.AlbumArtist = &canonical
+	t.albumArtist = &canonical
 }
 
 type AcquisitionProvenance = downloadprovenance.AcquisitionProvenance
@@ -229,8 +256,8 @@ func (t *Track) MarkReady(audioRef string, source ids.Source) error {
 	if source == nil {
 		return ErrIDSourceRequired
 	}
-	if t.DownloadStatus == AcquisitionReady && t.AudioRef != nil && *t.AudioRef != audioRef {
-		return illegalTransition("mark ready", t.DownloadStatus)
+	if t.downloadStatus == AcquisitionReady && t.audioRef != nil && *t.audioRef != audioRef {
+		return illegalTransition("mark ready", t.downloadStatus)
 	}
 	t.setReadyAudio(audioRef, source)
 	return nil
@@ -244,25 +271,25 @@ func (t *Track) ReplaceAudio(audioRef string, source ids.Source) error {
 		return ErrIDSourceRequired
 	}
 	if !t.IsStreamable() {
-		return illegalTransition("replace audio", t.DownloadStatus)
+		return illegalTransition("replace audio", t.downloadStatus)
 	}
 	t.setReadyAudio(audioRef, source)
 	return nil
 }
 
 func (t *Track) setReadyAudio(audioRef string, source ids.Source) {
-	t.DownloadStatus = AcquisitionReady
-	t.AudioRef = &audioRef
-	t.AudioVersion = source.NewString()
-	t.FailureReason = nil
-	t.AcquisitionStartedAt = nil
+	t.downloadStatus = AcquisitionReady
+	t.audioRef = &audioRef
+	t.audioVersion = source.NewString()
+	t.failureReason = nil
+	t.acquisitionStartedAt = nil
 }
 
 func (t *Track) SetAudioSource(url string) {
 	if url == "" {
 		return
 	}
-	t.AudioSourceURL = &url
+	t.audioSourceURL = &url
 }
 
 func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {
@@ -270,7 +297,7 @@ func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {
 		return
 	}
 	value := string(p)
-	t.AcquisitionProvenance = &value
+	t.acquisitionProvenance = &value
 }
 
 func (t *Track) SetAcquisitionConfidence(confidence float64, evidence json.RawMessage) error {
@@ -280,20 +307,20 @@ func (t *Track) SetAcquisitionConfidence(confidence float64, evidence json.RawMe
 	if len(evidence) > 0 && !json.Valid(evidence) {
 		return errors.New("acquisition evidence must be valid JSON")
 	}
-	t.ConfidenceScore = &confidence
-	t.EvidenceJSON = evidence
+	t.confidenceScore = &confidence
+	t.evidenceJSON = evidence
 	return nil
 }
 
 func (t *Track) AcquisitionConfidence() float64 {
-	if t.ConfidenceScore == nil {
+	if t.confidenceScore == nil {
 		return 0
 	}
-	return *t.ConfidenceScore
+	return *t.confidenceScore
 }
 
 func (t *Track) AcquisitionEvidence() json.RawMessage {
-	return t.EvidenceJSON
+	return slices.Clone(t.evidenceJSON)
 }
 
 func (t *Track) SetDuration(seconds float64) error {
@@ -302,7 +329,7 @@ func (t *Track) SetDuration(seconds float64) error {
 		return err
 	}
 	if length.Known() {
-		t.DurationSeconds = &seconds
+		t.durationSeconds = &seconds
 	}
 	return nil
 }
@@ -313,8 +340,8 @@ func (t *Track) SetCatalogDuration(seconds float64) error {
 		return err
 	}
 	if length.Known() {
-		t.CatalogDurationSeconds = &seconds
-		t.DurationSeconds = &seconds
+		t.catalogDurationSeconds = &seconds
+		t.durationSeconds = &seconds
 	}
 	return nil
 }
@@ -327,7 +354,7 @@ func (t *Track) setCatalogMBID(mbid *string) error {
 	if err != nil {
 		return err
 	}
-	t.CatalogMBID = &normalized
+	t.catalogMBID = &normalized
 	return nil
 }
 
@@ -339,8 +366,8 @@ func (t *Track) SetCatalogIdentity(mbid *string, explicit *bool, sources []Catal
 	if err != nil {
 		return err
 	}
-	t.CatalogExplicit = explicit
-	t.CatalogSources = unique
+	t.catalogExplicit = explicit
+	t.catalogSources = unique
 	return nil
 }
 
@@ -349,15 +376,15 @@ func (t *Track) RecordAudioLength(measured tracklength.TrackLength) bool {
 	if !catalog.Known() || !measured.Known() {
 		return false
 	}
-	t.AudioLengthMismatch = !catalog.SameRecording(measured)
+	t.audioLengthMismatch = !catalog.SameRecording(measured)
 	return true
 }
 
 func (t *Track) catalogLength() tracklength.TrackLength {
-	if t.CatalogDurationSeconds == nil {
+	if t.catalogDurationSeconds == nil {
 		return tracklength.TrackLength{}
 	}
-	length, err := tracklength.TrackLengthOf(*t.CatalogDurationSeconds)
+	length, err := tracklength.TrackLengthOf(*t.catalogDurationSeconds)
 	if err != nil {
 		return tracklength.TrackLength{}
 	}
@@ -365,10 +392,10 @@ func (t *Track) catalogLength() tracklength.TrackLength {
 }
 
 func (t *Track) AdoptISRC(isrc string) {
-	if isrc == "" || (t.ISRC != nil && *t.ISRC != "") {
+	if isrc == "" || (t.isrc != nil && *t.isrc != "") {
 		return
 	}
-	t.ISRC = &isrc
+	t.isrc = &isrc
 }
 
 type recordingLabel struct {
@@ -405,14 +432,16 @@ func (t *Track) RelabelAsRecording(mbid, title, album string, year int, isrc str
 	if err != nil {
 		return err
 	}
-	if year != 0 && !PlausibleYear(year, wallClock()) {
-		return NewValidationError("year is implausible")
+	if year != 0 {
+		if err := ValidateYear(year, wallClock()); err != nil {
+			return err
+		}
 	}
-	t.Title = label.title
-	t.Album = label.album
-	t.DedupKey = computeDedupKey(label.title, t.Artist, label.album)
-	t.CatalogMBID = &label.mbid
-	t.Year, t.ISRC, t.CatalogDurationSeconds = nil, nil, nil
+	t.title = label.title
+	t.album = label.album
+	t.dedupKey = computeDedupKey(label.title, t.artist, label.album)
+	t.catalogMBID = &label.mbid
+	t.year, t.isrc, t.catalogDurationSeconds = nil, nil, nil
 	t.setRelabelOptionals(year, isrc, durationSeconds)
 	t.relabelled = true
 	return nil
@@ -424,15 +453,22 @@ func PlausibleYear(year int, now time.Time) bool {
 	return year >= minPlausibleYear && year <= now.UTC().Year()+1
 }
 
+func ValidateYear(year int, now time.Time) error {
+	if !PlausibleYear(year, now) {
+		return NewValidationError("year is implausible")
+	}
+	return nil
+}
+
 func (t *Track) setRelabelOptionals(year int, isrc string, durationSeconds float64) {
 	if year != 0 {
-		t.Year = &year
+		t.year = &year
 	}
 	if isrc != "" {
-		t.ISRC = &isrc
+		t.isrc = &isrc
 	}
 	if durationSeconds > 0 {
-		t.CatalogDurationSeconds = &durationSeconds
+		t.catalogDurationSeconds = &durationSeconds
 	}
 }
 
@@ -444,19 +480,19 @@ func (t *Track) MarkFailed(reason string) error {
 	if reason == "" {
 		return errors.New("failure_reason required for failed status")
 	}
-	if t.DownloadStatus == AcquisitionFailed {
-		return illegalTransition("mark failed", t.DownloadStatus)
+	if t.downloadStatus == AcquisitionFailed {
+		return illegalTransition("mark failed", t.downloadStatus)
 	}
-	t.DownloadStatus = AcquisitionFailed
-	t.FailureReason = &reason
-	t.AudioRef = nil
-	t.AcquisitionStartedAt = nil
+	t.downloadStatus = AcquisitionFailed
+	t.failureReason = &reason
+	t.audioRef = nil
+	t.acquisitionStartedAt = nil
 	return nil
 }
 
 func (t *Track) FailAcquisition(reason string) error {
-	if t.DownloadStatus != AcquisitionPending {
-		return illegalTransition("fail acquisition", t.DownloadStatus)
+	if t.downloadStatus != AcquisitionPending {
+		return illegalTransition("fail acquisition", t.downloadStatus)
 	}
 	return t.MarkFailed(reason)
 }
@@ -465,26 +501,26 @@ func (t *Track) RevertToPending(wallClock clock.Func) error {
 	if wallClock == nil {
 		return ErrTrackTimestampClockRequired
 	}
-	if t.DownloadStatus == AcquisitionPending {
-		return illegalTransition("revert to pending", t.DownloadStatus)
+	if t.downloadStatus == AcquisitionPending {
+		return illegalTransition("revert to pending", t.downloadStatus)
 	}
 	now := wallClock.UTC()
-	t.DownloadStatus = AcquisitionPending
-	t.AudioRef = nil
-	t.FailureReason = nil
-	t.AcquisitionStartedAt = &now
+	t.downloadStatus = AcquisitionPending
+	t.audioRef = nil
+	t.failureReason = nil
+	t.acquisitionStartedAt = &now
 	return nil
 }
 
 func (t *Track) IsStreamable() bool {
-	return t.DownloadStatus == AcquisitionReady && t.AudioRef != nil
+	return t.downloadStatus == AcquisitionReady && t.audioRef != nil
 }
 
 func TotalDurationSeconds(tracks []*Track) float64 {
 	total := 0.0
 	for _, t := range tracks {
-		if t.DurationSeconds != nil {
-			total += *t.DurationSeconds
+		if t.durationSeconds != nil {
+			total += *t.durationSeconds
 		}
 	}
 	return total

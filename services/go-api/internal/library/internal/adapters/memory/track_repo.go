@@ -71,10 +71,10 @@ func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, 
 	}
 	held := 0
 	for _, t := range r.Tracks {
-		if t.UserId != track.UserId {
+		if t.UserId() != track.UserId() {
 			continue
 		}
-		if sameIdempotencyKey(t, track) || t.DedupKey == track.DedupKey {
+		if sameIdempotencyKey(t, track) || t.DedupKey() == track.DedupKey() {
 			return t, false, nil
 		}
 		held++
@@ -82,8 +82,8 @@ func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, 
 	if held >= r.libraryCap {
 		return nil, false, domain.ErrLibraryFull
 	}
-	r.Tracks[track.ID.String()] = track
-	r.claimable[track.ID.String()] = track.DownloadStatus == domain.AcquisitionPending
+	r.Tracks[track.ID().String()] = track
+	r.claimable[track.ID().String()] = track.DownloadStatus() == domain.AcquisitionPending
 	return track, true, nil
 }
 
@@ -92,8 +92,8 @@ func (r *TrackRepo) Claimable(id domain.TrackId) bool {
 }
 
 func sameIdempotencyKey(a, b *domain.Track) bool {
-	return a.IdempotencyKey != nil && b.IdempotencyKey != nil &&
-		*a.IdempotencyKey == *b.IdempotencyKey
+	return a.IdempotencyKey() != nil && b.IdempotencyKey() != nil &&
+		*a.IdempotencyKey() == *b.IdempotencyKey()
 }
 
 func (r *TrackRepo) GetByID(_ context.Context, id domain.TrackId, userId sharedids.UserId) (*domain.Track, error) {
@@ -101,7 +101,7 @@ func (r *TrackRepo) GetByID(_ context.Context, id domain.TrackId, userId sharedi
 		return nil, r.ErrOnGetBy
 	}
 	for _, t := range r.Tracks {
-		if t.ID == id && t.UserId == userId {
+		if t.ID() == id && t.UserId() == userId {
 			return t, nil
 		}
 	}
@@ -113,7 +113,7 @@ func (r *TrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTra
 		return false, r.ErrOnGetBy
 	}
 	for _, t := range r.Tracks {
-		if t.ID != excludeTrackID && t.AudioRef != nil && *t.AudioRef == audioRef {
+		if t.ID() != excludeTrackID && t.AudioRef() != nil && *t.AudioRef() == audioRef {
 			return true, nil
 		}
 	}
@@ -126,7 +126,7 @@ func (r *TrackRepo) CountForUser(_ context.Context, userId sharedids.UserId, atM
 	}
 	held := 0
 	for _, t := range r.Tracks {
-		if t.UserId != userId {
+		if t.UserId() != userId {
 			continue
 		}
 		held++
@@ -156,15 +156,15 @@ func (r *TrackRepo) ListForUser(_ context.Context, userId sharedids.UserId, limi
 func (r *TrackRepo) newestFirst(userId sharedids.UserId) []*domain.Track {
 	var all []*domain.Track
 	for _, t := range r.Tracks {
-		if t.UserId == userId {
+		if t.UserId() == userId {
 			all = append(all, t)
 		}
 	}
 	sort.Slice(all, func(i, j int) bool {
-		if !all[i].AddedAt.Equal(all[j].AddedAt) {
-			return all[i].AddedAt.After(all[j].AddedAt)
+		if !all[i].AddedAt().Equal(all[j].AddedAt()) {
+			return all[i].AddedAt().After(all[j].AddedAt())
 		}
-		return all[i].ID.String() > all[j].ID.String()
+		return all[i].ID().String() > all[j].ID().String()
 	})
 	return all
 }
@@ -177,9 +177,9 @@ func (r *TrackRepo) ListFilteredForUser(ctx context.Context, userId sharedids.Us
 	needle := strings.ToLower(query.Search)
 	var matched []*domain.Track
 	for _, t := range tracks {
-		if strings.Contains(strings.ToLower(t.Title), needle) ||
-			strings.Contains(strings.ToLower(t.Artist), needle) ||
-			strings.Contains(strings.ToLower(t.Album), needle) {
+		if strings.Contains(strings.ToLower(t.Title()), needle) ||
+			strings.Contains(strings.ToLower(t.Artist()), needle) ||
+			strings.Contains(strings.ToLower(t.Album()), needle) {
 			matched = append(matched, t)
 		}
 	}
@@ -194,11 +194,11 @@ func (r *TrackRepo) ListAlbumsForUser(_ context.Context, userId sharedids.UserId
 	byKey := map[string]*domain.AlbumGroup{}
 	var order []string
 	for _, t := range r.Tracks {
-		if t.UserId != userId || t.Album == "" {
+		if t.UserId() != userId || t.Album() == "" {
 			continue
 		}
 		artist := albumArtist(t)
-		key := strings.ToLower(t.Album) + "|||" + strings.ToLower(artist)
+		key := strings.ToLower(t.Album()) + "|||" + strings.ToLower(artist)
 		if g, ok := byKey[key]; ok {
 			g.TrackCount++
 			continue
@@ -211,17 +211,17 @@ func (r *TrackRepo) ListAlbumsForUser(_ context.Context, userId sharedids.UserId
 
 func newAlbumGroup(key, artist string, t *domain.Track) *domain.AlbumGroup {
 	return &domain.AlbumGroup{
-		Key: key, Album: t.Album, Artist: artist,
-		ArtworkURL: t.ArtworkURL, Year: t.Year,
-		TrackCount: 1, MostRecentAddedAt: t.AddedAt,
+		Key: key, Album: t.Album(), Artist: artist,
+		ArtworkURL: t.ArtworkURL(), Year: t.Year(),
+		TrackCount: 1, MostRecentAddedAt: t.AddedAt(),
 	}
 }
 
 func albumArtist(t *domain.Track) string {
-	if t.AlbumArtist != nil {
-		return *t.AlbumArtist
+	if t.AlbumArtist() != nil {
+		return *t.AlbumArtist()
 	}
-	return t.Artist
+	return t.Artist()
 }
 
 func (r *TrackRepo) ListArtistsForUser(_ context.Context, userId sharedids.UserId, query domain.LibraryQuery) ([]domain.ArtistGroup, error) {
@@ -232,10 +232,10 @@ func (r *TrackRepo) ListArtistsForUser(_ context.Context, userId sharedids.UserI
 	byKey := map[string]*domain.ArtistGroup{}
 	var order []string
 	for _, t := range r.Tracks {
-		if t.UserId != userId {
+		if t.UserId() != userId {
 			continue
 		}
-		key := strings.ToLower(t.Artist)
+		key := strings.ToLower(t.Artist())
 		if g, ok := byKey[key]; ok {
 			g.TrackCount++
 			continue
@@ -248,8 +248,8 @@ func (r *TrackRepo) ListArtistsForUser(_ context.Context, userId sharedids.UserI
 
 func newArtistGroup(key string, t *domain.Track) *domain.ArtistGroup {
 	return &domain.ArtistGroup{
-		Key: key, Artist: t.Artist, ArtworkURL: t.ArtworkURL,
-		TrackCount: 1, MostRecentAddedAt: t.AddedAt,
+		Key: key, Artist: t.Artist(), ArtworkURL: t.ArtworkURL(),
+		TrackCount: 1, MostRecentAddedAt: t.AddedAt(),
 	}
 }
 
@@ -269,7 +269,7 @@ func (r *TrackRepo) ListByIDs(_ context.Context, userId sharedids.UserId, ids []
 	}
 	var out []*domain.Track
 	for _, id := range ids {
-		if t, ok := r.Tracks[id.String()]; ok && t.UserId == userId {
+		if t, ok := r.Tracks[id.String()]; ok && t.UserId() == userId {
 			out = append(out, t)
 		}
 	}
@@ -280,33 +280,41 @@ func (r *TrackRepo) Update(_ context.Context, track *domain.Track, expectedVersi
 	if r.ErrOnUpdate != nil {
 		return r.ErrOnUpdate
 	}
-	existing, ok := r.Tracks[track.ID.String()]
-	if !ok || existing.UserId != track.UserId {
-		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
+	existing, ok := r.Tracks[track.ID().String()]
+	if !ok || existing.UserId() != track.UserId() {
+		return fmt.Errorf("track %s not found or was deleted", track.ID().String())
 	}
-	if existing.Version != expectedVersion {
+	if existing.Version() != expectedVersion {
 		return fmt.Errorf("%w: track %s expected version %d, found %d",
-			ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, existing.Version)
+			ports.ErrTrackVersionConflict, track.ID().String(), expectedVersion, existing.Version())
 	}
-	track.Version = expectedVersion + 1
-	r.Tracks[track.ID.String()] = track
+	track.RecordVersion(expectedVersion + 1)
+	r.Tracks[track.ID().String()] = track
 	return nil
+}
+
+func rewrite(t *domain.Track, change func(*domain.TrackSnapshot)) {
+	snapshot := t.Snapshot()
+	change(&snapshot)
+	*t = *domain.RestoreTrack(snapshot)
 }
 
 func (r *TrackRepo) Requeue(_ context.Context, id domain.TrackId) error {
 	for _, t := range r.Tracks {
-		if t.ID != id {
+		if t.ID() != id {
 			continue
 		}
-		failed := t.DownloadStatus == domain.AcquisitionFailed
-		if !failed && (t.FailureReason == nil || *t.FailureReason == "") {
+		failed := t.DownloadStatus() == domain.AcquisitionFailed
+		if !failed && (t.FailureReason() == nil || *t.FailureReason() == "") {
 			continue
 		}
-		if failed {
-			t.DownloadStatus = domain.AcquisitionPending
-		}
-		t.FailureReason = nil
-		t.Version++
+		rewrite(t, func(s *domain.TrackSnapshot) {
+			if failed {
+				s.DownloadStatus = domain.AcquisitionPending
+			}
+			s.FailureReason = nil
+			s.Version++
+		})
 	}
 	return nil
 }
@@ -317,10 +325,10 @@ func (r *TrackRepo) UpdateFenced(ctx context.Context, track *domain.Track, expec
 
 func (r *TrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, userId sharedids.UserId, n int) (bool, error) {
 	t, ok := r.Tracks[id.String()]
-	if !ok || t.UserId != userId || t.TrackNumber != nil {
+	if !ok || t.UserId() != userId || t.TrackNumber() != nil {
 		return false, nil
 	}
-	t.TrackNumber = &n
+	rewrite(t, func(s *domain.TrackSnapshot) { s.TrackNumber = &n })
 	return true, nil
 }
 
@@ -330,30 +338,30 @@ func (r *TrackRepo) Delete(_ context.Context, id domain.TrackId, userId sharedid
 	}
 	key := id.String()
 	t, ok := r.Tracks[key]
-	if !ok || t.UserId != userId {
+	if !ok || t.UserId() != userId {
 		return false, nil, nil
 	}
-	audioRef := t.AudioRef
+	audioRef := t.AudioRef()
 	delete(r.Tracks, key)
 	return true, audioRef, nil
 }
 
 func (r *TrackRepo) ReplaceFeaturedArtists(_ context.Context, id domain.TrackId, userId sharedids.UserId, feats []domain.FeaturedArtist) error {
 	t, ok := r.Tracks[id.String()]
-	if !ok || t.UserId != userId {
+	if !ok || t.UserId() != userId {
 		return nil
 	}
-	t.FeaturedArtists = feats
+	rewrite(t, func(s *domain.TrackSnapshot) { s.FeaturedArtists = feats })
 	return nil
 }
 
 func (r *TrackRepo) ListTracksFeaturing(_ context.Context, userId sharedids.UserId, fa domain.FeaturedArtist) ([]*domain.Track, error) {
 	var out []*domain.Track
 	for _, t := range r.Tracks {
-		if t.UserId != userId {
+		if t.UserId() != userId {
 			continue
 		}
-		for _, f := range t.FeaturedArtists {
+		for _, f := range t.FeaturedArtists() {
 			if f.IdentityKey() == fa.IdentityKey() {
 				out = append(out, t)
 				break
@@ -364,5 +372,5 @@ func (r *TrackRepo) ListTracksFeaturing(_ context.Context, userId sharedids.User
 }
 
 func (r *TrackRepo) Seed(track *domain.Track) {
-	r.Tracks[track.ID.String()] = track
+	r.Tracks[track.ID().String()] = track
 }

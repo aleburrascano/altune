@@ -23,11 +23,13 @@ func TestPostgresTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 	userId := sharedids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	track.FeaturedArtists = []library.FeaturedArtist{
-		{Name: "Guest One", MBID: "mb-guest-1", Role: library.RoleFeatured},
-		{Name: "Guest Two", DeezerID: 555, Role: library.RoleFeatured},
-	}
-	cleanupTrack(t, pool, track.ID, userId)
+	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) {
+		s.FeaturedArtists = []library.FeaturedArtist{
+			{Name: "Guest One", MBID: "mb-guest-1", Role: library.RoleFeatured},
+			{Name: "Guest Two", DeezerID: 555, Role: library.RoleFeatured},
+		}
+	})
+	cleanupTrack(t, pool, track.ID(), userId)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM featured_artists WHERE user_id = $1`, userId.UUID())
 	})
@@ -36,18 +38,18 @@ func TestPostgresTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	got, err := repo.GetByDedupKey(ctx, userId, track.DedupKey)
+	got, err := repo.GetByDedupKey(ctx, userId, track.DedupKey())
 	if err != nil {
 		t.Fatalf("GetByDedupKey() error = %v", err)
 	}
-	if len(got.FeaturedArtists) != 2 {
-		t.Fatalf("featured count = %d, want 2 (%+v)", len(got.FeaturedArtists), got.FeaturedArtists)
+	if len(got.FeaturedArtists()) != 2 {
+		t.Fatalf("featured count = %d, want 2 (%+v)", len(got.FeaturedArtists()), got.FeaturedArtists())
 	}
-	if got.FeaturedArtists[0].Name != "Guest One" || got.FeaturedArtists[0].MBID != "mb-guest-1" {
-		t.Errorf("featured[0] = %+v", got.FeaturedArtists[0])
+	if got.FeaturedArtists()[0].Name != "Guest One" || got.FeaturedArtists()[0].MBID != "mb-guest-1" {
+		t.Errorf("featured[0] = %+v", got.FeaturedArtists()[0])
 	}
-	if got.FeaturedArtists[1].Name != "Guest Two" || got.FeaturedArtists[1].DeezerID != 555 {
-		t.Errorf("featured[1] = %+v", got.FeaturedArtists[1])
+	if got.FeaturedArtists()[1].Name != "Guest Two" || got.FeaturedArtists()[1].DeezerID != 555 {
+		t.Errorf("featured[1] = %+v", got.FeaturedArtists()[1])
 	}
 }
 
@@ -59,23 +61,25 @@ func TestPostgresFeaturedArtistRepo_ReplaceFeaturedArtists_RefusesAnotherUsersTr
 	cleanupFeaturedArtists(t, pool, owner)
 	cleanupFeaturedArtists(t, pool, intruder)
 	track := newTestTrackForDB(t, owner)
-	track.FeaturedArtists = []library.FeaturedArtist{{Name: "Guest", Role: library.RoleFeatured}}
-	cleanupTrack(t, pool, track.ID, owner)
+	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) {
+		s.FeaturedArtists = []library.FeaturedArtist{{Name: "Guest", Role: library.RoleFeatured}}
+	})
+	cleanupTrack(t, pool, track.ID(), owner)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	err := repo.ReplaceFeaturedArtists(ctx, track.ID, intruder, []library.FeaturedArtist{{Name: "Intruder", Role: library.RoleFeatured}})
+	err := repo.ReplaceFeaturedArtists(ctx, track.ID(), intruder, []library.FeaturedArtist{{Name: "Intruder", Role: library.RoleFeatured}})
 
 	if err == nil {
 		t.Fatal("ReplaceFeaturedArtists() on another user's track succeeded, want an error")
 	}
-	got, err := repo.GetByDedupKey(ctx, owner, track.DedupKey)
+	got, err := repo.GetByDedupKey(ctx, owner, track.DedupKey())
 	if err != nil {
 		t.Fatalf("GetByDedupKey() error = %v", err)
 	}
-	if len(got.FeaturedArtists) != 1 || got.FeaturedArtists[0].Name != "Guest" {
-		t.Errorf("owner's featured artists = %+v, want only Guest", got.FeaturedArtists)
+	if len(got.FeaturedArtists()) != 1 || got.FeaturedArtists()[0].Name != "Guest" {
+		t.Errorf("owner's featured artists = %+v, want only Guest", got.FeaturedArtists())
 	}
 	if n := featuredRowCount(t, pool, intruder); n != 0 {
 		t.Errorf("intruder's featured_artists rows = %d, want 0", n)
@@ -85,7 +89,7 @@ func TestPostgresFeaturedArtistRepo_ReplaceFeaturedArtists_RefusesAnotherUsersTr
 func addTrackForFeaturing(t *testing.T, pool *pgxpool.Pool, userId sharedids.UserId) *library.Track {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -120,10 +124,10 @@ func TestPostgresFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T)
 
 	nfc := []library.FeaturedArtist{{Name: "Beyoncé", Role: library.RoleFeatured}}
 	nfd := []library.FeaturedArtist{{Name: "Beyoncé", Role: library.RoleFeatured}}
-	if err := repo.ReplaceFeaturedArtists(ctx, first.ID, userId, nfc); err != nil {
+	if err := repo.ReplaceFeaturedArtists(ctx, first.ID(), userId, nfc); err != nil {
 		t.Fatalf("ReplaceFeaturedArtists(nfc) error = %v", err)
 	}
-	if err := repo.ReplaceFeaturedArtists(ctx, second.ID, userId, nfd); err != nil {
+	if err := repo.ReplaceFeaturedArtists(ctx, second.ID(), userId, nfd); err != nil {
 		t.Fatalf("ReplaceFeaturedArtists(nfd) error = %v", err)
 	}
 
@@ -162,11 +166,11 @@ func TestPostgresFeaturedArtistRepo_LegacyKeyRowStillMatches(t *testing.T) {
 	}
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO track_featured_artists (track_id, featured_artist_id, position) VALUES ($1,$2,0)`,
-		legacyTrack.ID.UUID(), legacyID); err != nil {
+		legacyTrack.ID().UUID(), legacyID); err != nil {
 		t.Fatalf("link legacy row: %v", err)
 	}
 
-	if err := repo.ReplaceFeaturedArtists(ctx, newTrack.ID, userId, []library.FeaturedArtist{fa}); err != nil {
+	if err := repo.ReplaceFeaturedArtists(ctx, newTrack.ID(), userId, []library.FeaturedArtist{fa}); err != nil {
 		t.Fatalf("ReplaceFeaturedArtists() error = %v", err)
 	}
 
@@ -226,8 +230,8 @@ func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_StopsAtTheLibraryPageCap
 		t.Fatalf("ListTracksFeaturing = %d tracks, err %v; want the %d cap of %d featuring", len(got), err, library.MaxLibraryPageSize, len(ids))
 	}
 	for i, track := range got {
-		if want := ids[len(ids)-1-i]; track.ID != want {
-			t.Fatalf("track %d = %s, want %s: tracks added together come largest id first, and the cap drops the smallest, which sits first on disk", i, track.ID, want)
+		if want := ids[len(ids)-1-i]; track.ID() != want {
+			t.Fatalf("track %d = %s, want %s: tracks added together come largest id first, and the cap drops the smallest, which sits first on disk", i, track.ID(), want)
 		}
 	}
 }
@@ -235,8 +239,10 @@ func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_StopsAtTheLibraryPageCap
 func addFeaturedTrackAt(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId sharedids.UserId, id library.TrackId, addedAt time.Time, fa library.FeaturedArtist) {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
-	track.ID = id
-	track.AddedAt = addedAt
+	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) {
+		s.ID = id
+		s.AddedAt = addedAt
+	})
 	cleanupTrack(t, pool, id, userId)
 	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	if _, _, err := repo.Add(ctx, track); err != nil {
@@ -250,7 +256,7 @@ func addFeaturedTrackAt(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 func featuringIds(tracks []*library.Track) []library.TrackId {
 	ids := make([]library.TrackId, len(tracks))
 	for i, track := range tracks {
-		ids[i] = track.ID
+		ids[i] = track.ID()
 	}
 	return ids
 }

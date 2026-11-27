@@ -161,7 +161,7 @@ func TestWire_AudioURLsAnswersTheResolvedUrlsWithTheirExpiry(t *testing.T) {
 	rig := newWireRig(t)
 	track := librarytest.SeedReadyTrack(t, rig.tracks, librarytest.UserId(), "Ready", "Artist", "Album", "audio/ok.opus")
 
-	out := rig.exchange(t, http.MethodPost, "/audio-urls", "audio_urls", map[string]any{"track_ids": []string{track.ID.UUID().String()}}, http.StatusOK)
+	out := rig.exchange(t, http.MethodPost, "/audio-urls", "audio_urls", map[string]any{"track_ids": []string{track.ID().UUID().String()}}, http.StatusOK)
 
 	jsoncontract.AssertWire(t, "audio_urls", out)
 }

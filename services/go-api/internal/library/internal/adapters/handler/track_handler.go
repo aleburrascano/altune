@@ -230,16 +230,16 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	case result.Created:
 		status = http.StatusCreated
 		slog.InfoContext(r.Context(), "track.saved",
-			logging.KeyTrackID, result.Track.ID.String(),
-			"title", result.Track.Title,
-			"artist", result.Track.Artist,
-			"album", result.Track.Album,
+			logging.KeyTrackID, result.Track.ID().String(),
+			"title", result.Track.Title(),
+			"artist", result.Track.Artist(),
+			"album", result.Track.Album(),
 		)
 	default:
 		slog.InfoContext(r.Context(), "track.dedup_hit",
-			logging.KeyTrackID, result.Track.ID.String(),
-			"title", result.Track.Title,
-			logging.KeyStatus, result.Track.DownloadStatus.String(),
+			logging.KeyTrackID, result.Track.ID().String(),
+			"title", result.Track.Title(),
+			logging.KeyStatus, result.Track.DownloadStatus().String(),
 		)
 	}
 
@@ -267,9 +267,9 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 	}
 
 	httpserver.WriteJSON(w, http.StatusOK, TrackStatusResponse{
-		ID:             track.ID.UUID(),
-		DownloadStatus: track.DownloadStatus.String(),
-		FailureReason:  track.FailureReason,
+		ID:             track.ID().UUID(),
+		DownloadStatus: track.DownloadStatus().String(),
+		FailureReason:  track.FailureReason(),
 	})
 }
 

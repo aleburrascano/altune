@@ -138,7 +138,7 @@ func (s *PlaylistMembershipService) ownedDistinct(ctx context.Context, userId sh
 	}
 	owned := make(map[domain.TrackId]bool, len(tracks))
 	for _, t := range tracks {
-		owned[t.ID] = true
+		owned[t.ID()] = true
 	}
 	out := make([]domain.TrackId, 0, len(owned))
 	for _, id := range trackIds {

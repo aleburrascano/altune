@@ -105,37 +105,37 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 }
 
 func snapshotOf(track *library.Track) (*download.TrackSnapshot, error) {
-	status, err := mapStatus(track.DownloadStatus)
+	status, err := mapStatus(track.DownloadStatus())
 	if err != nil {
 		return nil, err
 	}
 	snapshot := catalogFactsOf(track)
-	snapshot.AudioRef = track.AudioRef
-	snapshot.AudioSourceURL = track.AudioSourceURL
-	snapshot.StoredDurationSeconds = track.DurationSeconds
+	snapshot.AudioRef = track.AudioRef()
+	snapshot.AudioSourceURL = track.AudioSourceURL()
+	snapshot.StoredDurationSeconds = track.DurationSeconds()
 	snapshot.Evidence = track.AcquisitionEvidence()
 	snapshot.Status = status
 	snapshot.Streamable = track.IsStreamable()
-	snapshot.Version = track.Version
+	snapshot.Version = track.Version()
 	return snapshot, nil
 }
 
 func catalogFactsOf(track *library.Track) *download.TrackSnapshot {
 	return &download.TrackSnapshot{
-		ID:                     track.ID,
-		UserId:                 track.UserId,
-		Title:                  track.Title,
-		Artist:                 track.Artist,
-		Album:                  track.Album,
-		CatalogDurationSeconds: track.CatalogDurationSeconds,
-		CatalogMBID:            track.CatalogMBID,
-		CatalogExplicit:        track.CatalogExplicit,
-		CatalogSources:         snapshotSources(track.CatalogSources),
-		ISRC:                   track.ISRC,
-		Year:                   track.Year,
-		TrackNumber:            track.TrackNumber,
-		AlbumArtist:            track.AlbumArtist,
-		Genre:                  track.Genre,
+		ID:                     track.ID(),
+		UserId:                 track.UserId(),
+		Title:                  track.Title(),
+		Artist:                 track.Artist(),
+		Album:                  track.Album(),
+		CatalogDurationSeconds: track.CatalogDurationSeconds(),
+		CatalogMBID:            track.CatalogMBID(),
+		CatalogExplicit:        track.CatalogExplicit(),
+		CatalogSources:         snapshotSources(track.CatalogSources()),
+		ISRC:                   track.ISRC(),
+		Year:                   track.Year(),
+		TrackNumber:            track.TrackNumber(),
+		AlbumArtist:            track.AlbumArtist(),
+		Genre:                  track.Genre(),
 	}
 }
 
@@ -230,27 +230,27 @@ func relabel(ctx context.Context, track *library.Track, given *download.TrackLab
 	}
 	label := *given
 	if label.Year != 0 && !library.PlausibleYear(label.Year, now()) {
-		slog.WarnContext(ctx, "acquisition.relabel_year_dropped", logging.KeyTrackID, track.ID.String(), "year", label.Year)
+		slog.WarnContext(ctx, "acquisition.relabel_year_dropped", logging.KeyTrackID, track.ID().String(), "year", label.Year)
 		label.Year = 0
 	}
-	oldMBID, oldTitle := "", track.Title
-	if track.CatalogMBID != nil {
-		oldMBID = *track.CatalogMBID
+	oldMBID, oldTitle := "", track.Title()
+	if track.CatalogMBID() != nil {
+		oldMBID = *track.CatalogMBID()
 	}
 	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds, now); err != nil {
 		return fmt.Errorf("relabel as recording: %w", err)
 	}
 	slog.InfoContext(ctx, "acquisition.track_relabelled",
-		logging.KeyTrackID, track.ID.String(),
-		"old_mbid", oldMBID, "new_mbid", *track.CatalogMBID,
-		"old_title", oldTitle, "new_title", track.Title)
+		logging.KeyTrackID, track.ID().String(),
+		"old_mbid", oldMBID, "new_mbid", *track.CatalogMBID(),
+		"old_title", oldTitle, "new_title", track.Title())
 	return nil
 }
 
 func recordLengthCheck(ctx context.Context, track *library.Track, measured tracklength.TrackLength) {
-	if track.RecordAudioLength(measured) && track.AudioLengthMismatch {
+	if track.RecordAudioLength(measured) && track.AudioLengthMismatch() {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
-			logging.KeyTrackID, track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measured.Seconds())
+			logging.KeyTrackID, track.ID().String(), "catalog_seconds", *track.CatalogDurationSeconds(), "audio_seconds", measured.Seconds())
 	}
 }
 
@@ -278,7 +278,7 @@ func recordMetadata(ctx context.Context, track *library.Track, c download.Comple
 	}
 	if err := track.SetAcquisitionConfidence(c.Confidence, c.Evidence); err != nil {
 		slog.WarnContext(ctx, "acquisition.confidence_rejected",
-			logging.KeyTrackID, track.ID.String(), "confidence", c.Confidence, logging.KeyError, redact.LogError(err))
+			logging.KeyTrackID, track.ID().String(), "confidence", c.Confidence, logging.KeyError, redact.LogError(err))
 	}
 }
 
@@ -296,7 +296,7 @@ func (l *LibraryTracks) RevertAt(ctx context.Context, snapshot download.TrackSna
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
-	if track.Version != snapshot.Version {
+	if track.Version() != snapshot.Version {
 		return fmt.Errorf("revert to pending: %w", library.ErrTrackVersionConflict)
 	}
 	if err := track.RevertToPending(l.now); err != nil {
@@ -327,10 +327,10 @@ func (l *LibraryTracks) attempt(ctx context.Context, id ids.TrackId, userId ids.
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
-	if leaseSuperseded(fence, track.AcquisitionFence) {
-		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence, fence, download.ErrLeaseLost)
+	if leaseSuperseded(fence, track.AcquisitionFence()) {
+		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence(), fence, download.ErrLeaseLost)
 	}
-	expectedVersion := track.Version
+	expectedVersion := track.Version()
 	if err := mutate(track); err != nil {
 		return translate(err)
 	}

@@ -24,14 +24,14 @@ type playlistRepoWithTracks struct {
 
 func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId ids.UserId) library.TrackId {
 	t.Helper()
-	track, err := library.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: "Title-" + uuid.NewString()[:8], Artist: "Artist-" + uuid.NewString()[:8], Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
 	if _, _, err := r.tracks.Add(context.Background(), track); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
-	return track.ID
+	return track.ID()
 }
 
 func TestPlaylistRepoFake_Contract(t *testing.T) {
@@ -81,7 +81,7 @@ func TestPlaylistRepoFake_SeedWithTracksFailsWhenATrackDoesNotFit(t *testing.T) 
 
 	go func() {
 		defer close(done)
-		repo.SeedWithTracks(tb, pl, []*library.Track{{ID: librarytest.NewTrackId()}})
+		repo.SeedWithTracks(tb, pl, []*library.Track{librarytest.RestoreTrack(librarytest.TrackSnapshot{ID: librarytest.NewTrackId()})})
 	}()
 	<-done
 

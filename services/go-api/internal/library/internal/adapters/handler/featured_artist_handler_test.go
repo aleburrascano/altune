@@ -149,7 +149,9 @@ func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
 func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Feature", "Artist", "Album")
-	track.FeaturedArtists = []library.FeaturedArtist{library.NewFeaturedArtistIdentityOnly("SZA", "", 42)}
+	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) {
+		s.FeaturedArtists = []library.FeaturedArtist{library.NewFeaturedArtistIdentityOnly("SZA", "", 42)}
+	})
 	router := trackRoutes(repo)
 
 	rec := request(t, router, http.MethodGet, "/tracks/featuring?deezer_id=42", nil)

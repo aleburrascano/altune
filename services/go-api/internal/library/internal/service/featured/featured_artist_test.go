@@ -34,7 +34,7 @@ func newManualClock() *clocktest.Manual {
 
 func newTrackFeat(t *testing.T, userId ids.UserId, title string) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, title, "Artist", "Album", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: title, Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -65,8 +65,8 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if res.Scanned != 2 || res.Updated != 1 {
 			t.Fatalf("result = %+v, want scanned 2 updated 1", res)
 		}
-		if len(t1.FeaturedArtists) != 1 || t1.FeaturedArtists[0].Name != "Guest" {
-			t.Errorf("t1 featured = %+v", t1.FeaturedArtists)
+		if len(t1.FeaturedArtists()) != 1 || t1.FeaturedArtists()[0].Name != "Guest" {
+			t.Errorf("t1 featured = %+v", t1.FeaturedArtists())
 		}
 
 		clock.Advance(backfillCooldown)
@@ -74,8 +74,8 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("second Execute: %v", err)
 		}
-		if res2.Updated != 1 || len(t1.FeaturedArtists) != 1 {
-			t.Errorf("re-run not idempotent: %+v / %+v", res2, t1.FeaturedArtists)
+		if res2.Updated != 1 || len(t1.FeaturedArtists()) != 1 {
+			t.Errorf("re-run not idempotent: %+v / %+v", res2, t1.FeaturedArtists())
 		}
 	})
 
@@ -112,7 +112,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo := &orderedTrackRepo{
 			InMemoryTrackRepo: library.NewInMemoryTrackRepo(),
 			order:             []*library.Track{t1, t2, t3},
-			failReplaceID:     t2.ID,
+			failReplaceID:     t2.ID(),
 			failReplaceErr:    errors.New("db down"),
 		}
 		repo.Seed(t1)
@@ -139,8 +139,8 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if res.Failed != 1 {
 			t.Fatalf("result = %+v, want failed 1 (only t2)", res)
 		}
-		if len(t3.FeaturedArtists) != 1 || t3.FeaturedArtists[0].Name != "Guest 3" {
-			t.Errorf("t3 featured = %+v, want it persisted after t2's failure", t3.FeaturedArtists)
+		if len(t3.FeaturedArtists()) != 1 || t3.FeaturedArtists()[0].Name != "Guest 3" {
+			t.Errorf("t3 featured = %+v, want it persisted after t2's failure", t3.FeaturedArtists())
 		}
 	})
 
@@ -456,7 +456,7 @@ func (r *numberedTrackRepo) featuredArtistsOf(title string) []library.FeaturedAr
 	if !ok {
 		return nil
 	}
-	return track.FeaturedArtists
+	return track.FeaturedArtists()
 }
 
 type orderedTrackRepo struct {
@@ -575,9 +575,9 @@ func TestListFeaturingService_Execute(t *testing.T) {
 	t.Run("returns only the tracks featuring the queried artist", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		withSza := librarytest.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
-		withSza.FeaturedArtists = []library.FeaturedArtist{sza}
+		librarytest.AmendTrack(withSza, func(s *librarytest.TrackSnapshot) { s.FeaturedArtists = []library.FeaturedArtist{sza} })
 		withDrake := librarytest.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
-		withDrake.FeaturedArtists = []library.FeaturedArtist{drake}
+		librarytest.AmendTrack(withDrake, func(s *librarytest.TrackSnapshot) { s.FeaturedArtists = []library.FeaturedArtist{drake} })
 		librarytest.SeedTrack(t, repo, userId, "Plain", "Artist", "Album")
 		svc := library.NewListFeaturingService(repo)
 
@@ -588,15 +588,15 @@ func TestListFeaturingService_Execute(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("len = %d, want 1", len(got))
 		}
-		if got[0].ID != withSza.ID {
-			t.Errorf("track = %v, want %v", got[0].ID, withSza.ID)
+		if got[0].ID() != withSza.ID() {
+			t.Errorf("track = %v, want %v", got[0].ID(), withSza.ID())
 		}
 	})
 
 	t.Run("returns nothing when no track features the artist", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		withDrake := librarytest.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
-		withDrake.FeaturedArtists = []library.FeaturedArtist{drake}
+		librarytest.AmendTrack(withDrake, func(s *librarytest.TrackSnapshot) { s.FeaturedArtists = []library.FeaturedArtist{drake} })
 		svc := library.NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
@@ -612,7 +612,7 @@ func TestListFeaturingService_Execute(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		other := ids.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
 		theirs := librarytest.SeedTrack(t, repo, other, "Feature", "Artist", "Album")
-		theirs.FeaturedArtists = []library.FeaturedArtist{sza}
+		librarytest.AmendTrack(theirs, func(s *librarytest.TrackSnapshot) { s.FeaturedArtists = []library.FeaturedArtist{sza} })
 		svc := library.NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
@@ -628,7 +628,7 @@ func TestListFeaturingService_Execute(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		stored := library.NewFeaturedArtistIdentityOnly("SZA", "mbid-1", 0)
 		track := librarytest.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
-		track.FeaturedArtists = []library.FeaturedArtist{stored}
+		librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) { s.FeaturedArtists = []library.FeaturedArtist{stored} })
 		svc := library.NewListFeaturingService(repo)
 
 		query := library.NewFeaturedArtistIdentityOnly("Solana", "mbid-1", 0)
@@ -636,7 +636,7 @@ func TestListFeaturingService_Execute(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(got) != 1 || got[0].ID != track.ID {
+		if len(got) != 1 || got[0].ID() != track.ID() {
 			t.Fatalf("got %d tracks, want the mbid-1 match", len(got))
 		}
 	})
@@ -769,11 +769,11 @@ func TestBackfill_ARunCanceledDuringAWriteStillLandsThatWrite(t *testing.T) {
 	if res == nil || res.Updated != 1 || res.Failed != 0 || res.NextOffset != 1 {
 		t.Fatalf("result = %+v, want the write in flight counted as updated and the run stopped after it", res)
 	}
-	if len(first.FeaturedArtists) != 1 || first.FeaturedArtists[0].Name != "Guest 1" {
-		t.Fatalf("first track featured = %+v, want the write that was in flight at cancel to have landed", first.FeaturedArtists)
+	if len(first.FeaturedArtists()) != 1 || first.FeaturedArtists()[0].Name != "Guest 1" {
+		t.Fatalf("first track featured = %+v, want the write that was in flight at cancel to have landed", first.FeaturedArtists())
 	}
-	if len(second.FeaturedArtists) != 0 {
-		t.Fatalf("second track featured = %+v, want nothing written after the cancel", second.FeaturedArtists)
+	if len(second.FeaturedArtists()) != 0 {
+		t.Fatalf("second track featured = %+v, want nothing written after the cancel", second.FeaturedArtists())
 	}
 }
 

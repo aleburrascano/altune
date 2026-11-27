@@ -34,32 +34,32 @@ type FeaturedArtistDTO struct {
 
 func TrackToDTO(t *domain.Track) TrackDTO {
 	var album *string
-	if t.Album != "" {
-		album = &t.Album
+	if name := t.Album(); name != "" {
+		album = &name
 	}
 	var failureMessage *string
-	if t.DownloadStatus == domain.AcquisitionFailed {
-		msg := domain.FailureMessage(t.FailureReason)
+	if t.DownloadStatus() == domain.AcquisitionFailed {
+		msg := domain.FailureMessage(t.FailureReason())
 		failureMessage = &msg
 	}
 	return TrackDTO{
-		ID:              t.ID.String(),
-		Title:           t.Title,
-		Artist:          t.Artist,
+		ID:              t.ID().String(),
+		Title:           t.Title(),
+		Artist:          t.Artist(),
 		Album:           album,
-		DurationSeconds: t.DurationSeconds,
-		AddedAt:         t.AddedAt,
-		DownloadStatus:  t.DownloadStatus.String(),
-		ArtworkURL:      t.ArtworkURL,
-		Year:            t.Year,
-		Genre:           t.Genre,
-		TrackNumber:     t.TrackNumber,
-		AlbumArtist:     t.AlbumArtist,
-		ISRC:            t.ISRC,
-		AudioRef:        t.AudioRef,
-		FailureReason:   t.FailureReason,
+		DurationSeconds: t.DurationSeconds(),
+		AddedAt:         t.AddedAt(),
+		DownloadStatus:  t.DownloadStatus().String(),
+		ArtworkURL:      t.ArtworkURL(),
+		Year:            t.Year(),
+		Genre:           t.Genre(),
+		TrackNumber:     t.TrackNumber(),
+		AlbumArtist:     t.AlbumArtist(),
+		ISRC:            t.ISRC(),
+		AudioRef:        t.AudioRef(),
+		FailureReason:   t.FailureReason(),
 		FailureMessage:  failureMessage,
-		FeaturedArtists: FeaturedToDTOs(t.FeaturedArtists),
+		FeaturedArtists: FeaturedToDTOs(t.FeaturedArtists()),
 	}
 }
 

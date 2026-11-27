@@ -200,7 +200,7 @@ func TestHandleDeleteTrack(t *testing.T) {
 			name: "existing track returns 204",
 			trackIdFn: func(repo *library.InMemoryTrackRepo) string {
 				track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "To Delete", "Artist", "Album")
-				return track.ID.UUID().String()
+				return track.ID().UUID().String()
 			},
 			wantStatus: http.StatusNoContent,
 		},
@@ -372,7 +372,7 @@ func TestHandleSetTrackNumber(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Dreams", "Fleetwood Mac", "Rumours")
 	router := trackRoutes(repo)
-	path := "/tracks/" + track.ID.UUID().String() + "/track-number"
+	path := "/tracks/" + track.ID().UUID().String() + "/track-number"
 
 	rec := request(t, router, http.MethodPatch, path, jsonBody(t, library.SetTrackNumberRequest{TrackNumber: 3}))
 	assertStatus(t, rec, http.StatusNoContent)
@@ -380,8 +380,8 @@ func TestHandleSetTrackNumber(t *testing.T) {
 	rec = request(t, router, http.MethodPatch, path, jsonBody(t, library.SetTrackNumberRequest{TrackNumber: 9}))
 	assertStatus(t, rec, http.StatusNoContent)
 
-	stored, ok := repo.Tracks[track.ID.String()]
-	if !ok || stored == nil || stored.TrackNumber == nil || *stored.TrackNumber != 3 {
+	stored, ok := repo.Tracks[track.ID().String()]
+	if !ok || stored == nil || stored.TrackNumber() == nil || *stored.TrackNumber() != 3 {
 		t.Fatal("track number must be 3 after the first fill and stay 3 after the second")
 	}
 
@@ -404,7 +404,7 @@ func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 
 	tests := []struct{ name, trackId string }{
 		{"nonexistent track", uuid.New().String()},
-		{"foreign track", foreign.ID.UUID().String()},
+		{"foreign track", foreign.ID().UUID().String()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -413,8 +413,8 @@ func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 			assertStatus(t, rec, http.StatusNotFound)
 		})
 	}
-	if foreign.TrackNumber != nil {
-		t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber)
+	if foreign.TrackNumber() != nil {
+		t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber())
 	}
 }
 
@@ -452,7 +452,7 @@ func TestHandleCreateTrack_AcceptsFeaturedArtistsAtCap(t *testing.T) {
 
 	assertStatus(t, rec, http.StatusCreated)
 	for _, tr := range repo.Tracks {
-		if got := len(tr.FeaturedArtists); got != library.MaxFeaturedArtistsPerTrack {
+		if got := len(tr.FeaturedArtists()); got != library.MaxFeaturedArtistsPerTrack {
 			t.Errorf("stored %d featured artists, want %d", got, library.MaxFeaturedArtistsPerTrack)
 		}
 	}
@@ -521,8 +521,8 @@ func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
 		t.Fatalf("stored %d tracks, want 1", len(repo.Tracks))
 	}
 	for _, tr := range repo.Tracks {
-		if len(tr.FeaturedArtists) != 1 || tr.FeaturedArtists[0].MBID != mbid || tr.FeaturedArtists[0].Name != name {
-			t.Errorf("stored featured artists = %+v, want the submitted one", tr.FeaturedArtists)
+		if len(tr.FeaturedArtists()) != 1 || tr.FeaturedArtists()[0].MBID != mbid || tr.FeaturedArtists()[0].Name != name {
+			t.Errorf("stored featured artists = %+v, want the submitted one", tr.FeaturedArtists())
 		}
 	}
 }
@@ -692,13 +692,13 @@ func TestHandleCreateTrack_AnInsertStalledBehindAnotherWriterAnswersTemporarilyU
 
 func holdUncommittedTrack(t *testing.T, user ids.UserId, title, artist, album string) {
 	t.Helper()
-	track, err := library.NewTrack(user, title, artist, album, time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: user, Title: title, Artist: artist, Album: album}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
 	if _, err := dbtest.Tx(t).Exec(context.Background(),
 		`INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, 'pending')`,
-		track.ID.UUID(), user.UUID(), title, artist, track.DedupKey,
+		track.ID().UUID(), user.UUID(), title, artist, track.DedupKey(),
 	); err != nil {
 		t.Fatalf("hold track: %v", err)
 	}

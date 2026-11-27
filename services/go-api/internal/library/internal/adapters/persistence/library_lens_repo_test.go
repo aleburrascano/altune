@@ -15,17 +15,19 @@ import (
 
 func seedLibraryTrack(t *testing.T, repo *library.PostgresCatalogTrackRepository, userId ids.UserId, spec libraryTrackSpec) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, spec.title, spec.artist, spec.album, time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: spec.title, Artist: spec.artist, Album: spec.album}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack(%q): %v", spec.title, err)
 	}
-	if spec.year != nil {
-		track.Year = spec.year
-	}
-	if spec.albumArtist != nil {
-		track.AlbumArtist = spec.albumArtist
-	}
-	track.AddedAt = spec.addedAt
+	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) {
+		if spec.year != nil {
+			s.Year = spec.year
+		}
+		if spec.albumArtist != nil {
+			s.AlbumArtist = spec.albumArtist
+		}
+		s.AddedAt = spec.addedAt
+	})
 	if _, _, err := repo.Add(context.Background(), track); err != nil {
 		t.Fatalf("Add(%q): %v", spec.title, err)
 	}
@@ -44,7 +46,7 @@ type libraryTrackSpec struct {
 func titlesOf(ts []*library.Track) []string {
 	out := make([]string, len(ts))
 	for i, tr := range ts {
-		out[i] = tr.Title
+		out[i] = tr.Title()
 	}
 	return out
 }
