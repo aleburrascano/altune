@@ -6,13 +6,17 @@ import (
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const defaultProviderTimeout = 1500 * time.Millisecond
@@ -118,14 +122,17 @@ func (s *Service) startProviderCall(ctx context.Context, run *fanOutRun, slot in
 	}
 	run.waiting[slot] = true
 	run.running.Add(1)
-	s.bg.Track(func() { s.callProvider(run, slot, call, provider, req) })
+	s.bg.Track(func() { s.callProvider(run.callCtx, run, slot, call, provider, req) })
 }
 
-func (s *Service) callProvider(run *fanOutRun, slot int, call providerguard.BreakerCall, provider ports.SearchProvider, req fanOutRequest) {
+func (s *Service) callProvider(ctx context.Context, run *fanOutRun, slot int, call providerguard.BreakerCall, provider ports.SearchProvider, req fanOutRequest) {
 	defer run.callDone()
-	res, status := s.searchProviderGuarded(run.callCtx, call, provider, req.query, req.kinds)
+	callCtx, stage := telemetry.StartStage(ctx, s.now, "search.provider", attribute.String("provider", provider.Name().String()))
+	res, status := s.searchProviderGuarded(callCtx, call, provider, req.query, req.kinds)
+	stage.Annotate(attribute.String("provider.status", status.Status.String()))
+	stage.End(nil)
 	if status.Status == domain.ProviderStatusOK {
-		req.answers.set(run.callCtx, provider.Name(), res)
+		req.answers.set(ctx, provider.Name(), res)
 	}
 	run.arrivals <- providerArrival{slot: slot, results: res, status: status}
 }
@@ -197,8 +204,8 @@ func (s *Service) searchProvider(
 	if partial := (*domain.PartialKindsError)(nil); errors.As(err, &partial) {
 		st := failureStatus(provCtx, err)
 		slog.WarnContext(ctx, "search.v2.provider_partial",
-			"provider", p.Name().String(), "status", st.String(), "failed_kinds", partial.Failed,
-			"error", redact.Secrets(err.Error()))
+			"provider", p.Name().String(), logging.KeyStatus, st.String(), "failed_kinds", partial.Failed,
+			logging.KeyError, redact.Secrets(err.Error()))
 		return res, domain.ProviderSearchResponse{
 			Provider:    p.Name(),
 			Results:     res,
@@ -210,7 +217,7 @@ func (s *Service) searchProvider(
 	if err != nil {
 		st := failureStatus(provCtx, err)
 		slog.WarnContext(ctx, "search.v2.provider_failed",
-			"provider", p.Name().String(), "status", st.String(), "error", redact.Secrets(err.Error()))
+			"provider", p.Name().String(), logging.KeyStatus, st.String(), logging.KeyError, redact.Secrets(err.Error()))
 		return nil, domain.ProviderSearchResponse{Provider: p.Name(), Status: st, LatencyMs: latencyMs}
 	}
 	return res, domain.ProviderSearchResponse{

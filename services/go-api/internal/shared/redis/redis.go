@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -21,7 +22,7 @@ func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Clie
 
 	opts, err := clientOptions(redisURL, poolSize)
 	if err != nil {
-		slog.WarnContext(ctx, "invalid redis URL, caches will degrade gracefully", "error", redactURLError(err))
+		slog.WarnContext(ctx, "invalid redis URL, caches will degrade gracefully", logging.KeyError, redactURLError(err))
 		return nil
 	}
 
@@ -31,7 +32,7 @@ func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Clie
 	defer cancel()
 
 	if err := client.Ping(pingCtx).Err(); err != nil {
-		slog.WarnContext(ctx, "redis not reachable, caches will degrade gracefully", "error", err)
+		slog.WarnContext(ctx, "redis not reachable, caches will degrade gracefully", logging.KeyError, err)
 		return client
 	}
 
@@ -58,19 +59,19 @@ func clientOptions(redisURL string, poolSize int) (*goredis.Options, error) {
 	return opts, nil
 }
 
-type PoolStats struct {
+type poolStats struct {
 	PoolSize   int    `json:"pool_size"`
 	TotalConns uint32 `json:"total_conns"`
 	IdleConns  uint32 `json:"idle_conns"`
 	Timeouts   uint32 `json:"timeouts"`
 }
 
-func ReadPoolStats(client *goredis.Client) PoolStats {
+func ReadPoolStats(client *goredis.Client) poolStats {
 	if client == nil {
-		return PoolStats{}
+		return poolStats{}
 	}
 	stats := client.PoolStats()
-	return PoolStats{
+	return poolStats{
 		PoolSize:   client.Options().PoolSize,
 		TotalConns: stats.TotalConns,
 		IdleConns:  stats.IdleConns,

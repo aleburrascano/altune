@@ -23,9 +23,7 @@ func (h *DiscoveryHandler) writeContentFetch(
 		return
 	}
 	dto := contentFetchToDTO(resp)
-	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
-		h.stampOwnership(r.Context(), userId, ownableItems(dto.Items))
-	}
+	h.stampOwnership(r.Context(), requestuser.UserID(r), ownableItems(dto.Items))
 	httpserver.WriteJSON(w, http.StatusOK, dto)
 }
 

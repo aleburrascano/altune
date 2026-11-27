@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,7 +28,7 @@ func audioURLRoutes(store library.AudioStore, opts ...func(*library.AudioURLHand
 	repo := library.NewInMemoryTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, time.Now, library.NoopAudioStoreMetrics()), time.Now, opts...).Routes(router)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, time.Now, &librarytest.Metrics{}), time.Now, opts...).Routes(router)
 	return repo, router
 }
 
@@ -107,9 +106,7 @@ func (failingSigner) PresignGet(context.Context, string, time.Duration) (string,
 }
 
 func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
@@ -117,7 +114,7 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	router.Use(httpserver.CorrelationID)
 	router.Use(httpserver.RequestLogger(clock.Now))
 	router.Use(asBearer)
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, failingSigner{library.NewInMemoryAudioStore()}, time.Now, library.NoopAudioStoreMetrics()), time.Now).Routes(router)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, failingSigner{library.NewInMemoryAudioStore()}, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 
 	const inbound = "trace-abc12345"
 	req := httptest.NewRequest(http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
@@ -150,7 +147,7 @@ func TestAudioURLs_ARefusedCatalogDatabaseAnswersTemporarilyUnavailable(t *testi
 	router.Use(asBearer)
 	repo := library.NewPostgresTrackRepository(refusedPool(t))
 	signer := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, library.NoopAudioStoreMetrics()), time.Now).Routes(router)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{uuid.NewString()}}))
 

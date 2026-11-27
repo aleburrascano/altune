@@ -190,7 +190,7 @@ describe('SSEClient', () => {
         expect.objectContaining({
           name: 'SSEConnectionError',
           correlationId: sent,
-          message: `SSE connection error (correlation_id=${sent})`,
+          message: `SSE connection error (corr_id=${sent})`,
         }),
       );
     });
@@ -1096,9 +1096,7 @@ describe('HTTP status handling', () => {
       expect(onError).toHaveBeenCalledTimes(1);
       const error = onError.mock.calls[0]?.[0];
       expect(error).toMatchObject({ name: 'SSEHttpError', status: 502, correlationId: sent });
-      expect((error as Error).message).toBe(
-        `SSE stream refused (status=502, correlation_id=${sent})`,
-      );
+      expect((error as Error).message).toBe(`SSE stream refused (status=502, corr_id=${sent})`);
     });
 
     it('does not feed an error body to the event parser', async () => {

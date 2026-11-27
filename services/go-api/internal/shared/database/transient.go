@@ -15,7 +15,7 @@ func IsTransient(err error) bool {
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return IsTransientSQLState(pgErr.Code)
+		return isTransientSQLState(pgErr.Code)
 	}
 	var connectErr *pgconn.ConnectError
 	var netErr net.Error

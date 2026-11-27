@@ -4,13 +4,14 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -73,23 +74,14 @@ func acquireIdentifiedAs(t *testing.T, results []ports.AcoustIDResult) {
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
 type loggedResult struct {
 	Score      float64  `json:"score"`
 	Recordings []string `json:"recordings"`
 }
 
-func loggedVerdictResults(t *testing.T, buf *bytes.Buffer) []loggedResult {
+func loggedVerdictResults(t *testing.T, buf *logging.Capture) []loggedResult {
 	t.Helper()
-	lines := bufio.NewScanner(buf)
+	lines := bufio.NewScanner(strings.NewReader(buf.String()))
 	for lines.Scan() {
 		var record struct {
 			Msg     string         `json:"msg"`
@@ -104,7 +96,7 @@ func loggedVerdictResults(t *testing.T, buf *bytes.Buffer) []loggedResult {
 }
 
 func TestExecute_TheAudioVerdictLogCarriesTheAcoustIDResults(t *testing.T) {
-	buf := captureLog(t)
+	buf := logging.CaptureJSON(t, slog.LevelInfo)
 
 	acquireIdentifiedAs(t, []ports.AcoustIDResult{
 		{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: "mbid-a"}, {MBID: "mbid-b"}}},
@@ -121,7 +113,7 @@ func TestExecute_TheAudioVerdictLogCarriesTheAcoustIDResults(t *testing.T) {
 }
 
 func TestExecute_TheAudioVerdictLogCapsTheResultsAndTheirRecordings(t *testing.T) {
-	buf := captureLog(t)
+	buf := logging.CaptureJSON(t, slog.LevelInfo)
 	recordings := make([]ports.LinkedRecording, loggedCap+3)
 	results := make([]ports.AcoustIDResult, loggedCap+3)
 	for i := range results {

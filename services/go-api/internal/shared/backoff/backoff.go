@@ -10,11 +10,11 @@ import (
 const defaultFactor = 2
 
 var (
-	ErrBaseNotPositive = errors.New("backoff: base must be positive")
-	ErrCapNotPositive  = errors.New("backoff: cap must be positive")
-	ErrCapBelowBase    = errors.New("backoff: cap must not be below the base")
-	ErrFactorBelowTwo  = errors.New("backoff: factor must be at least 2")
-	ErrSpreadOutside   = errors.New("backoff: spread must be within [0, 1]")
+	errBaseNotPositive = errors.New("backoff: base must be positive")
+	errCapNotPositive  = errors.New("backoff: cap must be positive")
+	errCapBelowBase    = errors.New("backoff: cap must not be below the base")
+	errFactorBelowTwo  = errors.New("backoff: factor must be at least 2")
+	errSpreadOutside   = errors.New("backoff: spread must be within [0, 1]")
 )
 
 type Policy struct {
@@ -24,61 +24,61 @@ type Policy struct {
 	spread float64
 }
 
-type Option func(*Policy) error
+type option func(*Policy) error
 
-func WithFactor(factor int) Option {
+func WithFactor(factor int) option {
 	return func(p *Policy) error {
 		if factor < defaultFactor {
-			return fmt.Errorf("%w, got %d", ErrFactorBelowTwo, factor)
+			return fmt.Errorf("%w, got %d", errFactorBelowTwo, factor)
 		}
 		p.factor = int64(factor)
 		return nil
 	}
 }
 
-func WithSpread(spread float64) Option {
+func WithSpread(spread float64) option {
 	return func(p *Policy) error {
 		if spread < 0 || spread > 1 || math.IsNaN(spread) {
-			return fmt.Errorf("%w, got %v", ErrSpreadOutside, spread)
+			return fmt.Errorf("%w, got %v", errSpreadOutside, spread)
 		}
 		p.spread = spread
 		return nil
 	}
 }
 
-func Capped(base, limit time.Duration, opts ...Option) (Policy, error) {
+func capped(base, limit time.Duration, opts ...option) (Policy, error) {
 	if limit <= 0 {
-		return Policy{}, fmt.Errorf("%w, got %v", ErrCapNotPositive, limit)
+		return Policy{}, fmt.Errorf("%w, got %v", errCapNotPositive, limit)
 	}
 	if limit < base {
-		return Policy{}, fmt.Errorf("%w: base %v, cap %v", ErrCapBelowBase, base, limit)
+		return Policy{}, fmt.Errorf("%w: base %v, cap %v", errCapBelowBase, base, limit)
 	}
 	return build(base, limit, opts)
 }
 
-func Uncapped(base time.Duration, opts ...Option) (Policy, error) {
+func uncapped(base time.Duration, opts ...option) (Policy, error) {
 	return build(base, time.Duration(math.MaxInt64), opts)
 }
 
-func MustCapped(base, limit time.Duration, opts ...Option) Policy {
-	p, err := Capped(base, limit, opts...)
+func MustCapped(base, limit time.Duration, opts ...option) Policy {
+	p, err := capped(base, limit, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return p
 }
 
-func MustUncapped(base time.Duration, opts ...Option) Policy {
-	p, err := Uncapped(base, opts...)
+func MustUncapped(base time.Duration, opts ...option) Policy {
+	p, err := uncapped(base, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return p
 }
 
-func build(base, limit time.Duration, opts []Option) (Policy, error) {
+func build(base, limit time.Duration, opts []option) (Policy, error) {
 	if base <= 0 {
-		return Policy{}, fmt.Errorf("%w, got %v", ErrBaseNotPositive, base)
+		return Policy{}, fmt.Errorf("%w, got %v", errBaseNotPositive, base)
 	}
 	p := Policy{base: base, limit: limit, factor: defaultFactor}
 	for _, opt := range opts {

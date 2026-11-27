@@ -1,0 +1,17 @@
+{
+  "dwell_ms": [
+    "number"
+  ],
+  "result_signature": [
+    "string"
+  ],
+  "session_id": [
+    "string"
+  ],
+  "tail_noise_top5": [
+    "number"
+  ],
+  "zero_result": [
+    "boolean"
+  ]
+}

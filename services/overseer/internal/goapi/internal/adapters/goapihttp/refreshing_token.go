@@ -573,7 +573,7 @@ func (s *RefreshingTokenSource) buildRequest(ctx context.Context, endpoint strin
 
 func (s *RefreshingTokenSource) parseExchange(body io.Reader) (string, time.Time, time.Time, string, error) {
 	var tr tokenResponse
-	if err := json.NewDecoder(io.LimitReader(body, maxTokenResponseBytes)).Decode(&tr); err != nil {
+	if err := DecodeCapped(body, maxTokenResponseBytes, &tr); err != nil {
 		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: err}
 	}
 	if tr.AccessToken == "" {

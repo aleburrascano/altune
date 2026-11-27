@@ -1,0 +1,20 @@
+{
+  "track_ids": [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002"
+  ],
+  "current_index": 1,
+  "position_ms": 42000,
+  "shuffled": true,
+  "repeat_mode": "off",
+  "source_id": "library",
+  "source": {
+    "kind": "library"
+  },
+  "natural_order": [
+    "00000000-0000-4000-8000-000000000002",
+    "00000000-0000-4000-8000-000000000001"
+  ],
+  "current_track_unavailable": true
+}
+

@@ -10,8 +10,8 @@ import {
 } from '@shared/playback';
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import { artworkPlaceholderUri } from '@features/player/ports/artworkPlaceholder';
-import { classifyPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
-import { recordPresignOutcome } from '@features/player/domain/playbackHealth';
+import { classifyPlaybackFailure, warnPlayback } from '@features/player/core/playbackError';
+import { recordPresignFailed, recordPresignOk } from '@features/player/core/playbackHealth';
 import { libraryTrackId } from '@features/player/domain/playerStatus';
 import { MAX_PRESIGN } from '@features/player/domain/presignWindow';
 import { ContractError } from '@shared/failure';
@@ -72,14 +72,14 @@ function libraryIdsToSign(tracks: readonly PlaybackTrack[]): string[] {
 
 function presignFailed(ids: string[], err: unknown): ResolvedUrls {
   warnPlayback('presign failed', { trackIds: ids }, err);
-  recordPresignOutcome(false);
+  recordPresignFailed();
   return { urls: new Map(), denied: classifyPlaybackFailure(err) === 'auth', presigned: false };
 }
 
 async function fetchResolvedUrls(ids: string[]): Promise<ResolvedUrls> {
   try {
     const resolved = await playbackPort().fetchAudioUrls(ids);
-    recordPresignOutcome(true);
+    recordPresignOk();
     return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false, presigned: true };
   } catch (err) {
     return presignFailed(ids, err);

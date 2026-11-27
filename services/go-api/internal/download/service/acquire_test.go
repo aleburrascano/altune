@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/savedlink"
 	"altune/go-api/internal/download/internal/core/audioquality"
@@ -12,6 +13,7 @@ import (
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"context"
 	"encoding/json"
@@ -1300,15 +1302,6 @@ func (i *contentRecordingIdentifier) identifiedStoredFile() int {
 	return n
 }
 
-func captureServiceLogs(t *testing.T) *strings.Builder {
-	t.Helper()
-	var out strings.Builder
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &out
-}
-
 func seedUnknownSourceTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId, trackId ids.TrackId) {
 	t.Helper()
 	row := committedTrack(t, ledger, trackId)
@@ -1334,7 +1327,7 @@ func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
 				seedUnknownSourceTrack(t, ledger, userId, trackId)
 			}
 			identifier := &contentRecordingIdentifier{storedID: "acoustid-of-the-stored-file"}
-			logs := captureServiceLogs(t)
+			logs := logging.CaptureText(t, slog.LevelInfo)
 			svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store,
 				withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}))
 
@@ -1358,7 +1351,7 @@ func TestExecuteReplace_AFailedStoredCopyIsLoggedAndTheReplaceStillRuns(t *testi
 	ledger, store, userId, trackId, originalRef := seedReadyTrackWith(t)
 	seedUnknownSourceTrack(t, ledger, userId, trackId)
 	identifier := &contentRecordingIdentifier{storedID: "never-recorded"}
-	logs := captureServiceLogs(t)
+	logs := logging.CaptureText(t, slog.LevelInfo)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store,
 		withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store, err: errors.New("object storage unavailable")}))
 
@@ -1532,7 +1525,7 @@ func TestExecuteReplace_NoFingerprintExcludesNothing(t *testing.T) {
 				"the current file again": {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
 				"another upload":         {AcoustID: "acoustid-of-another-upload", MBIDs: []string{recordingMBID}},
 			}}
-			logs := captureServiceLogs(t)
+			logs := logging.CaptureText(t, slog.LevelInfo)
 
 			store, err := replaceOfAnUnknownSource(t, source, identifier, tt.readerFor)
 			if err != nil {
@@ -2185,9 +2178,9 @@ func TestExecute_TheSourceIsAskedWithTheCatalogFacts(t *testing.T) {
 		{Provider: "deezer", ExternalID: "3135556"},
 	}
 	track := seedTrackInRepo(t, ledger, userId, func(tr *ledgerTrack) {
-		tr.ISRC = ptrTo("USUM71703861")
-		tr.CatalogDurationSeconds = ptrTo(214.0)
-		tr.StoredDurationSeconds = ptrTo(200.0)
+		tr.ISRC = new("USUM71703861")
+		tr.CatalogDurationSeconds = new(214.0)
+		tr.StoredDurationSeconds = new(200.0)
 		tr.CatalogExplicit, tr.CatalogSources = &explicit, sources
 	})
 	searcher := &fakeAudioSearcher{}
@@ -2463,7 +2456,7 @@ func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []ports.Catalo
 	track := newLedgerTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
 	isrc, mbid := "USAM18490008", recklessMBID
 	track.ISRC = &isrc
-	track.CatalogDurationSeconds = ptrTo(195.0)
+	track.CatalogDurationSeconds = new(195.0)
 	track.CatalogMBID, track.CatalogSources = &mbid, sources
 	store := &bytesAudioStore{objects: map[string]string{}}
 	var ref string
@@ -3048,7 +3041,7 @@ func (discardingDeleter) Delete(context.Context, string) error { return nil }
 
 func noopStages() service.StagePorts {
 	return service.StagePorts{
-		Prober:        ports.NoopAudioProber(),
+		Prober:        downloadtest.SilentAudioProber(),
 		Tagger:        ports.NoopAudioTagger(),
 		Rejections:    ports.NoopRejectionStore(),
 		StoredAudio:   ports.NoopStoredAudioReader(),
@@ -3123,7 +3116,7 @@ func newTestDownloadStep(fetcher fetcherPort, opts ...any) *service.DownloadStep
 	wired := stepPorts{
 		identifier: ports.NoopAudioIdentifier(),
 		lookup:     ports.NoopRecordingLookup(),
-		prober:     ports.NoopAudioProber(),
+		prober:     downloadtest.SilentAudioProber(),
 		skips:      ports.NoopVerifySkipRecorder(),
 		limit:      service.Unlimited(),
 	}

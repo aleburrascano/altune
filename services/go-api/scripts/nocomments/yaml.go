@@ -654,7 +654,7 @@ func yamlTreesSame(before, after []byte, workflow bool) error {
 		if line := firstComment(afterDocs[i]); line > 0 {
 			return fmt.Errorf("comment survived strip at line %d", line)
 		}
-		if err := cmp.same(beforeDocs[i], afterDocs[i], noStepContext, false); err != nil {
+		if err := cmp.same(beforeDocs[i], afterDocs[i], noStepContext); err != nil {
 			return err
 		}
 	}
@@ -682,13 +682,24 @@ func firstComment(n *yaml.Node) int {
 
 type treeComparison struct{ workflow bool }
 
-func (tc treeComparison) same(b, a *yaml.Node, ctx stepContext, shellRun bool) error {
+func sameShape(b, a *yaml.Node) error {
 	if b.Kind != a.Kind || b.Tag != a.Tag || b.Style != a.Style || b.Anchor != a.Anchor ||
 		len(b.Content) != len(a.Content) {
 		return fmt.Errorf("stripped YAML differs from the source at line %d", b.Line)
 	}
-	if shellRun {
-		return runValuesSame(b, a)
+	return nil
+}
+
+func sameShellRun(b, a *yaml.Node) error {
+	if err := sameShape(b, a); err != nil {
+		return err
+	}
+	return runValuesSame(b, a)
+}
+
+func (tc treeComparison) same(b, a *yaml.Node, ctx stepContext) error {
+	if err := sameShape(b, a); err != nil {
+		return err
 	}
 	if b.Value != a.Value {
 		return fmt.Errorf("stripped YAML value differs from the source at line %d", b.Line)
@@ -696,7 +707,11 @@ func (tc treeComparison) same(b, a *yaml.Node, ctx stepContext, shellRun bool) e
 	for i := range b.Content {
 		bc, ac := b.Content[i], a.Content[i]
 		ctxChild, isRun := tc.childContext(b, i, ctx)
-		if err := tc.same(bc, ac, ctxChild, isRun); err != nil {
+		compare := tc.same
+		if isRun {
+			compare = func(b, a *yaml.Node, _ stepContext) error { return sameShellRun(b, a) }
+		}
+		if err := compare(bc, ac, ctxChild); err != nil {
 			return err
 		}
 	}

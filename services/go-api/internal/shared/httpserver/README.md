@@ -1,4 +1,4 @@
-`httputil` owns how HTTP requests are limited, logged, recovered and answered with errors.
+`httpserver` owns how HTTP requests are limited, logged, recovered and answered with errors.
 
 ## One error writer
 
@@ -25,3 +25,15 @@ A handler never picks a status. The boundary reads `err`'s chain and takes the f
 A handler adds context by wrapping the error (`fmt.Errorf("...: %w", err)`), not by logging it. Separately, `RequestLogger` logs `request.complete` at Info for every request, including failed ones.
 
 Write every error through `HandleServiceError`; the strict lint (`forbidigo`) bans `http.Error`.
+
+## One measurement of each request
+
+`ObserveRequests(now, observers...)` is the one middleware that measures a request: it reads the clock once at the start and once at the end, wraps the writer once, and hands every `Observer` the same `Outcome` (method, path, route template, status, bytes, duration, user). An observer may change the request on the way in (the span observer puts the span in its context) and returns a finisher, or nil to decline. Finishers run in reverse order, each guarded so a panic in one is logged and the rest still run. The span (`telemetry.RequestSpan`), the latency histogram (`requestmetrics.Observer`) and the `request.complete` log line (`LogRequest`) are three observers of it, so they share one route template. `RequestLogger(now)` is `ObserveRequests` with only the log observer.
+
+## One place for request input
+
+A handler reads its input only through these, and each rejects bad input with a 400 problem that names the field.
+
+- `DecodeJSON` and `DecodeJSONWithCode` read one JSON value. Trailing data, an unknown field and a malformed body are `request.invalid_body` (or the code the caller passes). A body past the cap is 413.
+- `QueryInt(w, r, name, def, lo, hi, code)` reads an integer query parameter. Absent gives `def`; a value that is not an integer, or lies outside `lo..hi`, is rejected with `code`. `ParseQueryInt` is the same rule returning the error, for a handler that answers from a helper that returns errors.
+- `PathID` parses a path parameter into an id. `URLParam` reads a raw path parameter when the handler has its own rule for it. No handler imports chi to read one.

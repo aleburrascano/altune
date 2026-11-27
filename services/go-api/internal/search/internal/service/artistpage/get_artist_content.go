@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -179,7 +180,7 @@ func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, 
 	if err == nil || callerCtx.Err() != nil || errors.Is(err, context.Canceled) {
 		return slog.Attr{}, false
 	}
-	return slog.Group(provider.String(), "external_id", externalID, "error", redact.Secrets(err.Error())), true
+	return slog.Group(provider.String(), "external_id", externalID, logging.KeyError, redact.Secrets(err.Error())), true
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, limit int) (*providerguard.ContentFetchResponse, error) {

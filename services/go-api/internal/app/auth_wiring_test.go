@@ -196,7 +196,7 @@ func TestAuth_RejectionsAndAnUnreachableKeySetReachLiveMetrics(t *testing.T) {
 	f.keysDown.Store(true)
 	h := assembledHandler(t, f.cfg)
 	operator := signedToken(t, f.key, f.operator)
-	before := auth.ReadSnapshot()
+	before := auth.MetricsSnapshot{}
 
 	const firstClient, forgingClient = "198.51.100.7:1234", "198.51.100.8:1234"
 	if code, body := getFrom(t, h, firstClient, "/observe/metrics/live", operator); code != http.StatusServiceUnavailable {

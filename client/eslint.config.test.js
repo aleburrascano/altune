@@ -535,3 +535,33 @@ describe('mobile eslint config has no warnings', () => {
     });
   }
 });
+
+async function statusLiteralErrors(code) {
+  const [result] = await eslint.lintText(code, { filePath: 'src/shared/query/core/retryDelay.ts' });
+  return result.messages.filter(
+    (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('HTTP status'),
+  );
+}
+
+describe('mobile eslint config bans a bare HTTP status number', () => {
+  for (const [name, code] of [
+    ['status on the left', 'export const a = (error: { status: number }) => error.status >= 500;'],
+    ['status on the right', 'export const a = (status: number) => 500 <= status;'],
+    [
+      'a case label',
+      'export const a = (status: number) => { switch (status) { case 404: return 1; default: return 0; } };',
+    ],
+    ['a set of statuses', 'export const RETRYABLE_STATUSES = new Set([401, 408, 429]);'],
+  ]) {
+    it(`reports ${name}`, async () => {
+      assert.ok((await statusLiteralErrors(code)).length >= 1);
+    });
+  }
+
+  it('allows a named constant and a number that is not a status', async () => {
+    const errors = await statusLiteralErrors(
+      'const HTTP_X = 500;\nexport const a = (status: number, count: number) => status >= HTTP_X || count > 5000;',
+    );
+    assert.strictEqual(errors.length, 0);
+  });
+});

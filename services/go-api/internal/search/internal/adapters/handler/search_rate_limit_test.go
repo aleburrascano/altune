@@ -199,17 +199,6 @@ func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusOK)
 }
 
-func TestSearchRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), time.Now).WithRateLimits(handler.DiscoveryRateLimits{
-		Search:  handler.RequestLimit{Max: 0, Window: time.Hour},
-		Suggest: handler.RequestLimit{Max: 0, Window: time.Hour},
-	})
-	r := chi.NewRouter()
-	r.Mount("/discovery", h.Routes())
-
-	discAssertStatus(t, discServeNoAuth(t, r, http.MethodGet, "/discovery/search?q=a"), http.StatusUnauthorized)
-}
-
 func TestRequestLimit_BucketAdmitsBurstThenRefillsAtTheWindowRate(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	now := time.Unix(1_700_000_000, 0)

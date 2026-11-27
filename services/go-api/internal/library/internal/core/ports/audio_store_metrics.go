@@ -6,12 +6,3 @@ type AudioStoreMetrics interface {
 	StreamRecoveryTriggered()
 	OrphanedAudioReconcileFailed()
 }
-
-func NoopAudioStoreMetrics() AudioStoreMetrics { return noopAudioStoreMetrics{} }
-
-type noopAudioStoreMetrics struct{}
-
-func (noopAudioStoreMetrics) PresignFailed()                {}
-func (noopAudioStoreMetrics) OrphanedDelete()               {}
-func (noopAudioStoreMetrics) StreamRecoveryTriggered()      {}
-func (noopAudioStoreMetrics) OrphanedAudioReconcileFailed() {}

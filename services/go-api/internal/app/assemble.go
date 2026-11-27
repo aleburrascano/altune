@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"fmt"
@@ -23,12 +24,13 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-type Handles struct {
+type handles struct {
 	Pool      *pgxpool.Pool
 	Redis     *goredis.Client
 	Transport http.RoundTripper
 	Tracker   *background.Tracker
 	LogRing   *logging.RingBuffer
+	Metrics   *telemetry.Registry
 }
 
 func NewTracker(cfg *config.Config) (*background.Tracker, error) {
@@ -39,12 +41,12 @@ func NewTracker(cfg *config.Config) (*background.Tracker, error) {
 	return tracker, nil
 }
 
-type Assembly struct {
-	app     *App
+type composed struct {
+	app     *application
 	handler http.Handler
 }
 
-func Assemble(ctx context.Context, cfg *config.Config, h Handles) (*Assembly, error) {
+func assemble(ctx context.Context, cfg *config.Config, h handles) (*composed, error) {
 	if h.Pool == nil {
 		return nil, errors.New("assemble: Handles.Pool is required: the leader election, the stores and /health all use it")
 	}
@@ -60,18 +62,18 @@ func Assemble(ctx context.Context, cfg *config.Config, h Handles) (*Assembly, er
 	if err != nil {
 		return nil, err
 	}
-	return &Assembly{app: a, handler: handler}, nil
+	return &composed{app: a, handler: handler}, nil
 }
 
-func (s *Assembly) Handler() http.Handler { return s.handler }
+func (s *composed) Handler() http.Handler { return s.handler }
 
-func (s *Assembly) Jobs() *jobs.Runner { return &s.app.jobs }
+func (s *composed) Jobs() *jobs.Runner { return &s.app.jobs }
 
-func (s *Assembly) Shutdown(ctx context.Context) []shutdown.Outcome {
+func (s *composed) Shutdown(ctx context.Context) []shutdown.Outcome {
 	return s.app.runShutdownSequence(ctx)
 }
 
-func (a *App) attach(ctx context.Context, h Handles) {
+func (a *application) attach(ctx context.Context, h handles) {
 	a.pool = h.Pool
 	a.probes.DB = h.Pool.Ping
 	a.redisClient = h.Redis
@@ -79,10 +81,13 @@ func (a *App) attach(ctx context.Context, h Handles) {
 		a.probes.Redis = func(ctx context.Context) error { return h.Redis.Ping(ctx).Err() }
 	}
 	a.background = h.Tracker
+	if h.Metrics != nil {
+		a.metrics = h.Metrics
+	}
 	a.lifecycleDone = ctx.Done()
 }
 
-func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Handler, error) {
+func (a *application) compose(ctx context.Context, transport http.RoundTripper) (http.Handler, error) {
 	verifier, err := a.connectAuth(ctx)
 	if err != nil {
 		return nil, err
@@ -113,7 +118,7 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	return r, nil
 }
 
-func (a *App) openEventBus(ctx context.Context) error {
+func (a *application) openEventBus(ctx context.Context) error {
 	a.eventBus = events.NewInProcessBus(ctx, clock.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
 	tap, err := monitoring.NewEventTap(a.eventBus, clock.Now)
 	if err != nil {
@@ -129,7 +134,7 @@ type features struct {
 	playback  playbackWiring
 }
 
-func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
+func (a *application) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
 	disc, err := search.New(a.discoveryDeps(ctx, transport))
 	if err != nil {
 		return features{}, fmt.Errorf("discovery: %w", err)

@@ -25,10 +25,7 @@ type FavoriteRequest struct {
 }
 
 func (h *DiscoveryHandler) handleListFavorites(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	favorites, err := h.favoritesSvc.List(r.Context(), userId)
 	if err != nil {
@@ -90,10 +87,7 @@ func (h *DiscoveryHandler) handleRemoveFavorite(w http.ResponseWriter, r *http.R
 }
 
 func decodeFavorite(w http.ResponseWriter, r *http.Request) (ids.UserId, domain.ResultKind, FavoriteRequest, bool) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return userId, domain.ResultKindUnknown, FavoriteRequest{}, false
-	}
+	userId := requestuser.UserID(r)
 
 	var req FavoriteRequest
 	if !httpserver.DecodeJSONWithCode(w, r, &req, apierror.CodeDiscoveryInvalidBody) {

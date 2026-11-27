@@ -3,6 +3,7 @@ package searchqualitycheck
 import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -11,7 +12,7 @@ import (
 )
 
 const (
-	defaultInterval   = 6 * time.Hour
+	DefaultInterval   = 6 * time.Hour
 	defaultRunTimeout = 5 * time.Minute
 )
 
@@ -32,90 +33,46 @@ type Result struct {
 
 type Runner func(ctx context.Context) (Result, error)
 
-type LeadershipScope = background.OnlyWhileLeader
-
 type Meter struct {
-	interval   time.Duration
 	now        clock.Func
-	newTicker  clock.TickerFunc
 	runTimeout time.Duration
 	runner     Runner
-	leadership LeadershipScope
+	paused     func() bool
 
 	mu      sync.Mutex
 	last    *Result
 	lastRun time.Time
 	lastErr string
-
-	background.Background
 }
 
 var (
-	ErrClockRequired      = errors.New("the eval meter requires a clock")
-	ErrTickerRequired     = errors.New("the eval meter requires a ticker")
-	ErrRunnerRequired     = errors.New("the eval meter requires a runner")
-	ErrLeadershipRequired = errors.New("the eval meter requires a leadership scope, pass background.EveryPassLeads to run on every pass")
+	ErrClockRequired  = errors.New("the eval meter requires a clock")
+	ErrRunnerRequired = errors.New("the eval meter requires a runner")
+	ErrPausedRequired = errors.New("the eval meter requires a paused check")
 )
 
-func New(interval time.Duration, now clock.Func, newTicker clock.TickerFunc, runner Runner, leadership LeadershipScope) (*Meter, error) {
+func New(now clock.Func, runner Runner, paused func() bool) (*Meter, error) {
 	if now == nil {
 		return nil, ErrClockRequired
-	}
-	if newTicker == nil {
-		return nil, ErrTickerRequired
 	}
 	if runner == nil {
 		return nil, ErrRunnerRequired
 	}
-	if leadership == nil {
-		return nil, ErrLeadershipRequired
-	}
-	if interval <= 0 {
-		interval = defaultInterval
+	if paused == nil {
+		return nil, ErrPausedRequired
 	}
 	return &Meter{
-		interval:   interval,
 		now:        now,
-		newTicker:  newTicker,
 		runTimeout: defaultRunTimeout,
 		runner:     runner,
-		leadership: leadership,
+		paused:     paused,
 	}, nil
 }
 
-func (m *Meter) Start(ctx context.Context) {
-	m.Spawn(ctx, m.loop)
-}
-
-func (m *Meter) loop(ctx context.Context) {
-	ticks, stop := m.newTicker(m.interval)
-	defer stop()
-	m.tick(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticks:
-			m.tick(ctx)
-		}
-	}
-}
-
-func (m *Meter) tick(ctx context.Context) {
-	if m.Paused() {
-		return
-	}
-	termCtx, release, ok := m.leadership(ctx)
-	if !ok {
-		return
-	}
-	defer release()
-	m.runOnce(termCtx)
-}
-
-func (m *Meter) runOnce(ctx context.Context) {
+func (m *Meter) Pass(ctx context.Context) error {
 	res, err := m.runContained(ctx)
 	m.recordRun(ctx, res, err)
+	return err
 }
 
 func (m *Meter) runContained(ctx context.Context) (res Result, err error) {
@@ -148,7 +105,7 @@ func logRunFailure(ctx context.Context, err error) {
 	if errors.As(err, &panicked) {
 		return
 	}
-	slog.ErrorContext(ctx, "observe.eval_run_failed", "error", err)
+	slog.ErrorContext(ctx, "observe.eval_run_failed", logging.KeyError, err)
 }
 
 type State string
@@ -177,7 +134,7 @@ func (m *Meter) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	st := Status{Enabled: true, Paused: m.Paused()}
+	st := Status{Enabled: true, Paused: m.paused()}
 	switch {
 	case m.lastErr != "":
 		st.State = StateError

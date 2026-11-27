@@ -254,9 +254,7 @@ func (h panicOnMessage) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	slog.SetDefault(slog.New(panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"}))
+	logging.UseHandler(t, panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"})
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 	scheduler := newTestScheduler(failingAcquirer{}, 1, time.Now, withTestQueue(queue))
 	defer scheduler.Shutdown(context.Background())
@@ -310,10 +308,8 @@ func logsOfOneJob(t *testing.T, acquirer interface {
 },
 ) []slog.Record {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
 	var records []slog.Record
-	slog.SetDefault(slog.New(capturedLogs{mu: &sync.Mutex{}, records: &records}))
+	logging.UseHandler(t, capturedLogs{mu: &sync.Mutex{}, records: &records})
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 	scheduler := newTestScheduler(acquirer, 1, time.Now, withTestQueue(queue))
 	if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {

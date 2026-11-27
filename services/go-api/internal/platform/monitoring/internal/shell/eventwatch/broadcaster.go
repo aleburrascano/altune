@@ -26,6 +26,8 @@ func newBroadcaster(maxSubs int) *broadcaster {
 	return &broadcaster{subs: make(map[int]chan TapEvent), maxSubs: maxSubs}
 }
 
+func (b *broadcaster) droppedCount() uint64 { return b.dropped.Load() }
+
 func (b *broadcaster) broadcast(evt TapEvent) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

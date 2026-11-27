@@ -13,7 +13,8 @@ import {
   PLAYBACK_HEALTH_BATCH,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-  recordPresignOutcome,
+  recordPresignFailed,
+  recordPresignOk,
   recordQueueRestoreFailure,
   recordQueueSaveFailure,
   recordQueueStateRejected,
@@ -69,6 +70,8 @@ async function settleRequests(): Promise<void> {
 
 type SentRequest = { path: string; body: string };
 const TWO_REQUESTS = 2;
+const EXTRA_OUTCOMES = 3;
+const FAILURE_EVERY = 5;
 
 function healthRequests(): SentRequest[] {
   return (__http.requests as SentRequest[]).filter(
@@ -171,7 +174,10 @@ describe('playback health metric', () => {
   });
 
   it('sends one aggregate event per batch, not one per outcome', async () => {
-    for (let i = 0; i < PLAYBACK_HEALTH_BATCH * 2 + 3; i++) recordPresignOutcome(i % 5 !== 0);
+    for (let i = 0; i < PLAYBACK_HEALTH_BATCH * TWO_REQUESTS + EXTRA_OUTCOMES; i++) {
+      if (i % FAILURE_EVERY !== 0) recordPresignOk();
+      else recordPresignFailed();
+    }
 
     const payloads = await sentPayloads(TWO_REQUESTS);
     expect(payloads).toHaveLength(2);
@@ -179,7 +185,7 @@ describe('playback health metric', () => {
   });
 
   it('flushes the partial batch when the app goes to the background', async () => {
-    recordPresignOutcome(false);
+    recordPresignFailed();
     expect(await sentPayloads(0)).toEqual([]);
 
     app.change('background');
@@ -193,7 +199,7 @@ describe('playback health metric', () => {
 
     __http.reset();
     __http.fail(HEALTH_ROUTE);
-    recordPresignOutcome(true);
+    recordPresignOk();
     expect(() => flushPlaybackHealth()).not.toThrow();
     await settleRequests();
     expect(__http.countFor(HEALTH_ROUTE)).toBe(1);

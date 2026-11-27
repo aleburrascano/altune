@@ -8,9 +8,49 @@ while read -r _ local_sha _ _; do
 done
 [ $pushing = 1 ] || exit 0
 
-echo "pre-push: checking this checkout (HEAD and the working tree) against the merge base, not the refs being pushed"
+clean_env() { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE "$@"; }
+
+dir=.
+base=
+if [ -f scripts/ci/merge-result.sh ] && git rev-parse --git-dir >/dev/null 2>&1; then
+  if git remote get-url gitea >/dev/null 2>&1 && git rev-parse --verify --quiet gitea/main >/dev/null; then remote=gitea; else remote=origin; fi
+  base=$remote/main
+  git fetch -q "$remote" main 2>/dev/null || echo "pre-push: could not fetch $remote main, so $base is as of the last fetch"
+  if git rev-parse --verify --quiet "$base" >/dev/null && ! git merge-base --is-ancestor "$base" HEAD; then
+    mrc=0
+    merged=$(clean_env bash scripts/ci/merge-result.sh "$(pwd)" "$base" HEAD) || mrc=$?
+    case $mrc in
+      0) ;;
+      1) echo "❌ pre-push: this branch conflicts with $base, which is the tree CI checks. Rebase onto it (git rebase $base), fix what conflicts, and push again."; exit 1 ;;
+      *) echo "❌ pre-push: could not build the merge of this branch with $base (see the line above), so the tree CI checks was not tested. Fix that and push again."; exit 1 ;;
+    esac
+    cache=${XDG_CACHE_HOME:-$HOME/.cache}/altune/prepush-merge
+    wt=$cache/$(pwd | cksum | cut -d' ' -f1)
+    mkdir -p "$cache" || exit 1
+    for src in "$cache"/*.src; do
+      [ -e "$src" ] || continue
+      [ -d "$(cat "$src")" ] && continue
+      stale=${src%.src}
+      rm -rf "$stale" "$stale.lock" "$src"
+    done
+    git worktree prune
+    exec 9>"$wt.lock"
+    flock -w 900 9 || { echo "❌ pre-push: another push from this checkout holds the merge check for over 15 minutes; try again."; exit 1; }
+    pwd >"$wt.src"
+    if [ -e "$wt/.git" ] && git -C "$wt" checkout -q --detach -f "$merged" 2>/dev/null && git -C "$wt" clean -qfd; then
+      :
+    else
+      rm -rf "$wt"
+      git worktree prune
+      git worktree add -q --detach "$wt" "$merged" || { echo "❌ pre-push: could not make the merge check worktree $wt."; exit 1; }
+    fi
+    dir=$wt
+    echo "pre-push: $base has moved on, so checking the merge result $(printf %.12s "$merged"), the tree CI checks, not this branch alone"
+  fi
+fi
+[ "$dir" != . ] || echo "pre-push: checking this checkout (HEAD and the working tree) against the merge base, not the refs being pushed"
 rc=0
-[ -f scripts/precheck.sh ] && { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh || rc=$?; }
+[ -f "$dir/scripts/precheck.sh" ] && { (cd "$dir" && clean_env CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh --full ${base:+"$base"}) || rc=$?; }
 case $rc in
   0) ;;
   3) echo "❌ pre-push: some checks could not run (see the SKIP line or the first line above). Fix what it names, then push again: install a missing tool (bash scripts/ci/go-tools.sh for golangci-lint and govulncheck, bash scripts/worktree-deps.sh client or the folder named for node dependencies, or the tool the SKIP line names), or fetch a missing base (git fetch gitea main)."; exit 1 ;;

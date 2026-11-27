@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/shared/parallel"
 	"context"
 	"errors"
 	"fmt"
@@ -20,7 +21,7 @@ const (
 )
 
 type ConcurrencyLimit struct {
-	slots chan struct{}
+	slots *parallel.Slots
 	mode  limitMode
 }
 
@@ -28,7 +29,7 @@ func LimitedTo(n int) (*ConcurrencyLimit, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("%w: got %d", ErrLimitBelowOne, n)
 	}
-	return &ConcurrencyLimit{slots: make(chan struct{}, n), mode: limitCapped}, nil
+	return &ConcurrencyLimit{slots: parallel.MustNewSlots(n), mode: limitCapped}, nil
 }
 
 func MustLimitedTo(n int) *ConcurrencyLimit {
@@ -46,12 +47,9 @@ func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
 	case limitUncapped:
 		return nil
 	case limitCapped:
-		select {
-		case l.slots <- struct{}{}:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		return l.slots.Acquire(ctx)
+	case limitUnset:
+		return ErrLimitNotConfigured
 	default:
 		return ErrLimitNotConfigured
 	}
@@ -61,5 +59,5 @@ func (l *ConcurrencyLimit) Release() {
 	if l.mode != limitCapped {
 		return
 	}
-	<-l.slots
+	l.slots.Release()
 }

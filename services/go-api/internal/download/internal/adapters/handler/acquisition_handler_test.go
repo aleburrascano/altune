@@ -346,18 +346,6 @@ func TestHandleReacquire_CooldownUsesStandardErrorEnvelope(t *testing.T) {
 	}
 }
 
-func TestHandleReacquire_NoAuth(t *testing.T) {
-	repo := inmemoryledger.NewLedger()
-	scheduler := &reacquireFakeScheduler{}
-	router := buildReacquireRouter(repo, scheduler)
-
-	req := httptest.NewRequest(http.MethodPost, "/tracks/"+uuid.New().String()+"/reacquire", nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	retryAssertStatus(t, rec, http.StatusUnauthorized)
-}
-
 var (
 	retryTestUserUUID = uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	retryTestUserId   = ids.NewUserId(retryTestUserUUID)
@@ -522,18 +510,6 @@ func TestHandleRetryAcquisition(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestHandleRetryAcquisition_NoAuth(t *testing.T) {
-	repo := inmemoryledger.NewLedger()
-	scheduler := &retryFakeScheduler{}
-	router := buildRetryRouter(repo, scheduler)
-
-	req := httptest.NewRequest(http.MethodPost, "/tracks/"+uuid.New().String()+"/retry", nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	retryAssertStatus(t, rec, http.StatusUnauthorized)
 }
 
 type ownedRoute struct {

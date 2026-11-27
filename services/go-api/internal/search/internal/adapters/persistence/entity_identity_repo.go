@@ -3,6 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
@@ -46,7 +47,7 @@ func (s *PostgresIdentityStore) LookupByProviderID(
 	}
 	if err != nil {
 		slog.WarnContext(ctx, "identity.lookup_failed",
-			"kind", kind.String(), "provider", provider.String(), "external_id", externalID, "error", err)
+			"kind", kind.String(), "provider", provider.String(), "external_id", externalID, logging.KeyError, err)
 		return "", nil, false
 	}
 
@@ -63,7 +64,7 @@ func (s *PostgresIdentityStore) LookupByProviderIDs(
 	}
 	hits, err := s.queryIdentityHits(ctx, requested)
 	if err != nil {
-		slog.WarnContext(ctx, "identity.batch_lookup_failed", "refs", len(requested), "error", err)
+		slog.WarnContext(ctx, "identity.batch_lookup_failed", "refs", len(requested), logging.KeyError, err)
 		return nil
 	}
 	return hits
@@ -132,7 +133,7 @@ func decodeXref(ctx context.Context, mbid string, blob []byte) map[domain.Provid
 		return xref
 	}
 	if err := json.Unmarshal(blob, &xref); err != nil {
-		slog.WarnContext(ctx, "identity.xref_corrupt", "mbid", mbid, "error", err)
+		slog.WarnContext(ctx, "identity.xref_corrupt", "mbid", mbid, logging.KeyError, err)
 		return map[domain.ProviderKey]string{}
 	}
 	return xref

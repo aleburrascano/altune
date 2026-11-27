@@ -3,8 +3,10 @@ package alerts
 import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -22,17 +24,24 @@ type Sources struct {
 	Coverage              CoverageEvents
 	YouTubeSignedOutSince func(context.Context) (time.Time, bool)
 	Jobs                  *jobs.Runner
+	Requests              func() requestmetrics.Snapshot
 	Clock                 clock.Func
 }
 
 var ErrClockRequired = errors.New("alerts: Sources.Clock is required")
 
+var ErrRequestsRequired = errors.New("alerts: Sources.Requests is required: the API error ratio is the symptom the page is for")
+
 func Conditions(s Sources) ([]monitoring.Condition, error) {
 	if s.Clock == nil {
 		return nil, ErrClockRequired
 	}
+	if s.Requests == nil {
+		return nil, ErrRequestsRequired
+	}
 	gap, queryFailing := coverageConditions(s.Coverage, s.Clock)
 	conditions := []monitoring.Condition{
+		apiErrorRatioCondition(s.Requests, s.Clock),
 		dependencyCondition(s.DependencyHealth), gap, queryFailing,
 		youTubeCookiesCondition(s.YouTubeSignedOutSince),
 	}
@@ -118,7 +127,7 @@ func (c *coverageCheck) evalGap(ctx context.Context) *monitoring.Alert {
 	total, err := c.events.ZeroResultTotal(ctx, since)
 	if err != nil {
 		c.failures++
-		slog.WarnContext(ctx, "coverage alert query failed", "error", err, "consecutive_failures", c.failures)
+		slog.WarnContext(ctx, "coverage alert query failed", logging.KeyError, err, "consecutive_failures", c.failures)
 		return c.last
 	}
 	c.failures = 0

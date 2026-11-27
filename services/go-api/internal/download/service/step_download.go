@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/download/internal/core/tracklength"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
 	"context"
@@ -54,13 +55,13 @@ const ProdVerifyWidth = 2
 func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, now clock.Func, opts ...func(*DownloadStep)) (*DownloadStep, error) {
 	const owner = "NewDownloadStep"
 	if err := errors.Join(
-		missingPort(owner, "fetcher", fetcher == nil),
-		missingPort(owner, "identifier", identifier == nil),
-		missingPort(owner, "recording lookup", lookup == nil),
-		missingPort(owner, "prober", prober == nil),
-		missingPort(owner, "skip recorder", skips == nil),
-		missingPort(owner, "download limit", limit == nil),
-		missingPort(owner, "clock", now == nil),
+		missingPort(owner, "fetcher", fetcher),
+		missingPort(owner, "identifier", identifier),
+		missingPort(owner, "recording lookup", lookup),
+		missingPort(owner, "prober", prober),
+		missingPort(owner, "skip recorder", skips),
+		missingPort(owner, "download limit", limit),
+		missingPort(owner, "clock", now),
 		requireWorkspace(owner, workspace),
 	); err != nil {
 		return nil, err
@@ -316,7 +317,7 @@ func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, cand
 	ac.recordUnmeasuredRejection(candidate.URL, candidate.Title, candidate.Source, rejectedcandidates.Duration,
 		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.ExpectedLength()))
 	slog.InfoContext(ctx, "acquisition.candidate_skipped_duration",
-		"track_id", ac.Track.ID,
+		logging.KeyTrackID, ac.Track.ID,
 		"url", candidate.URL,
 		"source", candidate.Source,
 		"search_duration", candidate.Duration,
@@ -428,28 +429,29 @@ func (s *DownloadStep) fetchFull(
 	candidate ports.AudioCandidate,
 	tmpDir string,
 ) (ports.FetchedAudio, *downloadRejection) {
-	queued := s.now()
+	_, queued := startStage(ctx, s.now, "download.queue")
 	if err := s.limiter.Acquire(ctx); err != nil {
+		queued(err)
 		return ports.FetchedAudio{}, &downloadRejection{stage: rejectedcandidates.Download, reason: "download failed", err: err}
 	}
 	defer s.limiter.Release()
-	timeStage(ctx, "download.queue", queued, s.now)
+	queued(nil)
 
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	fetchStart := s.now()
+	fetchCtx, fetchDone := startStage(fetchCtx, s.now, "download.full")
 	fetched, err := s.fetcher.Fetch(fetchCtx, candidate, tmpDir)
-	timeStage(ctx, "download.full", fetchStart, s.now)
+	fetchDone(err)
 	if err != nil {
 		err = candidateTimedOut(ctx, fetchCtx, candidate, err)
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"error", redact.LogError(err))
+			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+			logging.KeyError, redact.LogError(err))
 		return ports.FetchedAudio{}, &downloadRejection{stage: rejectedcandidates.Download, reason: "download failed", err: err}
 	}
 	if fetched.Path == "" {
 		slog.WarnContext(ctx, "acquisition.candidate_download_no_file",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
+			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
 		return ports.FetchedAudio{}, &downloadRejection{stage: rejectedcandidates.Download, reason: "download failed", err: errFetchedNoFile}
 	}
 	return fetched, nil
@@ -560,8 +562,8 @@ func (s *DownloadStep) probeDuration(
 		return false, sharedtracklength.TrackLength{}, nil
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"probed_seconds", actual, "error", redact.LogError(err))
+			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+			"probed_seconds", actual, logging.KeyError, redact.LogError(err))
 		s.recordSkip(ports.SkipProbeFailed)
 		return false, sharedtracklength.TrackLength{}, nil
 	}
@@ -579,7 +581,7 @@ func durationRejection(
 	held float64,
 ) *downloadRejection {
 	slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
-		"track_id", ac.Track.ID,
+		logging.KeyTrackID, ac.Track.ID,
 		"url", candidate.URL,
 		"source", candidate.Source,
 		"actual_duration", actual,
@@ -621,8 +623,8 @@ func decodeRejection(
 		}
 	}
 	slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
-		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-		"error", redact.LogError(err))
+		logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		logging.KeyError, redact.LogError(err))
 	return &downloadRejection{
 		stage:  rejectedcandidates.Undecodable,
 		reason: "audio failed to decode",

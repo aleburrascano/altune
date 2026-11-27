@@ -1,6 +1,7 @@
 package shutdown
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"strings"
@@ -33,6 +34,6 @@ func closeRedis(ctx context.Context, client *goredis.Client) {
 		return
 	}
 	if err := client.Close(); err != nil {
-		slog.ErrorContext(ctx, "redis client close error", "error", err)
+		slog.ErrorContext(ctx, "redis client close error", logging.KeyError, err)
 	}
 }

@@ -2,6 +2,7 @@ package idfloor_test
 
 import (
 	"altune/go-api/internal/shared/events/internal/core/idfloor"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -85,9 +86,7 @@ func (h *warnRecorder) WithGroup(string) slog.Handler { return h }
 func captureWarnings(t *testing.T) *warnRecorder {
 	t.Helper()
 	rec := &warnRecorder{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(rec))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, rec)
 	return rec
 }
 

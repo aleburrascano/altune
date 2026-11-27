@@ -1,6 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { correlationIdOf } from '@shared/failure';
+import { error as logError } from '@shared/log';
 import { reportClientError } from '@shared/telemetry';
 
 import { Button } from '@shared/ui/view/primitives/Button';
@@ -21,6 +23,7 @@ function ScreenErrorFallback({
   onRetry: () => void;
 }): ReactNode {
   const theme = useTheme();
+  const reference = correlationIdOf(error);
   return (
     <View testID="screen-error" style={[styles.container, { backgroundColor: theme.color.canvas }]}>
       <Text variant="displayL" style={styles.title}>
@@ -35,6 +38,11 @@ function ScreenErrorFallback({
         label="Try again"
         onPress={onRetry}
       />
+      {reference === undefined ? null : (
+        <Text testID="screen-error-ref" variant="caption" tone="tertiary" style={styles.body}>
+          {`Reference: ${reference}`}
+        </Text>
+      )}
       {__DEV__ ? (
         <ScrollView style={styles.devBox} contentContainerStyle={styles.devContent}>
           <Text testID="screen-error-detail" variant="label" tone="tertiary" style={styles.devText}>
@@ -59,7 +67,7 @@ export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundar
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[ScreenBoundary] render error', error, info.componentStack);
+    logError('[ScreenBoundary] render error', error, info.componentStack);
     reportClientError(error, 'boundary');
     this.setState({ componentStack: info.componentStack ?? null });
   }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -171,11 +170,10 @@ func (c *Client) doRead(op string, req *http.Request, out any, readableStatus []
 	}
 	defer func() { _, _ = io.CopyN(io.Discard, resp.Body, maxBodyBytes); _ = resp.Body.Close() }()
 
-	body := io.LimitReader(resp.Body, maxBodyBytes)
 	if !isOKStatus(resp.StatusCode, readableStatus) {
-		return apiError(op, resp.StatusCode, echoedCorrID(sent, resp), body)
+		return apiError(op, resp.StatusCode, echoedCorrID(sent, resp), io.LimitReader(resp.Body, maxBodyBytes))
 	}
-	if err := json.NewDecoder(body).Decode(out); err != nil {
+	if err := DecodeCapped(resp.Body, maxBodyBytes, out); err != nil {
 		return fmt.Errorf("goapi: %s: decode response: %w", op, err)
 	}
 	return nil

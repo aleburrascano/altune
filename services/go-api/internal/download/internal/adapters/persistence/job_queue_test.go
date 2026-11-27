@@ -4,39 +4,16 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	n, err := b.buf.Write(p)
-	if err != nil {
-		return n, fmt.Errorf("write to the captured log: %w", err)
-	}
-	return n, nil
-}
-
-func (b *lockedBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
 
 func TestPostgresJobNotifier_RefusesAMissingSleeper(t *testing.T) {
 	notifier, err := persistence.NewPostgresJobNotifier(nil, nil)
@@ -47,10 +24,7 @@ func TestPostgresJobNotifier_RefusesAMissingSleeper(t *testing.T) {
 }
 
 func TestPostgresJobNotifier_LogsWhenItCannotListen(t *testing.T) {
-	logs := &lockedBuffer{}
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 	pool, err := pgxpool.New(context.Background(), "postgres://altune:altune@127.0.0.1:1/altune?sslmode=disable")
 	if err != nil {
 		t.Fatalf("pool: %v", err)

@@ -215,6 +215,34 @@ func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testin
 	}
 }
 
+func TestRouter_EveryRouteButThePublicOnesAnswersAnAnonymousCallerWith401(t *testing.T) {
+	r := productionRouter(t)
+	type call struct{ method, path string }
+	var calls []call
+	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		guarded := strings.HasPrefix(route, "/v1/") && !strings.HasPrefix(route, "/v1/public/") || strings.HasPrefix(route, "/observe/")
+		if guarded {
+			calls = append(calls, call{method, regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(route, "x")})
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk production router: %v", err)
+	}
+	if len(calls) == 0 {
+		t.Fatal("walked no guarded route, so the router under test is not the production one")
+	}
+	for _, c := range calls {
+		t.Run(c.method+" "+c.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, nil))
+			if rec.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s without Authorization = %d, want 401", c.method, c.path, rec.Code)
+			}
+		})
+	}
+}
+
 func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 	r := assembledRouter(t, jwksConfig(t), dbtest.Pool(t))
 
@@ -223,6 +251,7 @@ func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 		want                     int
 	}{
 		{"authed route rejected", http.MethodGet, "/v1/library", "", http.StatusUnauthorized},
+		{"discovery per-user route rejected", http.MethodGet, "/v1/discovery/search-history", "", http.StatusUnauthorized},
 		{"public route", http.MethodPost, "/v1/public/auth-failures", `{"reason":"invalid_credentials","app_version":"1.2.3"}`, http.StatusNoContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

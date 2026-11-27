@@ -81,6 +81,7 @@ type DiscoveryEventRequest struct {
 	EventID          string         `json:"event_id"`
 	ClientOccurredAt string         `json:"client_occurred_at"`
 	Payload          map[string]any `json:"payload"`
+	IgnoredQueryNorm string         `json:"query_norm"`
 }
 
 type SuggestionDTO struct {

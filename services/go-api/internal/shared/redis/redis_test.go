@@ -1,9 +1,10 @@
 package redis_test
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redis"
-	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
@@ -18,10 +19,7 @@ func TestNewClient_InvalidURLDoesNotLogCredentials(t *testing.T) {
 
 	for name, rawURL := range cases {
 		t.Run(name, func(t *testing.T) {
-			var buf bytes.Buffer
-			prev := slog.Default()
-			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-			defer slog.SetDefault(prev)
+			buf := logging.CaptureText(t, slog.LevelDebug)
 
 			if client := redis.NewClient(context.Background(), rawURL, 0); client != nil {
 				t.Fatalf("expected nil client for unparseable URL")
@@ -66,7 +64,12 @@ func TestNewClient_PinsPoolSizeFromConfiguration(t *testing.T) {
 }
 
 func TestReadPoolStats_NilClientReadsAsZero(t *testing.T) {
-	if stats := redis.ReadPoolStats(nil); stats != (redis.PoolStats{}) {
-		t.Fatalf("ReadPoolStats(nil) = %+v, want zero value", stats)
+	got, err := json.Marshal(redis.ReadPoolStats(nil))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	const want = `{"pool_size":0,"total_conns":0,"idle_conns":0,"timeouts":0}`
+	if string(got) != want {
+		t.Fatalf("ReadPoolStats(nil) = %s, want %s", got, want)
 	}
 }

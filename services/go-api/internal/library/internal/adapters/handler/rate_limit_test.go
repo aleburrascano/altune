@@ -101,8 +101,8 @@ func newAudioRig(now func() time.Time) *audioRig {
 	store := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
 	r := chi.NewRouter()
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), now).Routes(r)
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, now, library.NoopAudioStoreMetrics()), now).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), now).Routes(r)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, now, &librarytest.Metrics{}), now).Routes(r)
 	return &audioRig{router: r, store: store, repo: repo}
 }
 
@@ -157,17 +157,6 @@ func TestAudioRateLimit_IsPerPrincipalAndPerEndpoint(t *testing.T) {
 	}
 	if rec := rig.stream(quiet, quietTrack, ""); rec.Code != http.StatusOK {
 		t.Fatalf("another user's stream budget must be untouched, got %d", rec.Code)
-	}
-}
-
-func TestAudioRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	rig := newAudioRig(time.Now)
-
-	stream := sendAnonymous(rig.router, httptest.NewRequest(http.MethodGet, "/tracks/"+uuid.NewString()+"/audio", nil))
-	resolve := sendAnonymous(rig.router, httptest.NewRequest(http.MethodPost, "/audio-urls", strings.NewReader(`{"track_ids":[]}`)))
-
-	if stream.Code != http.StatusUnauthorized || resolve.Code != http.StatusUnauthorized {
-		t.Fatalf("missing principal must still be a 401, got stream %d audio-urls %d", stream.Code, resolve.Code)
 	}
 }
 

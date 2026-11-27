@@ -103,6 +103,13 @@ afterEach(() => {
   useTrackStatusStore.getState().reset();
 });
 
+const CORRELATION_ID_SHAPE = /^[0-9a-f]{16}$/;
+const TAP_RETRY = /Tap Retry\./;
+const COULDNT_SAVE = /Couldn't save this track\./;
+const SERVER_FAULT_BODY = /Something went wrong on our end\./;
+const OFFLINE_BODY = /Check your connection and try again\./;
+const REQUEST_REFUSED = /We could not complete that request\./;
+
 describe('TrackDetailBody save failure', () => {
   it('offers a retry and says so when the save failed for a transient reason', async () => {
     __http.reply('POST /v1/tracks', { status: 503 });
@@ -113,12 +120,28 @@ describe('TrackDetailBody save failure', () => {
     await waitFor(() => expect(screen.getByTestId('detail-save-error')).toBeTruthy());
     expect(ports.detail.warnings).toContainEqual([
       '[detail] save track failed',
-      expect.objectContaining({ title: TITLE, retryable: true }),
+      expect.objectContaining({
+        title: TITLE,
+        retryable: true,
+        corr_id: expect.stringMatching(CORRELATION_ID_SHAPE),
+      }),
     ]);
-    expect(banner().getByText(/Tap Retry\./)).toBeTruthy();
-    expect(banner().getByText(/returned 503/)).toBeTruthy();
+    expect(banner().getByText(TAP_RETRY)).toBeTruthy();
+    expect(banner().getByText(COULDNT_SAVE)).toBeTruthy();
+    expect(banner().getByText(SERVER_FAULT_BODY)).toBeTruthy();
     expect(saveIsInteractive()).toBe(true);
     expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy();
+  });
+
+  it('says the user is offline when the save never reached the server', async () => {
+    __http.fail('POST /v1/tracks');
+    renderDetail();
+
+    await pressSave();
+
+    await waitFor(() => expect(screen.getByTestId('detail-save-error')).toBeTruthy());
+    expect(banner().getByText(OFFLINE_BODY)).toBeTruthy();
+    expect(banner().getByText(TAP_RETRY)).toBeTruthy();
   });
 
   it('offers no retry and names the refusal when the save failed permanently', async () => {
@@ -132,8 +155,7 @@ describe('TrackDetailBody save failure', () => {
       '[detail] save track failed',
       expect.objectContaining({ title: TITLE, retryable: false }),
     ]);
-    expect(banner().getByText(/Retrying won't help\./)).toBeTruthy();
-    expect(banner().getByText(/returned 400/)).toBeTruthy();
+    expect(banner().getByText(REQUEST_REFUSED)).toBeTruthy();
     expect(saveIsInteractive()).toBe(false);
     expect(screen.queryByLabelText(`Retry saving ${TITLE}`)).toBeNull();
     expect(screen.getByLabelText(`Couldn't save ${TITLE}`)).toBeTruthy();

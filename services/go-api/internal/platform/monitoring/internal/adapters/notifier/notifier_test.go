@@ -2,7 +2,7 @@ package notifier_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -19,10 +19,7 @@ func TestNopNotifier(t *testing.T) {
 }
 
 func TestNopNotifier_LogsFiringAlertAtError(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	buf := logging.CaptureText(t, slog.LevelInfo)
 
 	if err := (monitoring.NopNotifier{}).Notify(context.Background(), monitoring.Alert{Title: "dep down", Message: "state down"}); err != nil {
 		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)

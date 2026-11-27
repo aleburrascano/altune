@@ -8,18 +8,18 @@ import {
   rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
   type RungOutcome,
-} from '@features/player/domain/queueResume';
+} from '@features/player/core/queueResume';
 import {
   asRepeatMode,
   fromWireSource,
   parseQueueState,
-} from '@features/player/domain/queueStateWire';
+} from '@features/player/core/queueStateWire';
 import {
   recordQueueRestoreFailure,
   recordQueueStateRejected,
   type QueueRestoreStage,
-} from '@features/player/domain/playbackHealth';
-import { warnPlayback } from '@features/player/domain/playbackError';
+} from '@features/player/core/playbackHealth';
+import { warnPlayback } from '@features/player/core/playbackError';
 import { warn } from '@shared/log';
 
 function userTookOver(owned: number): boolean {
@@ -113,8 +113,8 @@ async function readSavedQueue(owned: number): Promise<QueueStateResponse | null>
     recordQueueStateRejected();
     return null;
   }
-  if (!parsed.state.track_ids.length || userTookOver(owned)) return null;
-  return parsed.state;
+  if (!parsed.value.track_ids.length || userTookOver(owned)) return null;
+  return parsed.value;
 }
 
 function showPlaceholder(saved: QueueStateResponse, run: RestoreRun, mark: MarkPlaceholder): void {

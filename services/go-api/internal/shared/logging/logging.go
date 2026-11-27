@@ -12,13 +12,6 @@ func Setup(logLevel string) *RingBuffer {
 	return install(logLevel, jsonHandler, clock.Now)
 }
 
-func SetupWithClock(logLevel string, now func() time.Time) *RingBuffer {
-	if now == nil {
-		panic("logging: SetupWithClock requires a clock")
-	}
-	return install(logLevel, jsonHandler, now)
-}
-
 func SetupDevelopment(logLevel string) *RingBuffer {
 	return install(logLevel, prettyHandlerFor, clock.Now)
 }
@@ -41,7 +34,7 @@ func prettyHandlerFor(level slog.Level) slog.Handler {
 func install(logLevel string, newBase func(slog.Level) slog.Handler, now func() time.Time) *RingBuffer {
 	base := newBase(parseLevel(logLevel))
 
-	ring := MustNewRingBuffer(logRingCapacity, now)
+	ring := mustNewRingBuffer(logRingCapacity, now)
 	slog.SetDefault(slog.New(newCorrelationHandler(newRingHandler(base, ring))))
 	return ring
 }

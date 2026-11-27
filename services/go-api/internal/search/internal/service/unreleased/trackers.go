@@ -3,6 +3,7 @@ package unreleased
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/titlemarkers"
 	"context"
 	"errors"
@@ -31,11 +32,11 @@ func (s *Service) trackerResult(ctx context.Context, artistName string, catalogT
 		return sourceResult{complete: true}
 	}
 	if errors.Is(err, ports.ErrTrackerPartial) {
-		slog.WarnContext(ctx, "trackers.partial", "error", err)
+		slog.WarnContext(ctx, "trackers.partial", logging.KeyError, err)
 		return sourceResult{songs: withoutReleasedVersions(songs, catalogTitles), used: true}
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "trackers.fetch_failed", "error", err)
+		slog.WarnContext(ctx, "trackers.fetch_failed", logging.KeyError, err)
 		return sourceResult{used: true, err: err}
 	}
 	return sourceResult{songs: withoutReleasedVersions(songs, catalogTitles), complete: true, used: true}
@@ -47,7 +48,7 @@ func (s *Service) geniusResult(ctx context.Context, artistName string, catalogTi
 		return sourceResult{}
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "unreleased.genius_failed", "error", err)
+		slog.WarnContext(ctx, "unreleased.genius_failed", logging.KeyError, err)
 		return sourceResult{used: true, err: err}
 	}
 	if !found {

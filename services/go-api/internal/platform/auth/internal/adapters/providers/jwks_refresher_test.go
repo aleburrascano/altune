@@ -13,7 +13,7 @@ func TestJWKSRefresher_ForcedFetchStaysBoundedOnceTheVerifierContextEnds(t *test
 	server, _ := newCountingJWKSServer(t, 0, nil)
 	clock := &testClock{}
 	ctx, cancel := context.WithCancel(context.Background())
-	verifier, err := auth.NewSupabaseJWTVerifier(ctx, server.URL, testProjectURL, testAudience, clock.now, random.Real, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.JWKSSchedule{FetchTimeout: 200 * time.Millisecond})
+	verifier, err := auth.NewSupabaseJWTVerifier(ctx, server.URL, testProjectURL, testAudience, clock.now, random.Real, silentAuthMetrics{}, auth.NoopTokenRevoker(), auth.JWKSSchedule{FetchTimeout: 200 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("create verifier: %v", err)
 	}

@@ -66,7 +66,7 @@ type catalogServicesStaging struct {
 	audioURLSvc           *library.AudioLinkService
 }
 
-func (a *App) wireCatalog(
+func (a *application) wireCatalog(
 	ctx context.Context,
 	transport http.RoundTripper,
 	tap *monitoring.EventTap,
@@ -92,7 +92,7 @@ func featuredBridge(disc *search.Discovery) library.FeaturedArtistResolver {
 	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(disc.FeaturedArtists))
 }
 
-func (a *App) wireAudioSources(
+func (a *application) wireAudioSources(
 	ctx context.Context,
 	transport http.RoundTripper,
 	tap *monitoring.EventTap,
@@ -115,6 +115,7 @@ func (a *App) wireAudioSources(
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
 		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, download.NewPostgresUpgradeStore(a.pool)),
+		scheduler:      library.NoopAcquisitionScheduler(),
 		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      ytmCanary,
@@ -132,14 +133,14 @@ func (a *App) wireAudioSources(
 	return staging, nil
 }
 
-func (a *App) liveTiers(ctx context.Context, transport http.RoundTripper, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
+func (a *application) liveTiers(ctx context.Context, transport http.RoundTripper, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
 	if audioStore == nil {
 		return downloadsetup.SourceOrder{}, download.Verification{}, nil
 	}
 	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient, transport)
 }
 
-func (a *App) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
+func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
 	recording, err := downloadfromsearch.RecordingOptions(disc)
 	if err != nil {
 		return downloadsetup.Deps{}, fmt.Errorf("wire recording resolver: %w", err)
@@ -150,7 +151,7 @@ func (a *App) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTa
 	}, nil
 }
 
-func (a *App) wireCatalogServices(
+func (a *application) wireCatalogServices(
 	tap *monitoring.EventTap,
 	featuredBridge library.FeaturedArtistResolver,
 	audio audioSourcesStaging,
@@ -158,10 +159,10 @@ func (a *App) wireCatalogServices(
 	catalogTrackRepo := library.NewPostgresCatalogTrackRepository(a.pool)
 	playlistRepo := library.NewPostgresPlaylistRepository(a.pool)
 	orphanedAudio := library.NewPostgresOrphanedAudioRepository(a.pool)
-	audioStoreMetrics := library.NewExpvarAudioStoreMetrics()
-	library.SetDBCallMetrics(library.NewExpvarDBCallMetrics())
+	audioStoreMetrics := library.NewAudioStoreMetrics(a.metrics)
+	library.SetDBCallMetrics(library.NewDBCallMetrics(a.metrics))
 
-	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, addTrackScheduler(audio.scheduler), clock.Now)
+	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, audio.scheduler, clock.Now)
 	if err != nil {
 		return catalogServicesStaging{}, fmt.Errorf("build the add-track service: %w", err)
 	}
@@ -186,19 +187,12 @@ func (a *App) wireCatalogServices(
 		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, clock.Now),
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, addTrackScheduler(audio.scheduler), audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
+		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, audio.scheduler, audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
 		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, clock.Now, audioStoreMetrics),
 	}, nil
 }
 
-func addTrackScheduler(scheduler library.AcquisitionScheduler) library.AcquisitionScheduler {
-	if scheduler == nil {
-		return library.NoopAcquisitionScheduler()
-	}
-	return scheduler
-}
-
-func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
+func (a *application) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
 	featuredArtistHandler := library.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
 
 	var retryH *download.RetryHandler

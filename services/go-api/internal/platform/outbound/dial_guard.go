@@ -38,13 +38,15 @@ func isNonPublicAddr(addr netip.Addr) bool {
 	return false
 }
 
-func RefuseNonPublicDial(_, address string, _ syscall.RawConn) error {
+func refuseNonPublicDial(_, address string, _ syscall.RawConn) error {
 	addrPort, err := netip.ParseAddrPort(address)
 	if err != nil || isNonPublicAddr(addrPort.Addr()) {
 		return ErrNonPublicAddr
 	}
 	return nil
 }
+
+func NewGuardedTransport() http.RoundTripper { return baseTransport() }
 
 func baseTransport() http.RoundTripper {
 	t, ok := http.DefaultTransport.(*http.Transport)
@@ -61,6 +63,6 @@ func providerDialer() *net.Dialer {
 	return &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
-		Control:   RefuseNonPublicDial,
+		Control:   refuseNonPublicDial,
 	}
 }

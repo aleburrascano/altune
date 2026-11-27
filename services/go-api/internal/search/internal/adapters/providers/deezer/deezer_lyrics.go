@@ -1,6 +1,7 @@
 package deezer
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
@@ -98,9 +99,9 @@ func (a *DeezerLyricsAdapter) postLyrics(ctx context.Context, jwt, trackID strin
 		return nil, 0, fmt.Errorf("encode the lyrics request for track %s: %w", trackID, err)
 	}
 
-	status, body, err := providerrequests.PostBytesCapped(ctx, a.client, deezerPipeURL, bytes.NewReader(payload), deezerLyricsMaxBody,
-		providerrequests.WithHeader("Content-Type", "application/json"),
-		providerrequests.WithHeader("Authorization", "Bearer "+jwt))
+	status, body, err := outbound.PostBytesCapped(ctx, a.client, deezerPipeURL, bytes.NewReader(payload), deezerLyricsMaxBody,
+		outbound.WithHeader("Content-Type", "application/json"),
+		outbound.WithHeader("Authorization", "Bearer "+jwt))
 	return body, status, err
 }
 
@@ -182,7 +183,7 @@ func newDeezerJWTResolver(client *http.Client, now clock.Func) *deezerJWTResolve
 const deezerJWTResolveTimeout = 10 * time.Second
 
 func (r *deezerJWTResolver) resolve(ctx context.Context) (string, time.Time, error) {
-	status, body, err := providerrequests.GetBytesCapped(ctx, r.client, r.authURL, deezerLyricsMaxBody)
+	status, body, err := outbound.GetBytesCapped(ctx, r.client, r.authURL, deezerLyricsMaxBody)
 	if err != nil {
 		if status != 0 && status != http.StatusOK {
 			return "", time.Time{}, fmt.Errorf("deezer anonymous auth returned %d", status)

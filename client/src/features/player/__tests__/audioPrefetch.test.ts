@@ -702,7 +702,7 @@ describe('cache path containment', () => {
     it('accepts a UUID and the opaque token ids the client already uses', () => {
       expect(parseTrackId('0b7c9a4e-1f2d-4c3b-9a8e-7d6f5e4c3b2a')).toEqual({
         ok: true,
-        id: '0b7c9a4e-1f2d-4c3b-9a8e-7d6f5e4c3b2a',
+        value: '0b7c9a4e-1f2d-4c3b-9a8e-7d6f5e4c3b2a',
       });
       expect(parseTrackId('trk_42').ok).toBe(true);
     });

@@ -2,6 +2,7 @@ package providerguard
 
 import (
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -83,7 +84,7 @@ func failedFetchResponse(ctx context.Context, logKey string, providerName domain
 	status := contentFailureStatus(err)
 	slog.WarnContext(ctx, logKey,
 		"provider", providerName.String(), "external_id", externalID,
-		"status", status.String(), "error", redact.Secrets(err.Error()))
+		logging.KeyStatus, status.String(), logging.KeyError, redact.Secrets(err.Error()))
 	return failedContentResponse(providerName, status)
 }
 

@@ -47,9 +47,7 @@ type streamFixture struct {
 
 func newStreamFixture(t *testing.T) streamFixture {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 	tap := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	feed := monitoring.NewEventFeed()
 	ctx, stopFeed := context.WithCancel(context.Background())
@@ -310,7 +308,7 @@ func TestStreams_SendEventStreamNoCacheAndNosniffHeaders(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 
-			streamRouter(fx.deps, monitoring.NoStoreAndNosniff).ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
+			streamRouter(fx.deps).ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
 
 			want := map[string]string{"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"}
 			for header, value := range want {
@@ -329,8 +327,7 @@ func TestStreams_OpenWritesOneObserveReadAuditLine(t *testing.T) {
 	fx := newStreamFixture(t)
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
-			var logs bytes.Buffer
-			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+			logs := logging.CaptureJSON(t, slog.LevelInfo)
 			principal := ids.NewUserId(uuid.New())
 			ctx, cancel := context.WithCancel(requestuser.ContextWithUserID(withCorrelation("audit-corr-1"), principal))
 			cancel()
@@ -350,10 +347,7 @@ func TestStreams_OpenWritesOneObserveReadAuditLine(t *testing.T) {
 }
 
 func TestStreams_AuditNamesAnUnknownActorWhenNoSubjectReachedIt(t *testing.T) {
-	var logs bytes.Buffer
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	logs := logging.CaptureJSON(t, slog.LevelInfo)
 
 	serveOnce(monitoring.Deps{}, "/logs/stream")
 

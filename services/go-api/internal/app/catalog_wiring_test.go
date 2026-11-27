@@ -96,7 +96,7 @@ func TestCatalog_ADBCallTimeoutReachesOperatorLiveMetrics(t *testing.T) {
 	})
 	h, token := assembly.Handler(), signedToken(t, fixture.key, fixture.operator)
 
-	before := library.ReadSnapshot().DBCallTimeouts
+	before := library.MetricsSnapshot{}.DBCallTimeouts
 	start := time.Now()
 	code, body := getAs(t, h, "/v1/library/albums", token)
 	if code < http.StatusInternalServerError {

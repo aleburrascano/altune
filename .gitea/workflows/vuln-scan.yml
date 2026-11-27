@@ -1,0 +1,32 @@
+name: vuln-scan
+
+on:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: vuln-scan
+  cancel-in-progress: false
+
+env:
+  REPO: /home/ubuntu/projects/altune
+
+jobs:
+  scan:
+    runs-on: host
+    timeout-minutes: 30
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
+      - name: govulncheck and osv-scanner
+        run: |
+          cd "${WT:?checkout did not run}"
+          bash scripts/ci/vuln-scan.sh
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/scripts/ci/cleanup.sh"

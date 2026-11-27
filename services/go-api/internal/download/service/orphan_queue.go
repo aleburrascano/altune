@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
@@ -19,7 +20,7 @@ type audioDeleter interface {
 type directDeleteOrphans struct{ store audioDeleter }
 
 func DirectDeleteOrphans(store audioDeleter) (ports.OrphanedAudioRecorder, error) {
-	if err := missingPort("DirectDeleteOrphans", "audio store", store == nil); err != nil {
+	if err := missingPort("DirectDeleteOrphans", "audio store", store); err != nil {
 		return nil, err
 	}
 	return directDeleteOrphans{store: store}, nil
@@ -47,7 +48,7 @@ func queueOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, orph
 	err := q.RecordOrphanedAudio(recordCtx, orphan)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.orphaned_audio_not_queued",
-			"track_id", orphan.TrackId.String(), "audio_ref", orphan.AudioRef, "error", redact.LogError(err))
+			logging.KeyTrackID, orphan.TrackId.String(), "audio_ref", orphan.AudioRef, logging.KeyError, redact.LogError(err))
 	}
 	return err
 }

@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -49,14 +48,12 @@ func (n *EmailNotifier) Notify(ctx context.Context, a domain.Alert) error {
 	if err != nil {
 		return err
 	}
-	resp, err := n.client.Do(req)
-	if err != nil {
+	status, reply, err := outbound.DoCapped(n.client, req, maxEmailReplyBytes)
+	if err != nil && status == 0 {
 		return fmt.Errorf("send alert email: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	reply, _ := io.ReadAll(io.LimitReader(resp.Body, maxEmailReplyBytes))
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return n.rejection(resp.StatusCode, reply)
+	if status < 200 || status > 299 {
+		return n.rejection(status, reply)
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -36,7 +37,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ Pipe
 	kept, skipped := filterCandidates(ctx, ac, res.Candidates)
 	if len(kept) == 0 && len(skipped) > 0 {
 		slog.InfoContext(ctx, "acquisition.prior_rejections_exhausted",
-			"track_id", ac.Track.ID, "skipped", len(skipped))
+			logging.KeyTrackID, ac.Track.ID, "skipped", len(skipped))
 		kept = skipped
 	}
 	if len(kept) == 0 && outage != nil {
@@ -64,10 +65,10 @@ func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []
 		switch {
 		case ac.Replace.excludesCandidate(c):
 			slog.InfoContext(ctx, "acquisition.candidate_excluded",
-				"track_id", ac.Track.ID, "url", c.URL, "source", c.Source)
+				logging.KeyTrackID, ac.Track.ID, "url", c.URL, "source", c.Source)
 		case ac.priorRejected(c.URL):
 			slog.InfoContext(ctx, "acquisition.candidate_skipped_prior_rejection",
-				"track_id", ac.Track.ID, "key", sourceKey(c.URL), "source", c.Source)
+				logging.KeyTrackID, ac.Track.ID, "key", sourceKey(c.URL), "source", c.Source)
 			skipped = append(skipped, c)
 		default:
 			kept = append(kept, c)

@@ -1,7 +1,6 @@
 package ports
 
 import (
-	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"time"
@@ -27,14 +26,6 @@ func NoopRecordingLookup() RecordingLookup { return noopRecordingLookup{} }
 
 func (noopRecordingLookup) RecordingByMBID(context.Context, string) (RecordingFacts, bool, error) {
 	return RecordingFacts{}, false, nil
-}
-
-type noopRecordingSearch struct{}
-
-func NoopRecordingSearch() RecordingSearch { return noopRecordingSearch{} }
-
-func (noopRecordingSearch) SearchRecordings(context.Context, string, int) ([]SearchedRecording, error) {
-	return nil, nil
 }
 
 type noopISRCLookup struct{}
@@ -64,16 +55,6 @@ func NoopRerecordingFinder() RerecordingFinder { return noopRerecordingFinder{} 
 func (noopRerecordingFinder) FindRerecording(context.Context, RerecordingQuery) (TrackLabel, bool, error) {
 	return TrackLabel{}, false, nil
 }
-
-type noopAudioProber struct{}
-
-func NoopAudioProber() AudioProber { return noopAudioProber{} }
-
-func (noopAudioProber) ProbeDuration(context.Context, string) (float64, error) {
-	return 0, ErrNoAudioProber
-}
-
-func (noopAudioProber) ValidateDecodable(context.Context, string) error { return nil }
 
 type noopAudioTagger struct{}
 
@@ -109,14 +90,6 @@ func NoopStoredAudioReader() StoredAudioReader { return noopStoredAudioReader{} 
 
 func (noopStoredAudioReader) CopyStored(context.Context, string, string) (string, error) {
 	return "", ErrNoStoredAudioReader
-}
-
-type noopAudioRefLookup struct{}
-
-func NoopAudioRefLookup() AudioRefLookup { return noopAudioRefLookup{} }
-
-func (noopAudioRefLookup) AudioRefInUse(context.Context, string, ids.TrackId) (bool, error) {
-	return false, nil
 }
 
 type noopVerifySkipRecorder struct{}

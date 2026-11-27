@@ -14,6 +14,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"fmt"
 	"log/slog"
@@ -24,7 +25,7 @@ import (
 
 const eventIDFloorFile = "altune-event-id-floor"
 
-type App struct {
+type application struct {
 	cfg           *config.Config
 	pool          *pgxpool.Pool
 	probes        health.Probes
@@ -38,6 +39,7 @@ type App struct {
 	alertMonitor  *monitoring.AlertMonitor
 	logRing       *logging.RingBuffer
 	latency       *requestmetrics.Registry
+	metrics       *telemetry.Registry
 	eventFeed     *monitoring.EventFeed
 	evalMeter     *monitoring.EvalMeter
 	lifecycleDone <-chan struct{}
@@ -47,17 +49,18 @@ type App struct {
 	background *background.Tracker
 }
 
-func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
-	return &App{
+func New(cfg *config.Config, logRing *logging.RingBuffer) *application {
+	return &application{
 		cfg:     cfg,
 		logRing: logRing,
 		latency: requestmetrics.NewRegistry(),
+		metrics: telemetry.NewRegistry(),
 		jobs:    jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker},
 	}
 }
 
-func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
-	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
+func (a *application) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
+	supaVerifier, err := newAuthVerifier(ctx, a.cfg, a.metrics)
 	if err != nil {
 		return nil, fmt.Errorf("auth: %w", err)
 	}
@@ -65,7 +68,7 @@ func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 	return supaVerifier, nil
 }
 
-func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
+func (a *application) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
 	a.startSourceCanary(ctx, sourcecheck.Probes{
@@ -80,11 +83,11 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 	}
 }
 
-func (a *App) applyDisabledJobs(ctx context.Context) error {
+func (a *application) applyDisabledJobs(ctx context.Context) error {
 	return a.jobs.DisableAtStartup(ctx, a.cfg.DisabledJobs)
 }
 
-func (a *App) applyStartupSwitches(ctx context.Context) error {
+func (a *application) applyStartupSwitches(ctx context.Context) error {
 	if a.cfg.AcquisitionPaused && a.acquisitionOn {
 		a.scheduler.Pause()
 		slog.InfoContext(ctx, "acquisition started paused")

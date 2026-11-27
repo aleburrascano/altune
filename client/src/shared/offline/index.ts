@@ -11,7 +11,6 @@ export {
 } from '@shared/offline/shell/pinnedFiles';
 export type { PinnedEntry } from '@shared/offline/core/pinnedEntry';
 export { formatBytes } from '@shared/offline/core/pinnedNames';
-export { pinnedBytes as pinnedByteTotal } from '@shared/offline/shell/pinnedFiles';
 export { createOffline, type OfflineDeps } from '@shared/offline/shell/pinnedStore';
 export {
   provideOfflinePort,

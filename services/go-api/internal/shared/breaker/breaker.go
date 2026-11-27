@@ -16,17 +16,17 @@ const (
 	HalfOpen
 )
 
-type Kind int
+type kind int
 
 const (
-	Tripped Kind = iota + 1
+	Tripped kind = iota + 1
 	Probing
 	LeaseExpired
 	Recovered
 )
 
 type Change struct {
-	Kind     Kind
+	Kind     kind
 	Failures int
 }
 
@@ -62,18 +62,18 @@ type Breaker struct {
 	probeSeq       uint64
 }
 
-var ErrClockRequired = errors.New("breaker: the breaker requires a clock")
+var errClockRequired = errors.New("breaker: the breaker requires a clock")
 
-func New(cfg Config) (*Breaker, error) {
+func newBreaker(cfg Config) (*Breaker, error) {
 	if cfg.Now == nil {
-		return nil, ErrClockRequired
+		return nil, errClockRequired
 	}
 	cfg.Threshold = max(cfg.Threshold, 1)
 	return &Breaker{cfg: cfg}, nil
 }
 
 func MustNew(cfg Config) *Breaker {
-	b, err := New(cfg)
+	b, err := newBreaker(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -100,9 +100,10 @@ func (b *Breaker) Allow(ctx context.Context) (Admission, bool) {
 			b.notify(ctx, Change{Kind: LeaseExpired})
 		}
 		return b.admitProbe(), true
-	default:
+	case Closed:
 		return Admission{generation: b.generation}, true
 	}
+	return Admission{generation: b.generation}, true
 }
 
 func (b *Breaker) Success(ctx context.Context, adm Admission) {

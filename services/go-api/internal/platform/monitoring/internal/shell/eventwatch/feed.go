@@ -2,6 +2,7 @@ package eventwatch
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"sync/atomic"
@@ -23,7 +24,7 @@ func NewFeed() *WatchedEvents {
 func (f *WatchedEvents) Start(ctx context.Context, tap *EventWatcher) {
 	ch, cancelTap, err := tap.SubscribeAll()
 	if err != nil {
-		slog.ErrorContext(ctx, "admin.event_feed_unavailable", "error", err)
+		slog.ErrorContext(ctx, "admin.event_feed_unavailable", logging.KeyError, err)
 		return
 	}
 	f.available.Store(true)
@@ -66,5 +67,5 @@ func (f *WatchedEvents) Subscribe() (<-chan TapEvent, func(), error) {
 }
 
 func (f *WatchedEvents) Dropped() uint64 {
-	return f.broadcaster.dropped.Load()
+	return f.broadcaster.droppedCount()
 }

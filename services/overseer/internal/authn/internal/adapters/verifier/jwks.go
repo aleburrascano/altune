@@ -1,16 +1,15 @@
 package verifier
 
 import (
+	"altune/overseer/internal/goapi"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"sync"
@@ -96,7 +95,7 @@ func (c *jwksCache) fetch(ctx context.Context) (map[string]any, error) {
 		return nil, fmt.Errorf("authn: jwks endpoint returned status %d", resp.StatusCode)
 	}
 	var doc jwksDoc
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxJWKSBytes)).Decode(&doc); err != nil {
+	if err := goapi.DecodeCapped(resp.Body, maxJWKSBytes, &doc); err != nil {
 		return nil, fmt.Errorf("authn: decode jwks: %w", err)
 	}
 	out := make(map[string]any, len(doc.Keys))

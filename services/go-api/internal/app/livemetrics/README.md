@@ -1,1 +1,2 @@
 `livemetrics` gathers the one map observe serves at `/observe/metrics/live`: each feature's live metrics snapshot, plus the process's own sources (the database and Redis pools, the leader election, the event bus, tap and feed, and the alert monitor).
+ Their counters live in the `telemetry.Registry` that `app` creates, so the one map is read from that registry plus the process sources.

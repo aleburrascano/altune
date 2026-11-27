@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func DatabaseURLWithoutSchema(t testing.TB) string {
+func databaseURLWithoutSchema(t testing.TB) string {
 	t.Helper()
 	RequireIntegration(t)
 	url := os.Getenv("DATABASE_URL")
@@ -22,7 +22,7 @@ func DatabaseURLWithoutSchema(t testing.TB) string {
 
 func DatabaseURL(t testing.TB) string {
 	t.Helper()
-	return requireSchemaURL(t, DatabaseURLWithoutSchema(t))
+	return requireSchemaURL(t, databaseURLWithoutSchema(t))
 }
 
 func Pool(t testing.TB) *pgxpool.Pool {

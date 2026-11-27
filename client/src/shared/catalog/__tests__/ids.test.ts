@@ -84,7 +84,7 @@ describe.each([
   ['parsePlaylistId', parsePlaylistId, 'invalid-playlist-id'],
 ] as const)('%s', (_name, parse, kind) => {
   it('returns the id it was given when it is safe', () => {
-    expect(parse('t1')).toEqual({ ok: true, id: 't1' });
+    expect(parse('t1')).toEqual({ ok: true, value: 't1' });
   });
 
   it(`returns a ${kind} error carrying the refused value`, () => {

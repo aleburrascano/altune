@@ -3,9 +3,11 @@ package database_test
 import (
 	"altune/go-api/internal/shared/database"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func TestIsTransientSQLState(t *testing.T) {
+func TestIsTransient_ClassifiesPostgresSQLStates(t *testing.T) {
 	cases := map[string]bool{
 		"57P01": true,
 		"57P02": true,
@@ -22,8 +24,8 @@ func TestIsTransientSQLState(t *testing.T) {
 	}
 	for code, want := range cases {
 		t.Run(code, func(t *testing.T) {
-			if got := database.IsTransientSQLState(code); got != want {
-				t.Fatalf("IsTransientSQLState(%q) = %v, want %v", code, got, want)
+			if got := database.IsTransient(&pgconn.PgError{Code: code}); got != want {
+				t.Fatalf("IsTransient(PgError %q) = %v, want %v", code, got, want)
 			}
 		})
 	}

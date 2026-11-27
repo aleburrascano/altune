@@ -257,8 +257,10 @@ func TestRingBuffer_SubscribeRejectsPastCeiling(t *testing.T) {
 	cancels = append(cancels, cancel)
 }
 
-func TestNewRingBuffer_StartsEmptyAndAcceptsSubscribers(t *testing.T) {
-	ring := logging.MustNewRingBuffer(0, time.Now)
+func TestSetup_RingBufferStartsEmptyAndAcceptsSubscribers(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ring := logging.Setup("info")
 
 	_, cancel, err := ring.Subscribe()
 	if err != nil {

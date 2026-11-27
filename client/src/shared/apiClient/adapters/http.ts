@@ -7,7 +7,6 @@ import {
   type CredentialStamp,
 } from '@shared/auth';
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/adapters/correlationId';
-import type { ApiErrorCode } from '@shared/failure';
 import { warn } from '@shared/log';
 import { startDeadline } from '@shared/timing';
 import type { Deadline } from '@shared/timing';
@@ -16,10 +15,18 @@ import {
   ContractError,
   HTTP_UNAUTHORIZED,
   NetworkError,
+  fail,
   isAbort,
   isSessionFetchFailure,
+  ok,
+  type Result,
 } from '@shared/failure';
-import { parseErrorBody } from '@shared/apiClient/core/wireDecoders';
+import {
+  errorExtrasOf,
+  parseErrorBody,
+  retryAfterMsOf,
+  type ApiErrorBody,
+} from '@shared/apiClient/core/wireDecoders';
 import { apiBase, REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 
 type CorrelationId = string | undefined;
@@ -82,12 +89,17 @@ async function send(
   }
 }
 
-async function errorCode(response: Response): Promise<ApiErrorCode | undefined> {
+async function readJson(response: Response): Promise<Result<unknown, unknown>> {
   try {
-    return parseErrorBody(await response.json()).code;
-  } catch {
-    return undefined;
+    return ok(await response.json());
+  } catch (error) {
+    return fail(error);
   }
+}
+
+async function errorBody(response: Response): Promise<ApiErrorBody> {
+  const json = await readJson(response);
+  return parseErrorBody(json.ok ? json.value : undefined);
 }
 
 const HTTP_ACCEPTED = 202;
@@ -133,7 +145,7 @@ export function logFailure(
   warn('[api] request failed', {
     method,
     path: path.split('?')[0],
-    ...(correlationId === undefined ? {} : { correlationId }),
+    corr_id: correlationId,
     ...failureFields(error),
   });
 }
@@ -159,8 +171,15 @@ async function requestHeaders(
 }
 
 async function apiError(response: Response, path: string, id: CorrelationId): Promise<ApiError> {
-  const code = await errorCode(response);
-  return new ApiError(response.status, `API ${path} returned ${response.status}`, code, id);
+  const body = await errorBody(response);
+  const retryAfterMs = retryAfterMsOf(response.headers.get('Retry-After'));
+  return new ApiError(
+    response.status,
+    `API ${path} returned ${response.status}`,
+    body.code,
+    body.instance ?? id,
+    errorExtrasOf(body, retryAfterMs),
+  );
 }
 
 async function receive(
@@ -207,7 +226,7 @@ async function dispatch(path: string, id: CorrelationId, init?: RequestInit): Pr
 }
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
-  const id = newCorrelationId() ?? undefined;
+  const id = newCorrelationId();
   try {
     return await dispatch(path, id, init);
   } catch (error) {

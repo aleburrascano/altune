@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -257,15 +258,8 @@ func (d *Disk) Tail(bucket, series string, from, to time.Time, limit int) ([]cor
 	if err != nil {
 		return nil, err
 	}
-	return reverse(points), nil
-}
-
-func reverse(points []core.Point) []core.Point {
-	reversed := make([]core.Point, len(points))
-	for i, p := range points {
-		reversed[len(points)-1-i] = p
-	}
-	return reversed
+	slices.Reverse(points)
+	return points, nil
 }
 
 func (d *Disk) Minutes(bucket, series string, from, to time.Time) ([]core.Minute, error) {

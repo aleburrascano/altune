@@ -19,9 +19,9 @@
     "orientation": "portrait",
     "scheme": "altune",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
+      "userInterfaceStyle": "dark",
       "supportsTablet": true,
       "bundleIdentifier": "com.altune.app",
       "entitlements": {

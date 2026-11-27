@@ -4,6 +4,12 @@ class FakeResponse {
     this.ok = rule.status >= 200 && rule.status < 300;
     this._json = rule.json;
     this._malformed = rule.malformed === true;
+    const lowered = Object.entries(rule.headers ?? {}).map(([k, v]) => [
+      k.toLowerCase(),
+      String(v),
+    ]);
+    const byName = new Map(lowered);
+    this.headers = { get: (name) => byName.get(String(name).toLowerCase()) ?? null };
   }
 
   async json() {
@@ -42,6 +48,7 @@ function normalize(response) {
     status: rule.status ?? 200,
     json: rule.json,
     malformed: rule.malformed === true,
+    headers: rule.headers,
   };
 }
 

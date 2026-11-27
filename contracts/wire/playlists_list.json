@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "id": "3ab48d4e-23e4-4fbb-ae88-9e832651885c",
+      "name": "Road trip",
+      "track_count": 1,
+      "preview_artwork_urls": [
+        "https://example.com/art.jpg"
+      ],
+      "created_at": "2026-11-27T00:30:28.992593293Z",
+      "updated_at": "2026-11-27T00:30:28.992593293Z"
+    }
+  ],
+  "total": 1
+}
+

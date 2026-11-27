@@ -82,12 +82,20 @@ func TestDrift(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := jsoncontract.Drift(json.RawMessage(tc.fixture), json.RawMessage(tc.body))
-			if len(got) == 0 && len(tc.want) == 0 {
+			rec := assertAgainst(writeFixture(t, tc.fixture), tc.body)
+
+			var want []string
+			for _, w := range tc.want {
+				want = append(want, "fixture.json drifted: "+w)
+			}
+			if rec.fatal != "" {
+				t.Fatalf("fatal %q, want only reported drifts", rec.fatal)
+			}
+			if len(rec.errors) == 0 && len(want) == 0 {
 				return
 			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("drift = %q, want %q", got, tc.want)
+			if !reflect.DeepEqual(rec.errors, want) {
+				t.Errorf("drift = %q, want %q", rec.errors, want)
 			}
 		})
 	}
@@ -150,5 +158,129 @@ func TestAssertMatchesFixture_UpdateRefusesABodyThatIsNotJSON(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("stat = %v, want no fixture written for a body that is not JSON", err)
+	}
+}
+
+func TestStrictDrift(t *testing.T) {
+	cases := []struct {
+		name    string
+		fixture string
+		body    string
+		want    []string
+	}{
+		{"identical", `{"a":1}`, `{"a":2}`, nil},
+		{"extra body key", `{"a":1}`, `{"a":1,"b":1}`, []string{"b: unexpected"}},
+		{"nested extra key", `{"d":{"a":1}}`, `{"d":{"a":1,"z":1,"y":1}}`, []string{"d.y: unexpected", "d.z: unexpected"}},
+		{"extra key in array element", `{"items":[{"a":1}]}`, `{"items":[{"a":1,"b":1}]}`, []string{"items[0].b: unexpected"}},
+		{"missing key still reported", `{"a":1}`, `{}`, []string{"a: missing"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := jsoncontract.StrictDrift(json.RawMessage(tc.fixture), json.RawMessage(tc.body))
+			if len(got) == 0 && len(tc.want) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("drift = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWirePath_NamesAJSONFileUnderTheRepoContractsFolder(t *testing.T) {
+	path := jsoncontract.WirePath("tracks_list")
+
+	if !strings.HasSuffix(filepath.ToSlash(path), "/contracts/wire/tracks_list.json") {
+		t.Fatalf("path = %q, want it to end in /contracts/wire/tracks_list.json", path)
+	}
+	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	if _, err := os.Stat(filepath.Join(root, "services", "go-api", "go.mod")); err != nil {
+		t.Fatalf("repo root %q does not hold services/go-api: %v", root, err)
+	}
+}
+
+func TestAssertWire_ReportsAKeyTheFixtureDoesNotHave(t *testing.T) {
+	name := "zz_jsoncontract_probe"
+	path := jsoncontract.WirePath(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"a":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+
+	rec := &recordingTB{}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		jsoncontract.AssertWire(rec, name, []byte(`{"a":1,"b":2}`))
+	}()
+	<-done
+
+	want := []string{name + ".json drifted: b: unexpected"}
+	if !reflect.DeepEqual(rec.errors, want) {
+		t.Fatalf("errors = %q, want %q", rec.errors, want)
+	}
+}
+
+func TestAssertWireExact_ReportsAChangedValue(t *testing.T) {
+	name := "zz_jsoncontract_exact_probe"
+	path := jsoncontract.WirePath(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[\n  \"a\",\n  \"b\"\n]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+
+	run := func(body string) *recordingTB {
+		rec := &recordingTB{}
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			jsoncontract.AssertWireExact(rec, name, []byte(body))
+		}()
+		<-done
+		return rec
+	}
+
+	if rec := run(`["a", "b"]`); len(rec.errors) != 0 || rec.fatal != "" {
+		t.Fatalf("same content reformatted: errors %q fatal %q, want a pass", rec.errors, rec.fatal)
+	}
+	rec := run(`["a","c"]`)
+	if len(rec.errors) != 1 || !strings.Contains(rec.errors[0], "content changed") {
+		t.Fatalf("errors = %q, want one content-changed report", rec.errors)
+	}
+}
+
+func TestAssertWire_UpdateLeavesAFixtureAloneWhenTheShapeStillMatches(t *testing.T) {
+	name := "zz_jsoncontract_update_probe"
+	path := jsoncontract.WirePath(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := "{\"a\":\"old\"}\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+	if err := flag.Set("update-contract", "true"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = flag.Set("update-contract", "false") })
+
+	rec := &recordingTB{}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		jsoncontract.AssertWire(rec, name, []byte(`{"a":"new"}`))
+	}()
+	<-done
+
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != original {
+		t.Fatalf("fixture = %q err %v, want it untouched (%q)", got, err, original)
 	}
 }

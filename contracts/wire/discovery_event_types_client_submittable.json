@@ -1,0 +1,22 @@
+[
+  "acquisition_ui",
+  "client_error",
+  "completed",
+  "detail_health",
+  "download_failed",
+  "failure_shown",
+  "library_add",
+  "outbox_flush_failed",
+  "play",
+  "play_start",
+  "playback_health",
+  "result_clicked",
+  "results_shown",
+  "screen_view",
+  "search_degraded",
+  "search_failed",
+  "skip",
+  "sse_reconnect",
+  "user_action",
+  "wrong_album"
+]

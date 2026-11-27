@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"database/sql/driver"
 	"errors"
@@ -70,7 +71,7 @@ func (r *PostgresQueueStateRepository) runOp(
 	r.recordTimeout(ctx, err)
 	if isUnclassifiedFault(err) {
 		slog.ErrorContext(ctx, "playback.queue_state_op_failed",
-			"op", op, "user_id", userId.String(), "error", err)
+			"op", op, logging.KeyUserID, userId.String(), logging.KeyError, err)
 	}
 	if !database.IsTransient(err) {
 		return err

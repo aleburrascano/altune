@@ -2,6 +2,7 @@ package shutdown
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"net/http"
@@ -9,9 +10,7 @@ import (
 )
 
 const (
-	AlertMonitor   = "alert monitor"
 	EventFeed      = "event feed"
-	EvalMeter      = "eval meter"
 	Scheduler      = "acquisition scheduler"
 	Background     = "background tasks"
 	LeaderElection = "leader election"
@@ -54,9 +53,7 @@ type Step struct {
 }
 
 type Components struct {
-	AlertMonitor   func(context.Context)
 	EventFeed      func(context.Context)
-	EvalMeter      func(context.Context)
 	Scheduler      func(context.Context)
 	Background     func(context.Context)
 	LeaderElection func(context.Context)
@@ -84,9 +81,7 @@ type Budgets struct {
 
 func Plan(c Components, b Budgets) []Step {
 	return []Step{
-		{Component: AlertMonitor, Timeout: observerDrainTimeout, Stop: c.AlertMonitor},
 		{Component: EventFeed, Timeout: observerDrainTimeout, Stop: c.EventFeed},
-		{Component: EvalMeter, Timeout: observerDrainTimeout, Stop: c.EvalMeter},
 		{Component: Scheduler, Timeout: cappedDrain(b.SchedulerSeconds, schedulerDrainCap), Stop: c.Scheduler},
 		{Component: Background, Timeout: cappedDrain(b.BackgroundSeconds, backgroundDrainCap), Stop: c.Background},
 		{Component: LeaderElection, Timeout: leaderReleaseTimeout, Stop: c.LeaderElection, requires: Background, blockedMsg: leaderLockKeptMessage},
@@ -160,8 +155,8 @@ func DrainServer(parent context.Context, server *http.Server, timeout time.Durat
 	if err == nil {
 		return
 	}
-	slog.ErrorContext(ctx, "server shutdown error", "error", err)
+	slog.ErrorContext(ctx, "server shutdown error", logging.KeyError, err)
 	if closeErr := server.Close(); closeErr != nil {
-		slog.ErrorContext(ctx, "server close error", "error", closeErr)
+		slog.ErrorContext(ctx, "server close error", logging.KeyError, closeErr)
 	}
 }

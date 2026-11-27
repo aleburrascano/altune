@@ -2,6 +2,7 @@ package cleanupjobs
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -14,7 +15,7 @@ func EraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []search
 	for _, eraser := range erasers {
 		rows, err := eraser.EraseRowsOfDeletedIdentities(ctx)
 		if errors.Is(err, search.ErrIdentityStoreUnavailable) {
-			slog.WarnContext(ctx, "discovery.deleted_identity_sweep_idle", "error", err)
+			slog.WarnContext(ctx, "discovery.deleted_identity_sweep_idle", logging.KeyError, err)
 			idle++
 			continue
 		}

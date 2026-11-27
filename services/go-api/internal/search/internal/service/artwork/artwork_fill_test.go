@@ -6,8 +6,8 @@ import (
 	"altune/go-api/internal/search/internal/service/artwork"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
-	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -81,10 +81,7 @@ func TestNoFill_ReturnsTheResultsUntouched(t *testing.T) {
 func TestPendingFiller_MarksArtworkPendingAndNeverResolvesLive(t *testing.T) {
 	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
 	liveRan := func(build func(*background.Tracker) *artwork.ArtworkFiller) (domain.ArtworkPath, bool) {
-		var logs bytes.Buffer
-		prev := slog.Default()
-		slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
-		t.Cleanup(func() { slog.SetDefault(prev) })
+		logs := logging.CaptureText(t, slog.LevelDebug)
 		bg := searchtest.NewTracker(t)
 		got := fillAndSettle(t, bg, build(bg), track)
 		return got[0].ArtworkPath, strings.Contains(logs.String(), "artwork.enriched")
@@ -136,10 +133,7 @@ func (failingArtworkCache) Set(context.Context, domain.ResultKind, string, strin
 }
 
 func TestArtworkFiller_AFailedCacheWriteIsLogged(t *testing.T) {
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
 	cache := &failingArtworkCache{scriptedArtworkCache{log: &stageLog{}}}
 	resolver := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}

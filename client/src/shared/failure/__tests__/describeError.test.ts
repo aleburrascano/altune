@@ -1,7 +1,7 @@
-import { ApiError, ContractError, RETRY_TAIL, describeError } from '@shared/failure';
+import { ApiError, ContractError, NetworkError, RETRY_TAIL, describeError } from '@shared/failure';
 describe('describeError — network vs 5xx vs generic', () => {
   it('maps a transport failure to the offline copy', () => {
-    expect(describeError(new Error('network request failed'))).toEqual({
+    expect(describeError(new NetworkError('transport', 'the API is unreachable'))).toEqual({
       title: 'No connection',
       body: 'Check your connection and try again.',
     });
@@ -100,5 +100,44 @@ describe('describeError — an ApiError is never a transport failure', () => {
   it('refuses an ApiError whose message looks like a network failure', () => {
     const err = new ApiError(HTTP_BAD_REQUEST, 'network down');
     expect(describeError(err).title).not.toBe('No connection');
+  });
+});
+
+describe('describeError — codes whose server kind would hide the fix get their own copy', () => {
+  it.each([
+    ['catalog.batch_too_large', 'Too many tracks at once', 'Pick fewer tracks and try again.'],
+    [
+      'playback.queue_too_long',
+      'Queue is too long',
+      'Remove some tracks from the queue, then try again.',
+    ],
+    [
+      'acquisition.retry_not_failed',
+      'Nothing to retry',
+      'This track has not failed, so there is nothing to retry.',
+    ],
+    [
+      'acquisition.reacquire_not_ready',
+      'Not ready yet',
+      "This track isn't ready to re-download yet. Try again in a minute.",
+    ],
+    [
+      'discovery.provider_rate_limited',
+      'Music source is busy',
+      'The music source is busy. Try again in a minute.',
+    ],
+  ] as const)('%s says what happened and what to do', (code, title, body) => {
+    const status = 400;
+    expect(describeError(new ApiError(status, 'x', code))).toEqual({ title, body });
+  });
+
+  it('keeps the specific copy when an action is named', () => {
+    const status = 400;
+    expect(
+      describeError(new ApiError(status, 'x', 'catalog.batch_too_large'), 'add the tracks'),
+    ).toEqual({
+      title: 'Too many tracks at once',
+      body: 'Pick fewer tracks and try again.',
+    });
   });
 });

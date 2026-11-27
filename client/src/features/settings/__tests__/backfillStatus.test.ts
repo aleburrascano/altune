@@ -34,9 +34,7 @@ describe('backfill status copy', () => {
       status: 'error' as const,
       error: new NetworkError('transport', 'offline'),
     };
-    expect(backfillDetail(failed)).toBe(
-      'Could not reach the server — check your connection and try again.',
-    );
+    expect(backfillDetail(failed)).toBe('Check your connection and try again.');
     expect(backfillActionLabel(failed)).toBe('Retry');
     expect(backfillActionTone(failed)).toBe('danger');
     expect(backfillActionTone(idle)).toBe('accent');

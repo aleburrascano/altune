@@ -115,7 +115,7 @@ describe('a failed "Explore artist" search', () => {
           status: 503,
           code: 'discovery.all_providers_failed',
           failure: 'server',
-          correlationId: 'corr-7',
+          corr_id: 'corr-7',
         },
       ]),
     );
@@ -185,7 +185,7 @@ describe('a failed featuring load', () => {
 
     expect(logs.warnings).toContainEqual([
       '[library] featuring query failed',
-      { key: 'name', status: 500, failure: 'server', correlationId: 'corr-9' },
+      { key: 'name', status: 500, failure: 'server', corr_id: 'corr-9' },
     ]);
     expect(logs.text()).not.toContain(SECRET);
   });

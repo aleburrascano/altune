@@ -37,8 +37,7 @@ func (l RequestLimit) rateLimit() httpserver.RateLimit {
 }
 
 func newUserRateLimiter(limit RequestLimit, now clock.Func) func(http.Handler) http.Handler {
-	return httpserver.MustNewUserRateLimiter(limit.rateLimit(), now).
-		Middleware(httpserver.UserKey(requestuser.UserIDFromContext), domain.ErrRateLimited, nil)
+	return requestuser.LimitPerUser(limit.rateLimit(), now, domain.ErrRateLimited, nil)
 }
 
 func newClientRateLimiter(limit RequestLimit, now clock.Func) func(http.Handler) http.Handler {

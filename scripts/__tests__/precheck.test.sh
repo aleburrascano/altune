@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_NO_CACHE HEAVY_HELD
+unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_NO_CACHE PRECHECK_WHOLE_MODULE HEAVY_HELD
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FAILURES=0
@@ -41,6 +41,10 @@ new_repo() {
     cp "$HERE/precheck.sh" "$WORK/repo/scripts/"
     mkdir -p "$WORK/repo/scripts/ci"
     printf '#!/usr/bin/env bash\nprintf "secret-scan %%s\\n" "$*" >>"%s/tools.log"\nexit "${SECRET_SCAN_STUB_RC:-0}"\n' "$WORK" >"$WORK/repo/scripts/ci/secret-scan.sh"
+    printf '#!/usr/bin/env bash\nprintf "vuln-scan %%s\\n" "$*" >>"%s/tools.log"\nexit "${VULN_SCAN_STUB_RC:-0}"\n' "$WORK" >"$WORK/repo/scripts/ci/vuln-scan.sh"
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/repo/scripts/ci/noop-reachable.sh"
+    mkdir -p "$WORK/repo/services/go-api/cmd/collabcheck"
+    printf 'package main\n\nfunc main() {}\n' >"$WORK/repo/services/go-api/cmd/collabcheck/main.go"
     printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/repo/scripts/test-home-tree.sh"
     printf '#!/usr/bin/env bash\nexit "${HISTORY_STUB_RC:-0}"\n' >"$WORK/repo/scripts/history-complete.sh"
     (
@@ -232,6 +236,19 @@ expect_jest_cache_in_checkout() {
     ! grep -qE -- '--cacheDirectory /' "$WORK/npx.log" 2>/dev/null || fail "jest got an absolute cache directory, which keeps heavy.sh from running it on a remote slot"
 }
 
+CASE="any client change runs the doctor config test, which reads the whole tree and so fails in CI for files a push never touched"
+new_repo
+add_mobile_stubs
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client/src
+    printf 'export const x = 1;\n' >client/src/x.ts
+    git add -A
+    git commit -qm "mobile change"
+)
+run_script_with_stubs
+expect_npx "__tests__/doctor.config.test.ts"
+
 CASE="mobile related tests keep the jest cache inside the checkout, so heavy.sh can run them remotely"
 new_repo
 add_mobile_stubs
@@ -270,7 +287,7 @@ add_mobile_stubs
     git commit -qm "events change"
 )
 run_script_with_stubs
-expect_npx "\\.contract\\.test\\.tsx?\$"
+expect_npx "(\\.contract|Contract)\\.test\\.tsx?\$"
 expect_jest_cache_in_checkout
 
 add_gate_parity_stub() {
@@ -306,6 +323,7 @@ add_jest_stub() {
 #!/usr/bin/env bash
 printf 'npx %s\n' "$*" >>"$NPX_LOG"
 case " $* " in *" jest "*) ;; *) exit 0 ;; esac
+case " $* " in *" __tests__/doctor.config.test.ts "*) echo "doctor config stub"; exit "${STUB_DOCTOR_RC:-0}" ;; esac
 case "${STUB_JEST:-pass}" in
     fail)
         echo "FAIL src/__tests__/a.test.ts"
@@ -408,6 +426,15 @@ NPX_LOG="$WORK/npx.log" run_script_with_stubs
 expect_npx "--forceExit"
 expect_npx "--watchman=false"
 expect_out "ok    mobile tests (related)"
+
+CASE="a failing doctor config test fails precheck and names itself"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+STUB_DOCTOR_RC=1 NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_rc 1
+expect_out "FAIL  mobile doctor config test"
 
 CASE="a failing jest run prints each failed test name, not the last 40 lines"
 new_repo
@@ -652,6 +679,8 @@ if [ -n "\${GO_RENDEZVOUS:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; the
 fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
+"run ./scripts/lintdoors"*) exit "\${GO_LINTDOORS_STUB_RC:-0}" ;;
+"run ./scripts/genclientcodes"*) exit "\${GO_GENCLIENTCODES_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
 "test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi; [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 "mod tidy"*) exit "\${GO_MOD_TIDY_STUB_RC:-0}" ;;
@@ -982,13 +1011,15 @@ run_push_scoped
 expect_rc 0
 expect_out "ok    capability notes name mounted routes"
 
-CASE="--full lints the whole module and every line, not only new code"
+CASE="--full lints the changed package and its importers on every line, not only new code"
 new_repo
 add_go_fixture
 edit_go_file internal/shared/s/s.go
 run_with_tools
 expect_rc 0
-expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./..."
+expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./internal/shared/s"
+! grep -E "^golangci-lint .*altune/go-api" "$WORK/tools.log" >/dev/null 2>&1 || fail "golangci-lint takes directories, not import paths: $(grep -E "^golangci-lint" "$WORK/tools.log" | head -n 1)"
+forbid_log "--allow-serial-runners ./..."
 forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
 expect_log_line "go-arch-lint check"
@@ -1015,6 +1046,42 @@ edit_go_file internal/shared/s/s.go
 GO_ARCH_LINT_STUB_RC=1 run_push_scoped
 expect_rc 1
 expect_out "FAIL  go-api architecture"
+
+CASE="a failing lintdoors --exports turns a push red, and --full runs it on the whole tree"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_push_scoped
+expect_rc 0
+expect_log "go run ./scripts/lintdoors --exports ."
+GO_LINTDOORS_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api module doors"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_with_tools
+expect_rc 0
+expect_log "go run ./scripts/lintdoors --exports ."
+GO_LINTDOORS_STUB_RC=1 run_with_tools
+expect_rc 1
+expect_out "FAIL  go-api module doors"
+
+CASE="an edit to only the generated client codes file runs the genclientcodes check, and a stale file turns a push red"
+new_repo
+add_go_fixture
+mkdir -p "$WORK/repo/services/go-api/scripts/genclientcodes" "$WORK/repo/client/src/shared/failure/core"
+(
+    cd "$WORK/repo" || exit 1
+    printf 'export const API_ERROR_CODES = [] as const;\n' >client/src/shared/failure/core/apiErrorCodes.generated.ts
+    git add -A
+    git commit -qm "edit generated codes"
+)
+run_push_scoped
+expect_log "go run ./scripts/genclientcodes --check"
+GO_GENCLIENTCODES_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  client error codes match the go-api catalog"
 
 CASE="a change to go.sum is checked for tidiness and a dirty go.sum turns a push red"
 new_repo
@@ -1228,13 +1295,68 @@ expect_rc 1
 expect_out "FAIL  go-api vet (whole module"
 expect_out "not enough arguments in call to s.S"
 
-CASE="--full lints the whole module for a one-package change"
+CASE="--full lints the whole module when the lint configuration or a rule file changes"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'version: "2"\n' >services/go-api/.golangci.strict.yml
+    git add -A
+    git commit -qm "lint config"
+)
+run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints the whole module when a rule file changes"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/_rules
+    printf 'package gorules\n' >services/go-api/_rules/x.rules
+    git add -A
+    git commit -qm "rule"
+)
+run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints the whole module when the caller says so, as CI does on a push to main"
+new_repo
+add_go_fixture
+edit_go_file internal/search/adapters/x/x.go
+PRECHECK_WHOLE_MODULE=1 run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints and tests a one-package change with its importers and still runs govulncheck over the module"
 new_repo
 add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
 run_with_tools
-expect_log "--allow-serial-runners ./..."
+expect_log "--allow-serial-runners ./internal/search/adapters/x"
+forbid_log "--allow-serial-runners ./..."
+expect_log "test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
 expect_log "govulncheck ./..."
+
+CASE="with heavy.sh present the go tests ask for INTEGRATION=1 and name no database, so heavy.sh sends them to chudbox"
+new_repo
+add_go_fixture
+edit_go_file internal/search/adapters/x/x.go
+mkdir -p "$WORK/home/.claude/bin"
+printf '#!/usr/bin/env bash\nprintf "heavy %%s\\n" "$*" >>"%s/tools.log"\nexec "$@"\n' "$WORK" >"$WORK/home/.claude/bin/heavy.sh"
+run_with_tools
+expect_log "heavy env INTEGRATION=1 go test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
+forbid_log "DATABASE_URL"
+rm -rf "$WORK/home/.claude"
+
+CASE="a DATABASE_URL already set is left alone, with no INTEGRATION=1 added"
+new_repo
+add_go_fixture
+edit_go_file internal/search/adapters/x/x.go
+mkdir -p "$WORK/home/.claude/bin"
+printf '#!/usr/bin/env bash\nprintf "heavy %%s\\n" "$*" >>"%s/tools.log"\nexec "$@"\n' "$WORK" >"$WORK/home/.claude/bin/heavy.sh"
+DATABASE_URL=postgres://u@localhost/x run_with_tools
+expect_log "heavy go test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
+rm -rf "$WORK/home/.claude"
 
 CASE="a change to go.sum runs govulncheck"
 new_repo
@@ -1416,15 +1538,11 @@ add_contract_tests() {
     (
         cd "$WORK/repo" || exit 1
         mkdir -p client/src/shared/a/__tests__ client/src/shared/b/__tests__
-        printf "const dir = 'go-api';\n" >client/src/shared/a/__tests__/aContract.test.ts
-        printf "const dir = 'go-api';\n" >client/src/shared/b/__tests__/bContract.test.tsx
-        printf "const dir = 'elsewhere';\n" >client/src/shared/b/__tests__/other.test.ts
-        printf "const dir = 'go-api';\n" >client/src/shared/b/notATest.ts
     )
     commit_as_base
 }
 
-CASE="a go-api change runs the client test files that mention go-api, found at run time"
+CASE="a go-api change runs the client contract tests, selected by their file name"
 new_repo
 add_mobile_stubs
 add_jest_stub
@@ -1432,10 +1550,23 @@ add_contract_tests
 add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
 run_with_tools
-expect_out "ok    mobile contract tests (go-api changed)"
-expect_npx "src/shared/a/__tests__/aContract.test.ts src/shared/b/__tests__/bContract.test.tsx"
-grep -qF "other.test.ts" "$WORK/npx.log" && fail "a test file that does not mention go-api should not run"
-grep -qF "notATest.ts" "$WORK/npx.log" && fail "a non-test file that mentions go-api should not run"
+expect_out "ok    mobile contract tests (go-api or contracts changed)"
+expect_npx "(\\.contract|Contract)\\.test\\.tsx?\$"
+
+CASE="a change to a wire fixture alone runs the client contract tests"
+new_repo
+add_mobile_stubs
+add_jest_stub
+add_contract_tests
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p contracts/wire
+    printf '{}\n' >contracts/wire/x.json
+    git add -A
+    git commit -qm "wire fixture"
+)
+run_with_tools
+expect_out "ok    mobile contract tests (go-api or contracts changed)"
 
 CASE="a go-api change that breaks a client contract test fails precheck"
 new_repo
@@ -1446,7 +1577,7 @@ add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
 STUB_JEST=fail run_with_tools
 expect_rc 1
-expect_out "FAIL  mobile contract tests (go-api changed)"
+expect_out "FAIL  mobile contract tests (go-api or contracts changed)"
 
 CASE="a client-only change does not run the contract tests"
 new_repo
@@ -1456,22 +1587,6 @@ add_contract_tests
 mobile_src_change
 run_with_tools
 forbid_out "mobile contract tests"
-
-CASE="a client with no test file mentioning go-api fails the contract step loudly"
-new_repo
-add_mobile_stubs
-add_jest_stub
-add_go_fixture
-(
-    cd "$WORK/repo" || exit 1
-    mkdir -p client/src
-    printf 'export const a = 1;\n' >client/src/a.ts
-)
-commit_as_base
-edit_go_file internal/search/adapters/x/x.go
-run_with_tools
-expect_rc 1
-expect_out "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"
 
 CASE="a change that only deletes a go-api go file still vets and tests the package it left"
 new_repo
@@ -1488,7 +1603,7 @@ commit_as_base
 )
 run_with_tools
 expect_log "vet altune/go-api/internal/search/adapters/x"
-expect_log "test -race -shuffle=on -count=1 ./internal/search/adapters/x"
+expect_log "test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
 
 CASE="every golangci-lint call runs with a cache inside the checkout"
 new_repo
@@ -1514,6 +1629,40 @@ add_plain_file
 run_with_tools
 expect_log "secret-scan $(git -C "$WORK/repo" rev-parse gitea/main)"
 expect_out "ok    secret scan (commits since base)"
+
+CASE="a changed lockfile or go.sum is scanned for known vulnerabilities with osv-scanner"
+new_repo
+commit_as_base
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api
+    printf 'x\n' >services/go-api/go.sum
+    git add services/go-api/go.sum
+    git commit -qm "bump a dependency"
+)
+run_with_tools
+expect_log "vuln-scan --osv"
+expect_out "ok    dependency scan (osv-scanner)"
+
+CASE="a vulnerable dependency fails precheck"
+new_repo
+commit_as_base
+(
+    cd "$WORK/repo" || exit 1
+    printf 'x\n' >pnpm-lock.yaml
+    git add pnpm-lock.yaml
+    git commit -qm "bump a dependency"
+)
+VULN_SCAN_STUB_RC=1 run_with_tools
+expect_out "FAIL  dependency scan (osv-scanner)"
+[ "$RC" != 0 ] || fail "an osv-scanner finding must make precheck exit non-zero"
+
+CASE="a change that touches no dependency file runs no osv-scanner scan"
+new_repo
+commit_as_base
+add_plain_file
+run_with_tools
+forbid_log "vuln-scan"
 
 CASE="a secret found in the range fails precheck"
 new_repo

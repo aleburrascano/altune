@@ -4,9 +4,11 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -62,7 +64,7 @@ func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.
 }
 
 func TestSource_Find_QueryFailureLogRedactsTheCookiePath(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	if _, err := findWithYtDlp(t, download.MustNewYtDlpAudioSearcher("", secretCookiePath, "", time.Now, clock.Sleep)); err == nil {
 		t.Fatal("every query failed, Find reported no error")
@@ -285,7 +287,7 @@ func TestSource_Find_PreviewDurationBoundaries(t *testing.T) {
 }
 
 func TestSource_Find_InspectionFailureLeavesTheCandidatePlayableAndIsLogged(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	if got := findUnplayable(t, 240, "fail 'boom'"); got != "" {
 		t.Fatalf("Unplayable = %q, want fail-open", got)

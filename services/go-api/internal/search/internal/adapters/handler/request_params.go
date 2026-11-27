@@ -4,12 +4,11 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
+	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -67,7 +66,7 @@ func isCanonicalUUID(s string) bool {
 }
 
 func externalIDParam(w http.ResponseWriter, r *http.Request) (string, bool) {
-	externalID := chi.URLParam(r, "externalId")
+	externalID := httpserver.URLParam(r, "externalId")
 	if !isValidExternalID(externalID) {
 		httpserver.HandleServiceError(w, r, invalidParam("externalId is not a valid identifier"))
 		return "", false
@@ -106,16 +105,7 @@ const (
 )
 
 func parseIntParam(w http.ResponseWriter, r *http.Request, param string, def int) (int, bool) {
-	raw := r.URL.Query().Get(param)
-	if raw == "" {
-		return def, true
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		httpserver.HandleServiceError(w, r, invalidParam(param+" must be an integer"))
-		return 0, false
-	}
-	return value, true
+	return httpserver.QueryInt(w, r, param, def, math.MinInt, math.MaxInt, apierror.CodeDiscoveryInvalidParam)
 }
 
 func limitOrDefault(w http.ResponseWriter, r *http.Request, param string, def int) (int, bool) {

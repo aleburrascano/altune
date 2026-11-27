@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -47,7 +48,7 @@ func (s libraryMatchesSource) dispatch(fan *relatedFanOut, userId ids.UserId, re
 	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
 		matches, err := s.querier.FindRelatedByAlbumArtist(ctx, userId, album, result.Subtitle, relatedPerGroup)
 		if err != nil {
-			slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
+			slog.DebugContext(ctx, "related.library_lookup_failed", logging.KeyError, err)
 			return nil, err
 		}
 		return fan.memoize(lookup, matchesToSearchResults(matches)), nil

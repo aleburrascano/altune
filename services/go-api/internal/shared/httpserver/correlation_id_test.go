@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,9 +76,7 @@ func TestGetCorrelationID_EmptyContext(t *testing.T) {
 }
 
 func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	const inbound = "trace-abc12345"
 	var capturedID string

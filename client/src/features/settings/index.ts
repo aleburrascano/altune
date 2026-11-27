@@ -20,7 +20,6 @@ export type {
 } from '@features/settings/core/dangerZoneActions';
 export { useDownloadStats, useRemoveDownloads } from '@features/settings/view/useDownloads';
 export { DangerZoneCard } from '@features/settings/view/DangerZoneCard';
-export { failureCopyForAction } from '@features/settings/core/failureCopyForAction';
 export { LibraryCard } from '@features/settings/view/LibraryCard';
 export type { DownloadStats } from '@features/settings/core/downloadStatsModel';
 export { OfflineDownloadsCard } from '@features/settings/view/OfflineDownloadsCard';

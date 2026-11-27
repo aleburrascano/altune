@@ -19,6 +19,8 @@ Tests sit in a `__tests__/` folder. A test reaches its own module only through t
 
 Work that must finish by a deadline goes through `withDeadline(work, ms, { onExpire })` from `@shared/timing`, never `Promise.race`. It owns the timer, clears it when the work settles, and hands a failure that comes after the deadline to `onLate`, so it is not lost.
 
+What a failure means and what the user reads about it live in `@shared/failure`: `failureKindOf(error)` names the kind and `describeError(error, action?)` words it. Code never compares an HTTP status to a bare number (`status >= 500`, `500 <= status`, `case 404:`, a `*_STATUSES` set): it asks for the kind, or uses a named constant from `@shared/failure` (`HTTP_*`). `client/eslint.config.js` fails the bare forms. `apiErrorCodes.generated.ts` is written by `cd services/go-api && go run ./scripts/genclientcodes ../../client/src/shared/failure/core/apiErrorCodes.generated.ts` from the server's catalog; never edit it by hand.
+
 | Rule | Checked by |
 |---|---|
 | Module imports and doors | fallow, `client/fallow/modules.json` |
@@ -26,5 +28,7 @@ Work that must finish by a deadline goes through `withDeadline(work, ms, { onExp
 | No duplicated code | `fallow dupes` |
 | Packages and JSX per part, tests through doors, no patching, `process.env`, no `Promise.race` | eslint, `client/eslint.config.js` |
 | Each changed line is tested | Stryker, `bash scripts/ci/client-mutate.sh <base>` |
+
+Call a collaborator, not its parts: keep `deps.foreground` in a field and call `this.foreground.isActive()`, never `this.deps.foreground.isActive()`. Reading plain data (`props.theme.color`) is exempt.
 
 For now the fallow and eslint rules above check only the files a branch changes, because older code still breaks them: `node client/scripts/fallow-changed.mjs <base>` and eslint on the changed files. Until then `npm run lint` on the whole tree fails on the older code. `bash scripts/precheck.sh` runs every check.

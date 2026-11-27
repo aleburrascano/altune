@@ -75,7 +75,7 @@ describe.each([
       status: 503,
       code: 'catalog.temporarily_unavailable',
       failure: 'server',
-      correlationId: 'corr-1',
+      corr_id: 'corr-1',
     });
   });
 
@@ -129,7 +129,7 @@ describe('a failed usePlaylistActions load', () => {
       status: 500,
       code: 'internal',
       failure: 'server',
-      correlationId: 'corr-2',
+      corr_id: 'corr-2',
     });
   });
 });

@@ -8,7 +8,7 @@ import {
   reacquireTrack,
   retryAcquisition,
   parseTrackResponse,
-  tryParseTrackResponse,
+  parseTrackResponseLenient,
 } from '@shared/apiClient';
 import {
   type CreateTrackRequest,
@@ -587,7 +587,7 @@ describe('wire parsing', () => {
     });
   });
 
-  describe('tryParseTrackResponse — the lenient SSE sibling of parseTrackResponse', () => {
+  describe('parseTrackResponseLenient — the lenient SSE sibling of parseTrackResponse', () => {
     it('parses a valid payload identically to the strict parser, including optional fields', () => {
       const wire = {
         ...fullTrack(),
@@ -596,26 +596,30 @@ describe('wire parsing', () => {
         failure_message: 'download failed',
         featured_artists: [{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }],
       };
-      expect(tryParseTrackResponse(wire)).toEqual(parseTrackResponse(wire));
+      expect(parseTrackResponseLenient(wire)).toEqual({
+        ok: true,
+        value: parseTrackResponse(wire),
+      });
     });
 
-    it('returns null instead of throwing when a required field is missing or the wrong type', () => {
-      expect(tryParseTrackResponse({ ...fullTrack(), artist: 42 })).toBeNull();
-      expect(tryParseTrackResponse({ ...fullTrack(), acquisition_status: 'weird' })).toBeNull();
-      expect(tryParseTrackResponse({ ...fullTrack(), title: undefined })).toBeNull();
-      expect(tryParseTrackResponse(null)).toBeNull();
-      expect(tryParseTrackResponse([])).toBeNull();
+    it('returns a contract failure instead of throwing when a required field is missing or the wrong type', () => {
+      const rejected = [
+        { ...fullTrack(), artist: 42 },
+        { ...fullTrack(), acquisition_status: 'weird' },
+        { ...fullTrack(), title: undefined },
+        null,
+        [],
+      ].map((wire) => parseTrackResponseLenient(wire).ok);
+      expect(rejected).toEqual([false, false, false, false, false]);
     });
 
     it('coerces an off-type nullable field to null rather than rejecting the whole track', () => {
-      const track = tryParseTrackResponse({
+      const parsed = parseTrackResponseLenient({
         ...fullTrack(),
         duration_seconds: '210',
         year: '2020',
       });
-      expect(track).not.toBeNull();
-      expect(track!.duration_seconds).toBeNull();
-      expect(track!.year).toBeNull();
+      expect(parsed.ok && [parsed.value.duration_seconds, parsed.value.year]).toEqual([null, null]);
     });
   });
 

@@ -13,7 +13,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -547,9 +546,7 @@ func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
 }
 
 func TestFindRelated_EachPanickingLookupIsLoggedUnderItsOwnEvent(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(panickingQuerier{}), searchtest.RelatedAlbumTracks(panickingAlbumProvider{}), searchtest.RelatedArtistAlbums(panickingArtistProvider{}))
 	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.Album = "Some Album"

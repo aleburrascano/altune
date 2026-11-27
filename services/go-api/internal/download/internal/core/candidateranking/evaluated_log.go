@@ -1,6 +1,7 @@
 package candidateranking
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"math"
@@ -9,7 +10,7 @@ import (
 func logEvaluated(ctx context.Context, track Track, e entry) {
 	c := e.candidate
 	slog.InfoContext(ctx, "candidate_evaluated",
-		"track_id", track.ID,
+		logging.KeyTrackID, track.ID,
 		"source", c.Source,
 		"candidate_title", c.Title,
 		"candidate_channel", c.Channel,

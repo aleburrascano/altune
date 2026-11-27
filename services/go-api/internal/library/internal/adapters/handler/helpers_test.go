@@ -110,11 +110,6 @@ func requestAs(t *testing.T, router http.Handler, user ids.UserId, method, path 
 	return sendAs(router, req, user)
 }
 
-func requestAnonymous(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
-	t.Helper()
-	return sendAnonymous(router, httptest.NewRequest(method, path, body))
-}
-
 func newWriteRig(now func() time.Time) *writeRig {
 	tracks := library.NewInMemoryTrackRepo()
 	playlists := library.NewInMemoryPlaylistRepo()
@@ -362,6 +357,6 @@ func failingRepoRoutes(err error) chi.Router {
 	router := newRouter()
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
 	signer := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, library.NoopAudioStoreMetrics()), time.Now).Routes(router)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 	return router
 }

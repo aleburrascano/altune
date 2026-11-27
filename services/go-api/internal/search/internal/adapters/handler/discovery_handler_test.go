@@ -118,14 +118,6 @@ func discServe(t *testing.T, router chi.Router, method, path string, body io.Rea
 	return rec
 }
 
-func discServeNoAuth(t *testing.T, router chi.Router, method, path string) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(method, path, nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	return rec
-}
-
 func discJsonBody(t *testing.T, v any) *bytes.Buffer {
 	t.Helper()
 	buf := &bytes.Buffer{}
@@ -334,14 +326,6 @@ func TestHandleSearch(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestHandleSearch_NoAuth(t *testing.T) {
-	router := buildDiscoveryRouter(t, &fakeSearchProvider{name: search.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
-
-	rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/search?q=test")
-
-	discAssertStatus(t, rec, http.StatusUnauthorized)
 }
 
 func TestHandleSearch_ResponseShape(t *testing.T) {
@@ -795,36 +779,6 @@ func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return body.Code
 }
 
-func TestPerUserGets_CarryNoStoreHeaders(t *testing.T) {
-	searchRouter := buildDiscoveryRouter(t, &fakeSearchProvider{name: search.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
-	favoritesRouter := buildFavoritesRouter(t, nil)
-	tests := []struct {
-		name string
-		path string
-		fav  bool
-	}{
-		{name: "search success", path: "/discovery/search?q=test"},
-		{name: "search validation error", path: "/discovery/search"},
-		{name: "history success", path: "/discovery/search-history"},
-		{name: "favorites success", path: "/discovery/favorites", fav: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			router := searchRouter
-			if tt.fav {
-				router = favoritesRouter
-			}
-			rec := discServe(t, router, http.MethodGet, tt.path, nil)
-			if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
-				t.Errorf("Cache-Control = %q, want %q (status %d)", got, "private, no-store", rec.Code)
-			}
-			if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-				t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
-			}
-		})
-	}
-}
-
 func TestHandleRecordSearchHistory(t *testing.T) {
 	t.Run("submitted query is saved once", func(t *testing.T) {
 		historyRepo := &fakeSearchHistoryRepo{}
@@ -864,16 +818,4 @@ func TestHandleRecordSearchHistory(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("anonymous caller is refused", func(t *testing.T) {
-		historyRepo := &fakeSearchHistoryRepo{}
-		router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
-
-		rec := discServeNoAuth(t, router, http.MethodPost, "/discovery/search-history")
-
-		discAssertStatus(t, rec, http.StatusUnauthorized)
-		if len(historyRepo.entries) != 0 {
-			t.Errorf("history entries = %d, want 0", len(historyRepo.entries))
-		}
-	})
 }

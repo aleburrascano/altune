@@ -7,8 +7,9 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -71,13 +72,14 @@ func TestDiscovery_RequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			fixture := newJWKSFixture(t)
 			fixture.cfg.MusicBrainzUserAgent = "altune-test/1.0"
 			rt := &countingProviderRT{}
-			h := assembleWith(t, fixture.cfg, search.NewCountingTransport(rt)).assembly.Handler()
-			before, callsBefore := search.ReadProviderMetricsSnapshot(), rt.roundTrips()
+			reg := telemetry.NewRegistry()
+			h := assembleWith(t, fixture.cfg, search.NewCountingTransport(rt, reg)).assembly.Handler()
+			before, callsBefore := search.ReadProviderMetricsSnapshot(reg), rt.roundTrips()
 
 			code, body := getAs(t, h, route.target, signedToken(t, fixture.key, fixture.operator))
 
 			calls := rt.roundTrips() - callsBefore
-			counted := totalProviderCounts(search.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
+			counted := totalProviderCounts(search.ReadProviderMetricsSnapshot(reg)) - totalProviderCounts(before)
 			if calls == 0 {
 				t.Fatalf("%s made no provider call (status %d, body %s), so it proves nothing about the transport", route.target, code, body)
 			}
@@ -146,10 +148,7 @@ func TestNewEvalDiscovery_RefusesAMissingTransport(t *testing.T) {
 }
 
 func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 
 	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {

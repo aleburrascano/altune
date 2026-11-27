@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -69,7 +70,7 @@ func (s *GetAlbumTracksService) featuredFromSpotify(ctx context.Context, known m
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "album_tracks.spotify_featured_failed",
-			"album_id", albumID, "error", redact.Secrets(err.Error()))
+			"album_id", albumID, logging.KeyError, redact.Secrets(err.Error()))
 		return nil
 	}
 	return copyFeaturedByTitle(tracks, resp.Items)
