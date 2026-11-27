@@ -1012,7 +1012,8 @@ add_go_fixture
 edit_go_file internal/shared/s/s.go
 run_with_tools
 expect_rc 0
-expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners altune/go-api/internal/shared/s"
+expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./internal/shared/s"
+! grep -E "^golangci-lint .*altune/go-api" "$WORK/tools.log" >/dev/null 2>&1 || fail "golangci-lint takes directories, not import paths: $(grep -E "^golangci-lint" "$WORK/tools.log" | head -n 1)"
 forbid_log "--allow-serial-runners ./..."
 forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
@@ -1310,7 +1311,7 @@ new_repo
 add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
 run_with_tools
-expect_log "--allow-serial-runners altune/go-api/internal/search/adapters/x"
+expect_log "--allow-serial-runners ./internal/search/adapters/x"
 forbid_log "--allow-serial-runners ./..."
 expect_log "test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
 expect_log "govulncheck ./..."

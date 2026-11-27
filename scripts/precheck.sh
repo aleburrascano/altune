@@ -395,7 +395,12 @@ if touches '^services/go-api/'; then
       if [ $whole_module = 1 ]; then
         par check "go-api strict linters (whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./...
       elif [ ${#affected[@]} -gt 0 ]; then
-        par check "go-api strict linters (changed packages and their importers)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners "${affected[@]}"
+        module_path=$(cd "$m" && go list -m)
+        lint_dirs=()
+        for pkg in "${affected[@]}"; do
+          if [ "$pkg" = "$module_path" ]; then lint_dirs+=(.); else lint_dirs+=("./${pkg#"$module_path"/}"); fi
+        done
+        par check "go-api strict linters (changed packages and their importers)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners "${lint_dirs[@]}"
       fi
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "history is whole, so the whole-tree checks see every file" . bash scripts/history-complete.sh
