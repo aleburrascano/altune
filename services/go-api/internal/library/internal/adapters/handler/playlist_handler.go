@@ -141,13 +141,17 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlist, err := h.lifecycle.Create(r.Context(), userId, req.Name)
+	playlist, created, err := h.lifecycle.Create(r.Context(), userId, req.Name, httpserver.IdempotencyKey(r))
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)
 		return
 	}
 
-	httpserver.WriteJSON(w, http.StatusCreated, playlistToResponse(playlist, 0, nil))
+	status := http.StatusCreated
+	if !created {
+		status = http.StatusOK
+	}
+	httpserver.WriteJSON(w, status, playlistToResponse(playlist, 0, nil))
 }
 
 func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {

@@ -8,7 +8,4 @@ var (
 	NewPreviewMatcher    = deezerpreview.NewMatcher
 )
 
-const (
-	DeezerPreviewBaseURL        = deezerpreview.BaseURL
-	DefaultMatchMaxBitErrorRate = deezerpreview.DefaultMatchMaxBitErrorRate
-)
+const DefaultMatchMaxBitErrorRate = deezerpreview.DefaultMatchMaxBitErrorRate

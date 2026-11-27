@@ -105,7 +105,7 @@ func TestPlaylistLifecycleService_Create(t *testing.T) {
 			}
 			svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now, ids.Real)
 
-			playlist, err := svc.Create(ctx, userId, tt.plName)
+			playlist, _, err := svc.Create(ctx, userId, tt.plName, nil)
 
 			if tt.wantErr != "" {
 				if err == nil {
@@ -164,7 +164,7 @@ func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
 	plRepo := newHeldPlaylistsRepo(userId, playlistCap)
 	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now, ids.Real)
 
-	playlist, err := svc.Create(ctx, userId, "One Too Many")
+	playlist, _, err := svc.Create(ctx, userId, "One Too Many", nil)
 
 	if !errors.Is(err, library.ErrTooManyPlaylists) {
 		t.Fatalf("error = %v, want ErrTooManyPlaylists", err)
@@ -184,7 +184,7 @@ func TestPlaylistLifecycleService_Create_AllowsTheLastPlaylistUnderTheCap(t *tes
 	plRepo := newHeldPlaylistsRepo(userId, playlistCap-1)
 	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now, ids.Real)
 
-	playlist, err := svc.Create(ctx, userId, "The Last One")
+	playlist, _, err := svc.Create(ctx, userId, "The Last One", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *tes
 	plRepo := newHeldPlaylistsRepo(librarytest.OtherUserId(), playlistCap)
 	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now, ids.Real)
 
-	playlist, err := svc.Create(ctx, librarytest.UserId(), "Mine")
+	playlist, _, err := svc.Create(ctx, librarytest.UserId(), "Mine", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -209,11 +209,127 @@ func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *tes
 	plRepo.assertAskedForTheCap(t)
 }
 
+func TestPlaylistLifecycleService_Create_ARepeatedKeyReturnsTheFirstPlaylist(t *testing.T) {
+	ctx := context.Background()
+	userId := librarytest.UserId()
+	plRepo := newHeldPlaylistsRepo(userId, 0)
+	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now, ids.Real)
+	key := "retry-1"
+
+	first, created, err := svc.Create(ctx, userId, "Road Trip", &key)
+	if err != nil || !created {
+		t.Fatalf("first Create = (%v, %v), want created", created, err)
+	}
+	again, createdAgain, err := svc.Create(ctx, userId, "Road Trip", &key)
+	if err != nil {
+		t.Fatalf("repeat Create: %v", err)
+	}
+	if createdAgain {
+		t.Error("the repeat reported created, want the existing playlist")
+	}
+	if again.ID != first.ID {
+		t.Errorf("repeat id = %v, want %v", again.ID, first.ID)
+	}
+	if len(plRepo.Playlists) != 1 {
+		t.Errorf("stored playlists = %d, want 1", len(plRepo.Playlists))
+	}
+}
+
+func TestPlaylistLifecycleService_Create_ARepeatAtTheCapStillReturnsTheExisting(t *testing.T) {
+	ctx := context.Background()
+	userId := librarytest.UserId()
+	plRepo := newHeldPlaylistsRepo(userId, playlistCap-1)
+	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now, ids.Real)
+	key := "last-slot"
+	first, _, err := svc.Create(ctx, userId, "Last", &key)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	again, created, err := svc.Create(ctx, userId, "Last", &key)
+
+	if err != nil || created || again.ID != first.ID {
+		t.Fatalf("repeat at the cap = (%v, %v, %v), want the existing playlist", again, created, err)
+	}
+}
+
+func TestPlaylistLifecycleService_Create_PublishesPlaylistCreatedOnlyWhenCreated(t *testing.T) {
+	ctx := context.Background()
+	userId := librarytest.UserId()
+	pub := &library.InMemoryRecordingPublisher{}
+	svc := library.MustNewPlaylistLifecycleService(library.NewInMemoryPlaylistRepo(), pub, time.Now, ids.Real)
+	first, second := "a", "b"
+
+	svc.Create(ctx, userId, "One", &first)
+	svc.Create(ctx, userId, "One", &first)
+	svc.Create(ctx, userId, "Two", &second)
+
+	if got := len(pub.Events); got != 2 {
+		t.Fatalf("published %d events, want 2: one per created playlist and none for the repeat", got)
+	}
+}
+
+type missingLookupRepo struct {
+	*library.InMemoryPlaylistRepo
+}
+
+func (missingLookupRepo) GetByIdempotencyKey(context.Context, ids.UserId, string) (*library.Playlist, bool, error) {
+	return nil, false, nil
+}
+
+func TestPlaylistLifecycleService_Create_ALostRaceReturnsTheWinnerWithoutAnEvent(t *testing.T) {
+	ctx := context.Background()
+	userId := librarytest.UserId()
+	repo := missingLookupRepo{library.NewInMemoryPlaylistRepo()}
+	pub := &library.InMemoryRecordingPublisher{}
+	svc := library.MustNewPlaylistLifecycleService(repo, pub, time.Now, ids.Real)
+	key := "raced"
+	winner, _, err := svc.Create(ctx, userId, "Winner", &key)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	published := len(pub.Events)
+
+	got, created, err := svc.Create(ctx, userId, "Loser", &key)
+
+	if err != nil || created || got == nil || got.ID != winner.ID {
+		t.Fatalf("lost race = (%v, %v, %v), want the winner and created=false", got, created, err)
+	}
+	if len(pub.Events) != published {
+		t.Error("the lost race published a PlaylistCreated event")
+	}
+}
+
+func TestPlaylistLifecycleService_Create_KeysAreScopedPerUser(t *testing.T) {
+	ctx := context.Background()
+	plRepo := library.NewInMemoryPlaylistRepo()
+	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now, ids.Real)
+	key := "same"
+
+	mine, _, _ := svc.Create(ctx, librarytest.UserId(), "Mine", &key)
+	theirs, created, err := svc.Create(ctx, librarytest.OtherUserId(), "Theirs", &key)
+
+	if err != nil || !created || theirs.ID == mine.ID {
+		t.Fatalf("other user's create = (%v, %v, %v), want a separate playlist", theirs, created, err)
+	}
+}
+
+func TestPlaylistLifecycleService_Create_RefusesAMalformedKey(t *testing.T) {
+	svc := library.MustNewPlaylistLifecycleService(library.NewInMemoryPlaylistRepo(), events.NoopPublisher(), time.Now, ids.Real)
+	key := strings.Repeat("k", 201)
+
+	pl, _, err := svc.Create(context.Background(), librarytest.UserId(), "X", &key)
+
+	if err == nil || pl != nil {
+		t.Fatalf("Create with a 201-char key = (%v, %v), want a validation error", pl, err)
+	}
+}
+
 func TestPlaylistLifecycleService_Create_StampsWallClockInUTC(t *testing.T) {
 	svc := library.MustNewPlaylistLifecycleService(library.NewInMemoryPlaylistRepo(), events.NoopPublisher(), time.Now, ids.Real)
 
 	before := time.Now()
-	pl, err := svc.Create(context.Background(), librarytest.UserId(), "Clocked")
+	pl, _, err := svc.Create(context.Background(), librarytest.UserId(), "Clocked", nil)
 	after := time.Now()
 	if err != nil {
 		t.Fatalf("Create: %v", err)
