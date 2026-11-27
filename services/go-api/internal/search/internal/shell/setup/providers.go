@@ -104,7 +104,6 @@ func (t *providerTable) addSpotify(c connections.Clients) {
 		searchTimeout: adapter.SearchTimeout(),
 		artist:        adapter,
 		album:         adapter,
-		artwork:       []ports.ArtworkLookup{artwork},
 		artworkByID:   []ports.IdentityArtworkLookup{artwork},
 	})
 }
@@ -134,7 +133,6 @@ func (t *providerTable) addDiscogs(token, userAgent string, c connections.Client
 	t.add(provider{
 		name:        rowDiscogs,
 		id:          domain.ProviderDiscogs,
-		artwork:     []ports.ArtworkLookup{adapter},
 		artworkByID: []ports.IdentityArtworkLookup{adapter},
 	})
 }

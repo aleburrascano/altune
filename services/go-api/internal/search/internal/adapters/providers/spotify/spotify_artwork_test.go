@@ -197,7 +197,8 @@ func TestChainedArtworkResolver_SpotifyIdentityOn503IsDegradedAndUnavailable(t *
 	}))
 	defer server.Close()
 
-	chain := artworkfallback.NewChainedArtworkLookup(spotify.NewSpotifyArtworkLookup(providertest.NewClient(server.URL)))
+	lookup := spotify.NewSpotifyArtworkLookup(providertest.NewClient(server.URL))
+	chain := artworkfallback.NewChainedArtworkLookup().WithIdentityLookups(lookup)
 	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), search.ResultKindArtist, "Che", "", spotifyIdentity())
 	if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("ResolveWithIdentityTagged on Spotify 503 = (%q, %v), want (\"\", ErrArtworkDegraded and ErrArtworkUnavailable)", url, err)

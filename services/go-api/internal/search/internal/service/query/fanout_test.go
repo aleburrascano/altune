@@ -224,7 +224,6 @@ func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 
 type ignoresCtxProvider struct{ memory.FakeProvider }
 
-
 func (p *ignoresCtxProvider) Search(ctx context.Context, _ string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
 	<-ctx.Done()
 	return nil, errors.New("signal: killed")

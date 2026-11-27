@@ -105,7 +105,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 	}))
 	defer srv.Close()
 	discogsLookup := discogs.NewDiscogsAdapter(serverClient(srv.URL, true), "test-token", "altune-test/1.0")
-	chain := artworkfallback.NewChainedArtworkLookup(discogsLookup).WithIdentityLookups(discogsLookup)
+	chain := artworkfallback.NewChainedArtworkLookup().WithIdentityLookups(discogsLookup)
 	enrichment := domain.EmptyEnrichment()
 	enrichment.MBID = "mbid-artist-1"
 	enrichment.ExternalIDs = map[domain.ProviderKey]string{"discogs": "38"}

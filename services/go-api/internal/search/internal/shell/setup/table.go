@@ -140,7 +140,7 @@ func (p provider) catalogSlots() []jobSlot {
 		{jobAlbum, p.album != nil},
 		{jobAlbum, p.albumFallback != nil},
 		{jobRelated, p.related != nil},
-		{jobArtwork, len(p.artwork) > 0},
+		{jobArtwork, len(p.artwork)+len(p.artworkByID) > 0},
 		{jobCharts, p.charts != nil},
 	}
 }
