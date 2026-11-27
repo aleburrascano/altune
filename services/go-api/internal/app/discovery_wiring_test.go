@@ -6,8 +6,11 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/telemetry"
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -70,13 +73,14 @@ func TestDiscovery_RequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			fixture := newJWKSFixture(t)
 			fixture.cfg.MusicBrainzUserAgent = "altune-test/1.0"
 			rt := &countingProviderRT{}
-			h := assembleWith(t, fixture.cfg, search.NewCountingTransport(rt)).assembly.Handler()
-			before, callsBefore := search.ReadProviderMetricsSnapshot(), rt.roundTrips()
+			reg := telemetry.NewRegistry()
+			h := assembleWith(t, fixture.cfg, search.NewCountingTransport(rt, reg)).assembly.Handler()
+			before, callsBefore := search.ReadProviderMetricsSnapshot(reg), rt.roundTrips()
 
 			code, body := getAs(t, h, route.target, signedToken(t, fixture.key, fixture.operator))
 
 			calls := rt.roundTrips() - callsBefore
-			counted := totalProviderCounts(search.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
+			counted := totalProviderCounts(search.ReadProviderMetricsSnapshot(reg)) - totalProviderCounts(before)
 			if calls == 0 {
 				t.Fatalf("%s made no provider call (status %d, body %s), so it proves nothing about the transport", route.target, code, body)
 			}
@@ -92,12 +96,11 @@ func TestDiscovery_AFailedBehavioralRankingRefreshIsLoggedAndCounted(t *testing.
 	cfg.BehavioralRankingEnabled = true
 	run := assembleLogging(t, cfg)
 
-	deadline := time.Now().Add(3 * time.Second)
-	h := jobHealth(t, run.assembly, jobs.BehavioralRankingRefresh)
-	for h.Failures == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
+	var h background.JobHealth
+	polltest.Within(3*time.Second, func() bool {
 		h = jobHealth(t, run.assembly, jobs.BehavioralRankingRefresh)
-	}
+		return h.Failures != 0
+	})
 
 	if h.Failures == 0 || h.LastFailure.IsZero() {
 		t.Fatalf("ranking refresh health = %+v, want a counted failure with its time against an unreachable store", h)
@@ -145,10 +148,7 @@ func TestNewEvalDiscovery_RefusesAMissingTransport(t *testing.T) {
 }
 
 func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 
 	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {
@@ -262,7 +262,7 @@ func TestDiscovery_AStoredClientEventReachesTheObserveStreamAndTheTelemetryExpor
 	recorded := recordClientEvents(t)
 	f := newJWKSFixture(t)
 	f.cfg.OTLPEndpoint = "https://otlp.example.com"
-	srv := httptest.NewServer(assembledRouter(t, f.cfg, integrationPool(t)))
+	srv := httptest.NewServer(assembledRouter(t, f.cfg, dbtest.Pool(t)))
 	t.Cleanup(srv.Close)
 	token := signedToken(t, f.key, f.operator)
 	lines := eventStreamLines(t, srv, token)

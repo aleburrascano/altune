@@ -2,6 +2,7 @@ package soundcloud
 
 import (
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/ytdlprunner"
 	"context"
 	"encoding/json"
@@ -16,7 +17,7 @@ const maxConcurrentYtdlp = 3
 var ErrYtdlpBusy = errors.New("yt-dlp soundcloud search: all slots busy")
 
 type SoundCloudAdapter struct {
-	slots    chan struct{}
+	slots    *parallel.Slots
 	dumpJSON YtdlpRunner
 }
 
@@ -28,12 +29,14 @@ func NewSoundCloudAdapter() *SoundCloudAdapter {
 
 func NewSoundCloudAdapterWithRunner(run YtdlpRunner) *SoundCloudAdapter {
 	return &SoundCloudAdapter{
-		slots:    make(chan struct{}, maxConcurrentYtdlp),
+		slots:    parallel.MustNewSlots(maxConcurrentYtdlp),
 		dumpJSON: run,
 	}
 }
 
-func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
+const soundCloudSearchTimeout = 5 * time.Second
+
+func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return soundCloudSearchTimeout }
 
 func (a *SoundCloudAdapter) Name() domain.ProviderName { return domain.ProviderSoundCloud }
 
@@ -48,12 +51,10 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 		return nil, nil
 	}
 
-	select {
-	case a.slots <- struct{}{}:
-		defer func() { <-a.slots }()
-	default:
+	if !a.slots.TryAcquire() {
 		return nil, ErrYtdlpBusy
 	}
+	defer a.slots.Release()
 
 	args := []string{
 		"--dump-json",

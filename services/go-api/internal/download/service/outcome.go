@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -23,51 +24,49 @@ type outcomeReporter struct {
 	events events.Publisher
 }
 
-type retryPolicy func(jobCtx context.Context, err error) bool
+type retryPolicy func(job ports.AcquisitionJob, err error) bool
 
-func neverRetry(context.Context, error) bool { return false }
+func neverRetry(ports.AcquisitionJob, error) bool { return false }
 
-func WillRetry(jobCtx context.Context, err error) bool {
-	attempt := jobAttemptFrom(jobCtx)
-	return attempt > 0 && attempt < MaxAcquisitionAttempts && isTransientFailure(err)
+func WillRetry(job ports.AcquisitionJob, err error) bool {
+	return job.Attempt > 0 && job.Attempt < MaxAcquisitionAttempts && isTransientFailure(err)
 }
 
 func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return background.Detach(ctx, settleBudget)
 }
 
-func (o outcomeReporter) settleExecute(ctx, jobCtx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
-	return o.settle(ctx, jobCtx, userId, trackId, err, WillRetry, func(err error) error {
-		return o.reportAcquireFailure(ctx, userId, trackId, err, ac)
+func (o outcomeReporter) settleExecute(ctx context.Context, err error, ac *AcquisitionContext) error {
+	job := ac.Job
+	return o.settle(ctx, job, err, WillRetry, func(err error) error {
+		return o.reportAcquireFailure(ctx, job, err, ac)
 	})
 }
 
-func (o outcomeReporter) settleReplace(ctx, jobCtx context.Context, userId ids.UserId, trackId ids.TrackId, err error, retry retryPolicy, ac *AcquisitionContext) error {
-	return o.settle(ctx, jobCtx, userId, trackId, err, retry, func(err error) error {
-		return o.reportReplaceFailure(ctx, userId, trackId, err, ac)
+func (o outcomeReporter) settleReplace(ctx context.Context, err error, retry retryPolicy, ac *AcquisitionContext) error {
+	job := ac.Job
+	return o.settle(ctx, job, err, retry, func(err error) error {
+		return o.reportReplaceFailure(ctx, job.UserID, job.TrackID, err, ac)
 	})
 }
 
-func (o outcomeReporter) settle(ctx, jobCtx context.Context, userId ids.UserId, trackId ids.TrackId, err error, retry retryPolicy, reportTerminal func(error) error) error {
-	if errors.Is(err, acqdomain.ErrLeaseLost) {
-		return o.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
+func (o outcomeReporter) settle(ctx context.Context, job ports.AcquisitionJob, err error, retry retryPolicy, reportTerminal func(error) error) error {
+	timedOut := ownBudgetSpent(ctx)
+	if errors.Is(err, acqdomain.ErrLeaseLost) || (!timedOut && job.CancelledByScheduler(ctx)) {
+		return o.reportSchedulerCancelledWithoutMarkingFailed(ctx, job.UserID, job.TrackID, err)
 	}
-	if schedulerCancelledJobContext(jobCtx) {
-		return o.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
-	}
-	err = ownTimeout(jobCtx, ctx, err)
-	if retry(jobCtx, err) {
-		return o.reportRetryableFailure(ctx, userId, trackId, err)
+	err = ownTimeout(ctx, err)
+	if retry(job, err) {
+		return o.reportRetryableFailure(ctx, job.UserID, job.TrackID, err)
 	}
 	return reportTerminal(err)
 }
 
 func (o outcomeReporter) reportReplaceFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"replace", true,
-		"error", redact.LogError(err),
+		logging.KeyError, redact.LogError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
@@ -81,33 +80,31 @@ func (o outcomeReporter) reportReplaceFailure(ctx context.Context, userId ids.Us
 
 func (o outcomeReporter) reportSchedulerCancelledWithoutMarkingFailed(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_cancelled",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
-		"error", redact.LogError(err),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyError, redact.LogError(err),
 	)
 	return err
 }
 
 func (o outcomeReporter) reportRetryableFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_retryable",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
-		"error", redact.LogError(err),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyError, redact.LogError(err),
 	)
 	return fmt.Errorf("%w: %w", ErrAcquisitionRetryable, err)
 }
 
-func (o outcomeReporter) reportAcquireFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
+func (o outcomeReporter) reportAcquireFailure(ctx context.Context, job ports.AcquisitionJob, err error, ac *AcquisitionContext) error {
+	userId, trackId := job.UserID, job.TrackID
 	slog.WarnContext(ctx, "track_acquisition_failed",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"replace", false,
-		"error", redact.LogError(err),
+		logging.KeyError, redact.LogError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
-	if persistErr := o.failTrack(settleCtx, trackId, userId, reason); errors.Is(persistErr, acqdomain.ErrLeaseLost) {
+	if persistErr := o.failTrack(settleCtx, job.Claim, trackId, userId, reason); errors.Is(persistErr, acqdomain.ErrLeaseLost) {
 		return errors.Join(err, persistErr)
 	}
 	o.events.Publish(settleCtx, userId, events.TrackAcquisitionFailed{
@@ -123,14 +120,13 @@ func rejectionAwareReason(ctx context.Context, trackId ids.TrackId, err error, a
 		return failureReason(err)
 	}
 	slog.InfoContext(ctx, "acquisition.rejection_summary",
-		"track_id", trackId.String(), "summary", summary)
+		logging.KeyTrackID, trackId.String(), "summary", summary)
 	return downloadfailure.JoinFailureReason(failureCode(err), summary)
 }
 
 func (o outcomeReporter) completed(ctx context.Context, userId ids.UserId, trackId ids.TrackId, audioRef string) {
 	slog.InfoContext(ctx, "track_acquisition_completed",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"audio_ref", audioRef,
 	)
 	o.events.Publish(ctx, userId, events.TrackAcquisitionCompleted{
@@ -139,38 +135,38 @@ func (o outcomeReporter) completed(ctx context.Context, userId ids.UserId, track
 	})
 }
 
-func (o outcomeReporter) markFailed(ctx context.Context, trackId ids.TrackId, userId ids.UserId, reason string) bool {
-	return o.failTrack(ctx, trackId, userId, reason) == nil
+func (o outcomeReporter) markFailed(ctx context.Context, claim ports.ClaimNumber, trackId ids.TrackId, userId ids.UserId, reason string) bool {
+	return o.failTrack(ctx, claim, trackId, userId, reason) == nil
 }
 
-func (o outcomeReporter) failTrack(ctx context.Context, trackId ids.TrackId, userId ids.UserId, reason string) error {
-	err := o.ledger.Fail(ctx, trackId, userId, jobFenceFrom(ctx), reason)
+func (o outcomeReporter) failTrack(ctx context.Context, claim ports.ClaimNumber, trackId ids.TrackId, userId ids.UserId, reason string) error {
+	err := o.ledger.Fail(ctx, trackId, userId, claim, reason)
 	if errors.Is(err, ports.ErrIllegalTransition) {
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return err
 	}
 	if errors.Is(err, acqdomain.ErrLeaseLost) {
 		slog.InfoContext(ctx, "mark_failed: lease lost, failure not persisted",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return err
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
-			"track_id", trackId.String(), "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), logging.KeyError, redact.LogError(err))
 		return err
 	}
 	return nil
 }
 
-func (o outcomeReporter) refuseQueued(ctx context.Context, userId ids.UserId, trackId ids.TrackId) {
+func (o outcomeReporter) refuseQueued(ctx context.Context, job ports.AcquisitionJob) {
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
-	if !o.markFailed(settleCtx, trackId, userId, string(downloadfailure.FailureAcquisitionRefused)) {
+	if !o.markFailed(settleCtx, job.Claim, job.TrackID, job.UserID, string(downloadfailure.FailureAcquisitionRefused)) {
 		return
 	}
-	o.events.Publish(settleCtx, userId, events.TrackAcquisitionFailed{
-		TrackID: trackId.String(),
+	o.events.Publish(settleCtx, job.UserID, events.TrackAcquisitionFailed{
+		TrackID: job.TrackID.String(),
 		Reason:  string(downloadfailure.FailureAcquisitionRefused),
 	})
 }

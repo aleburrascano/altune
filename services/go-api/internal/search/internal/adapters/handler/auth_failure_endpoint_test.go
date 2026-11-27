@@ -44,7 +44,7 @@ func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 		t.Fatalf("appended %d events, want 1", len(store.events))
 	}
 	got := store.events[0]
-	if got.Type != domain.EventTypeAuthFailed || got.UserId != ids.AnonymousUserId() {
+	if got.Type != domain.InteractionTypeAuthFailed || got.UserId != ids.AnonymousUserId() {
 		t.Errorf("event = %v for %v, want auth_failed for the anonymous user", got.Type, got.UserId)
 	}
 	want := map[string]any{"reason": "invalid_credentials", "app_version": "1.2.3"}
@@ -72,6 +72,18 @@ func TestAuthFailureEndpoint_RateLimitsPerClientIP(t *testing.T) {
 	discAssertStatus(t, postAuthFailure(r, validAuthFailureBody, "203.0.113.6:1000"), http.StatusNoContent)
 }
 
+func TestAuthFailureEndpoint_OversizedBodyIsTooLarge(t *testing.T) {
+	store := &recordingEventStore{}
+	r := buildAuthFailureRouter(t, store, search.DefaultAuthFailureLimit)
+
+	rec := postAuthFailure(r, `{"reason":"network","app_version":"1.2.3","pad":"`+strings.Repeat("x", 600)+`"}`, "203.0.113.5:1000")
+
+	discAssertStatus(t, rec, http.StatusRequestEntityTooLarge)
+	if len(store.events) != 0 {
+		t.Errorf("appended %d events, want 0", len(store.events))
+	}
+}
+
 func TestAuthFailureEndpoint_RejectsInvalidBodies(t *testing.T) {
 	cases := map[string]string{
 		"unknown field":        `{"reason":"network","app_version":"1.2.3","email":"a@b.c"}`,
@@ -81,7 +93,6 @@ func TestAuthFailureEndpoint_RejectsInvalidBodies(t *testing.T) {
 		"version too long":     `{"reason":"network","app_version":"` + strings.Repeat("1", 33) + `"}`,
 		"version with space":   `{"reason":"network","app_version":"1 2"}`,
 		"trailing data":        validAuthFailureBody + `{}`,
-		"over 512 bytes":       `{"reason":"network","app_version":"1.2.3","pad":"` + strings.Repeat("x", 600) + `"}`,
 		"oversized valid keys": validAuthFailureBody + strings.Repeat(" ", 600),
 	}
 	for name, body := range cases {

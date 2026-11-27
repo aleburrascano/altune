@@ -46,6 +46,7 @@ type Bucket struct {
 	reader  metricsReader
 	history core.Store
 	series  core.Series
+	slos    searchSLOs
 
 	mu      sync.RWMutex
 	last    goapi.LatencyMetrics
@@ -72,6 +73,7 @@ func New(deps Deps) *Bucket {
 		reader:  reader,
 		history: core.NewRingStore(historyCapacity),
 		series:  core.DiscardSeries{},
+		slos:    newSearchSLOs(),
 	}
 }
 
@@ -96,6 +98,9 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	w := b.advanceWindow(live.Latency, time.Now())
 	stats := routeStats(w.latency)
 	b.recordSeries(w, stats)
+	if w.measured {
+		b.slos.record(w.at, w.latency.Routes[searchRoute])
+	}
 	b.recordFresh(w.latency)
 	return []core.Signal{throughputSignal(w)}, nil
 }
@@ -153,10 +158,14 @@ type window struct {
 	requests  uint64
 	perSecond float64
 	at        time.Time
+	measured  bool
 }
 
 func (b *Bucket) advanceWindow(cur goapi.LatencyMetrics, at time.Time) window {
-	delta := windowedLatency(b.prev, cur, b.havePrev)
+	delta := cur
+	if b.havePrev {
+		delta = windowedLatency(b.prev, cur)
+	}
 	requests := totalRequests(delta)
 	var perSecond float64
 	if b.havePrev {
@@ -164,14 +173,12 @@ func (b *Bucket) advanceWindow(cur goapi.LatencyMetrics, at time.Time) window {
 			perSecond = float64(requests) / secs
 		}
 	}
+	measured := b.havePrev
 	b.prev, b.prevAt, b.havePrev = cur, at, true
-	return window{latency: delta, requests: requests, perSecond: perSecond, at: at.UTC()}
+	return window{latency: delta, requests: requests, perSecond: perSecond, at: at.UTC(), measured: measured}
 }
 
-func windowedLatency(prev, cur goapi.LatencyMetrics, havePrev bool) goapi.LatencyMetrics {
-	if !havePrev {
-		return cur
-	}
+func windowedLatency(prev, cur goapi.LatencyMetrics) goapi.LatencyMetrics {
 	routes := make(map[string]goapi.RouteLatency, len(cur.Routes))
 	for route, c := range cur.Routes {
 		p, ok := prev.Routes[route]
@@ -231,8 +238,9 @@ func (b *Bucket) Store(signals []core.Signal) {
 }
 
 type Data struct {
-	Routes     []routeStat   `json:"routes"`
-	Throughput []core.Signal `json:"throughput"`
+	Routes     []routeStat      `json:"routes"`
+	Throughput []core.Signal    `json:"throughput"`
+	SLOs       []core.SLOStatus `json:"slos"`
 }
 
 func (b *Bucket) Snapshot() core.Snapshot {
@@ -257,7 +265,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
-		Data:      core.MarshalData(Data{Routes: stats, Throughput: b.history.Snapshot()}),
+		Data:      core.MarshalData(Data{Routes: stats, Throughput: b.history.Snapshot(), SLOs: b.slos.statuses(time.Now())}),
 	}
 }
 

@@ -43,7 +43,10 @@ func (d DependencyHealth) Healthy() bool {
 	return d.DB != DepDown && d.Redis != DepDown && d.Auth != DepDown
 }
 
-const defaultProbeTimeout = 5 * time.Second
+const (
+	defaultProbeTimeout = 5 * time.Second
+	bytesPerMB          = 1024 * 1024
+)
 
 type HealthProbe func(ctx context.Context) DependencyHealth
 
@@ -54,7 +57,7 @@ func (h *Handler) serveHealth(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteJSON(w, healthStatusCode(dependencies), healthResponse{
 		DependencyHealth: dependencies,
 		Goroutines:       runtime.NumGoroutine(),
-		HeapMB:           ms.HeapAlloc / (1024 * 1024),
+		HeapMB:           ms.HeapAlloc / bytesPerMB,
 	})
 }
 

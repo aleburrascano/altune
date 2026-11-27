@@ -17,31 +17,31 @@ import (
 const writeOnlyEventRetention = 30 * 24 * time.Hour
 
 var retentionPolicy = []struct {
-	eventType domain.EventType
+	eventType domain.InteractionType
 	window    time.Duration
 }{
-	{domain.EventTypeSearchPerformed, persistence.AggregateEventRetention},
-	{domain.EventTypeResultClicked, persistence.AggregateEventRetention},
-	{domain.EventTypePlay, persistence.AggregateEventRetention},
-	{domain.EventTypeSkip, persistence.AggregateEventRetention},
-	{domain.EventTypeCompleted, persistence.AggregateEventRetention},
-	{domain.EventTypeLibraryAdd, persistence.AggregateEventRetention},
-	{domain.EventTypeWrongAlbum, persistence.AggregateEventRetention},
-	{domain.EventTypeResultsShown, writeOnlyEventRetention},
-	{domain.EventTypeSearchFailed, writeOnlyEventRetention},
-	{domain.EventTypeSearchDegraded, writeOnlyEventRetention},
-	{domain.EventTypePlaybackHealth, writeOnlyEventRetention},
-	{domain.EventTypeDetailHealth, writeOnlyEventRetention},
-	{domain.EventTypeAcquisitionUi, writeOnlyEventRetention},
-	{domain.EventTypeClientError, writeOnlyEventRetention},
-	{domain.EventTypeUserAction, writeOnlyEventRetention},
-	{domain.EventTypeFailureShown, writeOnlyEventRetention},
-	{domain.EventTypeSseReconnect, writeOnlyEventRetention},
-	{domain.EventTypeOutboxFlushFailed, writeOnlyEventRetention},
-	{domain.EventTypeDownloadFailed, writeOnlyEventRetention},
-	{domain.EventTypeAuthFailed, writeOnlyEventRetention},
-	{domain.EventTypeScreenView, writeOnlyEventRetention},
-	{domain.EventTypePlayStart, writeOnlyEventRetention},
+	{domain.InteractionTypeSearchPerformed, persistence.AggregateEventRetention},
+	{domain.InteractionTypeResultClicked, persistence.AggregateEventRetention},
+	{domain.InteractionTypePlay, persistence.AggregateEventRetention},
+	{domain.InteractionTypeSkip, persistence.AggregateEventRetention},
+	{domain.InteractionTypeCompleted, persistence.AggregateEventRetention},
+	{domain.InteractionTypeLibraryAdd, persistence.AggregateEventRetention},
+	{domain.InteractionTypeWrongAlbum, persistence.AggregateEventRetention},
+	{domain.InteractionTypeResultsShown, writeOnlyEventRetention},
+	{domain.InteractionTypeSearchFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeSearchDegraded, writeOnlyEventRetention},
+	{domain.InteractionTypePlaybackHealth, writeOnlyEventRetention},
+	{domain.InteractionTypeDetailHealth, writeOnlyEventRetention},
+	{domain.InteractionTypeAcquisitionUi, writeOnlyEventRetention},
+	{domain.InteractionTypeClientError, writeOnlyEventRetention},
+	{domain.InteractionTypeUserAction, writeOnlyEventRetention},
+	{domain.InteractionTypeFailureShown, writeOnlyEventRetention},
+	{domain.InteractionTypeSseReconnect, writeOnlyEventRetention},
+	{domain.InteractionTypeOutboxFlushFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeDownloadFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeAuthFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeScreenView, writeOnlyEventRetention},
+	{domain.InteractionTypePlayStart, writeOnlyEventRetention},
 }
 
 func newEventOwner(t *testing.T, pool *pgxpool.Pool) ids.UserId {
@@ -53,7 +53,7 @@ func newEventOwner(t *testing.T, pool *pgxpool.Pool) ids.UserId {
 	return owner
 }
 
-func seedEvent(t *testing.T, store *persistence.PostgresEventStore, owner ids.UserId, at time.Time, eventType domain.EventType) {
+func seedEvent(t *testing.T, store *persistence.PostgresEventStore, owner ids.UserId, at time.Time, eventType domain.InteractionType) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
@@ -65,7 +65,7 @@ func seedEvent(t *testing.T, store *persistence.PostgresEventStore, owner ids.Us
 	}
 }
 
-func countEventsOfType(t *testing.T, pool *pgxpool.Pool, owner ids.UserId, eventType domain.EventType) int {
+func countEventsOfType(t *testing.T, pool *pgxpool.Pool, owner ids.UserId, eventType domain.InteractionType) int {
 	t.Helper()
 	var n int
 	if err := pool.QueryRow(context.Background(),
@@ -85,12 +85,12 @@ func deleteOwnEvents(t *testing.T, pool *pgxpool.Pool, owner ids.UserId) {
 }
 
 func TestRetentionPolicy_NamesEveryEventTypeButDiscographyObserved(t *testing.T) {
-	listed := map[domain.EventType]bool{}
+	listed := map[domain.InteractionType]bool{}
 	for _, ret := range retentionPolicy {
 		listed[ret.eventType] = true
 	}
-	for et := domain.EventTypeUnknown + 1; et.String() != "unknown"; et++ {
-		if et != domain.EventTypeDiscographyObserved && !listed[et] {
+	for et := domain.InteractionTypeUnknown + 1; et.String() != "unknown"; et++ {
+		if et != domain.InteractionTypeDiscographyObserved && !listed[et] {
 			t.Errorf("event type %s has no retention window in this test's policy table", et)
 		}
 	}
@@ -131,13 +131,13 @@ func TestPostgresEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) 
 	owner := newEventOwner(t, pool)
 
 	now := time.Now().UTC()
-	seedEvent(t, store, owner, now.Add(-persistence.AggregateEventRetention-30*24*time.Hour), domain.EventTypeDiscographyObserved)
-	seedEvent(t, store, newEventOwner(t, pool), now.Add(-time.Hour), domain.EventTypeDiscographyObserved)
+	seedEvent(t, store, owner, now.Add(-persistence.AggregateEventRetention-30*24*time.Hour), domain.InteractionTypeDiscographyObserved)
+	seedEvent(t, store, newEventOwner(t, pool), now.Add(-time.Hour), domain.InteractionTypeDiscographyObserved)
 
 	if _, err := store.PruneEvents(context.Background(), now); err != nil {
 		t.Fatalf("PruneEvents: %v", err)
 	}
-	if got := countEventsOfType(t, pool, owner, domain.EventTypeDiscographyObserved); got != 1 {
+	if got := countEventsOfType(t, pool, owner, domain.InteractionTypeDiscographyObserved); got != 1 {
 		t.Fatalf("discography_observed rows after PruneEvents = %d, want 1 (untouched)", got)
 	}
 }
@@ -146,9 +146,9 @@ func TestPostgresEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *t
 	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	now := time.Now().UTC()
-	types := []domain.EventType{
-		domain.EventTypePlaybackHealth, domain.EventTypeUserAction, domain.EventTypeFailureShown,
-		domain.EventTypeSseReconnect, domain.EventTypeOutboxFlushFailed, domain.EventTypeDownloadFailed,
+	types := []domain.InteractionType{
+		domain.InteractionTypePlaybackHealth, domain.InteractionTypeUserAction, domain.InteractionTypeFailureShown,
+		domain.InteractionTypeSseReconnect, domain.InteractionTypeOutboxFlushFailed, domain.InteractionTypeDownloadFailed,
 	}
 	owner := newEventOwner(t, pool)
 	clean := func() { deleteOwnEvents(t, pool, owner) }
@@ -168,7 +168,7 @@ func TestPostgresEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *t
 			if _, err := store.PruneEvents(context.Background(), now); err != nil {
 				t.Fatalf("PruneEvents: %v", err)
 			}
-			health := countEventsOfType(t, pool, owner, domain.EventTypePlaybackHealth)
+			health := countEventsOfType(t, pool, owner, domain.InteractionTypePlaybackHealth)
 			for _, et := range types[1:] {
 				if got := countEventsOfType(t, pool, owner, et); got != health {
 					t.Errorf("%s rows aged %s after prune = %d, want %d (same as playback_health)",

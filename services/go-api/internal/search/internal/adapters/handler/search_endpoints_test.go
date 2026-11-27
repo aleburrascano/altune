@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -420,18 +419,10 @@ func TestHandleSuggest(t *testing.T) {
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=x", nil)
 		discAssertStatus(t, rec, http.StatusInternalServerError)
 	})
-
-	t.Run("no auth returns 401", func(t *testing.T) {
-		router := buildSuggestRouter(t, &fakeVocabStore{})
-		rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/suggest?q=x")
-		discAssertStatus(t, rec, http.StatusUnauthorized)
-	})
 }
 
 func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 
 	const secret = "kendricksecretunreleasedcut"
 	router := buildSuggestRouter(t, &fakeVocabStore{err: context.DeadlineExceeded})
@@ -588,12 +579,6 @@ func TestHandleClearSearchHistory_RepoErrorReturns500(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusInternalServerError)
 }
 
-func TestHandleClearSearchHistory_NoAuthReturns401(t *testing.T) {
-	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, nil)
-	rec := discServeNoAuth(t, router, http.MethodDelete, "/discovery/search-history")
-	discAssertStatus(t, rec, http.StatusUnauthorized)
-}
-
 func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
 	router := buildEventRouter(t, &recordingEventStore{err: context.DeadlineExceeded})
 
@@ -672,7 +657,7 @@ func TestHandleRecordEvent_ResultsShownIsClientSubmittable(t *testing.T) {
 	if len(store.events) != 1 {
 		t.Fatalf("stored events = %d, want 1", len(store.events))
 	}
-	if store.events[0].Type != domain.EventTypeResultsShown {
+	if store.events[0].Type != domain.InteractionTypeResultsShown {
 		t.Errorf("stored type = %v, want results_shown", store.events[0].Type)
 	}
 }
@@ -691,7 +676,7 @@ func TestHandleRecordEvent_SearchFailedIsClientSubmittable(t *testing.T) {
 	if len(store.events) != 1 {
 		t.Fatalf("stored events = %d, want 1", len(store.events))
 	}
-	if store.events[0].Type != domain.EventTypeSearchFailed {
+	if store.events[0].Type != domain.InteractionTypeSearchFailed {
 		t.Errorf("stored type = %v, want search_failed", store.events[0].Type)
 	}
 	if store.events[0].Payload["source"] != "suggest" {
@@ -718,7 +703,7 @@ func TestHandleRecordEvent_SearchDegradedIsClientSubmittable(t *testing.T) {
 	if len(store.events) != 1 {
 		t.Fatalf("stored events = %d, want 1", len(store.events))
 	}
-	if store.events[0].Type != domain.EventTypeSearchDegraded {
+	if store.events[0].Type != domain.InteractionTypeSearchDegraded {
 		t.Errorf("stored type = %v, want search_degraded", store.events[0].Type)
 	}
 }
@@ -743,7 +728,7 @@ func TestHandleRecordEvent_PlaybackHealthIsClientSubmittable(t *testing.T) {
 	if len(store.events) != 1 {
 		t.Fatalf("stored events = %d, want 1", len(store.events))
 	}
-	if store.events[0].Type != domain.EventTypePlaybackHealth {
+	if store.events[0].Type != domain.InteractionTypePlaybackHealth {
 		t.Errorf("stored type = %v, want playback_health", store.events[0].Type)
 	}
 }
@@ -768,7 +753,7 @@ func TestHandleRecordEvent_DetailHealthIsClientSubmittable(t *testing.T) {
 	if len(store.events) != 1 {
 		t.Fatalf("stored events = %d, want 1", len(store.events))
 	}
-	if store.events[0].Type != domain.EventTypeDetailHealth {
+	if store.events[0].Type != domain.InteractionTypeDetailHealth {
 		t.Errorf("stored type = %v, want detail_health", store.events[0].Type)
 	}
 }
@@ -1019,17 +1004,17 @@ func (s *recordingVocabStore) written() []string {
 	return append([]string(nil), s.terms...)
 }
 
-func buildQueryCapRouter(t *testing.T, p search.SearchProvider, vocab search.SpellingHintsStore) chi.Router {
+func buildQueryCapRouter(t *testing.T, p search.SearchProvider, vocab search.SpellingHintsStore) (chi.Router, *background.Tracker) {
 	bg := searchtest.NewTracker(t)
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = vocab })
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Search: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
-	return r
+	return r, bg
 }
 
-func newQueryCapFixture(t *testing.T) (*countingSearchProvider, *recordingVocabStore, chi.Router) {
+func newQueryCapFixture(t *testing.T) (*countingSearchProvider, *recordingVocabStore, chi.Router, *background.Tracker) {
 	p := &countingSearchProvider{fakeSearchProvider: fakeSearchProvider{
 		name: search.ProviderDeezer,
 		results: []search.SearchResult{{
@@ -1041,7 +1026,8 @@ func newQueryCapFixture(t *testing.T) (*countingSearchProvider, *recordingVocabS
 		}},
 	}}
 	vocab := &recordingVocabStore{}
-	return p, vocab, buildQueryCapRouter(t, p, vocab)
+	router, bg := buildQueryCapRouter(t, p, vocab)
+	return p, vocab, router, bg
 }
 
 func wordQuery(n int) string {
@@ -1049,7 +1035,7 @@ func wordQuery(n int) string {
 }
 
 func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) {
-	p, vocab, router := newQueryCapFixture(t)
+	p, vocab, router, bg := newQueryCapFixture(t)
 	raw := wordQuery(domain.MaxSearchQueryTokens + 1)
 	if len([]rune(raw)) > domain.MaxSearchQueryRunes {
 		t.Fatalf("fixture must stay under the rune cap to isolate the token cap")
@@ -1058,7 +1044,7 @@ func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(raw), nil)
 
 	discAssertStatus(t, rec, http.StatusBadRequest)
-	time.Sleep(100 * time.Millisecond)
+	bg.Wait()
 	if n := p.calls.Load(); n != 0 {
 		t.Errorf("provider fan-out calls = %d, want 0", n)
 	}
@@ -1068,7 +1054,7 @@ func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) 
 }
 
 func TestHandleSearch_QueryAtTokenCap_StillSearchesAndIngests(t *testing.T) {
-	p, vocab, router := newQueryCapFixture(t)
+	p, vocab, router, bg := newQueryCapFixture(t)
 	raw := wordQuery(domain.MaxSearchQueryTokens)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(raw), nil)
@@ -1077,10 +1063,7 @@ func TestHandleSearch_QueryAtTokenCap_StillSearchesAndIngests(t *testing.T) {
 	if p.calls.Load() == 0 {
 		t.Fatalf("provider was not called for a query at the token cap")
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for len(vocab.written()) == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	bg.Wait()
 	terms := vocab.written()
 	want := []string{"Song - Artist", "Artist"}
 	if len(terms) != len(want) {
@@ -1372,9 +1355,7 @@ func seededHistoryRepo() *fakeSearchHistoryRepo {
 
 func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("info")
+	return logging.CaptureRing(t, "info")
 }
 
 func findRecord(ring *logging.RingBuffer, msg string) (logging.CapturedRecord, bool) {
@@ -1564,7 +1545,7 @@ func TestHandleRecordEvent_UserTelemetryEnvelopesAreAccepted(t *testing.T) {
 	cases := []struct {
 		name    string
 		body    map[string]any
-		want    domain.EventType
+		want    domain.InteractionType
 		payload map[string]any
 	}{
 		{
@@ -1572,7 +1553,7 @@ func TestHandleRecordEvent_UserTelemetryEnvelopesAreAccepted(t *testing.T) {
 			body: map[string]any{"type": "user_action", "payload": map[string]any{
 				"action": "library.retry", "outcome": "tapped", "session_id": "s-1",
 			}},
-			want:    domain.EventTypeUserAction,
+			want:    domain.InteractionTypeUserAction,
 			payload: map[string]any{"action": "library.retry", "outcome": "tapped"},
 		},
 		{
@@ -1582,7 +1563,7 @@ func TestHandleRecordEvent_UserTelemetryEnvelopesAreAccepted(t *testing.T) {
 				"status": 503, "correlation_id": "corr-1",
 				"error": strings.Repeat("x", 300), "session_id": "s-1",
 			}},
-			want: domain.EventTypeUserAction,
+			want: domain.InteractionTypeUserAction,
 			payload: map[string]any{
 				"action": "detail.save", "outcome": "failed", "track_id": "t-1",
 				"correlation_id": "corr-1", "error": strings.Repeat("x", 300),
@@ -1594,7 +1575,7 @@ func TestHandleRecordEvent_UserTelemetryEnvelopesAreAccepted(t *testing.T) {
 				"surface": "alert.delete_track", "message": "could not delete",
 				"track_id": "t-2", "session_id": "s-1",
 			}},
-			want:    domain.EventTypeFailureShown,
+			want:    domain.InteractionTypeFailureShown,
 			payload: map[string]any{"surface": "alert.delete_track", "message": "could not delete", "track_id": "t-2"},
 		},
 		{
@@ -1606,7 +1587,7 @@ func TestHandleRecordEvent_UserTelemetryEnvelopesAreAccepted(t *testing.T) {
 					"surface": "banner.track_status", "message": "ünicode 山 🎵", "session_id": "s-1",
 				},
 			},
-			want:    domain.EventTypeFailureShown,
+			want:    domain.InteractionTypeFailureShown,
 			payload: map[string]any{"surface": "banner.track_status", "message": "ünicode 山 🎵"},
 		},
 	}

@@ -1,11 +1,8 @@
-import { isWebPlatform } from '@shared/device';
-
 export const CORRELATION_HEADER = 'X-Correlation-ID';
 
 const ID_BYTES = 8;
 
-export function newCorrelationId(): string | null {
-  if (isWebPlatform()) return null;
+export function newCorrelationId(): string {
   let id = '';
   for (let i = 0; i < ID_BYTES; i += 1) {
     id += Math.floor(Math.random() * 256)

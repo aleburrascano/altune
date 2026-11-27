@@ -561,8 +561,8 @@ describe('AddToPlaylistSheet(): failure injection', () => {
 
     await waitFor(() =>
       expect(dialogs.alerts).toContainEqual([
-        'Add failed',
-        'Could not add the track to the playlist. Please try again.',
+        "Couldn't add the track to the playlist",
+        'Check your connection and try again.',
       ]),
     );
     expect(screen.queryByText('Added ✓')).toBeNull();

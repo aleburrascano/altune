@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -28,7 +29,7 @@ func (f storedFileFingerprinter) fingerprint(ctx context.Context, ac *Acquisitio
 	}
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.replace_current_file_fingerprint_failed",
-			"track_id", trackId.String(), "audio_ref", *track.AudioRef, "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), "audio_ref", *track.AudioRef, logging.KeyError, redact.LogError(err))
 		warnCurrentFileUnidentified(ctx, trackId, "the stored file could not be fingerprinted")
 		return
 	}
@@ -38,13 +39,13 @@ func (f storedFileFingerprinter) fingerprint(ctx context.Context, ac *Acquisitio
 	}
 	ac.Replace.StoredAcoustID = match.AcoustID
 	slog.InfoContext(ctx, "acquisition.replace_current_file_fingerprinted",
-		"track_id", trackId.String(), "audio_ref", *track.AudioRef,
+		logging.KeyTrackID, trackId.String(), "audio_ref", *track.AudioRef,
 		"stored_acoustid", match.AcoustID, "known", match.Known())
 }
 
 func warnCurrentFileUnidentified(ctx context.Context, trackId ids.TrackId, reason string) {
 	slog.WarnContext(ctx, "acquisition.replace_current_file_unidentified",
-		"track_id", trackId.String(), "reason", reason,
+		logging.KeyTrackID, trackId.String(), "reason", reason,
 		"effect", "no candidate is excluded as the current file")
 }
 

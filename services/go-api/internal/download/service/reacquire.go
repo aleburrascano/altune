@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -23,7 +24,7 @@ func (p reacquirePolicy) reconcile(ctx context.Context, track *ports.TrackSnapsh
 		}
 	case ports.TrackPending:
 	case ports.TrackFailed:
-		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", track.ID.String())
+		slog.InfoContext(ctx, "acquire_retrying_failed", logging.KeyTrackID, track.ID.String())
 		if err := p.revertToPending(ctx, track); err != nil {
 			return false, err
 		}
@@ -39,14 +40,14 @@ func (p reacquirePolicy) reconcileReady(ctx context.Context, track *ports.TrackS
 	switch {
 	case existsErr != nil:
 		slog.WarnContext(ctx, "acquire_exists_check_failed",
-			"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
+			logging.KeyTrackID, track.ID.String(), "audio_ref", *track.AudioRef, logging.KeyError, existsErr)
 		return false, fmt.Errorf("reconcile exists check: %w", existsErr)
 	case exists:
-		slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", track.ID.String())
+		slog.InfoContext(ctx, "acquire_skip_already_ready", logging.KeyTrackID, track.ID.String())
 		return false, nil
 	default:
 		slog.InfoContext(ctx, "acquire_reacquire_missing_file",
-			"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
+			logging.KeyTrackID, track.ID.String(), "audio_ref", *track.AudioRef)
 		return true, nil
 	}
 }

@@ -23,7 +23,7 @@ func (a *application) startOrphanedAudioReconcile(ctx context.Context, queue lib
 		return
 	}
 	svc := library.NewReconcileOrphanedAudioService(queue, audioStore,
-		library.NewExpvarAudioStoreMetrics(), a.jobs.Switch(jobs.OrphanedAudioReconcile))
+		library.NewAudioStoreMetrics(a.metrics), a.jobs.Switch(jobs.OrphanedAudioReconcile))
 	a.startSimpleJob(ctx, jobs.OrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)
 		return err
@@ -66,9 +66,12 @@ func (a *application) startVocabularyRefresh(ctx context.Context, vocabStore sea
 	if vocabStore == nil || len(charts) == 0 {
 		return
 	}
-	const vocabRefreshInterval = 6 * time.Hour
+	const (
+		vocabRefreshInterval = 6 * time.Hour
+		vocabChartDepth      = 50
+	)
 	a.vocabRefresh = search.NewVocabularyRefreshService(
-		charts, vocabStore, 50,
+		charts, vocabStore, vocabChartDepth,
 	)
 	a.startSimpleJob(ctx, jobs.SpellingHintsRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		return a.vocabRefresh.RunOnce(ctx)

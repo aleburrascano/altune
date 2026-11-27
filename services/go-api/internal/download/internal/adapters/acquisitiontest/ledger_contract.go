@@ -21,15 +21,21 @@ func contractTrack(status ports.TrackStatus) ports.TrackSnapshot {
 		ID: contractIDs.NewTrackId(), UserId: contractIDs.NewUserId(),
 		Title: "Song", Artist: "Artist", Album: "Album", Status: status,
 	}
-	return withFileOnRecord(track, status == ports.TrackReady)
+	if status == ports.TrackReady {
+		track.Streamable = true
+		return withFileOnRecord(track)
+	}
+	return withoutFileOnRecord(track)
 }
 
-func withFileOnRecord(track ports.TrackSnapshot, hasFile bool) ports.TrackSnapshot {
+func withFileOnRecord(track ports.TrackSnapshot) ports.TrackSnapshot {
+	ref := contractAudioRef
+	track.AudioRef = &ref
+	return track
+}
+
+func withoutFileOnRecord(track ports.TrackSnapshot) ports.TrackSnapshot {
 	track.AudioRef = nil
-	if hasFile {
-		ref := contractAudioRef
-		track.AudioRef = &ref
-	}
 	return track
 }
 
@@ -110,7 +116,11 @@ func contractGetReportsEachStatusAndWhetherTheTrackIsStreamable(t *testing.T, l 
 		{ports.TrackFailed, false, false},
 		{ports.TrackFailed, true, false},
 	} {
-		track := withFileOnRecord(contractTrack(tt.status), tt.withFile)
+		track := withoutFileOnRecord(contractTrack(tt.status))
+		if tt.withFile {
+			track = withFileOnRecord(track)
+		}
+		track.Streamable = tt.streamable
 		l.AddTrack(t, track)
 
 		if got := ownersView(t, l, track); got.Status != tt.status || got.Streamable != tt.streamable {

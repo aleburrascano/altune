@@ -23,13 +23,22 @@ type DiscoveryRateLimits struct {
 	History   RequestLimit
 }
 
+const (
+	searchPerMinute    = 60
+	suggestPerMinute   = 120
+	eventsPerMinute    = 300
+	contentPerMinute   = 180
+	favoritesPerMinute = 60
+	historyPerMinute   = 60
+)
+
 var DefaultDiscoveryRateLimits = DiscoveryRateLimits{
-	Search:    RequestLimit{Max: 60, Window: time.Minute},
-	Suggest:   RequestLimit{Max: 120, Window: time.Minute},
-	Events:    RequestLimit{Max: 300, Window: time.Minute},
-	Content:   RequestLimit{Max: 180, Window: time.Minute},
-	Favorites: RequestLimit{Max: 60, Window: time.Minute},
-	History:   RequestLimit{Max: 60, Window: time.Minute},
+	Search:    RequestLimit{Max: searchPerMinute, Window: time.Minute},
+	Suggest:   RequestLimit{Max: suggestPerMinute, Window: time.Minute},
+	Events:    RequestLimit{Max: eventsPerMinute, Window: time.Minute},
+	Content:   RequestLimit{Max: contentPerMinute, Window: time.Minute},
+	Favorites: RequestLimit{Max: favoritesPerMinute, Window: time.Minute},
+	History:   RequestLimit{Max: historyPerMinute, Window: time.Minute},
 }
 
 func (l RequestLimit) rateLimit() httpserver.RateLimit {
@@ -37,8 +46,7 @@ func (l RequestLimit) rateLimit() httpserver.RateLimit {
 }
 
 func newUserRateLimiter(limit RequestLimit, now clock.Func) func(http.Handler) http.Handler {
-	return httpserver.MustNewUserRateLimiter(limit.rateLimit(), now).
-		Middleware(httpserver.UserKey(requestuser.UserIDFromContext), domain.ErrRateLimited, nil)
+	return requestuser.LimitPerUser(limit.rateLimit(), now, domain.ErrRateLimited, nil)
 }
 
 func newClientRateLimiter(limit RequestLimit, now clock.Func) func(http.Handler) http.Handler {

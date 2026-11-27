@@ -5,8 +5,8 @@ import (
 	"altune/go-api/internal/download/internal/adapters/chromaprint"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/retrysafe"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -184,9 +184,7 @@ func (h *warnCapture) WithGroup(string) slog.Handler      { return h }
 func captureWarnings(t *testing.T) *warnCapture {
 	t.Helper()
 	h := &warnCapture{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(h))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, h)
 	return h
 }
 
@@ -223,17 +221,8 @@ func TestNewIdentifier_ValidKeyDoesNotWarn(t *testing.T) {
 	}
 }
 
-func captureJSONLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	buf := &bytes.Buffer{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return buf
-}
-
 func TestNewIdentifier_BlankKeyLogsExactlyOneWarn(t *testing.T) {
-	logs := captureJSONLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	newIdentifier(t, t.TempDir(), "   ")
 
@@ -257,7 +246,7 @@ func TestNewIdentifier_BlankKeyLogsExactlyOneWarn(t *testing.T) {
 }
 
 func TestNewIdentifier_NonBlankKeyLogsNothing(t *testing.T) {
-	logs := captureJSONLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	newIdentifier(t, t.TempDir(), "key")
 

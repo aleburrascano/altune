@@ -77,7 +77,8 @@ func kindOf(k ports.CandidateKind) titlematch.Kind {
 		return titlematch.ArtTrack
 	case ports.KindPinnedVideo, ports.KindCatalogPin:
 		return titlematch.PinnedVideo
-	default:
+	case ports.KindUpload:
 		return titlematch.Upload
 	}
+	return titlematch.Upload
 }

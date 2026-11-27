@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -128,8 +130,25 @@ func TestIsTransient_RealPostgresFailures(t *testing.T) {
 		}, true},
 		"query cancelled by the caller": {func(t *testing.T) error {
 			cancellable, cancel := context.WithCancel(ctx)
-			time.AfterFunc(200*time.Millisecond, cancel)
-			_, err := pool.Exec(cancellable, "SELECT pg_sleep(10)")
+			query := "SELECT pg_sleep(10) /* " + uuid.NewString() + " */"
+			finished := make(chan struct{})
+			go func() {
+				defer close(finished)
+				defer cancel()
+				polltest.Within(10*time.Second, func() bool {
+					if cancellable.Err() != nil {
+						return true
+					}
+					var n int
+					err := killer.QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND query = $1", query).Scan(&n)
+					return err == nil && n > 0
+				})
+			}()
+			defer func() {
+				cancel()
+				<-finished
+			}()
+			_, err := pool.Exec(cancellable, query)
 			return err
 		}, false},
 		"query on an already cancelled context": {func(t *testing.T) error {

@@ -27,7 +27,8 @@ func (q contractPgxJobQueue) ExpireLease(t *testing.T, trackID ids.TrackId) {
 
 func TestPostgresJobQueue_Contract(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	acquisitiontest.JobQueueContract(t, func(*testing.T) acquisitiontest.JobQueueUnderTest {
 		return contractPgxJobQueue{PostgresJobQueue: download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool}), pool: pool}
 	})

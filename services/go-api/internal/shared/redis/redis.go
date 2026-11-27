@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 
 const defaultPoolSize = 50
 
+const pingTimeout = 3 * time.Second
+
 func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Client {
 	if redisURL == "" {
 		slog.InfoContext(ctx, "redis not configured, caches will degrade gracefully")
@@ -21,17 +24,17 @@ func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Clie
 
 	opts, err := clientOptions(redisURL, poolSize)
 	if err != nil {
-		slog.WarnContext(ctx, "invalid redis URL, caches will degrade gracefully", "error", redactURLError(err))
+		slog.WarnContext(ctx, "invalid redis URL, caches will degrade gracefully", logging.KeyError, redactURLError(err))
 		return nil
 	}
 
 	client := goredis.NewClient(opts)
 
-	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 
 	if err := client.Ping(pingCtx).Err(); err != nil {
-		slog.WarnContext(ctx, "redis not reachable, caches will degrade gracefully", "error", err)
+		slog.WarnContext(ctx, "redis not reachable, caches will degrade gracefully", logging.KeyError, err)
 		return client
 	}
 

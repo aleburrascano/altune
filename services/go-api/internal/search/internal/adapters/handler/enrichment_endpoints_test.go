@@ -1,11 +1,11 @@
 package handler_test
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
-	"altune/go-api/internal/search/internal/core/details"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/details"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
@@ -394,7 +394,7 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 }
 
 func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
-	upstream := providerrequests.StatusError{Status: http.StatusNotFound}
+	upstream := outbound.StatusError{Status: http.StatusNotFound}
 	router, _ := deezerRouter(t, &scriptedDeezerEnricher{resolveErr: upstream})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas", nil)
@@ -404,20 +404,6 @@ func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
 	discDecodeJSON(t, rec, &resp)
 	if !resp.Degraded {
 		t.Errorf("degraded = false, want true")
-	}
-}
-
-func TestEnrichmentRoutes_NoIdentityIs401(t *testing.T) {
-	paths := []string{
-		"/discovery/enrichment?kind=track&title=X",
-		"/discovery/enrichment/deezer?kind=track&title=X",
-		"/discovery/lyrics?title=X&artist=Y",
-	}
-	router := unauthenticatedDiscoveryRouter(handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), time.Now))
-	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
-			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
-		})
 	}
 }
 

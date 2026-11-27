@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/search/internal/service/related"
 	"altune/go-api/internal/shared/clock"
+	"context"
 	"fmt"
 	"strings"
 )
@@ -34,7 +35,7 @@ func (p *searchPlan) option(name string, opt query.Option) {
 	p.choose(name)
 }
 
-func newSearchService(w wiring, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
+func newSearchService(ctx context.Context, w wiring, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
 	p := newSearchPlan()
 	planRanking(p, w.deps.Search, w.stores)
 	planExplorationAndDeadline(p, w.deps.Search)
@@ -48,18 +49,18 @@ func newSearchService(w wiring, breaker *providerguard.CircuitBreaker) (*query.S
 	if err := planRecording(p, w); err != nil {
 		return nil, err
 	}
-	return w.namedSearchService("discovery.search", p, breaker)
+	return w.namedSearchService(ctx, "discovery.search", p, breaker)
 }
 
-func newRankingOnlySearchService(w wiring) (*query.Service, error) {
+func newRankingOnlySearchService(ctx context.Context, w wiring) (*query.Service, error) {
 	p := newSearchPlan()
 	planRanking(p, w.deps.Search, w.stores)
 	planVocabulary(p, w.stores)
-	return w.namedSearchService("discovery.ranking_only_search", p, providerguard.NewCircuitBreaker(clock.Now))
+	return w.namedSearchService(ctx, "discovery.ranking_only_search", p, providerguard.NewCircuitBreaker(clock.Now))
 }
 
-func (w wiring) namedSearchService(message string, p *searchPlan, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
-	w.deps.Logger.InfoContext(w.deps.Lifecycle, message, "options", strings.Join(p.chosen, ","))
+func (w wiring) namedSearchService(ctx context.Context, message string, p *searchPlan, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
+	w.deps.Logger.InfoContext(ctx, message, "options", strings.Join(p.chosen, ","))
 	svc, err := query.NewService(w.deps.Tracker, w.table.searchProviders(), breaker, p.collaborators, p.options...)
 	if err != nil {
 		return nil, fmt.Errorf("build %s: %w", message, err)

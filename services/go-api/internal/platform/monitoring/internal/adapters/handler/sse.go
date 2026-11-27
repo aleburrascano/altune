@@ -22,8 +22,14 @@ type StreamBounds struct {
 	MaxLifetime time.Duration
 }
 
+const (
+	streamWriteIdle   = 10 * time.Second
+	streamHeartbeat   = 25 * time.Second
+	streamMaxLifetime = 15 * time.Minute
+)
+
 func DefaultStreamBounds() StreamBounds {
-	return StreamBounds{WriteIdle: 10 * time.Second, Heartbeat: 25 * time.Second, MaxLifetime: 15 * time.Minute}
+	return StreamBounds{WriteIdle: streamWriteIdle, Heartbeat: streamHeartbeat, MaxLifetime: streamMaxLifetime}
 }
 
 const keepaliveFrame = ": keepalive\n\n"
@@ -72,7 +78,6 @@ func setStreamHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
 func streamFrames[T any](newTicker clock.TickerFunc, r *http.Request, w http.ResponseWriter, rc *http.ResponseController, ch <-chan T, every time.Duration) {

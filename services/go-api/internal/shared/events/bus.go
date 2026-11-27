@@ -3,8 +3,9 @@ package events
 import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events/internal/adapters/filefloor"
-	"altune/go-api/internal/shared/events/internal/core/idfloor"
+	"altune/go-api/internal/shared/events/internal/service/idfloor"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"sync"
@@ -152,8 +153,8 @@ func (b *InProcessBus) recordIssuedID(ctx context.Context, id uint64) {
 
 func (b *InProcessBus) recordDropForFullSubscriber(ctx context.Context, userId ids.UserId, eventType EventType, eventID uint64) {
 	total := b.dropped.Add(1)
-	slog.WarnContext(ctx, "events.subscriber_dropped",
-		"user_id", userId.String(), "event_type", eventType,
+	slog.WarnContext(logging.ContextWithSubjectUser(ctx, userId.String()), "events.subscriber_dropped",
+		"event_type", eventType,
 		"event_id", eventID, "dropped_total", total)
 }
 
@@ -238,7 +239,7 @@ func warnIfEventsWereEvictedBeforeResume(ctx context.Context, userId ids.UserId,
 	if resumingFromBeginning || oldestRetainedID <= afterID+1 {
 		return
 	}
-	slog.WarnContext(ctx, "events.replay_gap",
-		"user_id", userId.String(), "after_id", afterID,
+	slog.WarnContext(logging.ContextWithSubjectUser(ctx, userId.String()), "events.replay_gap",
+		"after_id", afterID,
 		"oldest_retained_id", oldestRetainedID, "lost", oldestRetainedID-afterID-1)
 }

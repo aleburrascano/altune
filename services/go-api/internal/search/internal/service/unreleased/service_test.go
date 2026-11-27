@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -366,29 +367,31 @@ func TestService_Lookup_SlowJobIsPendingThenTheNextCallIsCached(t *testing.T) {
 }
 
 func TestService_Lookup_ConcurrentCallsShareOneJob(t *testing.T) {
-	gate := make(chan struct{})
-	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
-	svc, jobs := backgroundService(t, context.Background(), genius, newLockedCache(), 0)
+	synctest.Test(t, func(t *testing.T) {
+		gate := make(chan struct{})
+		genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
+		svc, jobs := backgroundService(t, context.Background(), genius, newLockedCache(), 0)
 
-	const callers = 8
-	results := make(chan unreleased.Lookup, callers)
-	for range callers {
-		go func() {
-			found, _ := svc.Lookup(context.Background(), search.ProviderDeezer, "1", "Artist", nil)
-			results <- found
-		}()
-	}
-	time.Sleep(50 * time.Millisecond)
-	close(gate)
-	for range callers {
-		if got := <-results; !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
-			t.Errorf("a caller got %v, want [Leak]", titlesOf(got.Songs))
+		const callers = 8
+		results := make(chan unreleased.Lookup, callers)
+		for range callers {
+			go func() {
+				found, _ := svc.Lookup(context.Background(), search.ProviderDeezer, "1", "Artist", nil)
+				results <- found
+			}()
 		}
-	}
-	jobs.Wait()
-	if len(genius.SearchedFor) != 1 {
-		t.Errorf("genius searched %d times, want one job for the key", len(genius.SearchedFor))
-	}
+		synctest.Wait()
+		close(gate)
+		for range callers {
+			if got := <-results; !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
+				t.Errorf("a caller got %v, want [Leak]", titlesOf(got.Songs))
+			}
+		}
+		jobs.Wait()
+		if len(genius.SearchedFor) != 1 {
+			t.Errorf("genius searched %d times, want one job for the key", len(genius.SearchedFor))
+		}
+	})
 }
 
 func TestService_Lookup_FailedJobLeavesNoCacheEntry(t *testing.T) {
@@ -646,9 +649,6 @@ func TestNewUnreleasedService_RefusesAMissingCollaborator(t *testing.T) {
 		},
 		"storage": func() (*search.UnreleasedService, error) {
 			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{}, wiringWithout(func(w *unreleased.Wiring) { w.Storage = nil }))
-		},
-		"lifecycle": func() (*search.UnreleasedService, error) {
-			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{}, wiringWithout(func(w *unreleased.Wiring) { w.Lifecycle = nil }))
 		},
 		"jobs": func() (*search.UnreleasedService, error) {
 			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{}, wiringWithout(func(w *unreleased.Wiring) { w.Jobs = nil }))

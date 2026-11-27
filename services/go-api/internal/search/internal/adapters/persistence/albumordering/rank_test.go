@@ -4,9 +4,13 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence/albumordering"
 	"altune/go-api/internal/search/internal/core/ports"
 	"errors"
+	"maps"
 	"slices"
+	"sort"
 	"testing"
 	"time"
+
+	"pgregory.net/rapid"
 )
 
 func dc(ref string, releases, single int, pc ...any) ports.DiscographyCase {
@@ -275,4 +279,57 @@ func TestRankByArtist_ACaseWithoutReleasesCountsAsClean(t *testing.T) {
 		dcNoID("no-releases", 0, 3, 3),
 		dc("some-contamination", 10, 1),
 	}, ports.GroupByArtist, "some-contamination", "no-releases")
+}
+
+func discographyCases() *rapid.Generator[[]ports.DiscographyCase] {
+	one := rapid.Custom(func(t *rapid.T) ports.DiscographyCase {
+		return ports.DiscographyCase{
+			ArtistRef:          rapid.StringMatching(`[a-z]{1,8}`).Draw(t, "artist"),
+			Releases:           rapid.IntRange(-2, 40).Draw(t, "releases"),
+			SingleProvider:     rapid.IntRange(-2, 40).Draw(t, "single"),
+			SingleProviderNoID: rapid.IntRange(-2, 40).Draw(t, "noid"),
+			ProviderCounts:     rapid.MapOfN(rapid.SampledFrom([]string{"deezer", "itunes", "ytmusic"}), rapid.IntRange(-2, 30), 0, 3).Draw(t, "providers"),
+			LastSeen:           time.Unix(rapid.Int64Range(0, 2_000_000_000).Draw(t, "seen"), 0).UTC(),
+		}
+	})
+	return rapid.SliceOfN(one, 0, 12)
+}
+
+func artistRefs(cases []ports.DiscographyCase) []string {
+	refs := make([]string, len(cases))
+	for i, c := range cases {
+		refs[i] = c.ArtistRef
+	}
+	sort.Strings(refs)
+	return refs
+}
+
+func TestRank_EveryGroupingKeepsExactlyTheCasesItWasGiven(t *testing.T) {
+	t.Parallel()
+	groupings := []ports.DiscographyGroupBy{ports.GroupByArtist, ports.GroupByProvider, ports.GroupByContaminationBand}
+	rapid.Check(t, func(t *rapid.T) {
+		cases := discographyCases().Draw(t, "cases")
+		groupBy := rapid.SampledFrom(groupings).Draw(t, "groupBy")
+		before := artistRefs(cases)
+		originalOrder := slices.Clone(cases)
+
+		ranked, err := albumordering.Rank(cases, groupBy)
+		if err != nil {
+			t.Fatalf("Rank(%s): %v", groupBy, err)
+		}
+		if !slices.Equal(artistRefs(ranked), before) {
+			t.Fatalf("Rank(%s) changed the set of cases: %v -> %v", groupBy, before, artistRefs(ranked))
+		}
+		for i := range cases {
+			if cases[i].ArtistRef != originalOrder[i].ArtistRef || !maps.Equal(cases[i].ProviderCounts, originalOrder[i].ProviderCounts) {
+				t.Fatalf("Rank(%s) reordered or edited its input at %d", groupBy, i)
+			}
+		}
+		again, _ := albumordering.Rank(cases, groupBy)
+		if !slices.EqualFunc(ranked, again, func(a, b ports.DiscographyCase) bool {
+			return a.ArtistRef == b.ArtistRef && a.LastSeen.Equal(b.LastSeen)
+		}) {
+			t.Fatalf("Rank(%s) is not deterministic", groupBy)
+		}
+	})
 }

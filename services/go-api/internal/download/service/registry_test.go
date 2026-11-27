@@ -6,8 +6,10 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -312,7 +314,7 @@ func searchFailureCode(t *testing.T, reg *service.SourceRegistry) downloadfailur
 	t.Helper()
 	track := pendingSong()
 	ledger := inmemoryledger.NewLedger(track)
-	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), track.UserId, track.ID); err == nil {
+	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want a search failure")
 	}
 	return persistedCode(t, ledger, track.ID)
@@ -463,7 +465,7 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 		{"resolved first-tier hit skips the configured fallback", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{}, true},
 		{"unresolved first tier runs the fallback", []ports.AudioCandidate{candidate("u1")}, true, ports.FindRequest{}, false},
 		{"no fallback configured", []ports.AudioCandidate{resolvedCandidate("u1")}, false, ports.FindRequest{}, false},
-		{"fallback only", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{FallbackOnly: true}, false},
+		{"fallback only", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{Tier: ports.TierFallbackOnly}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -479,5 +481,29 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 				t.Errorf("FallbackSkipped = %v, want %v", res.FallbackSkipped, tt.want)
 			}
 		})
+	}
+}
+
+func TestFindReportingOutage_LogsEachCandidateDroppedForNoSourceKey(t *testing.T) {
+	logs := logging.CaptureJSON(t, slog.LevelWarn)
+	keyless := ports.AudioCandidate{URL: "https://www.youtube.com/", Source: "stub"}
+	reg := service.NewSourceRegistry(&stubSource{name: "stub", found: []ports.AudioCandidate{candidate("u1"), keyless}})
+
+	res, err := reg.FindReportingOutage(context.Background(), ports.FindRequest{})
+	if err != nil {
+		t.Fatalf("FindReportingOutage: %v", err)
+	}
+
+	if len(res.Candidates) != 1 {
+		t.Fatalf("candidates = %d, want only the keyed one", len(res.Candidates))
+	}
+	dropped := 0
+	for line := range strings.Lines(logs.String()) {
+		if strings.Contains(line, "acquisition.candidate_dropped_no_source_key") && strings.Contains(line, keyless.URL) {
+			dropped++
+		}
+	}
+	if dropped != 1 {
+		t.Fatalf("drop log lines = %d, want 1 for the keyless candidate in %q", dropped, logs.String())
 	}
 }

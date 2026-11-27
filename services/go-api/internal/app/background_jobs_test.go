@@ -3,6 +3,9 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"log/slog"
 	"net/http"
@@ -20,7 +23,7 @@ import (
 
 type assembledRun struct {
 	assembly *app.Assembly
-	logs     *syncBuffer
+	logs     *logging.Capture
 }
 
 func assembleLogging(t *testing.T, cfg *config.Config) assembledRun {
@@ -35,10 +38,7 @@ func assembleWith(t *testing.T, cfg *config.Config, transport http.RoundTripper)
 
 func assembleOn(t *testing.T, cfg *config.Config, pool *pgxpool.Pool, transport http.RoundTripper) assembledRun {
 	t.Helper()
-	logs := &syncBuffer{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 	ctx, cancel := context.WithCancel(t.Context())
 	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: pool, Transport: transport, Tracker: testTracker(t)})
 	if err != nil {
@@ -68,7 +68,7 @@ func TestBackgroundJobs_TheAssemblyStartsTheHousekeepingJobsWithTheirOldLogLines
 
 func emptyDatabasePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	admin := integrationPool(t)
+	admin := dbtest.Pool(t)
 	name := pgx.Identifier{"app_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")}.Sanitize()
 	if _, err := admin.Exec(t.Context(), "CREATE DATABASE "+name); err != nil {
 		t.Fatalf("create an empty database: %v", err)
@@ -136,11 +136,7 @@ func TestBackgroundJobs_ALeaderJobThatFailsLogsItsFailureUnderItsName(t *testing
 	run := assembleOn(t, jwksConfig(t), emptyDatabasePool(t), refuseEgress{})
 	const want = `level=WARN msg="deleted identity erasure failed" error=`
 
-	deadline := time.Now().Add(time.Minute)
-	for !strings.Contains(run.logs.String(), want) {
-		if time.Now().After(deadline) {
-			t.Fatalf("no %q within a minute of leading a database with no tables:\n%s", want, run.logs.String())
-		}
-		time.Sleep(100 * time.Millisecond)
+	if !polltest.Within(time.Minute, func() bool { return strings.Contains(run.logs.String(), want) }) {
+		t.Fatalf("no %q within a minute of leading a database with no tables:\n%s", want, run.logs.String())
 	}
 }

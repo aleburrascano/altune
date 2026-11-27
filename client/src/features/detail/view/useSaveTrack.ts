@@ -1,7 +1,7 @@
 import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 
-import { isRetryable } from '@shared/failure';
+import { correlationIdOf, describeError, isRetryable } from '@shared/failure';
 import {
   type TrackId,
   type CreateTrackRequest,
@@ -59,12 +59,15 @@ export type SaveTrack = {
   failure: SaveFailure | null;
 };
 
+const SAVE_ACTION = 'save this track';
+const REMEMBERED_FAILURE_TITLE = "Couldn't save this track";
+
 type SaveBody = CreateTrackRequest | undefined;
 
 function saveFailure(error: Error | null, body: SaveBody): SaveFailure | null {
   if (error === null) return null;
   return {
-    message: error.message,
+    copy: describeError(error, SAVE_ACTION),
     isRetryable: isRetryable(error),
     ...(body === undefined ? {} : { trackId: optimisticTrackId(body) }),
   };
@@ -139,6 +142,7 @@ function warnSaveFailed(port: DetailPort, error: Error, body: CreateTrackRequest
     artist: body.artist,
     error: error.message,
     retryable: isRetryable(error),
+    corr_id: correlationIdOf(error),
   });
 }
 
@@ -199,7 +203,10 @@ function rememberedFailure(owned: OwnedTrack | null): SaveFailure | null {
   if (owned?.acquisitionStatus !== 'failed' || owned.failureMessage === null) {
     return null;
   }
-  return { message: owned.failureMessage, isRetryable: owned.retryable };
+  return {
+    copy: { title: REMEMBERED_FAILURE_TITLE, body: owned.failureMessage },
+    isRetryable: owned.retryable,
+  };
 }
 
 function deriveState(

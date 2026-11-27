@@ -4,7 +4,7 @@ import { PlaybackContext } from '@shared/playback';
 import type { PlaybackContextValue, PlaybackState } from '@shared/playback';
 import { onSignOut } from '@shared/session';
 
-import { derivePlaybackState } from '@features/player/domain/derivePlaybackState';
+import { derivePlaybackState } from '@features/player/core/derivePlaybackState';
 import { useMediaSession } from '@features/player/view/useMediaSession';
 import {
   advanceOnEnded,

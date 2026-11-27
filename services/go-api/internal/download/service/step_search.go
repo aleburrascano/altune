@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -32,11 +33,11 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ Pipe
 	}
 	outage := res.Outage
 
-	ac.FallbackSkipped = res.FallbackSkipped
+	ac.Pass = passAfterSearch(ac.Pass, res)
 	kept, skipped := filterCandidates(ctx, ac, res.Candidates)
 	if len(kept) == 0 && len(skipped) > 0 {
 		slog.InfoContext(ctx, "acquisition.prior_rejections_exhausted",
-			"track_id", ac.Track.ID, "skipped", len(skipped))
+			logging.KeyTrackID, ac.Track.ID, "skipped", len(skipped))
 		kept = skipped
 	}
 	if len(kept) == 0 && outage != nil {
@@ -64,10 +65,10 @@ func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []
 		switch {
 		case ac.Replace.excludesCandidate(c):
 			slog.InfoContext(ctx, "acquisition.candidate_excluded",
-				"track_id", ac.Track.ID, "url", c.URL, "source", c.Source)
+				logging.KeyTrackID, ac.Track.ID, "url", c.URL, "source", c.Source)
 		case ac.priorRejected(c.URL):
 			slog.InfoContext(ctx, "acquisition.candidate_skipped_prior_rejection",
-				"track_id", ac.Track.ID, "key", sourceKey(c.URL), "source", c.Source)
+				logging.KeyTrackID, ac.Track.ID, "key", sourceKey(c.URL), "source", c.Source)
 			skipped = append(skipped, c)
 		default:
 			kept = append(kept, c)
@@ -94,7 +95,7 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 
 		KnownSourceURL: ac.Track.AudioSourceURL,
 
-		FallbackOnly: ac.FallbackOnly,
+		Tier: tierOf(ac.Pass),
 	}
 }
 
@@ -103,4 +104,30 @@ func searchHintISRC(ac *AcquisitionContext) string {
 		return ac.Track.ISRC
 	}
 	return ac.Identity.ISRC
+}
+
+type SearchPass int
+
+const (
+	PassAllTiers SearchPass = iota
+	PassFallbackSkipped
+	PassFallbackOnly
+)
+
+func tierOf(pass SearchPass) ports.SourceTier {
+	if pass == PassFallbackOnly {
+		return ports.TierFallbackOnly
+	}
+	return ports.TierFirstThenFallback
+}
+
+func passAfterSearch(pass SearchPass, res FindResult) SearchPass {
+	switch {
+	case pass == PassFallbackOnly:
+		return PassFallbackOnly
+	case res.FallbackSkipped:
+		return PassFallbackSkipped
+	default:
+		return PassAllTiers
+	}
 }

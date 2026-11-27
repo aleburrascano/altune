@@ -3,7 +3,7 @@ package providertest
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"io"
 	"log/slog"
@@ -20,6 +20,8 @@ import (
 type RedirectTransport struct {
 	TargetURL string
 }
+
+const slowServerGiveUp = 5 * time.Second
 
 func (t *RedirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
@@ -99,7 +101,7 @@ func CancelMidRequestServer(t *testing.T) (*httptest.Server, context.Context) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		cancel()
-		giveUp, stop := clock.NewTimer(5 * time.Second)
+		giveUp, stop := clock.NewTimer(slowServerGiveUp)
 		defer stop()
 		select {
 		case <-r.Context().Done():
@@ -154,13 +156,9 @@ func CapturingClient(capture **http.Request) *http.Client {
 
 const SensitiveQuery = "zqxj private diagnosis clinic"
 
-func CaptureDefaultLog(t *testing.T) *bytes.Buffer {
+func CaptureDefaultLog(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
 func AssertNoQueryText(t *testing.T, logged string) {

@@ -1,0 +1,11 @@
+{
+  "status": 401,
+  "www_authenticate": "Bearer",
+  "body": {
+    "type": "urn:altune:problem:auth.token_expired",
+    "title": "Token expired",
+    "status": 401,
+    "detail": "invalid token",
+    "code": "auth.token_expired"
+  }
+}

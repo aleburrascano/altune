@@ -25,6 +25,7 @@ type Deps struct {
 	Config       *config.Config
 	Transport    http.RoundTripper
 	Pool         *pgxpool.Pool
+	DBMetrics    library.DBCallMetrics
 	Events       *monitoring.EventTap
 	Recording    downloadfromsearch.RecordingWiring
 	Ledger       download.TrackLedgerPort
@@ -64,7 +65,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Tagger:        download.NewFFmpegTagger(binpath.Resolve("ffmpeg", d.Config.FFmpegLocation), download.NewId3Tagger()),
 			Rejections:    download.NewPostgresRejectionStore(d.Pool),
 			StoredAudio:   storedAudio,
-			Orphans:       downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool)),
+			Orphans:       downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool, d.DBMetrics)),
 			Skips:         skips,
 			Events:        d.Events,
 			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
@@ -75,7 +76,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 		},
 		opts...,
 	)
-	return download.MustNewBackgroundAcquisitionScheduler(download.NewProcessRoot(ctx), acquireSvc, d.Config.AcquisitionConcurrency, clock.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
+	return download.MustNewBackgroundAcquisitionScheduler(ctx, acquireSvc, d.Config.AcquisitionConcurrency, clock.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
 }
 
 func storeOptions(d Deps) []acquireOption {
@@ -118,10 +119,12 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 		FingerprintVerified: lookups.Verified,
 		Timer:               clock.NewTimer,
 		Ticker:              clock.NewTicker,
+		Unit:                random.Real,
+		Verification:        d.Verification,
 	}
 	if d.Pool != nil {
 		wiring.Queue = download.QueueOf(download.MustNewPostgresJobQueue(d.Pool, d.Ledger))
-		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc)
+		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.DBMetrics, d.Ledger, acquireSvc)
 		wiring.Notifier = download.MustNewPostgresJobNotifier(d.Pool, clock.Sleep)
 		wiring.Outcomes = download.NewPostgresOutcomeStore(d.Pool)
 	}
@@ -131,7 +134,6 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 func schedulerOptions(d Deps) []func(*download.BackgroundAcquisitionScheduler) {
 	return []func(*download.BackgroundAcquisitionScheduler){
 		download.WithSchedulerPaused(d.Config.AcquisitionPaused),
-		download.WithVerificationStatus(d.Verification),
 		download.WithDrainBudget(time.Duration(d.Config.AcquisitionDrainBudgetSeconds) * time.Second),
 	}
 }

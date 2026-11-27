@@ -5,17 +5,18 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 )
 
-func RunSweepStagingAudio(cfg *config.Config, execute bool) error {
-	return runSweepStagingAudio(cfg, execute)
+func RunSweepStagingAudio(cfg *config.Config, mode RunMode) error {
+	return runSweepStagingAudio(cfg, mode)
 }
 
-func runSweepStagingAudio(cfg *config.Config, execute bool) error {
+func runSweepStagingAudio(cfg *config.Config, mode RunMode) error {
 	ctx := context.Background()
 
 	pool, err := openPool(ctx, cfg)
@@ -24,11 +25,11 @@ func runSweepStagingAudio(cfg *config.Config, execute bool) error {
 	}
 	defer pool.Close()
 
-	return sweepAudioStore(ctx, cfg, library.NewPostgresTrackRepository(pool), execute)
+	return sweepAudioStore(ctx, cfg, library.NewPostgresTrackRepository(pool, library.NewDBCallMetrics(telemetry.NewRegistry())), mode)
 }
 
-func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, execute bool) error {
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
+func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, mode RunMode) error {
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NewFSCallMetrics(telemetry.NewRegistry()))
 	if err != nil {
 		return err
 	}
@@ -37,20 +38,25 @@ func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.Audio
 		return errors.New("the configured audio store cannot list object age")
 	}
 
-	tally, err := stagingsweep.Sweep(ctx, store, lister, refs, execute, clock.Now())
+	var tally stagingsweep.Tally
+	if mode == Apply {
+		tally, err = stagingsweep.Sweep(ctx, store, lister, refs, clock.Now())
+	} else {
+		tally, err = stagingsweep.Preview(ctx, lister, refs, clock.Now())
+	}
 	if err != nil {
 		return err
 	}
-	return reportSweep(ctx, tally.Deleted, tally.KeptReferenced, tally.KeptFresh, tally.Failed, execute)
+	return reportSweep(ctx, tally.Deleted, tally.KeptReferenced, tally.KeptFresh, tally.Failed, mode)
 }
 
-func reportSweep(ctx context.Context, deleted, keptReferenced, keptFresh, failed int, execute bool) error {
+func reportSweep(ctx context.Context, deleted, keptReferenced, keptFresh, failed int, mode RunMode) error {
 	printSummary("Sweep staging audio complete:")
 	fmt.Printf("  Deleted:         %d\n", deleted)
 	fmt.Printf("  Kept (in use):   %d\n", keptReferenced)
 	fmt.Printf("  Kept (< 1h old): %d\n", keptFresh)
 	fmt.Printf("  Failed:          %d\n", failed)
-	if !execute {
+	if mode != Apply {
 		printDryRunHint()
 	}
 	fmt.Println()

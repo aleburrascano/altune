@@ -2,6 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/tracklength"
@@ -20,7 +22,7 @@ import (
 
 func TestPostgresTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	otherId := ids.NewUserId(uuid.New())
@@ -49,7 +51,7 @@ func TestPostgresTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *tes
 
 func TestPostgresTrackRepo_AddAndGetByID(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -97,7 +99,7 @@ func TestPostgresTrackRepo_AddAndGetByID(t *testing.T) {
 
 func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -112,7 +114,7 @@ func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
 		t.Fatal("first Add() created = false, want true")
 	}
 
-	track2, err := library.NewTrack(userId, track1.Title, track1.Artist, track1.Album, time.Now)
+	track2, err := library.NewTrack(userId, track1.Title, track1.Artist, track1.Album, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack for dedup: %v", err)
 	}
@@ -130,7 +132,7 @@ func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
 
 func TestPostgresTrackRepo_ListForUser(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -174,7 +176,7 @@ func TestPostgresTrackRepo_ListForUser(t *testing.T) {
 
 func TestPostgresTrackRepo_Update(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -186,7 +188,7 @@ func TestPostgresTrackRepo_Update(t *testing.T) {
 	}
 
 	audioRef := "s3://bucket/test-" + uuid.New().String() + ".opus"
-	if err := track.MarkReady(audioRef); err != nil {
+	if err := track.MarkReady(audioRef, ids.Real); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
 	if err := repo.Update(ctx, track, track.Version); err != nil {
@@ -210,7 +212,7 @@ func TestPostgresTrackRepo_Update(t *testing.T) {
 
 func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -238,7 +240,7 @@ func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing
 	}
 
 	audioRef := "s3://bucket/test-" + uuid.New().String() + ".opus"
-	if err := loaded.MarkReady(audioRef); err != nil {
+	if err := loaded.MarkReady(audioRef, ids.Real); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
 	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
@@ -265,7 +267,7 @@ func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing
 
 func TestPostgresTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -288,7 +290,7 @@ func TestPostgresTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 	}
 
 	refA := "s3://bucket/winner-" + uuid.New().String() + ".opus"
-	if err := writerA.MarkReady(refA); err != nil {
+	if err := writerA.MarkReady(refA, ids.Real); err != nil {
 		t.Fatalf("writer A MarkReady: %v", err)
 	}
 	if err := repo.Update(ctx, writerA, writerA.Version); err != nil {
@@ -320,7 +322,7 @@ func TestPostgresTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 
 func TestPostgresTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -339,7 +341,7 @@ func TestPostgresTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	if err := loaded.MarkReady("s3://bucket/gone-" + uuid.New().String() + ".opus"); err != nil {
+	if err := loaded.MarkReady("s3://bucket/gone-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
 	err = repo.Update(ctx, loaded, loaded.Version)
@@ -353,7 +355,7 @@ func TestPostgresTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 
 func TestPostgresTrackRepo_Delete(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -391,8 +393,8 @@ func TestPostgresTrackRepo_Delete(t *testing.T) {
 
 func TestPostgresTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	pool := dbtest.Pool(t)
-	trackRepo := library.NewPostgresTrackRepository(pool)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	trackRepo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 
 	userB := ids.NewUserId(uuid.New())
@@ -470,8 +472,8 @@ func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId library.P
 
 func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	pool := dbtest.Pool(t)
-	trackRepo := library.NewPostgresTrackRepository(pool)
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
+	trackRepo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -543,11 +545,11 @@ func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 
 func TestPostgresTrackRepo_GetByID_NotFound(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	got, err := repo.GetByID(ctx, library.NewTrackId(), userId)
+	got, err := repo.GetByID(ctx, librarytest.NewTrackId(), userId)
 	if !errors.Is(err, library.ErrTrackNotFound) {
 		t.Fatalf("GetByID() error = %v, want ErrTrackNotFound", err)
 	}
@@ -558,7 +560,7 @@ func TestPostgresTrackRepo_GetByID_NotFound(t *testing.T) {
 
 func TestPostgresTrackRepo_GetByDedupAndIdempotencyKey_UnknownKeyIsNotFound(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -572,7 +574,7 @@ func TestPostgresTrackRepo_GetByDedupAndIdempotencyKey_UnknownKeyIsNotFound(t *t
 
 func TestPostgresTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	t.Cleanup(func() {
@@ -603,7 +605,7 @@ func keyed(t *testing.T, userId ids.UserId, key string) *library.Track {
 
 func TestPostgresTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	key := "idem-" + uuid.NewString()
@@ -663,7 +665,7 @@ func TestPostgresTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 func TestPostgresTrackRepo_ConcurrentAddsNeverPassTheLibraryCap(t *testing.T) {
 	const libraryCap, concurrent = 3, 12
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool, library.WithLibraryCap(libraryCap))
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics(), library.WithLibraryCap(libraryCap))
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	tracks := make([]*library.Track, concurrent)
@@ -708,7 +710,7 @@ func TestPostgresTrackRepo_ConcurrentAddsNeverPassTheLibraryCap(t *testing.T) {
 
 func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	key := "idem-" + uuid.NewString()
@@ -743,7 +745,7 @@ func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 
 func TestPostgresTrackRepo_Update_RoundTripsAcquisitionConfidenceAndEvidence(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -795,7 +797,7 @@ func countTracksForUser(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 
 func TestPostgresTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -841,7 +843,7 @@ func setAudioRef(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id libra
 
 func TestPostgresTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -891,7 +893,7 @@ func TestPostgresTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(
 
 func TestPostgresTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	u := uuid.NewString()
@@ -927,7 +929,7 @@ func TestPostgresTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *test
 
 func TestPostgresTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	u := uuid.NewString()
@@ -956,7 +958,7 @@ func TestPostgresTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testi
 
 func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	track := newTestTrackForDB(t, userId)
@@ -969,7 +971,7 @@ func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.
 	}
 	cleanupTrack(t, pool, stored.ID, userId)
 
-	if err := stored.MarkReady("ref"); err != nil {
+	if err := stored.MarkReady("ref", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 	if err := stored.SetDuration(137); err != nil {
@@ -1007,7 +1009,7 @@ func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.
 
 func TestPostgresTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -1054,7 +1056,7 @@ func TestPostgresTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 
 func TestPostgresTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -1093,7 +1095,7 @@ func TestPostgresTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testin
 
 func TestPostgresTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -1108,10 +1110,10 @@ func TestPostgresTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t 
 	}
 
 	const mbid = "25d68187-ee71-4f06-9e58-0b49d66bf8a8"
-	if err := loaded.RelabelAsRecording(mbid, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording(mbid, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
-	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
@@ -1157,25 +1159,25 @@ func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *library.Postg
 
 func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothing(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	existing, err := library.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love", time.Now)
+	existing, err := library.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	addAndLoadForRelabel(ctx, t, repo, pool, existing)
-	studio, err := library.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless", time.Now)
+	studio, err := library.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
 
-	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
-	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, loaded, loaded.Version); err == nil {
@@ -1196,20 +1198,20 @@ func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothi
 
 func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now)
+	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
 
-	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
-	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, loaded, loaded.Version+1); !errors.Is(err, library.ErrTrackVersionConflict) {
@@ -1227,16 +1229,16 @@ func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 
 func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now)
+	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
-	if err := loaded.RelabelAsRecording("7933a65c-2c66-4ec1-9880-e46b5d2f05de", "Studio", "Reckless", 1984, "USAM18490008", 195); err != nil {
+	if err := loaded.RelabelAsRecording("7933a65c-2c66-4ec1-9880-e46b5d2f05de", "Studio", "Reckless", 1984, "USAM18490008", 195, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
@@ -1248,7 +1250,7 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 	}
 
 	const title = "It’s Only Love (classic version)"
-	if err := labelled.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", title, "", 0, "", 0); err != nil {
+	if err := labelled.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", title, "", 0, "", 0, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, labelled, labelled.Version); err != nil {
@@ -1269,19 +1271,19 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 
 func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNextWrite(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now)
+	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
-	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
-	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
@@ -1300,7 +1302,7 @@ func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNext
 		studio.ID.UUID(), userId.UUID(), editedTitle); err != nil {
 		t.Fatalf("concurrent metadata edit failed: %v", err)
 	}
-	if err := reloaded.ReplaceAudio("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+	if err := reloaded.ReplaceAudio("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, reloaded, reloaded.Version); err != nil {
@@ -1376,7 +1378,7 @@ func TestPostgresTrackRepo_TrackListsStopAtTheirCeilingInLibraryPages(t *testing
 	userId := ids.NewUserId(uuid.New())
 	seedBulkTracks(ctx, t, dbtest.Pool(t), userId, trackListCeiling+1)
 	pool, trace := tracedPool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 
 	t.Run("owned track refs", func(t *testing.T) {
 		refs, err := repo.ListOwnedTrackRefs(ctx, userId)
@@ -1449,7 +1451,7 @@ func TestPostgresTrackRepo_ListForUser_CountsOnlyWhenThePageCannotProveTheTotal(
 				trace.afterNextQuery(func() { tc.betweenPageAndCount(ctx, t, plain, userId) })
 			}
 
-			_, total, err := library.NewPostgresTrackRepository(pool).ListForUser(ctx, userId, tc.limit, tc.offset)
+			_, total, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).ListForUser(ctx, userId, tc.limit, tc.offset)
 
 			if err != nil || total != tc.wantTotal {
 				t.Fatalf("ListForUser = total %d, err %v; want %d, nil", total, err, tc.wantTotal)
@@ -1469,7 +1471,7 @@ func TestPostgresTrackRepo_ListForUser_ReturnsTheCountsFailure(t *testing.T) {
 	pool, trace := tracedPool(t)
 	trace.afterNextQuery(cancel)
 
-	_, _, err := library.NewPostgresTrackRepository(pool).ListForUser(ctx, userId, 50, 500)
+	_, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).ListForUser(ctx, userId, 50, 500)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want the count's context.Canceled", err)

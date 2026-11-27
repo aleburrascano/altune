@@ -13,7 +13,9 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintsleeps [--summary] <dir>...\n  lists every time.Sleep call in the go files under each dir that is not inside a synctest.Test or synctest.Run callback, and exits 1 when there are any; --summary prints only the count per directory"
+const usage = "usage: go run ./scripts/lintsleeps [--summary] <dir>...\n  lists every time.Sleep call in the go files under each dir, and in its _test.go files every clock.Sleep, time.AfterFunc, time.NewTimer and time.Tick call and every bare <-time.After receive (a timeout case in a select is a bound, not a wait), that is not inside a synctest.Test or synctest.Run callback, and exits 1 when there are any; --summary prints only the count per directory"
+
+const clockImportPath = "altune/go-api/internal/shared/clock"
 
 var skippedDirs = map[string]bool{"vendor": true, "testdata": true, "node_modules": true}
 
@@ -61,10 +63,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		printSummary(stdout, found)
 	} else {
 		for _, v := range found {
-			say(stdout, "%s:%d: time.Sleep outside a synctest bubble; wait through the Sleeper in internal/shared/clock, or run the test inside synctest.Test\n", v.path, v.line)
+			say(stdout, "%s:%d: wait outside a synctest bubble (sleep or timer); wait on the event itself, a condition with a deadline or a channel the test controls, or run the test inside synctest.Test\n", v.path, v.line)
 		}
 	}
-	say(stdout, "time.Sleep calls outside a synctest bubble: %d\n", len(found))
+	say(stdout, "sleeps and timer waits outside a synctest bubble: %d\n", len(found))
 	if len(found) > 0 {
 		return 1
 	}
@@ -139,20 +141,41 @@ func scanFile(path string) ([]violation, error) {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	timePkg := importName(file, "time", "time")
-	if timePkg == "" {
+	clockPkg := ""
+	if strings.HasSuffix(path, "_test.go") {
+		clockPkg = importName(file, clockImportPath, "clock")
+	}
+	if timePkg == "" && clockPkg == "" {
 		return nil, nil
 	}
 	synctestPkg := importName(file, "testing/synctest", "synctest")
+	isTest := strings.HasSuffix(path, "_test.go")
 	var found []violation
+	inSelect := map[ast.Stmt]bool{}
 	var walk func(n ast.Node)
 	walk = func(n ast.Node) {
 		ast.Inspect(n, func(m ast.Node) bool {
-			if isSelector(m, timePkg, "Sleep") {
+			if timePkg != "" && isSelector(m, timePkg, "Sleep") {
+				found = append(found, violation{path, fset.Position(m.Pos()).Line})
+				return true
+			}
+			if clause, isClause := m.(*ast.CommClause); isClause && clause.Comm != nil {
+				inSelect[clause.Comm] = true
+			}
+			if stmt, isStmt := m.(*ast.ExprStmt); isStmt && !inSelect[stmt] && isTest && timePkg != "" && isReceiveFromAfter(stmt.X, timePkg) {
 				found = append(found, violation{path, fset.Position(m.Pos()).Line})
 				return true
 			}
 			call, ok := m.(*ast.CallExpr)
 			if !ok {
+				return true
+			}
+			if clockPkg != "" && isSelector(call.Fun, clockPkg, "Sleep") {
+				found = append(found, violation{path, fset.Position(m.Pos()).Line})
+				return true
+			}
+			if isTest && timePkg != "" && isTimedTrigger(call.Fun, timePkg) {
+				found = append(found, violation{path, fset.Position(m.Pos()).Line})
 				return true
 			}
 			if synctestPkg != "" && (isSelector(call.Fun, synctestPkg, "Test") || isSelector(call.Fun, synctestPkg, "Run")) {
@@ -168,6 +191,19 @@ func scanFile(path string) ([]violation, error) {
 	}
 	walk(file)
 	return found, nil
+}
+
+func isReceiveFromAfter(e ast.Expr, timePkg string) bool {
+	recv, ok := e.(*ast.UnaryExpr)
+	if !ok || recv.Op != token.ARROW {
+		return false
+	}
+	call, ok := recv.X.(*ast.CallExpr)
+	return ok && isSelector(call.Fun, timePkg, "After")
+}
+
+func isTimedTrigger(fun ast.Node, timePkg string) bool {
+	return isSelector(fun, timePkg, "AfterFunc") || isSelector(fun, timePkg, "NewTimer") || isSelector(fun, timePkg, "Tick")
 }
 
 func isSelector(e ast.Node, pkg, name string) bool {

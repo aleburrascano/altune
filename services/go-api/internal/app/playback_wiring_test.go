@@ -3,6 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -59,33 +60,35 @@ func TestQueueRateLimit_TheConfigDefaultsMatchPlaybacksOwnLimit(t *testing.T) {
 
 func TestQueueRateLimit_TheConfiguredIntervalRefillsTheBurst(t *testing.T) {
 	fixture := newJWKSFixture(t)
-	fixture.cfg.PlaybackQueueRateEvery, fixture.cfg.PlaybackQueueRateBurst = time.Second, 1
+	fixture.cfg.PlaybackQueueRateEvery, fixture.cfg.PlaybackQueueRateBurst = 300*time.Millisecond, 1
 	h := assembleWith(t, fixture.cfg, refuseEgress{}).assembly.Handler()
 	token := signedToken(t, fixture.key, fixture.operator)
 
 	first, throttled := putQueueState(t, h, token), putQueueState(t, h, token)
-	time.Sleep(1100 * time.Millisecond)
-	refilled := putQueueState(t, h, token)
+	refilled := http.StatusTooManyRequests
+	polltest.Until(t, time.Second, "the configured interval, well under the 2s default, to refill the burst", func() bool {
+		refilled = putQueueState(t, h, token)
+		return refilled != http.StatusTooManyRequests
+	})
 
 	if first == http.StatusTooManyRequests || throttled != http.StatusTooManyRequests || refilled == http.StatusTooManyRequests {
-		t.Errorf("statuses = [%d %d %d], want the second PUT throttled and the third admitted once the one-second interval refilled the burst", first, throttled, refilled)
+		t.Errorf("statuses = [%d %d %d], want the second PUT throttled and the third admitted once the configured interval refilled the burst", first, throttled, refilled)
 	}
 }
 
 func TestPlayback_TheErasureSweepReapsErasedQueueStates(t *testing.T) {
 	run := assembleOn(t, jwksConfig(t), emptyDatabasePool(t), refuseEgress{})
 
-	deadline := time.Now().Add(time.Minute)
-	for {
+	reaped := func() bool {
 		for _, line := range strings.Split(run.logs.String(), "\n") {
 			if strings.Contains(line, `msg="deleted identity erasure failed"`) && strings.Contains(line, "reap erased queue states") {
-				return
+				return true
 			}
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no erasure run tried to reap erased queue states within a minute of leading a database with no tables:\n%s", run.logs.String())
-		}
-		time.Sleep(100 * time.Millisecond)
+		return false
+	}
+	if !polltest.Within(time.Minute, reaped) {
+		t.Fatalf("no erasure run tried to reap erased queue states within a minute of leading a database with no tables:\n%s", run.logs.String())
 	}
 }
 

@@ -2,9 +2,9 @@ package service
 
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
@@ -25,20 +25,27 @@ var (
 const (
 	jobRetryBase   = 30 * time.Second
 	jobRetryFactor = 4
+	jobRetrySpread = 0.2
 )
 
-var jobRetryBackoff = backoff.MustUncapped(jobRetryBase, backoff.WithFactor(jobRetryFactor))
+var jobRetryBackoff = backoff.MustUncapped(jobRetryBase, backoff.WithFactor(jobRetryFactor), backoff.WithSpread(jobRetrySpread))
 
-func retryBackoff(attempts int) time.Duration {
-	return jobRetryBackoff.Ceiling(min(attempts, MaxAcquisitionAttempts))
+func retryBackoff(attempts int, unit random.Unit) time.Duration {
+	return jobRetryBackoff.DelayAt(min(attempts, MaxAcquisitionAttempts), unit())
 }
 
 func isTransientFailure(err error) bool {
 	return acqdomain.IsSourceUnavailable(err) || errors.Is(err, ErrAcquisitionTimedOut)
 }
 
-func ownTimeout(jobCtx, ctx context.Context, err error) error {
-	if !ports.RunTimedOut(jobCtx, ctx) {
+var errAcquireBudgetSpent = errors.New("acquisition budget spent")
+
+func ownBudgetSpent(ctx context.Context) bool {
+	return errors.Is(context.Cause(ctx), errAcquireBudgetSpent)
+}
+
+func ownTimeout(ctx context.Context, err error) error {
+	if !ownBudgetSpent(ctx) {
 		return err
 	}
 	return fmt.Errorf("%w: %w", ErrAcquisitionTimedOut, err)
@@ -82,18 +89,33 @@ func foundNoSource(err error) bool {
 	switch failureCode(err) {
 	case downloadfailure.FailureNoMatchFound, downloadfailure.FailureNoConfidentMatch, downloadfailure.FailureDownloadFailed:
 		return true
-	default:
+	case downloadfailure.FailureSourceUnavailable,
+		downloadfailure.FailureStorageFailed,
+		downloadfailure.FailureAcquisitionCancelled,
+		downloadfailure.FailureAcquisitionFailed,
+		downloadfailure.FailureYtdlpError,
+		downloadfailure.FailureAcquisitionInterrupted,
+		downloadfailure.FailureAcquisitionRefused:
 		return false
 	}
+	return false
 }
 
 func noSourceHasIt(err error) bool {
 	switch failureCode(err) {
 	case downloadfailure.FailureNoMatchFound, downloadfailure.FailureNoConfidentMatch:
 		return true
-	default:
+	case downloadfailure.FailureSourceUnavailable,
+		downloadfailure.FailureDownloadFailed,
+		downloadfailure.FailureStorageFailed,
+		downloadfailure.FailureAcquisitionCancelled,
+		downloadfailure.FailureAcquisitionFailed,
+		downloadfailure.FailureYtdlpError,
+		downloadfailure.FailureAcquisitionInterrupted,
+		downloadfailure.FailureAcquisitionRefused:
 		return false
 	}
+	return false
 }
 
 func isCancellation(err error) bool {
@@ -117,7 +139,8 @@ func reasonForStep(step StepName) (downloadfailure.FailureCode, bool) {
 		return downloadfailure.FailureDownloadFailed, true
 	case stepNameStore:
 		return downloadfailure.FailureStorageFailed, true
-	default:
+	case stepNameTag, stepNameUpdateTrack, stepNamePipeline:
 		return "", false
 	}
+	return "", false
 }

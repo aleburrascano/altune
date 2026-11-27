@@ -13,11 +13,16 @@ type QueueSaveLimit = httpserver.RateLimit
 
 var errQueueRateLimited = apierror.NewError(apierror.CodePlaybackRateLimited, "too many queue state requests, try again later")
 
+const (
+	queueStateRateInterval = 2 * time.Second
+	queueStateRateBurst    = 20
+)
+
 var DefaultQueueStateRateLimit = QueueSaveLimit{
-	Every: 2 * time.Second,
-	Burst: 20,
+	Every: queueStateRateInterval,
+	Burst: queueStateRateBurst,
 }
 
 func newUserRateLimiter(limit QueueSaveLimit, now func() time.Time, metrics ports.RateLimitMetrics) func(http.Handler) http.Handler {
-	return httpserver.MustNewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), errQueueRateLimited, metrics.QueueStateRateLimited)
+	return requestuser.LimitPerUser(limit, now, errQueueRateLimited, metrics.QueueStateRateLimited)
 }

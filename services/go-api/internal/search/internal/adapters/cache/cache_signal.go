@@ -2,8 +2,9 @@ package cache
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
-	"expvar"
 	"log/slog"
 	"strings"
 	"sync"
@@ -30,21 +31,23 @@ const (
 	kindVocab   CacheKind = "discovery:vocab"
 
 	errorLogInterval = 30 * time.Second
+
+	cacheKeyParts = 3
 )
 
 type Signal struct {
-	ops     *expvar.Map
+	ops     *telemetry.LabeledCounter
 	now     clock.Func
 	mu      sync.Mutex
 	lastLog map[string]time.Time
 }
 
-func NewSignal(ops *expvar.Map, now clock.Func) *Signal {
+func NewSignal(ops *telemetry.LabeledCounter, now clock.Func) *Signal {
 	return &Signal{ops: ops, now: now, lastLog: map[string]time.Time{}}
 }
 
 func newDefaultSignal() *Signal {
-	return NewSignal(new(expvar.Map).Init(), clock.Now)
+	return NewSignal(telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"), clock.Now)
 }
 
 type Option func(*redisJSON)
@@ -54,8 +57,8 @@ func WithSignal(s *Signal) Option {
 }
 
 func kindOf(key string) CacheKind {
-	parts := strings.SplitN(key, ":", 3)
-	if len(parts) < 3 {
+	parts := strings.SplitN(key, ":", cacheKeyParts)
+	if len(parts) < cacheKeyParts {
 		return kindUnknown
 	}
 	return CacheKind(parts[0] + ":" + parts[1])
@@ -73,7 +76,7 @@ func (s *Signal) failure(ctx context.Context, kind CacheKind, op cacheOp, err er
 	slog.WarnContext(ctx, "discovery.cache_error",
 		slog.String("cache", string(kind)),
 		slog.String("op", string(op)),
-		slog.Any("error", err),
+		slog.Any(logging.KeyError, err),
 	)
 }
 

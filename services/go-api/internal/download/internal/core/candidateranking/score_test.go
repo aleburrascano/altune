@@ -233,28 +233,39 @@ func TestRank_BelowTheIdentityGateTheRefusalNamesTheScore(t *testing.T) {
 	}
 }
 
-func TestRank_TheEvaluationLogCarriesScoresAndCandidateAttributes(t *testing.T) {
+func TestRank_EvaluationCarriesScoresAndTheCandidate(t *testing.T) {
 	track := candidateranking.Track{ID: "t1", Title: "Song", Artist: "Artist", ExpectedLength: 200}
 	c := download.AudioCandidate{Source: "youtube", Title: "Song", Channel: "Artist - Topic", Duration: 200, ViewCount: 50, Categories: []string{"Music"}}
 
-	record := evaluation(t, track, c)
+	_, _, evaluated := candidateranking.Rank(track, []download.AudioCandidate{c})
 
-	want := map[string]any{
-		"track_id": "t1", "source": "youtube",
-		"candidate_title": "Song", "candidate_channel": "Artist - Topic",
-		"candidate_duration": float64(200), "candidate_views": float64(50),
-		"identity_score": float64(60), "metadata_rank": float64(1),
-		"qualifier_distance": float64(0), "is_topic": true,
-		"artist_match": true, "feature_match": true, "explicit": false, "track_artist": "Artist",
+	if len(evaluated) != 1 {
+		t.Fatalf("evaluated %d candidates, want 1", len(evaluated))
 	}
-	for k, v := range want {
-		if record[k] != v {
-			t.Errorf("%s = %v, want %v", k, record[k], v)
-		}
+	got := evaluated[0]
+	if got.Candidate.Title != "Song" || got.Candidate.Channel != "Artist - Topic" || got.Candidate.Source != "youtube" {
+		t.Errorf("candidate = %+v, want the one ranked", got.Candidate)
+	}
+	if got.IdentityScore != 60 || got.MetadataRank != 1 || got.QualifierDistance != 0 {
+		t.Errorf("scores = %v/%v/%v, want 60/1/0", got.IdentityScore, got.MetadataRank, got.QualifierDistance)
+	}
+	if !got.IsTopic || !got.ArtistMatch || !got.FeatureMatch {
+		t.Errorf("flags topic/artist/feature = %v/%v/%v, want all true", got.IsTopic, got.ArtistMatch, got.FeatureMatch)
 	}
 }
 
-func TestRank_TheEvaluationLogRoundsScores(t *testing.T) {
+func TestRank_UnplayableCandidatesAreNotEvaluated(t *testing.T) {
+	track := song("Song", "Artist", 200)
+	drm := download.AudioCandidate{Title: "Song", Unplayable: "drm"}
+
+	_, refused, evaluated := candidateranking.Rank(track, []download.AudioCandidate{drm})
+
+	if len(evaluated) != 0 || len(refused) != 1 {
+		t.Fatalf("evaluated %d, refused %d, want 0 and 1", len(evaluated), len(refused))
+	}
+}
+
+func TestRank_EvaluationRoundsScores(t *testing.T) {
 	track := song("Blinding Lights", "The Weeknd", 200)
 	c := download.AudioCandidate{Title: "The Weeknd - Blinding Light", Channel: "LabelVEVO", Duration: 210, Categories: []string{"Comedy"}, ViewCount: 1}
 

@@ -29,14 +29,6 @@ func (noopRecordingLookup) RecordingByMBID(context.Context, string) (RecordingFa
 	return RecordingFacts{}, false, nil
 }
 
-type noopRecordingSearch struct{}
-
-func NoopRecordingSearch() RecordingSearch { return noopRecordingSearch{} }
-
-func (noopRecordingSearch) SearchRecordings(context.Context, string, int) ([]SearchedRecording, error) {
-	return nil, nil
-}
-
 type noopISRCLookup struct{}
 
 func NoopISRCLookup() ISRCLookup { return noopISRCLookup{} }
@@ -65,16 +57,6 @@ func (noopRerecordingFinder) FindRerecording(context.Context, RerecordingQuery) 
 	return TrackLabel{}, false, nil
 }
 
-type noopAudioProber struct{}
-
-func NoopAudioProber() AudioProber { return noopAudioProber{} }
-
-func (noopAudioProber) ProbeDuration(context.Context, string) (float64, error) {
-	return 0, ErrNoAudioProber
-}
-
-func (noopAudioProber) ValidateDecodable(context.Context, string) error { return nil }
-
 type noopAudioTagger struct{}
 
 func NoopAudioTagger() AudioTagger { return noopAudioTagger{} }
@@ -99,7 +81,7 @@ func NoopRejectionStore() RejectionStore { return noopRejectionStore{} }
 
 func (noopRejectionStore) Record(context.Context, []CandidateRejectionRecord) error { return nil }
 
-func (noopRejectionStore) Active(context.Context, string, time.Time) ([]PriorRejection, error) {
+func (noopRejectionStore) Active(context.Context, ids.TrackId, time.Time) ([]PriorRejection, error) {
 	return nil, nil
 }
 
@@ -109,14 +91,6 @@ func NoopStoredAudioReader() StoredAudioReader { return noopStoredAudioReader{} 
 
 func (noopStoredAudioReader) CopyStored(context.Context, string, string) (string, error) {
 	return "", ErrNoStoredAudioReader
-}
-
-type noopAudioRefLookup struct{}
-
-func NoopAudioRefLookup() AudioRefLookup { return noopAudioRefLookup{} }
-
-func (noopAudioRefLookup) AudioRefInUse(context.Context, string, ids.TrackId) (bool, error) {
-	return false, nil
 }
 
 type noopVerifySkipRecorder struct{}

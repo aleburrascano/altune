@@ -1,6 +1,12 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { ApiError, isServerFaultStatus, RETRY_TAIL } from '@shared/failure';
+import {
+  ApiError,
+  describeError,
+  failureKindOf,
+  RETRY_TAIL,
+  type FailureKind,
+} from '@shared/failure';
 import type {
   PlaylistId,
   TrackId,
@@ -54,8 +60,17 @@ function leftInPlace(playlist: PlaylistResponse): CreateWithTracksResult {
   return { playlist, added: 0, addFailed: true };
 }
 
+const REFUSAL_KINDS: ReadonlySet<FailureKind> = new Set([
+  'unauthorized',
+  'not-found',
+  'rate-limited',
+  'conflict',
+  'limit-reached',
+  'rejected',
+]);
+
 function isDefiniteRefusal(error: unknown): boolean {
-  return error instanceof ApiError && !isServerFaultStatus(error.status);
+  return error instanceof ApiError && REFUSAL_KINDS.has(failureKindOf(error));
 }
 
 function requestedTracksPresent(detail: PlaylistDetailResponse, trackIds: TrackId[]): number {
@@ -109,6 +124,11 @@ async function createWithTracks(
   const epoch = currentSessionEpoch();
   const playlist = await port.createPlaylist({ name });
   return fillCreatedPlaylist(port, { playlist, trackIds, epoch });
+}
+
+function failureAlert(error: Error, action: string) {
+  const copy = describeError(error, action);
+  return { title: copy.title, message: copy.body };
 }
 
 function alertCreateFailed(): void {
@@ -230,10 +250,8 @@ export function useAddTracksToPlaylist() {
         });
       }
     },
-    alertOnError: ({ trackIds }) => ({
-      title: 'Add failed',
-      message: `Could not add the ${countLabel(trackIds.length, 'track')} to the playlist. ${RETRY_TAIL}`,
-    }),
+    alertOnError: ({ trackIds }, error) =>
+      failureAlert(error, `add the ${countLabel(trackIds.length, 'track')} to the playlist`),
     invalidate: ({ playlistId }) => [playlistKeys.list, playlistKeys.detail(playlistId)],
   });
 }
@@ -247,10 +265,7 @@ export function useRenamePlaylist(playlistId: PlaylistId) {
     applyOptimistic: (previous: PlaylistDetail, name) => ({ ...previous, name }),
     revertOptimistic: (current, name, previous) =>
       current.name === name ? { ...current, name: previous.name } : current,
-    alertOnError: () => ({
-      title: 'Rename failed',
-      message: `Could not rename the playlist. ${RETRY_TAIL}`,
-    }),
+    alertOnError: (_name, error) => failureAlert(error, 'rename the playlist'),
     invalidate: () => [playlistKeys.detail(playlistId), playlistKeys.list],
   });
 }
@@ -298,10 +313,8 @@ export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
       ...current,
       tracks: reinsertTracks(current.tracks, previous.tracks, new Set(trackIds)),
     }),
-    alertOnError: (trackIds) => ({
-      title: 'Remove failed',
-      message: `Could not remove the ${countLabel(trackIds.length, 'track')}. ${RETRY_TAIL}`,
-    }),
+    alertOnError: (trackIds, error) =>
+      failureAlert(error, `remove the ${countLabel(trackIds.length, 'track')}`),
     invalidate: () => [playlistKeys.detail(playlistId), playlistKeys.list],
   });
 }

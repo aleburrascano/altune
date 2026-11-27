@@ -3,9 +3,8 @@ package library
 import domain "altune/go-api/internal/library/internal/domain"
 
 type (
-	SearchKeys = domain.SearchKeys
-	Track      = domain.Track
-	TrackId    = domain.TrackId
+	Track   = domain.Track
+	TrackId = domain.TrackId
 )
 
 type (
@@ -17,6 +16,7 @@ type (
 
 var (
 	ErrIllegalAcquisitionTransition = domain.ErrIllegalAcquisitionTransition
+	ErrIDSourceRequired             = domain.ErrIDSourceRequired
 	ErrTrackTimestampClockRequired  = domain.ErrTrackTimestampClockRequired
 	ErrLibraryFull                  = domain.ErrLibraryFull
 	ErrPlaylistFull                 = domain.ErrPlaylistFull
@@ -25,14 +25,13 @@ var (
 )
 
 var (
-	CleanSearchKeys           = domain.CleanSearchKeys
+	PlausibleYear             = domain.PlausibleYear
 	FailureMessage            = domain.FailureMessage
 	JoinFailureReason         = domain.JoinFailureReason
 	KnownCatalogProviders     = domain.KnownCatalogProviders
 	NewFeaturedArtist         = domain.NewFeaturedArtist
 	NewPlaylist               = domain.NewPlaylist
 	NewTrack                  = domain.NewTrack
-	NewTrackId                = domain.NewTrackId
 	NewValidationError        = domain.NewValidationError
 	NormalizeCatalogMBID      = domain.NormalizeCatalogMBID
 	NormalizeCatalogSources   = domain.NormalizeCatalogSources

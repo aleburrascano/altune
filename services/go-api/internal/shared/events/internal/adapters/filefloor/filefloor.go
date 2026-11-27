@@ -1,7 +1,7 @@
 package filefloor
 
 import (
-	"altune/go-api/internal/shared/events/internal/core/idfloor"
+	"altune/go-api/internal/shared/events/internal/service/idfloor"
 	"errors"
 	"fmt"
 	"io/fs"

@@ -63,12 +63,22 @@ func TestWriteDeadline_CutsOffClientThatStopsReading(t *testing.T) {
 }
 
 func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
-	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
+	deadlinePassed := make(chan struct{})
+	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/probe" {
+			_ = writeUntilError(w, 2*cutoffWait)
+			close(deadlinePassed)
+			return
+		}
 		httpserver.ClearWriteDeadline(w)
 		w.WriteHeader(http.StatusOK)
 		rc := http.NewResponseController(w)
 		_ = rc.Flush()
-		time.Sleep(3 * testWriteDeadline)
+		select {
+		case <-deadlinePassed:
+		case <-r.Context().Done():
+			return
+		}
 		_, _ = io.WriteString(w, "late frame")
 		_ = rc.Flush()
 	}))
@@ -76,6 +86,7 @@ func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 	conn, br := slowclienttest.Get(t, srv, "/", nil)
 	resp := slowclienttest.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
+	slowclienttest.Get(t, srv, "/probe", nil)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil || string(body) != "late frame" {
 		t.Fatalf("body = %q, err = %v; want the frame written after the route deadline", body, err)
@@ -95,13 +106,15 @@ func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.
 	began := time.Now()
 	got := 0
 	buf := make([]byte, 32<<10)
+	pace := time.NewTicker(20 * time.Millisecond)
+	defer pace.Stop()
 	for {
 		n, err := resp.Body.Read(buf)
 		got += n
 		if err != nil {
 			break
 		}
-		time.Sleep(20 * time.Millisecond)
+		<-pace.C
 	}
 	if got != size {
 		t.Fatalf("received %d of %d bytes after %s: steady slow client was cut off", got, size, time.Since(began))

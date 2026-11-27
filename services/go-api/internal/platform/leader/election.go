@@ -3,6 +3,7 @@ package leader
 import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -179,7 +180,7 @@ func (e *Election) lockedConn(ctx context.Context) (lockSession, bool) {
 
 func (e *Election) acquireFailed(ctx context.Context, stage string, err error) {
 	e.counters.failures.Add(1)
-	slog.WarnContext(ctx, "leader.acquire_failed", "key", e.key, "stage", stage, "err", err)
+	slog.WarnContext(ctx, "leader.acquire_failed", "key", e.key, "stage", stage, logging.KeyError, err)
 }
 
 func (e *Election) hold(conn lockSession) {
@@ -222,7 +223,7 @@ func (e *Election) verify(base context.Context) {
 	if base.Err() != nil {
 		return
 	}
-	slog.WarnContext(base, "leader.lost", "key", e.key, "err", err)
+	slog.WarnContext(base, "leader.lost", "key", e.key, logging.KeyError, err)
 	e.counters.holdsLost.Add(1)
 	e.release(base)
 }
@@ -235,7 +236,7 @@ func (e *Election) release(base context.Context) {
 	ctx, cancel := e.opCtx(base)
 	defer cancel()
 	if err := conn.AdvisoryUnlock(ctx, e.key); err != nil {
-		slog.WarnContext(ctx, "leader.unlock_failed", "key", e.key, "err", err)
+		slog.WarnContext(ctx, "leader.unlock_failed", "key", e.key, logging.KeyError, err)
 	}
 	conn.Release()
 }

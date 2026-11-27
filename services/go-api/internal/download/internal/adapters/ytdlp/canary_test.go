@@ -221,9 +221,7 @@ func TestCanary_SoundCloudPreviewUsesTheInspectionSlack(t *testing.T) {
 }
 
 func TestCanary_ParentCancelIsNotATimeout(t *testing.T) {
-	installYtDlp(t, "exec sleep 30")
-	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(100*time.Millisecond, cancel)
+	ctx := cancelOnceFileExists(t, installYtDlp(t, "exec sleep 30"))
 
 	err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(ctx, download.SoundCloudCanary)
 

@@ -93,7 +93,7 @@ describe('parseQueueState — the queue-state parse boundary', () => {
   });
 
   it('returns the typed state for a well-formed body', () => {
-    expect(parseQueueState(wire())).toEqual({ ok: true, state: wire() });
+    expect(parseQueueState(wire())).toEqual({ ok: true, value: wire() });
   });
 
   it('keeps playlist source fields and drops unknown extra fields', () => {
@@ -102,12 +102,12 @@ describe('parseQueueState — the queue-state parse boundary', () => {
       source: { kind: 'playlist', playlist_id: 'p1', name: 'Chill', extra: 1 },
       source_id: 'playlist:p1',
     });
-    expect(result.ok && result.state.source).toEqual({
+    expect(result.ok && result.value.source).toEqual({
       kind: 'playlist',
       playlist_id: 'p1',
       name: 'Chill',
     });
-    expect(result.ok && 'source_id' in result.state).toBe(false);
+    expect(result.ok && 'source_id' in result.value).toBe(false);
   });
 
   it('defaults an absent natural_order, source and current_track for legacy rows', () => {
@@ -116,7 +116,7 @@ describe('parseQueueState — the queue-state parse boundary', () => {
     delete legacy.source;
     delete legacy.current_track;
     const result = parseQueueState({ ...legacy, natural_order: null });
-    expect(result).toEqual({ ok: true, state: { ...legacy, natural_order: [], source: null } });
+    expect(result).toEqual({ ok: true, value: { ...legacy, natural_order: [], source: null } });
   });
 
   it.each<[string, unknown]>([
@@ -128,7 +128,7 @@ describe('parseQueueState — the queue-state parse boundary', () => {
 
     const result = parseQueueState({ ...wire(), source });
 
-    expect(result).toEqual({ ok: true, state: { ...wire(), source: null } });
+    expect(result).toEqual({ ok: true, value: { ...wire(), source: null } });
     expect(logged.warnings).toContainEqual([expect.stringContaining('unrecognized kind')]);
   });
 
@@ -186,7 +186,7 @@ function acquisitionStatusParsedFrom(value: unknown) {
     },
   });
   if (!result.ok) throw result.error;
-  return result.state.current_track?.acquisition_status;
+  return result.value.current_track?.acquisition_status;
 }
 
 describe('asAcquisitionStatus', () => {

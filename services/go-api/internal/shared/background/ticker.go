@@ -2,14 +2,13 @@ package background
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const runBudgetFraction = 2
@@ -29,8 +28,8 @@ func RunBudget(interval time.Duration) time.Duration {
 	return interval / runBudgetFraction
 }
 
-func BindRun(ctx context.Context, name string) context.Context {
-	return logging.ContextWithJobRun(ctx, name, uuid.NewString())
+func bindRun(ctx context.Context, name string) context.Context {
+	return logging.ContextWithJobRun(ctx, name, ids.Real().String())
 }
 
 func RunJob(parent context.Context, control *JobControl, now clock.Func, name string, budget time.Duration, fn func(context.Context) error) {
@@ -39,19 +38,19 @@ func RunJob(parent context.Context, control *JobControl, now clock.Func, name st
 	}
 	jobCtx, cancel := context.WithTimeoutCause(parent, budget, ErrRunBudgetExceeded)
 	defer cancel()
-	jobCtx = BindRun(jobCtx, name)
+	jobCtx = bindRun(jobCtx, name)
 	var err error
-	if panicked := SafeRun(jobCtx, backgroundJobPanic, func() { err = fn(jobCtx) }, "job", name); panicked != nil {
+	if panicked := SafeRun(jobCtx, backgroundJobPanic, func() { err = fn(jobCtx) }, logging.KeyJob, name); panicked != nil {
 		err = panicked
 	}
 	overBudget := err != nil && errors.Is(context.Cause(jobCtx), ErrRunBudgetExceeded)
 	if overBudget {
 		slog.WarnContext(jobCtx, "background job run exceeded its budget; canceled",
-			"job", name, "budget", budget.String(), "error", err)
+			logging.KeyJob, name, "budget", budget.String(), logging.KeyError, err)
 	}
 	if err != nil && !overBudget && parent.Err() != nil {
 		slog.InfoContext(jobCtx, "background job run interrupted; not counted as a failure",
-			"job", name, "cause", context.Cause(parent))
+			logging.KeyJob, name, "cause", context.Cause(parent))
 		return
 	}
 	control.Record(now(), err)
@@ -83,7 +82,7 @@ func StartWhenLeader(ctx context.Context, bg *Tracker, await func(context.Contex
 			return
 		}
 		for _, job := range starts {
-			_ = SafeRun(ctx, backgroundJobPanic, func() { job.Start(ctx) }, "job", job.Name)
+			_ = SafeRun(ctx, backgroundJobPanic, func() { job.Start(ctx) }, logging.KeyJob, job.Name)
 		}
 	})
 }

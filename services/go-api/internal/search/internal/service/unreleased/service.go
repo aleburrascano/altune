@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
@@ -39,11 +40,10 @@ type Service struct {
 	newTimer clock.TimerFunc
 	now      clock.Func
 
-	lifecycle           context.Context
-	cancelWithLifecycle func(cancel context.CancelFunc) (stop func() bool)
-	jobs                *background.Tracker
-	mu                  sync.Mutex
-	inflight            map[string]*job
+	shutdown <-chan struct{}
+	jobs     *background.Tracker
+	mu       sync.Mutex
+	inflight map[string]*job
 }
 
 var (
@@ -76,23 +76,22 @@ func (NoGenius) SongDetail(context.Context, int) (domain.GeniusSongDetail, error
 }
 
 type Wiring struct {
-	Trackers  ports.TrackerSongs
-	Storage   Storage
-	Lifecycle context.Context
-	Jobs      *background.Tracker
-	Timer     clock.TimerFunc
-	Now       clock.Func
+	Trackers ports.TrackerSongs
+	Storage  Storage
+	Shutdown <-chan struct{}
+	Jobs     *background.Tracker
+	Timer    clock.TimerFunc
+	Now      clock.Func
 }
 
 func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cfg Config, w Wiring) (*Service, error) {
 	for name, missing := range map[string]bool{
-		"genius":    genius == nil,
-		"catalog":   catalog == nil,
-		"trackers":  w.Trackers == nil,
-		"storage":   w.Storage == nil,
-		"lifecycle": w.Lifecycle == nil,
-		"jobs":      w.Jobs == nil,
-		"now":       w.Now == nil,
+		"genius":   genius == nil,
+		"catalog":  catalog == nil,
+		"trackers": w.Trackers == nil,
+		"storage":  w.Storage == nil,
+		"jobs":     w.Jobs == nil,
+		"now":      w.Now == nil,
 	} {
 		if missing {
 			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
@@ -102,17 +101,14 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 		return nil, fmt.Errorf("%w: a Wait needs a timer", ErrCollaboratorRequired)
 	}
 	return &Service{
-		genius:    genius,
-		newTimer:  w.Timer,
-		now:       w.Now,
-		trackers:  w.Trackers,
-		catalog:   catalog,
-		storage:   w.Storage,
-		cfg:       cfg,
-		lifecycle: w.Lifecycle,
-		cancelWithLifecycle: func(cancel context.CancelFunc) func() bool {
-			return context.AfterFunc(w.Lifecycle, cancel)
-		},
+		genius:   genius,
+		newTimer: w.Timer,
+		now:      w.Now,
+		trackers: w.Trackers,
+		catalog:  catalog,
+		storage:  w.Storage,
+		cfg:      cfg,
+		shutdown: w.Shutdown,
 		jobs:     w.Jobs,
 		inflight: map[string]*job{},
 	}, nil
@@ -136,8 +132,8 @@ func (s *Service) List(ctx context.Context, provider domain.ProviderName, extern
 	return s.storage.list(ctx, s, provider, externalID, artistName, known)
 }
 
-func (s *Service) cacheTTL(songs []domain.UnreleasedSong, complete bool) time.Duration {
-	if len(songs) == 0 || !complete {
+func (s *Service) cacheTTL(songs []domain.UnreleasedSong) time.Duration {
+	if len(songs) == 0 {
 		return s.cfg.EmptyTTL
 	}
 	return s.cfg.TTL
@@ -218,7 +214,7 @@ func (s *Service) lookUpDetails(ctx context.Context, songs []domain.UnreleasedSo
 func (s *Service) lookUpDetail(ctx context.Context, song domain.UnreleasedSong) lookedUpDetail {
 	detail, err := s.genius.SongDetail(ctx, song.GeniusID)
 	if err != nil {
-		slog.WarnContext(ctx, "unreleased.media_lookup_failed", "genius_id", song.GeniusID, "error", err)
+		slog.WarnContext(ctx, "unreleased.media_lookup_failed", "genius_id", song.GeniusID, logging.KeyError, err)
 		return lookedUpDetail{}
 	}
 	return lookedUpDetail{detail: detail, found: true}

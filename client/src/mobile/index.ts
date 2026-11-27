@@ -3,7 +3,7 @@ export { appAuthParts, createAuthClient } from '@/mobile/authClient';
 export type { AuthClientConfig, AuthClientParts } from '@/mobile/authClient';
 export { fetchWithinAuthDeadline } from '@/mobile/authFetch';
 export { createAuthStorage } from '@/mobile/authStorage';
-export { createAuthStorage as createWebAuthStorage } from '@/mobile/authStorage.web';
+export { createWebAuthStorage } from '@/mobile/authStorage.web';
 export { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 export { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 export { PlaybackShortcuts, SystemNavigationBar, TabsTitle } from '@/mobile/frame/platformExtras';

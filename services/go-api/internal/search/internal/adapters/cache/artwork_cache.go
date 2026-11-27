@@ -37,9 +37,10 @@ func negativeTTL(kind domain.ResultKind) time.Duration {
 		return artworkNegativeTTLTrack
 	case domain.ResultKindAlbum:
 		return artworkNegativeTTLAlbum
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindArtist, domain.ResultKindPlaylist:
 		return artworkNegativeTTLArtist
 	}
+	return artworkNegativeTTLArtist
 }
 
 type RedisArtworkCache struct {

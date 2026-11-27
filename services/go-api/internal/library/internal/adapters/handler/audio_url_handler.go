@@ -1,10 +1,11 @@
 package handler
 
 import (
-	audioservice "altune/go-api/internal/library/internal/core/audio"
 	"altune/go-api/internal/library/internal/domain"
+	audioservice "altune/go-api/internal/library/internal/service/audio"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"fmt"
 	"log/slog"
@@ -71,10 +72,7 @@ type resolveAudioURLsResponse struct {
 
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 	start := h.now()
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var body resolveAudioURLsRequest
 	if !httpserver.DecodeJSON(w, r, &body) {
@@ -113,9 +111,8 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 	slog.InfoContext(r.Context(), "audio_urls.handled",
 		"requested", len(ids),
 		"resolved", len(urls),
-		"duration_ms", h.now().Sub(start).Milliseconds(),
+		logging.KeyDurationMS, h.now().Sub(start).Milliseconds(),
 	)
-	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", httpserver.CacheControlPrivateNoStore)
 	httpserver.WriteJSON(w, http.StatusOK, resolveAudioURLsResponse{URLs: urls, PrefetchEnabled: h.prefetchEnabled})
 }

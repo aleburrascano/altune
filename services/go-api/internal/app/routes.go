@@ -27,30 +27,38 @@ func (a *application) mountRoutes(
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
+	requireAuth := authMiddleware(verifier, a.metrics)
+
 	r.Method(http.MethodGet, "/health", health.NewEndpoint(a.dependencyHealth, buildCommit, clock.Now))
 
-	r.Route("/v1", func(r chi.Router) {
-		r.Use(router.V1ResponseHeaders)
-		discoveryH.PublicRoutes(r, search.DefaultAuthFailureLimit)
+	router.MountV1(r, apiRequestTimeout, router.V1{
+		Bounded: func(r chi.Router) {
+			discoveryH.PublicRoutes(r, search.DefaultAuthFailureLimit)
 
-		r.Group(func(r chi.Router) {
-			r.Use(authMiddleware(verifier))
+			r.Group(func(r chi.Router) {
+				r.Use(requireAuth)
 
-			r.Route("/tracks", func(r chi.Router) {
-				r.Mount("/", cat.trackHandler.Routes())
+				r.Route("/tracks", func(r chi.Router) {
+					r.Mount("/", cat.trackHandler.Routes())
+				})
+				cat.streamHandler.RecoverRoute(r)
+				cat.audioURLHandler.Routes(r)
+				if cat.acquisitionOn {
+					r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
+					r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
+				}
+				r.Mount("/library", cat.libraryHandler.Routes())
+				r.Mount("/playlists", cat.playlistHandler.Routes())
+				r.Mount("/playback", queueHandler.Routes())
+				r.Mount("/discovery", discoveryH.Routes())
 			})
-			cat.streamHandler.Routes(r)
-			cat.audioURLHandler.Routes(r)
-			if cat.acquisitionOn {
-				r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
-				r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
-			}
-			r.Mount("/library", cat.libraryHandler.Routes())
-			r.Mount("/playlists", cat.playlistHandler.Routes())
-			r.Mount("/playback", queueHandler.Routes())
-			r.Mount("/discovery", discoveryH.Routes())
+		},
+		LongLived: func(r chi.Router) {
+			r.Use(requireAuth)
+
+			cat.streamHandler.StreamRoute(r)
 			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
-		})
+		},
 	})
 
 	return r
@@ -58,10 +66,9 @@ func (a *application) mountRoutes(
 
 func (a *application) newRouter(writeTimeout time.Duration) *chi.Mux {
 	return router.New(router.Settings{
-		WriteTimeout:   writeTimeout,
-		RequestTimeout: apiRequestTimeout,
-		CORSOrigins:    a.cfg.CORSOrigins,
-		Development:    a.cfg.IsDevelopment(),
-		Latency:        a.latency,
+		WriteTimeout: writeTimeout,
+		CORSOrigins:  a.cfg.CORSOrigins,
+		Development:  a.cfg.IsDevelopment(),
+		Latency:      a.latency,
 	})
 }

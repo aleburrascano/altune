@@ -1,7 +1,7 @@
 package ytmusic
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"bytes"
 	"context"
@@ -18,6 +18,8 @@ var errYTMUnexpectedShape = errors.New("ytmusic: response is not a JSON object")
 
 const (
 	ytmResponseBodyCap = 16 << 20
+
+	clockUnitSeconds = 60
 )
 
 type ytmFilter string
@@ -97,10 +99,10 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 		return nil, fmt.Errorf("ytmusic marshal: %w", err)
 	}
 
-	_, raw, err := providerrequests.PostBytesCappedOK(ctx, client, youtubemusicapi.URL(youtubemusicapi.MusicURL, "search"), bytes.NewReader(payload), ytmResponseBodyCap,
-		providerrequests.WithHeader("Content-Type", "application/json; charset=utf-8"),
-		providerrequests.WithHeader("Referer", "https://music.youtube.com/search"),
-		providerrequests.WithHeader("User-Agent", youtubemusicapi.UserAgent))
+	_, raw, err := outbound.PostBytesCappedOK(ctx, client, youtubemusicapi.URL(youtubemusicapi.MusicURL, "search"), bytes.NewReader(payload), ytmResponseBodyCap,
+		outbound.WithHeader("Content-Type", "application/json; charset=utf-8"),
+		outbound.WithHeader("Referer", "https://music.youtube.com/search"),
+		outbound.WithHeader("User-Agent", youtubemusicapi.UserAgent))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic do: %w", err)
 	}
@@ -348,7 +350,7 @@ func ytmDurationToSeconds(duration string) int {
 		if err != nil {
 			return 0
 		}
-		total += n * int(math.Pow(60, float64(len(parts)-i-1)))
+		total += n * int(math.Pow(clockUnitSeconds, float64(len(parts)-i-1)))
 	}
 	return total
 }

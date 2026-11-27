@@ -23,11 +23,8 @@ func (s *SetTrackNumberService) Execute(
 	trackId domain.TrackId,
 	trackNumber int,
 ) (updated bool, err error) {
-	if trackNumber <= 0 {
-		return false, domain.NewValidationError("track_number must be positive")
-	}
-	if trackNumber > maxTrackNumber {
-		return false, domain.NewValidationError("track_number exceeds maximum (int4)")
+	if err := domain.ValidateTrackNumber(trackNumber); err != nil {
+		return false, err
 	}
 	updated, err = s.trackRepo.SetTrackNumber(ctx, trackId, userId, trackNumber)
 	if err != nil {

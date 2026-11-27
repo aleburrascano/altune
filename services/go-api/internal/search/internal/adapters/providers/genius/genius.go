@@ -1,6 +1,7 @@
 package genius
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -95,7 +96,7 @@ func (r *GeniusArtworkLookup) searchGenius(ctx context.Context, query string) ([
 			Hits []geniusHit `json:"hits"`
 		} `json:"response"`
 	}
-	if err := providerrequests.GetJSON(ctx, r.client, u, &body, providerrequests.WithHeader("Authorization", "Bearer "+r.accessToken)); err != nil {
+	if err := outbound.GetJSON(ctx, r.client, u, &body, outbound.WithHeader("Authorization", "Bearer "+r.accessToken)); err != nil {
 		return nil, err
 	}
 

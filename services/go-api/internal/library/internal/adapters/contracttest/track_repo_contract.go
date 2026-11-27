@@ -8,8 +8,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type TrackRepositoryUnderTest interface {
@@ -25,7 +23,7 @@ type TrackRepositoryUnderTest interface {
 
 func contractTrack(t *testing.T, userId sharedids.UserId) *domain.Track {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album", time.Now)
+	track, err := domain.NewTrack(userId, "Title-"+randomIDs.NewString()[:8], "Artist-"+randomIDs.NewString()[:8], "Album", time.Now, randomIDs)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -56,12 +54,11 @@ func contractLoad(t *testing.T, repo TrackRepositoryUnderTest, id domain.TrackId
 }
 
 type trackRepositorySuite struct {
-	ctx     context.Context
 	newRepo func(t *testing.T) TrackRepositoryUnderTest
 }
 
 func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepositoryUnderTest) {
-	suite := &trackRepositorySuite{ctx: context.Background(), newRepo: newRepo}
+	suite := &trackRepositorySuite{newRepo: newRepo}
 
 	t.Run("add then get returns the same fields", suite.addThenGetReturnsSameFields)
 	t.Run("get of an unknown id is ErrTrackNotFound", suite.getUnknownIdIsNotFound)
@@ -79,7 +76,7 @@ func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepos
 
 func (s *trackRepositorySuite) addThenGetReturnsSameFields(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	track := contractTrack(t, userId)
 	contractAdd(t, repo, track)
 
@@ -100,7 +97,7 @@ func (s *trackRepositorySuite) addThenGetReturnsSameFields(t *testing.T) {
 
 func (s *trackRepositorySuite) getUnknownIdIsNotFound(t *testing.T) {
 	repo := s.newRepo(t)
-	got, err := repo.GetByID(s.ctx, domain.NewTrackId(), sharedids.NewUserId(uuid.New()))
+	got, err := repo.GetByID(t.Context(), randomIDs.NewTrackId(), randomIDs.NewUserId())
 	if !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Fatalf("GetByID error = %v, want ErrTrackNotFound", err)
 	}
@@ -111,15 +108,15 @@ func (s *trackRepositorySuite) getUnknownIdIsNotFound(t *testing.T) {
 
 func (s *trackRepositorySuite) secondAddWithSameDedupKeyReturnsStoredTrack(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	first := contractTrack(t, userId)
 	contractAdd(t, repo, first)
 
-	second, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album, time.Now)
+	second, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album, time.Now, randomIDs)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
-	stored, created, err := repo.Add(s.ctx, second)
+	stored, created, err := repo.Add(t.Context(), second)
 	if err != nil {
 		t.Fatalf("second Add: %v", err)
 	}
@@ -133,8 +130,8 @@ func (s *trackRepositorySuite) secondAddWithSameDedupKeyReturnsStoredTrack(t *te
 
 func (s *trackRepositorySuite) anotherUsersTrackIsInvisible(t *testing.T) {
 	repo := s.newRepo(t)
-	owner := sharedids.NewUserId(uuid.New())
-	intruder := sharedids.NewUserId(uuid.New())
+	owner := randomIDs.NewUserId()
+	intruder := randomIDs.NewUserId()
 	track := contractTrack(t, owner)
 	contractAdd(t, repo, track)
 
@@ -145,7 +142,7 @@ func (s *trackRepositorySuite) anotherUsersTrackIsInvisible(t *testing.T) {
 }
 
 func (s *trackRepositorySuite) expectGetHiddenFromIntruder(t *testing.T, repo TrackRepositoryUnderTest, id domain.TrackId, intruder sharedids.UserId) {
-	got, err := repo.GetByID(s.ctx, id, intruder)
+	got, err := repo.GetByID(t.Context(), id, intruder)
 	if !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Fatalf("GetByID error = %v, want ErrTrackNotFound", err)
 	}
@@ -155,7 +152,7 @@ func (s *trackRepositorySuite) expectGetHiddenFromIntruder(t *testing.T, repo Tr
 }
 
 func (s *trackRepositorySuite) expectListByIDsHiddenFromIntruder(t *testing.T, repo TrackRepositoryUnderTest, id domain.TrackId, intruder sharedids.UserId) {
-	listed, err := repo.ListByIDs(s.ctx, intruder, []domain.TrackId{id})
+	listed, err := repo.ListByIDs(t.Context(), intruder, []domain.TrackId{id})
 	if err != nil {
 		t.Fatalf("ListByIDs: %v", err)
 	}
@@ -165,7 +162,7 @@ func (s *trackRepositorySuite) expectListByIDsHiddenFromIntruder(t *testing.T, r
 }
 
 func (s *trackRepositorySuite) expectDeleteRefusedForIntruder(t *testing.T, repo TrackRepositoryUnderTest, id domain.TrackId, intruder sharedids.UserId) {
-	deleted, ref, err := repo.Delete(s.ctx, id, intruder)
+	deleted, ref, err := repo.Delete(t.Context(), id, intruder)
 	if err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -176,13 +173,13 @@ func (s *trackRepositorySuite) expectDeleteRefusedForIntruder(t *testing.T, repo
 
 func (s *trackRepositorySuite) listByIDsReturnsOwnersRequestedTracks(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	a, b, c := contractTrack(t, userId), contractTrack(t, userId), contractTrack(t, userId)
 	for _, track := range []*domain.Track{a, b, c} {
 		contractAdd(t, repo, track)
 	}
 
-	listed, err := repo.ListByIDs(s.ctx, userId, []domain.TrackId{a.ID, c.ID})
+	listed, err := repo.ListByIDs(t.Context(), userId, []domain.TrackId{a.ID, c.ID})
 	if err != nil {
 		t.Fatalf("ListByIDs: %v", err)
 	}
@@ -197,7 +194,7 @@ func (s *trackRepositorySuite) listByIDsReturnsOwnersRequestedTracks(t *testing.
 
 func (s *trackRepositorySuite) listPagesWithLimitOffsetAndTotal(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	base := time.Now().UTC()
 	ids := make([]domain.TrackId, 3)
 	for i := range ids {
@@ -207,7 +204,7 @@ func (s *trackRepositorySuite) listPagesWithLimitOffsetAndTotal(t *testing.T) {
 		ids[i] = track.ID
 	}
 
-	page, total, err := repo.ListForUser(s.ctx, userId, 2, 0)
+	page, total, err := repo.ListForUser(t.Context(), userId, 2, 0)
 	if err != nil {
 		t.Fatalf("ListForUser: %v", err)
 	}
@@ -218,7 +215,7 @@ func (s *trackRepositorySuite) listPagesWithLimitOffsetAndTotal(t *testing.T) {
 		t.Errorf("first page is not newest first")
 	}
 
-	rest, total, err := repo.ListForUser(s.ctx, userId, 10, 2)
+	rest, total, err := repo.ListForUser(t.Context(), userId, 10, 2)
 	if err != nil {
 		t.Fatalf("ListForUser offset: %v", err)
 	}
@@ -229,20 +226,20 @@ func (s *trackRepositorySuite) listPagesWithLimitOffsetAndTotal(t *testing.T) {
 
 func (s *trackRepositorySuite) countStopsAtBoundAndIgnoresOtherUsers(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	for range 3 {
 		contractAdd(t, repo, contractTrack(t, userId))
 	}
-	contractAdd(t, repo, contractTrack(t, sharedids.NewUserId(uuid.New())))
+	contractAdd(t, repo, contractTrack(t, randomIDs.NewUserId()))
 
-	whole, err := repo.CountForUser(s.ctx, userId, 10)
+	whole, err := repo.CountForUser(t.Context(), userId, 10)
 	if err != nil {
 		t.Fatalf("CountForUser(10): %v", err)
 	}
 	if whole != 3 {
 		t.Errorf("CountForUser(10) = %d, want 3", whole)
 	}
-	bounded, err := repo.CountForUser(s.ctx, userId, 2)
+	bounded, err := repo.CountForUser(t.Context(), userId, 2)
 	if err != nil {
 		t.Fatalf("CountForUser(2): %v", err)
 	}
@@ -253,18 +250,18 @@ func (s *trackRepositorySuite) countStopsAtBoundAndIgnoresOtherUsers(t *testing.
 
 func (s *trackRepositorySuite) updateWithCurrentVersionBumpsIt(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	track := contractTrack(t, userId)
 	contractAdd(t, repo, track)
 
 	loaded := contractLoad(t, repo, track.ID, userId)
 	before := loaded.Version
 	edit := *loaded
-	ref := "s3://bucket/update-" + uuid.NewString() + ".opus"
-	if err := edit.MarkReady(ref); err != nil {
+	ref := "s3://bucket/update-" + randomIDs.NewString() + ".opus"
+	if err := edit.MarkReady(ref, randomIDs); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	if err := repo.Update(s.ctx, &edit, before); err != nil {
+	if err := repo.Update(t.Context(), &edit, before); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
@@ -279,7 +276,7 @@ func (s *trackRepositorySuite) updateWithCurrentVersionBumpsIt(t *testing.T) {
 
 func (s *trackRepositorySuite) updateWithStaleVersionIsConflict(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	track := contractTrack(t, userId)
 	contractAdd(t, repo, track)
 
@@ -287,17 +284,17 @@ func (s *trackRepositorySuite) updateWithStaleVersionIsConflict(t *testing.T) {
 	before := loaded.Version
 	stale := *loaded
 	fresh := *loaded
-	if err := fresh.MarkReady("s3://bucket/fresh-" + uuid.NewString() + ".opus"); err != nil {
+	if err := fresh.MarkReady("s3://bucket/fresh-"+randomIDs.NewString()+".opus", randomIDs); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	if err := repo.Update(s.ctx, &fresh, before); err != nil {
+	if err := repo.Update(t.Context(), &fresh, before); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	if err := stale.MarkReady("s3://bucket/stale-" + uuid.NewString() + ".opus"); err != nil {
+	if err := stale.MarkReady("s3://bucket/stale-"+randomIDs.NewString()+".opus", randomIDs); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	err := repo.Update(s.ctx, &stale, before)
+	err := repo.Update(t.Context(), &stale, before)
 	if !errors.Is(err, ports.ErrTrackVersionConflict) {
 		t.Errorf("Update with stale version = %v, want ErrTrackVersionConflict", err)
 	}
@@ -305,18 +302,18 @@ func (s *trackRepositorySuite) updateWithStaleVersionIsConflict(t *testing.T) {
 
 func (s *trackRepositorySuite) updateOfDeletedRowIsNotConflict(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	track := contractTrack(t, userId)
 	contractAdd(t, repo, track)
 
 	loaded := *contractLoad(t, repo, track.ID, userId)
-	if _, _, err := repo.Delete(s.ctx, track.ID, userId); err != nil {
+	if _, _, err := repo.Delete(t.Context(), track.ID, userId); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if err := loaded.MarkReady("s3://bucket/gone-" + uuid.NewString() + ".opus"); err != nil {
+	if err := loaded.MarkReady("s3://bucket/gone-"+randomIDs.NewString()+".opus", randomIDs); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	err := repo.Update(s.ctx, &loaded, loaded.Version)
+	err := repo.Update(t.Context(), &loaded, loaded.Version)
 	if err == nil {
 		t.Fatal("Update of a deleted row returned nil, want an error")
 	}
@@ -327,25 +324,25 @@ func (s *trackRepositorySuite) updateOfDeletedRowIsNotConflict(t *testing.T) {
 
 func (s *trackRepositorySuite) deleteReturnsAudioRefAndRemovesTrack(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	track := contractTrack(t, userId)
-	ref := "s3://bucket/delete-" + uuid.NewString() + ".opus"
-	if err := track.MarkReady(ref); err != nil {
+	ref := "s3://bucket/delete-" + randomIDs.NewString() + ".opus"
+	if err := track.MarkReady(ref, randomIDs); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
 	contractAdd(t, repo, track)
 
-	deleted, got, err := repo.Delete(s.ctx, track.ID, userId)
+	deleted, got, err := repo.Delete(t.Context(), track.ID, userId)
 	if err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if !deleted || got == nil || *got != ref {
 		t.Errorf("Delete = %v/%v, want true/%q", deleted, got, ref)
 	}
-	if _, err := repo.GetByID(s.ctx, track.ID, userId); !errors.Is(err, domain.ErrTrackNotFound) {
+	if _, err := repo.GetByID(t.Context(), track.ID, userId); !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Errorf("GetByID after delete: err = %v, want ErrTrackNotFound", err)
 	}
-	again, _, err := repo.Delete(s.ctx, track.ID, userId)
+	again, _, err := repo.Delete(t.Context(), track.ID, userId)
 	if err != nil || again {
 		t.Errorf("second Delete = %v/%v, want false/nil", again, err)
 	}
@@ -353,21 +350,21 @@ func (s *trackRepositorySuite) deleteReturnsAudioRefAndRemovesTrack(t *testing.T
 
 func (s *trackRepositorySuite) audioRefInUseHonoursExclusion(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	holder := contractTrack(t, userId)
-	ref := "s3://bucket/shared-" + uuid.NewString() + ".opus"
-	if err := holder.MarkReady(ref); err != nil {
+	ref := "s3://bucket/shared-" + randomIDs.NewString() + ".opus"
+	if err := holder.MarkReady(ref, randomIDs); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
 	contractAdd(t, repo, holder)
 	other := contractTrack(t, userId)
 	contractAdd(t, repo, other)
 
-	inUse, err := repo.AudioRefInUse(s.ctx, ref, other.ID)
+	inUse, err := repo.AudioRefInUse(t.Context(), ref, other.ID)
 	if err != nil || !inUse {
 		t.Errorf("AudioRefInUse excluding another track = %v/%v, want true/nil", inUse, err)
 	}
-	inUse, err = repo.AudioRefInUse(s.ctx, ref, holder.ID)
+	inUse, err = repo.AudioRefInUse(t.Context(), ref, holder.ID)
 	if err != nil || inUse {
 		t.Errorf("AudioRefInUse excluding the holder = %v/%v, want false/nil", inUse, err)
 	}
@@ -376,12 +373,11 @@ func (s *trackRepositorySuite) audioRefInUseHonoursExclusion(t *testing.T) {
 const contractLibraryCap = 3
 
 type trackRepositoryLibraryCapSuite struct {
-	ctx     context.Context
 	newRepo func(t *testing.T, libraryCap int) TrackRepositoryUnderTest
 }
 
 func TrackRepositoryLibraryCapContract(t *testing.T, newRepo func(t *testing.T, libraryCap int) TrackRepositoryUnderTest) {
-	suite := &trackRepositoryLibraryCapSuite{ctx: context.Background(), newRepo: newRepo}
+	suite := &trackRepositoryLibraryCapSuite{newRepo: newRepo}
 
 	t.Run("an add past the cap is ErrLibraryFull and stores nothing", suite.addPastCapIsLibraryFullAndStoresNothing)
 	t.Run("the cap is per user", suite.capIsPerUser)
@@ -391,17 +387,17 @@ func TrackRepositoryLibraryCapContract(t *testing.T, newRepo func(t *testing.T, 
 
 func (s *trackRepositoryLibraryCapSuite) addPastCapIsLibraryFullAndStoresNothing(t *testing.T) {
 	repo := s.newRepo(t, contractLibraryCap)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	for range contractLibraryCap {
 		contractAdd(t, repo, contractTrack(t, userId))
 	}
 
-	stored, created, err := repo.Add(s.ctx, contractTrack(t, userId))
+	stored, created, err := repo.Add(t.Context(), contractTrack(t, userId))
 
 	if !errors.Is(err, domain.ErrLibraryFull) || created || stored != nil {
 		t.Fatalf("Add past the cap = %v/%v/%v, want nil/false/ErrLibraryFull", stored, created, err)
 	}
-	held, err := repo.CountForUser(s.ctx, userId, contractLibraryCap+1)
+	held, err := repo.CountForUser(t.Context(), userId, contractLibraryCap+1)
 	if err != nil || held != contractLibraryCap {
 		t.Errorf("CountForUser = %d/%v, want %d/nil", held, err, contractLibraryCap)
 	}
@@ -409,18 +405,18 @@ func (s *trackRepositoryLibraryCapSuite) addPastCapIsLibraryFullAndStoresNothing
 
 func (s *trackRepositoryLibraryCapSuite) capIsPerUser(t *testing.T) {
 	repo := s.newRepo(t, contractLibraryCap)
-	full := sharedids.NewUserId(uuid.New())
+	full := randomIDs.NewUserId()
 	for range contractLibraryCap {
 		contractAdd(t, repo, contractTrack(t, full))
 	}
 
-	contractAdd(t, repo, contractTrack(t, sharedids.NewUserId(uuid.New())))
+	contractAdd(t, repo, contractTrack(t, randomIDs.NewUserId()))
 }
 
 func (s *trackRepositoryLibraryCapSuite) keyedReplayAtCapReturnsStoredTrack(t *testing.T) {
 	repo := s.newRepo(t, contractLibraryCap)
-	userId := sharedids.NewUserId(uuid.New())
-	key := "idem-" + uuid.NewString()
+	userId := randomIDs.NewUserId()
+	key := "idem-" + randomIDs.NewString()
 	first := contractTrack(t, userId)
 	first.IdempotencyKey = &key
 	contractAdd(t, repo, first)
@@ -430,7 +426,7 @@ func (s *trackRepositoryLibraryCapSuite) keyedReplayAtCapReturnsStoredTrack(t *t
 	replay := contractTrack(t, userId)
 	replay.IdempotencyKey = &key
 
-	stored, created, err := repo.Add(s.ctx, replay)
+	stored, created, err := repo.Add(t.Context(), replay)
 
 	if err != nil || created || stored == nil || stored.ID != first.ID {
 		t.Fatalf("keyed replay at the cap = %v/%v/%v, want the first track, not created, no error", stored, created, err)
@@ -439,18 +435,18 @@ func (s *trackRepositoryLibraryCapSuite) keyedReplayAtCapReturnsStoredTrack(t *t
 
 func (s *trackRepositoryLibraryCapSuite) dedupReplayAtCapReturnsStoredTrack(t *testing.T) {
 	repo := s.newRepo(t, contractLibraryCap)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	first := contractTrack(t, userId)
 	contractAdd(t, repo, first)
 	for range contractLibraryCap - 1 {
 		contractAdd(t, repo, contractTrack(t, userId))
 	}
-	replay, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album, time.Now)
+	replay, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album, time.Now, randomIDs)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
 
-	stored, created, err := repo.Add(s.ctx, replay)
+	stored, created, err := repo.Add(t.Context(), replay)
 
 	if err != nil || created || stored == nil || stored.ID != first.ID {
 		t.Fatalf("replay at the cap = %v/%v/%v, want the first track, not created, no error", stored, created, err)

@@ -145,6 +145,26 @@ run_git_hook
 [ ! -e "$stale" ] && [ ! -e "$stale.src" ] && [ ! -e "$stale.lock" ] || fail "a scratch worktree whose source checkout is gone is removed on the next push"
 [ -e "$cache_dir/.git" ] || fail "the scratch worktree of a checkout that still exists is kept"
 
+L=$WORK/linked
+git -C "$G" worktree add -q -b linked "$L" feature
+run_linked_hook() {
+    : >"$WORK/calls.log"
+    (cd "$L" && printf '%s\n' "refs/heads/linked $(git rev-parse HEAD) refs/heads/linked $ZERO" | GIT_DIR="$(git rev-parse --absolute-git-dir)" XDG_CACHE_HOME="$WORK/cache" sh -e .husky/pre-push gitea url >"$WORK/out.log" 2>&1)
+    RC=$?
+}
+linked_head=$(git -C "$L" rev-parse HEAD)
+run_linked_hook
+[ "$RC" = 0 ] || fail "a push from a linked worktree passes (exit $RC): $(cat "$WORK/out.log")"
+run_linked_hook
+[ "$RC" = 0 ] || fail "a second push from a linked worktree, which reuses the scratch worktree, passes (exit $RC): $(cat "$WORK/out.log")"
+[ "$(git -C "$L" rev-parse HEAD)" = "$linked_head" ] || fail "pushing from a linked worktree must not move its HEAD"
+[ "$(git -C "$L" branch --show-current)" = linked ] || fail "pushing from a linked worktree must leave it on its branch"
+[ -z "$(git -C "$L" status --porcelain)" ] || fail "pushing from a linked worktree must leave it clean: $(git -C "$L" status --porcelain)"
+linked_src=$(grep -lx "$L" "$WORK"/cache/altune/prepush-merge/*.src | head -n 1)
+[ -n "$linked_src" ] || fail "the hook must record the linked worktree as the source of its scratch worktree"
+linked_cache=${linked_src%.src}
+grep -qF "$(git -C "$linked_cache" rev-parse HEAD | cut -c1-12)" "$WORK/out.log" || fail "the scratch worktree must sit on the merge result the hook names: $(cat "$WORK/out.log")"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

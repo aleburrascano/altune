@@ -1,7 +1,7 @@
 package itunes
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -21,9 +21,11 @@ func NewITunesAdapter(client *http.Client) *ITunesAdapter {
 	return &ITunesAdapter{client: client}
 }
 
+const itunesSearchTimeout = 4 * time.Second
+
 const itunesUserAgent = "Altune/1.0 (music manager; self-hosted)"
 
-func (a *ITunesAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
+func (a *ITunesAdapter) SearchTimeout() time.Duration { return itunesSearchTimeout }
 
 func (a *ITunesAdapter) Name() domain.ProviderName { return domain.ProviderITunes }
 
@@ -62,9 +64,10 @@ func itunesEntity(kind domain.ResultKind) string {
 		return "album"
 	case domain.ResultKindArtist:
 		return "musicArtist"
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return "song"
 	}
+	return "song"
 }
 
 func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResult {
@@ -124,9 +127,10 @@ func itunesSourceRef(item itunesItem, kind domain.ResultKind) (id, sourceURL str
 		return fmt.Sprintf("%d", item.CollectionID), item.CollectionViewURL
 	case domain.ResultKindArtist:
 		return fmt.Sprintf("%d", item.ArtistID), item.ArtistViewURL
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindTrack, domain.ResultKindPlaylist:
 		return fmt.Sprintf("%d", item.TrackID), item.TrackViewURL
 	}
+	return fmt.Sprintf("%d", item.TrackID), item.TrackViewURL
 }
 
 type itunesResponse struct {
@@ -157,5 +161,5 @@ type itunesItem struct {
 }
 
 func (a *ITunesAdapter) getJSON(ctx context.Context, u string, dst any) error {
-	return providerrequests.GetJSON(ctx, a.client, u, dst, providerrequests.WithHeader("User-Agent", itunesUserAgent))
+	return outbound.GetJSON(ctx, a.client, u, dst, outbound.WithHeader("User-Agent", itunesUserAgent))
 }

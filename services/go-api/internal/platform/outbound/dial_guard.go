@@ -46,6 +46,8 @@ func refuseNonPublicDial(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+func NewGuardedTransport() http.RoundTripper { return baseTransport() }
+
 func baseTransport() http.RoundTripper {
 	t, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -57,10 +59,15 @@ func baseTransport() http.RoundTripper {
 	return c
 }
 
+const (
+	providerDialTimeout   = 30 * time.Second
+	providerDialKeepAlive = 30 * time.Second
+)
+
 func providerDialer() *net.Dialer {
 	return &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
+		Timeout:   providerDialTimeout,
+		KeepAlive: providerDialKeepAlive,
 		Control:   refuseNonPublicDial,
 	}
 }

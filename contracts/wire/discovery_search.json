@@ -1,0 +1,156 @@
+{
+  "query": "kendrick",
+  "query_norm": "kendrick",
+  "search_id": "1299d3d8-75c7-476e-b631-c9da2fc9fb5a",
+  "results": [
+    {
+      "kind": "artist",
+      "title": "Kendrick Lamar",
+      "image_url": "https://img.example/ar1.jpg",
+      "confidence": "low",
+      "result_signature": "artist|kendrick lamar|",
+      "favorite_key": "kendrick lamar",
+      "sources": [
+        {
+          "provider": "deezer",
+          "external_id": "ar1",
+          "url": "https://deezer.com/ar1"
+        }
+      ],
+      "extras": {
+        "duration_seconds": 215,
+        "explicit": false
+      }
+    },
+    {
+      "kind": "track",
+      "title": "Alright",
+      "subtitle": "Kendrick Lamar",
+      "image_url": "https://img.example/t1.jpg",
+      "confidence": "low",
+      "result_signature": "track|alright|kendrick lamar",
+      "favorite_key": "kendrick lamar|alright",
+      "sources": [
+        {
+          "provider": "deezer",
+          "external_id": "t1",
+          "url": "https://deezer.com/t1"
+        }
+      ],
+      "extras": {
+        "duration_seconds": 215,
+        "explicit": false
+      }
+    },
+    {
+      "kind": "album",
+      "title": "To Pimp a Butterfly",
+      "subtitle": "Kendrick Lamar",
+      "image_url": "https://img.example/a1.jpg",
+      "confidence": "low",
+      "result_signature": "album|to pimp a butterfly|kendrick lamar",
+      "favorite_key": "kendrick lamar|to pimp a butterfly",
+      "sources": [
+        {
+          "provider": "deezer",
+          "external_id": "a1",
+          "url": "https://deezer.com/a1"
+        }
+      ],
+      "extras": {
+        "duration_seconds": 215,
+        "explicit": false
+      }
+    }
+  ],
+  "top_result": {
+    "kind": "artist",
+    "title": "Kendrick Lamar",
+    "image_url": "https://img.example/ar1.jpg",
+    "confidence": "low",
+    "result_signature": "artist|kendrick lamar|",
+    "favorite_key": "kendrick lamar",
+    "sources": [
+      {
+        "provider": "deezer",
+        "external_id": "ar1",
+        "url": "https://deezer.com/ar1"
+      }
+    ],
+    "extras": {
+      "duration_seconds": 215,
+      "explicit": false
+    }
+  },
+  "sections": [
+    {
+      "kind": "track",
+      "items": [
+        {
+          "kind": "track",
+          "title": "Alright",
+          "subtitle": "Kendrick Lamar",
+          "image_url": "https://img.example/t1.jpg",
+          "confidence": "low",
+          "result_signature": "track|alright|kendrick lamar",
+          "favorite_key": "kendrick lamar|alright",
+          "sources": [
+            {
+              "provider": "deezer",
+              "external_id": "t1",
+              "url": "https://deezer.com/t1"
+            }
+          ],
+          "extras": {
+            "duration_seconds": 215,
+            "explicit": false
+          }
+        }
+      ],
+      "has_more": false
+    },
+    {
+      "kind": "album",
+      "items": [
+        {
+          "kind": "album",
+          "title": "To Pimp a Butterfly",
+          "subtitle": "Kendrick Lamar",
+          "image_url": "https://img.example/a1.jpg",
+          "confidence": "low",
+          "result_signature": "album|to pimp a butterfly|kendrick lamar",
+          "favorite_key": "kendrick lamar|to pimp a butterfly",
+          "sources": [
+            {
+              "provider": "deezer",
+              "external_id": "a1",
+              "url": "https://deezer.com/a1"
+            }
+          ],
+          "extras": {
+            "duration_seconds": 215,
+            "explicit": false
+          }
+        }
+      ],
+      "has_more": false
+    }
+  ],
+  "providers": [
+    {
+      "provider": "deezer",
+      "status": "ok",
+      "latency_ms": 0,
+      "result_count": 3
+    }
+  ],
+  "partial": false,
+  "cache": {
+    "hit": false,
+    "fetched_at": null
+  },
+  "total": 3,
+  "offset": 0,
+  "has_more": false
+}
+

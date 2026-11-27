@@ -9,7 +9,7 @@ import TrackPlayer, {
 
 import type { RepeatMode as QueueRepeatMode } from '@shared/playback';
 
-import type { PlayerPhase } from '@features/player/domain/derivePlaybackState';
+import type { PlayerPhase } from '@features/player/core/derivePlaybackState';
 import {
   createNativePlaybackActions,
   ignoringNativeRejection,

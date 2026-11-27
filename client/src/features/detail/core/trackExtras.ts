@@ -26,7 +26,7 @@ type DiscoveryExtras = DiscoveryResult['extras'];
 
 function trackIdOrNull(value: string): TrackId | null {
   const parsed = parseTrackId(value);
-  return parsed.ok ? parsed.id : null;
+  return parsed.ok ? parsed.value : null;
 }
 
 function asNonEmptyText(value: unknown): string | null {

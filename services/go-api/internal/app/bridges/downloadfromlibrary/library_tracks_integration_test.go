@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -17,14 +18,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newLedgerPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	return dbtest.Pool(t)
-}
-
 func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours", time.Now)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -64,8 +60,8 @@ func rowState(t *testing.T, pool *pgxpool.Pool, trackID library.TrackId) (string
 }
 
 func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew(t *testing.T) {
-	pool := newLedgerPool(t)
-	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New())
+	pool := dbtest.Pool(t)
+	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), time.Now, upgradestatetest.New(), ids.Real)
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
 
@@ -108,12 +104,12 @@ func (s *claimDuringUpdateStore) UpdateFenced(ctx context.Context, track *librar
 }
 
 func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) {
-	pool := newLedgerPool(t)
+	pool := dbtest.Pool(t)
 	track := insertUnqueuedTrack(t, pool)
 	held := reclaimTrack(t, pool, track.ID)
-	store := &claimDuringUpdateStore{PostgresTrackRepository: library.NewPostgresTrackRepository(pool), pool: pool, t: t}
+	store := &claimDuringUpdateStore{PostgresTrackRepository: library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), pool: pool, t: t}
 
-	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New()).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New(), ids.Real).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost from the fenced write", err)
@@ -137,7 +133,7 @@ var downloadStatusOf = map[download.TrackStatus]library.DownloadStatus{
 
 func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) {
 	t.Helper()
-	track, err := library.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album, time.Now)
+	track, err := library.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -160,8 +156,8 @@ func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) 
 }
 
 func TestTrackLedger_OnPostgresMeetsTheLedgerContract(t *testing.T) {
-	store := library.NewPostgresTrackRepository(newLedgerPool(t))
+	store := library.NewPostgresTrackRepository(dbtest.Pool(t), librarytest.DiscardDBCallMetrics())
 	downloadtest.LedgerContract(t, func(*testing.T) downloadtest.LedgerUnderTest {
-		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New()), store: store}
+		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New(), ids.Real), store: store}
 	})
 }

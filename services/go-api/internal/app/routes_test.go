@@ -3,6 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -198,7 +199,7 @@ func TestCapabilityNotes_NameMountedRoutes(t *testing.T) {
 }
 
 func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testing.T) {
-	r := assembledRouter(t, jwksConfig(t), integrationPool(t))
+	r := assembledRouter(t, jwksConfig(t), dbtest.Pool(t))
 
 	rec := httptest.NewRecorder()
 	body := strings.NewReader(`{"reason":"invalid_credentials","app_version":"1.2.3"}`)
@@ -214,14 +215,47 @@ func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testin
 	}
 }
 
+func TestRouter_EveryRouteButThePublicOnesAnswersAnAnonymousCallerWith401(t *testing.T) {
+	r := productionRouter(t)
+	type call struct{ method, path string }
+	var calls []call
+	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		guarded := strings.HasPrefix(route, "/v1/") && !strings.HasPrefix(route, "/v1/public/") || strings.HasPrefix(route, "/observe/")
+		if guarded {
+			calls = append(calls, call{method, regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(route, "x")})
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk production router: %v", err)
+	}
+	if len(calls) == 0 {
+		t.Fatal("walked no guarded route, so the router under test is not the production one")
+	}
+	for _, c := range calls {
+		t.Run(c.method+" "+c.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, nil))
+			if rec.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s without Authorization = %d, want 401", c.method, c.path, rec.Code)
+			}
+		})
+	}
+}
+
 func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
-	r := assembledRouter(t, jwksConfig(t), integrationPool(t))
+	r := assembledRouter(t, jwksConfig(t), dbtest.Pool(t))
 
 	for _, tc := range []struct {
 		name, method, path, body string
 		want                     int
 	}{
 		{"authed route rejected", http.MethodGet, "/v1/library", "", http.StatusUnauthorized},
+		{"discovery per-user route rejected", http.MethodGet, "/v1/discovery/search-history", "", http.StatusUnauthorized},
+		{"event stream rejected", http.MethodGet, "/v1/events", "", http.StatusUnauthorized},
+		{"audio stream rejected", http.MethodGet, "/v1/tracks/abc/audio", "", http.StatusUnauthorized},
+		{"audio recover rejected", http.MethodPost, "/v1/tracks/abc/audio/recover", "", http.StatusUnauthorized},
+		{"playback rejected", http.MethodGet, "/v1/playback/queue-state", "", http.StatusUnauthorized},
 		{"public route", http.MethodPost, "/v1/public/auth-failures", `{"reason":"invalid_credentials","app_version":"1.2.3"}`, http.StatusNoContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -237,6 +271,37 @@ func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 				t.Errorf("Cache-Control = %q, want no-store", got)
 			}
 		})
+	}
+}
+
+func TestRouter_OneClientsFailedTokensShareOneBudgetAcrossEveryV1Group(t *testing.T) {
+	r := assembledRouter(t, jwksConfig(t), dbtest.Pool(t))
+	const client = "198.51.100.77:4321"
+	attempt := func(path string) int {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.RemoteAddr = client
+		req.Header.Set("Authorization", "Bearer not-a-token")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	const attempts = 200
+	throttled := false
+	for range attempts {
+		if attempt("/v1/library") == http.StatusTooManyRequests {
+			throttled = true
+			break
+		}
+	}
+	if !throttled {
+		t.Fatalf("%d failed tokens on a bounded route never ran out the failure budget", attempts)
+	}
+
+	for _, path := range []string{"/v1/events", "/v1/tracks/abc/audio"} {
+		if got := attempt(path); got != http.StatusTooManyRequests {
+			t.Errorf("GET %s after the client ran out its failure budget = %d, want 429 from the one shared throttle", path, got)
+		}
 	}
 }
 

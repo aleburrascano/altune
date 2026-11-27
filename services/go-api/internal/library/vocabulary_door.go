@@ -1,9 +1,9 @@
 package library
 
 import (
-	audio "altune/go-api/internal/library/internal/core/audio"
 	ports "altune/go-api/internal/library/internal/core/ports"
 	domain "altune/go-api/internal/library/internal/domain"
+	audio "altune/go-api/internal/library/internal/service/audio"
 )
 
 type (
@@ -29,5 +29,4 @@ var (
 	ErrPlaylistNotFound              = domain.ErrPlaylistNotFound
 	ErrTrackNotFound                 = domain.ErrTrackNotFound
 	NewFeaturedArtistIdentityOnly    = domain.NewFeaturedArtistIdentityOnly
-	NewPlaylistId                    = domain.NewPlaylistId
 )

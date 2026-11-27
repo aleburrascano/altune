@@ -8,6 +8,7 @@ type (
 	AudioAgeLister        = ports.AudioAgeLister
 	AudioLister           = ports.AudioLister
 	AudioRefPrefixLister  = ports.AudioRefPrefixLister
+	DBCallMetrics         = ports.DBCallMetrics
 	AudioStore            = ports.AudioStore
 	AudioStream           = ports.AudioStream
 	AudioLinkSigner       = ports.AudioLinkSigner
@@ -19,10 +20,7 @@ type (
 	TrackReadWriter       = ports.TrackReadWriter
 )
 
-var (
-	NoopAcquisitionScheduler = ports.NoopAcquisitionScheduler
-	NoopAudioStoreMetrics    = ports.NoopAudioStoreMetrics
-)
+var NoopAcquisitionScheduler = ports.NoopAcquisitionScheduler
 
 var (
 	ErrDBTransient                  = ports.ErrDBTransient

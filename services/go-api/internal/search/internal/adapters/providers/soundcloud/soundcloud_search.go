@@ -57,7 +57,7 @@ func (a *SoundCloudAPIAdapter) searchTracksOrFallback(ctx context.Context, query
 		return tracks, err
 	}
 	slog.WarnContext(ctx, "soundcloud.apiv2_fallback",
-		logging.SearchTextAttr(query), "error", redact.Secrets(logging.ScrubSearchErr(err, query)))
+		logging.SearchTextAttr(query), logging.KeyError, redact.Secrets(logging.ScrubSearchErr(err, query)))
 	if ferr != nil {
 		return nil, err
 	}
@@ -161,6 +161,18 @@ func scFetchList[T any](
 	return out, nil
 }
 
+func (a *SoundCloudAPIAdapter) searchArtworkCandidates(ctx context.Context, kind domain.ResultKind, query string) ([]domain.SearchResult, error) {
+	switch kind {
+	case domain.ResultKindArtist:
+		return a.searchArtists(ctx, query)
+	case domain.ResultKindAlbum:
+		return a.searchAlbums(ctx, query)
+	case domain.ResultKindUnknown, domain.ResultKindTrack, domain.ResultKindPlaylist:
+		return a.searchArtworkTracks(ctx, query)
+	}
+	return a.searchArtworkTracks(ctx, query)
+}
+
 func (a *SoundCloudAPIAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	if strings.TrimSpace(title) == "" {
 		return "", nil
@@ -170,18 +182,7 @@ func (a *SoundCloudAPIAdapter) Resolve(ctx context.Context, kind domain.ResultKi
 		query = subtitle + " " + title
 	}
 
-	var (
-		results []domain.SearchResult
-		err     error
-	)
-	switch kind {
-	case domain.ResultKindArtist:
-		results, err = a.searchArtists(ctx, query)
-	case domain.ResultKindAlbum:
-		results, err = a.searchAlbums(ctx, query)
-	default:
-		results, err = a.searchArtworkTracks(ctx, query)
-	}
+	results, err := a.searchArtworkCandidates(ctx, kind, query)
 	if err != nil {
 		return providerrequests.ArtworkFailure(a.ArtworkSource(), err)
 	}

@@ -263,7 +263,7 @@ func (a *App) noteDown(ctx context.Context, id string, err error) {
 
 	var panicErr *bucketPanicError
 	if errors.As(err, &panicErr) {
-		slog.ErrorContext(ctx, "overseer.collect.bucket_panic", "bucket", id, "stage", panicErr.stage, "recover", panicErr.value)
+		slog.ErrorContext(ctx, "overseer.collect.bucket_panic", "bucket", id, "stage", panicErr.stage, "panic", panicErr.value)
 		return
 	}
 	slog.WarnContext(ctx, "overseer.collect.source_down", "bucket", id, "error", err)

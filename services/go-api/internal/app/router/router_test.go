@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/slowclienttest"
 	"bufio"
 	"bytes"
@@ -30,10 +31,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-const (
-	productionWriteTimeout   = 60 * time.Second
-	productionRequestTimeout = 50 * time.Second
-)
+const productionWriteTimeout = 60 * time.Second
 
 const routeWriteDeadline = 150 * time.Millisecond
 
@@ -41,17 +39,12 @@ func newRouter(s router.Settings) *chi.Mux {
 	if s.WriteTimeout == 0 {
 		s.WriteTimeout = productionWriteTimeout
 	}
-	if s.RequestTimeout == 0 {
-		s.RequestTimeout = productionRequestTimeout
-	}
 	s.Latency = requestmetrics.NewRegistry()
 	return router.New(s)
 }
 
 func TestRouter_PanickingHandlerLogsOneErrorAndRequestCompleteAt500(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	r := newRouter(router.Settings{})
 	r.Get("/v1/boom", func(http.ResponseWriter, *http.Request) {
@@ -144,15 +137,14 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	}
 	body := bufio.NewReader(resp.Body)
 
-	time.Sleep(4 * routeWriteDeadline)
+	began := time.Now()
+	readUntil(t, body, func(string) bool { return time.Since(began) > 4*routeWriteDeadline })
 	bus.Publish(context.Background(), uid, eventstest.Fielded("late.event", map[string]any{"k": "v"}))
 	readUntil(t, body, func(l string) bool { return strings.HasPrefix(l, "event: late.event") })
 }
 
 func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	slog.SetDefault(slog.New(slog.DiscardHandler))
+	logging.Silence(t)
 
 	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
@@ -167,23 +159,20 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 	slowclienttest.Get(t, srv, "/v1/events", nil)
 
 	payload := map[string]any{"pad": strings.Repeat("x", 16<<10)}
-	giveUp := time.After(5 * time.Second)
-	for {
+	polltest.Until(t, 5*time.Second, "the SSE handler to give up on a stalled client (per-frame deadline applied)", func() bool {
 		select {
 		case <-done:
-			return
-		case <-giveUp:
-			t.Fatal("SSE handler still blocked on a stalled client after 5s: per-frame deadline not applied")
+			return true
 		default:
 			bus.Publish(context.Background(), uid, eventstest.Fielded("bulk", payload))
-			time.Sleep(5 * time.Millisecond)
+			return false
 		}
-	}
+	})
 }
 
-func TestRouter_RequestTimeoutReleasesBlockedV1HandlerButNotLongLivedRoutes(t *testing.T) {
+func TestMountV1_TheRequestTimeoutBoundsTheBoundedGroupAndLeavesTheLongLivedOneAlone(t *testing.T) {
 	const budget = 100 * time.Millisecond
-	r := newRouter(router.Settings{RequestTimeout: budget})
+	r := newRouter(router.Settings{})
 	blockUntilDone := func(w http.ResponseWriter, req *http.Request) {
 		select {
 		case <-req.Context().Done():
@@ -192,28 +181,54 @@ func TestRouter_RequestTimeoutReleasesBlockedV1HandlerButNotLongLivedRoutes(t *t
 			w.WriteHeader(http.StatusOK)
 		}
 	}
-	r.Get("/v1/blocked", blockUntilDone)
-	r.Get("/v1/events", blockUntilDone)
-	r.Get("/v1/tracks/{trackId}/audio", blockUntilDone)
-	r.Get("/health", blockUntilDone)
+	router.MountV1(r, budget, router.V1{
+		Bounded: func(r chi.Router) {
+			r.Get("/blocked", blockUntilDone)
+			r.Post("/tracks/{trackId}/audio/recover", blockUntilDone)
+		},
+		LongLived: func(r chi.Router) {
+			r.Get("/events", blockUntilDone)
+			r.Get("/tracks/{trackId}/audio", blockUntilDone)
+		},
+	})
 
 	cases := []struct {
-		path string
-		want int
+		method, path string
+		want         int
 	}{
-		{"/v1/blocked", http.StatusGatewayTimeout},
-		{"/v1/events", http.StatusOK},
-		{"/v1/tracks/abc/audio", http.StatusOK},
-		{"/health", http.StatusOK},
+		{http.MethodGet, "/v1/blocked", http.StatusGatewayTimeout},
+		{http.MethodPost, "/v1/tracks/abc/audio/recover", http.StatusGatewayTimeout},
+		{http.MethodGet, "/v1/events", http.StatusOK},
+		{http.MethodGet, "/v1/tracks/abc/audio", http.StatusOK},
 	}
 	for _, tc := range cases {
-		t.Run(tc.path, func(t *testing.T) {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
 			if rec.Code != tc.want {
-				t.Errorf("GET %s = %d, want %d", tc.path, rec.Code, tc.want)
+				t.Errorf("%s %s = %d, want %d", tc.method, tc.path, rec.Code, tc.want)
 			}
 		})
+	}
+}
+
+func TestMountV1_EveryGroupCarriesTheV1ResponseHeaders(t *testing.T) {
+	r := newRouter(router.Settings{})
+	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
+	router.MountV1(r, time.Minute, router.V1{
+		Bounded:   func(r chi.Router) { r.Get("/bounded", ok) },
+		LongLived: func(r chi.Router) { r.Get("/long-lived", ok) },
+	})
+
+	for _, path := range []string{"/v1/bounded", "/v1/long-lived"} {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s X-Content-Type-Options = %q, want nosniff", path, got)
+		}
+		if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+			t.Errorf("%s Cache-Control = %q, want no-store", path, got)
+		}
 	}
 }
 
@@ -347,7 +362,7 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 	previous := otel.GetTracerProvider()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
 	t.Cleanup(func() { otel.SetTracerProvider(previous) })
-	r := router.New(router.Settings{WriteTimeout: time.Minute, RequestTimeout: time.Minute, Latency: requestmetrics.NewRegistry()})
+	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: requestmetrics.NewRegistry()})
 	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
 	r.Get("/health", ok)
 	r.Get("/v1/events", ok)
@@ -375,7 +390,7 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 
 func TestRouter_RecordsEachRequestsLatencyByRouteAndStatusClass(t *testing.T) {
 	latency := requestmetrics.NewRegistry()
-	r := router.New(router.Settings{WriteTimeout: time.Minute, RequestTimeout: time.Minute, Latency: latency})
+	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: latency})
 	const route = "/v1/latency-probe/{status}"
 	r.Get(route, func(w http.ResponseWriter, req *http.Request) {
 		status, _ := strconv.Atoi(chi.URLParam(req, "status"))

@@ -38,7 +38,7 @@ func postTrack(t *testing.T, addTrack *library.AddTrackService, userId ids.UserI
 
 func listTracksBody(t *testing.T, repo *library.InMemoryTrackRepo, userId ids.UserId) string {
 	t.Helper()
-	status, body := serveAs(trackRoutes(library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now), repo), userId, http.MethodGet, "")
+	status, body := serveAs(trackRoutes(library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real), repo), userId, http.MethodGet, "")
 	if status != http.StatusOK {
 		t.Fatalf("GET /tracks status = %d, body %s", status, body)
 	}
@@ -85,7 +85,7 @@ func TestTrackToDTO_DoesNotSerializeAudioRef(t *testing.T) {
 func TestTrackToDTO_EmptyAlbumIsNull(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	userId := librarytest.UserId()
-	stored := &library.Track{ID: library.NewTrackId(), UserId: userId, Title: "Single", Artist: "Artist", Album: ""}
+	stored := &library.Track{ID: librarytest.NewTrackId(), UserId: userId, Title: "Single", Artist: "Artist", Album: ""}
 	if _, _, err := repo.Add(context.Background(), stored); err != nil {
 		t.Fatalf("Add: %v", err)
 	}

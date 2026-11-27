@@ -1,7 +1,7 @@
 package musicbrainz
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
@@ -41,8 +41,13 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string, now clock.Func
 	}
 }
 
+const (
+	mbMemoTTL      = 6 * time.Hour
+	mbMemoCapacity = 2048
+)
+
 func newMBMemo[V any](now clock.Func) *expiringcache.Memo[string, V] {
-	return expiringcache.New[string, V](6*time.Hour, 2048, now)
+	return expiringcache.New[string, V](mbMemoTTL, mbMemoCapacity, now)
 }
 
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }
@@ -68,9 +73,10 @@ func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 		return "artist:" + providersearch.DslQuote(providersearch.MbLuceneEscape(artist)) + " AND release:" + providersearch.DslQuote(providersearch.MbLuceneEscape(track))
 	case domain.ResultKindArtist:
 		return providersearch.MbLuceneEscape(artist)
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return providersearch.MbLuceneEscape(artist) + " " + providersearch.MbLuceneEscape(track)
 	}
+	return providersearch.MbLuceneEscape(artist) + " " + providersearch.MbLuceneEscape(track)
 }
 
 func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
@@ -81,9 +87,9 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		u += "&inc=isrcs"
 	}
 
-	status, rawBody, err := providerrequests.GetBytes(ctx, a.client, u,
-		providerrequests.WithHeader("User-Agent", a.userAgent),
-		providerrequests.WithHeader("Accept", "application/json"))
+	status, rawBody, err := outbound.GetBytes(ctx, a.client, u,
+		outbound.WithHeader("User-Agent", a.userAgent),
+		outbound.WithHeader("Accept", "application/json"))
 	if err != nil {
 		return nil, fmt.Errorf("musicbrainz status %d: %w", status, err)
 	}
@@ -127,9 +133,10 @@ func mbEntity(kind domain.ResultKind) string {
 		return "release-group"
 	case domain.ResultKindArtist:
 		return "artist"
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return "recording"
 	}
+	return "recording"
 }
 
 func mapMBRecording(rec mbRecording) domain.SearchResult {
@@ -281,9 +288,9 @@ type mbReleaseGroup struct {
 }
 
 func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) error {
-	return providerrequests.GetJSON(ctx, a.client, u, out,
-		providerrequests.WithHeader("User-Agent", a.userAgent),
-		providerrequests.WithHeader("Accept", "application/json"))
+	return outbound.GetJSON(ctx, a.client, u, out,
+		outbound.WithHeader("User-Agent", a.userAgent),
+		outbound.WithHeader("Accept", "application/json"))
 }
 
 func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query string) ([]mbRecording, error) {

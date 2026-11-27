@@ -3,7 +3,7 @@ package nowplaying_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/ids"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -23,13 +23,9 @@ const (
 	testLookupTimeout          = 50 * time.Millisecond
 )
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
 func testUser() ids.UserId {
@@ -163,7 +159,7 @@ func TestLookup_MalformedTrackId_EmitsDistinguishableSignal(t *testing.T) {
 	}), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 	user := testUser()
 
-	track, err := reader.Lookup(context.Background(), user, "not-a-uuid")
+	track, err := reader.Lookup(logging.ContextWithSubjectUser(context.Background(), user.String()), user, "not-a-uuid")
 	if !errors.Is(err, playback.ErrNowPlayingTrackNotFound) || track != nil {
 		t.Fatalf("malformed id must degrade to track-absent, got track=%v err=%v", track, err)
 	}

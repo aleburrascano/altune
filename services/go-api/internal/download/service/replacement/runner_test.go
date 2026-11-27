@@ -2,6 +2,7 @@ package replacement_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -130,7 +131,7 @@ func seed(t *testing.T, stored audioquality.Grade) *world {
 		TrackSnapshot: download.TrackSnapshot{
 			ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 			Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
-			Status: download.TrackReady, AudioRef: &ref, AudioSourceURL: &sourceURL, ISRC: &isrc,
+			Status: download.TrackReady, Streamable: true, AudioRef: &ref, AudioSourceURL: &sourceURL, ISRC: &isrc,
 			Evidence: json.RawMessage(fmt.Sprintf(`{"grade":%q,"pipeline_generation":1}`, stored)),
 		},
 		Confidence: 0.5,
@@ -163,7 +164,7 @@ func TestRunner_TrustsTheLedgersStreamableAndSkipsAFileItCallsUnplayable(t *test
 	replacer := &gateRecorder{}
 	runner := newRunner(t, unstreamableLedger{w.tracks}, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
 
-	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -244,7 +245,7 @@ type audioDeleter interface {
 
 func noStages(store audioDeleter) download.StagePorts {
 	return download.StagePorts{
-		Prober:        download.NoopAudioProber(),
+		Prober:        downloadtest.SilentAudioProber(),
 		Tagger:        download.NoopAudioTagger(),
 		Rejections:    download.NoopRejectionStore(),
 		StoredAudio:   download.NoopStoredAudioReader(),
@@ -288,7 +289,7 @@ func (w *world) committedGrade(t *testing.T) audioquality.Grade {
 func TestRunner_ALowerGradeTrackGetsTheBetterFile(t *testing.T) {
 	w := seed(t, audioquality.F)
 
-	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -310,7 +311,7 @@ func TestRunner_ALowerGradeTrackGetsTheBetterFile(t *testing.T) {
 func TestRunner_AnEqualGradeKeepsTheOldFileAndRejectsTheTriedSource(t *testing.T) {
 	w := seed(t, audioquality.D)
 
-	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, replacement.ErrKept) {
+	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v, want a kept file to be a settled job", err)
 	}
 
@@ -329,7 +330,7 @@ func TestRunner_AnEqualGradeKeepsTheOldFileAndRejectsTheTriedSource(t *testing.T
 func TestRunner_ALowerGradeKeepsTheOldFile(t *testing.T) {
 	w := seed(t, audioquality.B)
 
-	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, replacement.ErrKept) {
+	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -345,7 +346,7 @@ func TestRunner_AUserUploadIsNeverReplaced(t *testing.T) {
 	w := seed(t, audioquality.F)
 	w.asUserUpload()
 
-	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -367,7 +368,7 @@ func TestRunner_ATrackThatIsGoneOrNotTheCallersIsSkippedWithoutError(t *testing.
 			w := seed(t, audioquality.F)
 			userId, trackId := pick(w)
 
-			if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), userId, trackId); err != nil {
+			if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: userId, TrackID: trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade = %v, want nil: a missing track is skipped, not a failure", err)
 			}
 
@@ -384,7 +385,7 @@ func TestRunner_ATrackThatIsGoneOrNotTheCallersIsSkippedWithoutError(t *testing.
 func TestRunner_AGradeATrackIsLeftAlone(t *testing.T) {
 	w := seed(t, audioquality.A)
 
-	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := w.runner(download.UpgradeConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -398,7 +399,7 @@ func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
 	runner := w.runner(download.UpgradeConfig{MaxTries: 3})
 
 	for try := 1; try <= 3; try++ {
-		if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, replacement.ErrKept) {
+		if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, replacement.ErrKept) {
 			t.Fatalf("ExecuteUpgrade try %d: %v", try, err)
 		}
 		if try < 3 && len(w.upgrades.gaveUp) != 0 {
@@ -418,7 +419,7 @@ func TestRunner_ASwapThatFailsToCommitKeepsTheOldFileAndCountsNoTry(t *testing.T
 	w := seed(t, audioquality.F)
 	w.tracks.FailWrites(errors.New("transient db error"))
 
-	err := w.runner(download.UpgradeConfig{MaxTries: 1}).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.runner(download.UpgradeConfig{MaxTries: 1}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err == nil {
 		t.Fatal("ExecuteUpgrade = nil, want the failed commit reported")
@@ -438,7 +439,7 @@ func TestRunner_PublishesNothingToTheUser(t *testing.T) {
 	w := seed(t, audioquality.F)
 	pub := &publisher{}
 
-	if err := w.runnerPublishingTo(download.UpgradeConfig{MaxTries: 3}, pub).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := w.runnerPublishingTo(download.UpgradeConfig{MaxTries: 3}, pub).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -452,7 +453,7 @@ func TestReplace_IsNotHeldToTheRatchet(t *testing.T) {
 	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio,
 		download.NewTempWorkspace(), noVerification(), noStages(w.audio))
 
-	if err := svc.ExecuteReplace(context.Background(), w.userId, w.trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -477,7 +478,7 @@ func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
 	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), noStages(w.audio))
 	runner := newRunner(t, w.tracks, svc, store, download.UpgradeConfig{MaxTries: 1})
 
-	err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if !errors.Is(err, replacement.ErrKept) {
 		t.Errorf("ExecuteUpgrade = %v, want the kept outcome even though the give-up could not be written", err)
@@ -494,7 +495,7 @@ type gateRecorder struct {
 	gates []replacement.ReplacementGate
 }
 
-func (g *gateRecorder) ReplaceGated(_ context.Context, _ ids.UserId, _ *download.TrackSnapshot, gate replacement.ReplacementGate) (replacement.Attempt, error) {
+func (g *gateRecorder) ReplaceGated(_ context.Context, job ports.AcquisitionJob, _ *download.TrackSnapshot, gate replacement.ReplacementGate) (replacement.Attempt, error) {
 	g.gates = append(g.gates, gate)
 	return replacement.Attempt{}, nil
 }
@@ -515,7 +516,7 @@ func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
 			replacer := &gateRecorder{}
 			runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
-			if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+			if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
 			}
 
@@ -538,7 +539,7 @@ func TestRunner_TheGateCarriesTheCatalogAndStoredLengths(t *testing.T) {
 	replacer := &gateRecorder{}
 	runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
 
-	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -554,7 +555,7 @@ func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.
 	replacer := &gateRecorder{}
 	runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
-	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -572,7 +573,7 @@ func TestRunner_ATrackWithNoKnownLengthsGetsAGateWithTheLengthRescueOff(t *testi
 	replacer := &gateRecorder{}
 	runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
 
-	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 

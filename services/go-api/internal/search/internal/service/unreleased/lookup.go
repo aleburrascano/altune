@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -41,13 +42,26 @@ type ArtistToRefresh struct {
 	Known      map[domain.ProviderName]string
 }
 
-func (s *Service) Warm(artists []ArtistToRefresh) {
-	s.storage.warm(s, artists)
+func (s *Service) Warm(ctx context.Context, artists []ArtistToRefresh) {
+	s.storage.warm(ctx, s, artists)
 }
 
-func (s *Service) runWarm(store ports.UnreleasedStore, artists []ArtistToRefresh) {
-	ctx, cancel := context.WithTimeout(s.lifecycle, warmTimeout)
+func (s *Service) cancelOnShutdown(ctx context.Context, cancel context.CancelFunc) (stop func()) {
+	quit := make(chan struct{})
+	background.Go(ctx, "unreleased.shutdown_watch", func() {
+		select {
+		case <-s.shutdown:
+			cancel()
+		case <-quit:
+		}
+	})
+	return func() { close(quit) }
+}
+
+func (s *Service) runWarm(requestCtx context.Context, store ports.UnreleasedStore, artists []ArtistToRefresh) {
+	ctx, cancel := background.Detach(requestCtx, warmTimeout)
 	defer cancel()
+	defer s.cancelOnShutdown(ctx, cancel)()
 	defer background.RecoverContext(ctx, "unreleased.warm_panic")
 	seen := make(map[ports.UnreleasedArtistKey]bool, len(artists))
 	for _, a := range artists {
@@ -58,7 +72,7 @@ func (s *Service) runWarm(store ports.UnreleasedStore, artists []ArtistToRefresh
 		}
 		seen[key] = true
 		if err := store.Record(ctx, key, name, a.Known); err != nil {
-			slog.WarnContext(ctx, "unreleased.warm_record_failed", "error", err)
+			slog.WarnContext(ctx, "unreleased.warm_record_failed", logging.KeyError, err)
 		}
 	}
 }
@@ -95,7 +109,7 @@ func (s *Service) joinJob(ctx context.Context, key string, run func(context.Cont
 func (s *Service) runJob(requestCtx context.Context, key string, j *job, run func(context.Context) ([]domain.UnreleasedSong, error)) {
 	ctx, cancel := background.DetachCancelable(requestCtx)
 	defer cancel()
-	defer s.cancelWithLifecycle(cancel)()
+	defer s.cancelOnShutdown(ctx, cancel)()
 	if s.cfg.JobTimeout > 0 {
 		var cancelTimeout context.CancelFunc
 		ctx, cancelTimeout = context.WithTimeout(ctx, s.cfg.JobTimeout)
@@ -111,6 +125,6 @@ func (s *Service) runJob(requestCtx context.Context, key string, j *job, run fun
 	j.err = errJobPanicked
 	j.songs, j.err = run(ctx)
 	if j.err != nil {
-		slog.WarnContext(ctx, "unreleased.job_failed", "key", key, "error", j.err)
+		slog.WarnContext(ctx, "unreleased.job_failed", "key", key, logging.KeyError, j.err)
 	}
 }

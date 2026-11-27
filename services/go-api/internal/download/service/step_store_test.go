@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/audiokey"
@@ -169,7 +170,7 @@ func (s storing) execute(opts ...func(*service.AcquireTrackAudioService)) error 
 func (s storing) executeStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) error {
 	s.t.Helper()
 	svc := service.MustNewAcquireTrackAudioService(s.ledger, sourceFor(s.track), s.store, scratchfiles.New(), noVerification(), stages, opts...)
-	return svc.Execute(context.Background(), s.track.UserId, s.track.ID)
+	return svc.Execute(context.Background(), ports.AcquisitionJob{UserID: s.track.UserId, TrackID: s.track.ID})
 }
 
 func pending(title, artist, album string) inmemoryledger.LedgerTrack {
@@ -189,7 +190,7 @@ func refOf(track inmemoryledger.LedgerTrack, prefix string) string {
 func servedBy(track inmemoryledger.LedgerTrack, audioRef string) inmemoryledger.LedgerTrack {
 	serving := pending(track.Title, track.Artist, track.Album)
 	serving.UserId = track.UserId
-	serving.Status, serving.AudioRef = ports.TrackReady, &audioRef
+	serving.Status, serving.AudioRef, serving.Streamable = ports.TrackReady, &audioRef, true
 	return serving
 }
 
@@ -241,7 +242,7 @@ func TestStore_AReplaceStagesItsOwnPrefixedRef(t *testing.T) {
 
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages(), service.WithAcquireStoreKeyPrefix("staging/"))
-	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -290,7 +291,7 @@ func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
 	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {
+	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want the cancelled store to fail")
 	}
 
@@ -485,7 +486,7 @@ func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(
 	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -519,7 +520,7 @@ func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *tes
 	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err == nil {
 		t.Fatal("ExecuteReplace succeeded, want the failed commit")
 	}
 
@@ -568,7 +569,7 @@ func TestStoreRollback_WaitsLongerBeforeEachRetryOfTheDelete(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := &timingStore{recordingStore: newRecordingStore()}
 		store.failDeletes = 1 << 30
-		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
+		step := mustNewStoreStep(store, scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(store), downloadtest.SilentAudioRefLookup())
 
 		err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/song.mp3"})
 
@@ -592,7 +593,7 @@ func TestStoreRollback_StopsWaitingBetweenDeleteRetriesWhenTheContextIsCancelled
 	synctest.Test(t, func(t *testing.T) {
 		store := &timingStore{recordingStore: newRecordingStore()}
 		store.failDeletes = 1 << 30
-		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
+		step := mustNewStoreStep(store, scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(store), downloadtest.SilentAudioRefLookup())
 		ctx, cancel := context.WithCancel(context.Background())
 		time.AfterFunc(10*time.Millisecond, cancel)
 		start := time.Now()
@@ -687,7 +688,7 @@ func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T
 	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {
+	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want the cancelled commit to fail")
 	}
 

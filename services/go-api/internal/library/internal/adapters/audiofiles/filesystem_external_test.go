@@ -2,6 +2,8 @@ package audiofiles_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"io"
@@ -18,7 +20,7 @@ import (
 
 func TestFilesystemAudioStore_StoreAndStream(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	ctx := context.Background()
 
 	content := []byte("fake audio data for store-and-stream test")
@@ -51,7 +53,7 @@ func TestFilesystemAudioStore_StoreAndStream(t *testing.T) {
 
 func TestFilesystemAudioStore_Exists(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	ctx := context.Background()
 
 	srcPath := filepath.Join(dir, "source.opus")
@@ -81,7 +83,7 @@ func TestFilesystemAudioStore_Exists(t *testing.T) {
 
 func TestFilesystemAudioStore_Delete(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	ctx := context.Background()
 
 	srcPath := filepath.Join(dir, "source.opus")
@@ -107,7 +109,7 @@ func TestFilesystemAudioStore_Delete(t *testing.T) {
 
 func TestFilesystemDelete_MissingFileIsNoError(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	ctx := context.Background()
 
 	t.Run("never stored", func(t *testing.T) {
@@ -136,7 +138,7 @@ func TestFilesystemDelete_MissingFileIsNoError(t *testing.T) {
 
 func TestFilesystemAudioStore_Stream_NotFound(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	ctx := context.Background()
 
 	rc, _, err := store.Stream(ctx, "nonexistent.opus")
@@ -151,7 +153,7 @@ func TestFilesystemAudioStore_Stream_NotFound(t *testing.T) {
 
 func TestFilesystemAudioStore_SafePath(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	ctx := context.Background()
 
 	traversalRefs := []string{
@@ -192,7 +194,7 @@ func TestFilesystemAudioStore_SafePath(t *testing.T) {
 }
 
 func TestFilesystemAudioStore_StreamErrorCarriesTheFilesystemsPathError(t *testing.T) {
-	store := library.NewFilesystemAudioStore(t.TempDir())
+	store := library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics())
 
 	_, _, err := store.Stream(context.Background(), "missing.opus")
 
@@ -204,7 +206,7 @@ func TestFilesystemAudioStore_StreamErrorCarriesTheFilesystemsPathError(t *testi
 
 func TestFilesystemAudioStore_Stream_CancelledContextNeverOpensTheFile(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	path := makeFifo(t, dir, "untouched.opus")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -219,7 +221,7 @@ func TestFilesystemAudioStore_Stream_CancelledContextNeverOpensTheFile(t *testin
 
 func TestFilesystemAudioStore_Stream_ClosesAFileThatOpensAfterTheDeadline(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	path := makeFifo(t, dir, "late.opus")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -234,7 +236,7 @@ func TestFilesystemAudioStore_Stream_ClosesAFileThatOpensAfterTheDeadline(t *tes
 
 func TestFilesystemAudioStore_ListWithAge(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	ctx := context.Background()
 
 	for _, ref := range []string{"staging/u1/a/song1.opus", "staging/u1/a/song2.opus", "u2/other.opus"} {
@@ -271,7 +273,7 @@ func TestFilesystemAudioStore_ListWithAge(t *testing.T) {
 
 func TestFilesystemAudioStore_ListWithAge_MissingPrefixIsEmpty(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 
 	objects, err := store.ListWithAge(context.Background(), "staging/")
 	if err != nil {
@@ -284,7 +286,7 @@ func TestFilesystemAudioStore_ListWithAge_MissingPrefixIsEmpty(t *testing.T) {
 
 func TestFilesystemAudioStore_CancelledContextDoesNotTouchDisk(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	if err := os.WriteFile(filepath.Join(dir, "kept.opus"), []byte("data"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -342,7 +344,7 @@ func streamWithHangGuard(t *testing.T, ctx context.Context, store library.AudioS
 
 func TestFilesystemAudioStore_Stream_StalledOpenHonoursCallerDeadline(t *testing.T) {
 	dir := t.TempDir()
-	store := library.NewFilesystemAudioStore(dir)
+	store := library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics())
 	makeStalledAudio(t, dir, "stalled.opus")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -365,14 +367,14 @@ type contextRecordingHandler struct {
 
 type contextRecord struct {
 	message string
-	ctx     context.Context
+	marker  any
 }
 
 func (h contextRecordingHandler) Enabled(context.Context, slog.Level) bool { return true }
 
 func (h contextRecordingHandler) Handle(ctx context.Context, r slog.Record) error {
 	select {
-	case h.records <- contextRecord{message: r.Message, ctx: ctx}:
+	case h.records <- contextRecord{message: r.Message, marker: ctx.Value(recordedContextKey{})}:
 	default:
 	}
 	return nil
@@ -383,11 +385,9 @@ type recordedContextKey struct{}
 func recordSlog(t *testing.T) chan contextRecord {
 	t.Helper()
 	records := make(chan contextRecord, 4)
-	previous := slog.Default()
 	previousOutput, previousFlags := log.Writer(), log.Flags()
-	slog.SetDefault(slog.New(contextRecordingHandler{records: records}))
+	logging.UseHandler(t, contextRecordingHandler{records: records})
 	t.Cleanup(func() {
-		slog.SetDefault(previous)
 		log.SetOutput(previousOutput)
 		log.SetFlags(previousFlags)
 	})
@@ -403,7 +403,7 @@ func TestFilesystemAudioStore_StoreAcrossFilesystems_RemoveFailureStillSucceedsA
 	if err := os.WriteFile(sourcePath, []byte("audio"), 0o644); err != nil {
 		t.Fatalf("write source: %v", err)
 	}
-	store := library.NewFilesystemAudioStore(otherFilesystemDir(t, sourceDir))
+	store := library.NewFilesystemAudioStore(otherFilesystemDir(t, sourceDir), librarytest.DiscardFSCallMetrics())
 	if err := os.Chmod(sourceDir, 0o555); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
@@ -425,7 +425,7 @@ func assertRemoveFailureLoggedWithContext(t *testing.T, records chan contextReco
 		if record.message != "audio_temp_source_remove_failed" {
 			t.Fatalf("logged %q, want audio_temp_source_remove_failed", record.message)
 		}
-		if record.ctx.Value(recordedContextKey{}) != "marker" {
+		if record.marker != "marker" {
 			t.Fatal("log record did not carry the caller's context")
 		}
 	default:

@@ -7,8 +7,10 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -58,7 +60,7 @@ func acquireVerified(t *testing.T, track ports.TrackSnapshot, source ports.Audio
 	t.Helper()
 	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
-	return ledger, svc.Execute(context.Background(), track.UserId, track.ID)
+	return ledger, svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }
 
 func requireReady(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId, err error) {
@@ -111,7 +113,7 @@ func TestExecute_ATaggingFailureIsSwallowed(t *testing.T) {
 }
 
 func TestExecute_TheTaggingFailureLogRedactsHostPaths(t *testing.T) {
-	logs := captureLog(t)
+	logs := logging.CaptureJSON(t, slog.LevelInfo)
 	tagger := &recordingTagger{err: errors.New("open /run/secrets/altune/yt_cookies.txt: permission denied")}
 	track := pendingBlindingLights()
 

@@ -223,6 +223,32 @@ describe('the machine-readable error code (ADR-0021) surfaces on ApiError', () =
     expect(branch).toBe('missing-track');
   });
 
+  it('keeps the raw code of a code this build does not know, leaving code undefined', async () => {
+    withSession();
+    __http.reply('GET /v1/tracks/t1', {
+      status: 503,
+      json: { detail: 'later', code: 'brand.new_code' },
+    });
+
+    const error = await apiFetch('/v1/tracks/t1').catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 503, rawCode: 'brand.new_code', detail: 'later' });
+    expect((error as ApiError).code).toBeUndefined();
+  });
+
+  it('carries the problem instance as the correlation id and Retry-After as milliseconds', async () => {
+    withSession();
+    __http.reply('GET /v1/tracks/t1', {
+      status: 429,
+      headers: { 'Retry-After': '7' },
+      json: { detail: 'slow down', instance: 'abc123' },
+    });
+
+    const error = await apiFetch('/v1/tracks/t1').catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 429, correlationId: 'abc123', retryAfterMs: 7000 });
+  });
+
   it('leaves code undefined when the error body omits it, still yielding a usable ApiError', async () => {
     withSession();
     __http.reply('POST /v1/feedback/reports', {
@@ -498,7 +524,7 @@ describe('correlation id', () => {
       expect(sent).toMatch(SERVER_ACCEPTED_ID);
       expect(logs.warnings).toContainEqual([
         '[api] request failed',
-        expect.objectContaining({ correlationId: sent }),
+        expect.objectContaining({ corr_id: sent }),
       ]);
     });
 
@@ -509,7 +535,7 @@ describe('correlation id', () => {
 
       expect(logs.warnings).toContainEqual([
         '[api] request failed',
-        expect.objectContaining({ correlationId: sentCorrelationId() }),
+        expect.objectContaining({ corr_id: sentCorrelationId() }),
       ]);
     });
   });
@@ -589,7 +615,7 @@ describe('failure logging', () => {
         {
           method: 'POST',
           path: '/v1/playlists/p1/tracks',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           status: 409,
           code: 'catalog.playlist_full',
         },
@@ -606,7 +632,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           failure: 'transport',
         },
       ]);
@@ -622,7 +648,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           failure: 'transport',
         },
       ]);
@@ -638,7 +664,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           status: 401,
         },
       ]);
@@ -697,7 +723,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           error: 'ContractError',
           at: 'Session.access_token',
         },
@@ -716,7 +742,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/discovery/search',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           error: 'TypeError',
         },
       ]);
@@ -733,7 +759,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           error: 'string',
         },
       ]);

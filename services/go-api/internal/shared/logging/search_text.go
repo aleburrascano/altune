@@ -11,8 +11,10 @@ import (
 	"unicode/utf8"
 )
 
+const searchTextKeyBytes = 32
+
 var searchTextKey = func() []byte {
-	k := make([]byte, 32)
+	k := make([]byte, searchTextKeyBytes)
 	_, _ = rand.Read(k)
 	return k
 }()

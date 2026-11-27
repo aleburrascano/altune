@@ -37,13 +37,14 @@ func (reg *Registry) Snapshot() Snapshot {
 }
 
 func readRoute(h *routeHist) RouteLatency {
-	buckets := make([]BucketCount, numBuckets)
-	for i := range buckets {
-		buckets[i] = BucketCount{LeMs: bucketLabel(i), Count: atomic.LoadUint64(&h.buckets[i])}
+	latency := h.latency.Snapshot()
+	buckets := make([]BucketCount, len(latency.Buckets))
+	for i, count := range latency.Buckets {
+		buckets[i] = BucketCount{LeMs: bucketLabel(i), Count: count}
 	}
 	return RouteLatency{
-		Count:   atomic.LoadUint64(&h.count),
-		SumMs:   atomic.LoadUint64(&h.sumMs),
+		Count:   latency.Count,
+		SumMs:   latency.Sum,
 		Buckets: buckets,
 		Status: StatusClasses{
 			Count2xx: atomic.LoadUint64(&h.statusClass[class2xx]),

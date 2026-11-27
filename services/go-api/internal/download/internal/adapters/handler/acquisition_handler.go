@@ -8,10 +8,8 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
-	"log/slog"
+	"fmt"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type trackAdmission interface {
@@ -21,15 +19,11 @@ type trackAdmission interface {
 type acquisitionCommand struct {
 	trackRepo ports.LibraryTracks
 	admission trackAdmission
-	logMsg    string
 	schedule  func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, track, ok := c.resolveTrack(w, r, userId)
 	if !ok {
@@ -47,7 +41,7 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request, userId ids.UserId) (ids.TrackId, *ports.TrackSnapshot, bool) {
-	trackId, err := ids.ParseTrackId(chi.URLParam(r, "trackId"))
+	trackId, err := ids.ParseTrackId(httpserver.URLParam(r, "trackId"))
 	if err != nil {
 		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeCatalogInvalidTrackID, "invalid track ID"))
 		return trackId, nil, false
@@ -63,8 +57,7 @@ func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, us
 		return nil, false
 	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), c.logMsg, "error", err, "track_id", trackId.String())
-		httpserver.HandleServiceError(w, r, err)
+		httpserver.HandleServiceError(w, r, fmt.Errorf("get track %s: %w", trackId, err))
 		return nil, false
 	}
 	return track, true
@@ -92,7 +85,6 @@ func (h *ReacquireHandler) HandleReacquire(w http.ResponseWriter, r *http.Reques
 	acquisitionCommand{
 		trackRepo: h.trackRepo,
 		admission: h.admission,
-		logMsg:    "reacquire: get track failed",
 		schedule: func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
 			return h.scheduler.ScheduleReplace(ctx, userId, trackId)
 		},
@@ -125,7 +117,6 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 	acquisitionCommand{
 		trackRepo: h.trackRepo,
 		admission: h.admission,
-		logMsg:    "retry acquisition: get track failed",
 		schedule: func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
 			return h.scheduler.Schedule(ctx, userId, trackId, "")
 		},

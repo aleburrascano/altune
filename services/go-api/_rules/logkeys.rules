@@ -1,0 +1,28 @@
+package gorules
+
+import "github.com/quasilyte/go-ruleguard/dsl"
+
+func rawLogKeys(m dsl.Matcher) {
+	m.Match(
+		`$f($*_, "corr_id", $*_)`,
+		`$f($*_, "trace_id", $*_)`,
+		`$f($*_, "job", $*_)`,
+		`$f($*_, "run_id", $*_)`,
+		`$f($*_, "error", $*_)`,
+		`$f($*_, "err", $*_)`,
+		`$f($*_, "method", $*_)`,
+		`$f($*_, "path", $*_)`,
+		`$f($*_, "route", $*_)`,
+		`$f($*_, "user_id", $*_)`,
+		`$f($*_, "track_id", $*_)`,
+		`$f($*_, "status", $*_)`,
+		`$f($*_, "code", $*_)`,
+		`$f($*_, "duration", $*_)`,
+		`$f($*_, "duration_ms", $*_)`,
+		`$f($*_, "bytes", $*_)`,
+		`$f($*_, "panic", $*_)`,
+		`$f($*_, "stack", $*_)`,
+	).
+		Where(m["f"].Text.Matches(`^slog\.|\.(Debug|Info|Warn|Error|Log|With)(Context|Attrs)?$`)).
+		Report("name a log key with its logging.Key* constant (internal/shared/logging/keys.go), the one vocabulary of log keys")
+}

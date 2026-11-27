@@ -61,6 +61,7 @@ else
   changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
   deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
 fi
+client_codes_file=../../client/src/shared/failure/core/apiErrorCodes.generated.ts
 touches() { grep -qE "$1" <<<"$changed"$'\n'"$deleted"; }
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
@@ -344,6 +345,13 @@ go_affected() {
     }'
 }
 
+if touches '^services/go-api/internal/shared/apierror/|^services/go-api/scripts/genclientcodes/|^client/src/shared/failure/core/apiErrorCodes\.generated\.ts$' || [ $full = 1 ]; then
+  go_pin services/go-api
+  if [ -d services/go-api/scripts/genclientcodes ] && need go "client error codes"; then
+    check "client error codes match the go-api catalog (genclientcodes --check)" services/go-api go run ./scripts/genclientcodes --check "$client_codes_file"
+  fi
+fi
+
 if touches '^services/go-api/'; then
   m=services/go-api
   go_pin $m
@@ -363,6 +371,8 @@ if touches '^services/go-api/'; then
         fi
         if touches "^$m/.*\.go\$"; then
           check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports)" $m go run ./scripts/lintdoors --exports .
+          check "go-api no inline duration literals: name each as a const or take it from config (lintdurations)" $m go run ./scripts/lintdurations internal
+          check "go-api no sleeping to wait in a test: wait on the event, a condition or a synctest bubble (lintsleeps)" $m go run ./scripts/lintsleeps .
         fi
         if touches "^$m/go\.(mod|sum)\$"; then
           check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
@@ -375,6 +385,10 @@ if touches '^services/go-api/'; then
         fi
         mapfile -t pkgs < <(go_pkgs $m)
         [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+        if touches "^$m/.*\.go\$"; then
+          check "go-api collaborators: no nil guard on a required one, no collaborator option (collabcheck)" $m go run ./cmd/collabcheck ./...
+          check "go-api every Noop constructor is used by production code" . bash scripts/ci/noop-reachable.sh
+        fi
       fi
     else
       affected=()
@@ -407,6 +421,8 @@ if touches '^services/go-api/'; then
       check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
       need go-arch-lint "go-api architecture" && check "go-api architecture: every module imports only what its role may (go-arch-lint, whole tree)" $m go-arch-lint check
       check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports, whole tree)" $m go run ./scripts/lintdoors --exports .
+      check "go-api no inline duration literals: name each as a const or take it from config (lintdurations, whole tree)" $m go run ./scripts/lintdurations internal
+      check "go-api no sleeping to wait in a test: wait on the event, a condition or a synctest bubble (lintsleeps, whole tree)" $m go run ./scripts/lintsleeps .
       mapfile -t pkgs < <(go_pkgs $m)
       if [ $whole_module = 1 ]; then test_pkgs=(./...); else test_pkgs=("${affected[@]}"); fi
       [ ${#pkgs[@]} -gt 0 ] && [ ${#test_pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages and their importers)" $m "${heavy[@]}" "${db_env[@]}" go test -race -shuffle=on -count=1 "${test_pkgs[@]}"
@@ -420,6 +436,8 @@ if touches '^services/go-api/'; then
       fi
       need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
       check "go-api deadcode" $m "${heavy[@]}" bash "$root/scripts/ci/go-deadcode.sh"
+      check "go-api collaborators: no nil guard on a required one, no collaborator option (collabcheck)" $m go run ./cmd/collabcheck ./...
+      check "go-api every Noop constructor is used by production code" . bash scripts/ci/noop-reachable.sh
     fi
   fi
 fi
@@ -438,6 +456,10 @@ if need go "secret scan" && need jq "secret scan"; then
   else
     check "secret scan (commits since base)" . bash "$root/scripts/ci/secret-scan.sh" "$base"
   fi
+fi
+
+if [ $stage = push ] && touches '(^|/)(go\.sum|pnpm-lock\.yaml|package-lock\.json)$' && need go "dependency scan"; then
+  check "dependency scan (osv-scanner)" . bash "$root/scripts/ci/vuln-scan.sh" --osv
 fi
 
 script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
@@ -513,20 +535,9 @@ if touches '^services/overseer/'; then
   fi
 fi
 
-if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|search/internal/domain/events\.go)' && need npx "mobile contract tests"; then
+if [ $lint_only = 0 ] && { touches '^(services/go-api/internal/(shared/events/|search/internal/domain/events\.go)|contracts/wire/)' || { touches '^services/go-api/' && [ -d client/src ]; }; } && need npx "mobile contract tests"; then
   if link_deps client; then
-    par jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$jest_cache" '\.contract\.test\.tsx?$'
-  else
-    echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
-  fi
-fi
-
-if [ $lint_only = 0 ] && touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
-  contract_tests=$(grep -rlF --include='*.test.ts' --include='*.test.tsx' "'go-api'" client/src | sed 's#^client/##' | sort)
-  if [ -z "$contract_tests" ]; then
-    echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; record_fail "mobile contract tests (go-api changed)" 1 "no client test file mentions 'go-api'"; failed=1
-  elif link_deps client; then
-    par jest_check "mobile contract tests (go-api changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" $contract_tests
+    par jest_check "mobile contract tests (go-api or contracts changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" '(\.contract|Contract)\.test\.tsx?$'
   else
     echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
   fi

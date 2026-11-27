@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
@@ -282,11 +283,11 @@ func (a *ArtworkFiller) resolveLive(ctx context.Context, result domain.SearchRes
 	resolved, source, confidence, err := a.resolve(ctx, result, mbid)
 	if ports.IsUnverifiedArtworkMiss(resolved, err) {
 		slog.WarnContext(ctx, "artwork.not_cached_degraded",
-			"kind", result.Kind.String(), "had_mbid", mbid != "", "error", err)
+			"kind", result.Kind.String(), "had_mbid", mbid != "", logging.KeyError, err)
 		return
 	}
 	if err := a.cache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source, confidence); err != nil {
-		slog.WarnContext(ctx, "artwork.cache_set_failed", "kind", result.Kind.String(), "error", redact.Secrets(err.Error()))
+		slog.WarnContext(ctx, "artwork.cache_set_failed", "kind", result.Kind.String(), logging.KeyError, redact.Secrets(err.Error()))
 	}
 	slog.DebugContext(ctx, "artwork.enriched",
 		"kind", result.Kind.String(), "source", source.String(),

@@ -1,8 +1,8 @@
 package handler
 
 import (
-	playlistservice "altune/go-api/internal/library/internal/core/playlist"
 	"altune/go-api/internal/library/internal/domain"
+	playlistservice "altune/go-api/internal/library/internal/service/playlist"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
@@ -134,10 +134,7 @@ func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string
 }
 
 func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var req CreatePlaylistRequest
 	if !httpserver.DecodeJSON(w, r, &req) {
@@ -154,10 +151,7 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	limit, offset, err := pageBounds(r)
 	if err != nil {
@@ -178,10 +172,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return
@@ -205,10 +196,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return
@@ -229,10 +217,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return
@@ -247,10 +232,7 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return
@@ -271,10 +253,7 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return
@@ -304,10 +283,7 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 }
 
 func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return
@@ -326,10 +302,7 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return
@@ -356,10 +329,7 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	playlistId, ok := httpserver.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
 	if !ok {
 		return

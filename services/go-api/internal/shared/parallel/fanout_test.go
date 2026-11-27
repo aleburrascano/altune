@@ -6,13 +6,17 @@ import (
 	"altune/go-api/internal/shared/parallel"
 	"context"
 	"errors"
-	"log/slog"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
 func TestGroupRunsAllWithinLimit(t *testing.T) {
+	synctest.Test(t, runsAllWithinLimit)
+}
+
+func runsAllWithinLimit(t *testing.T) {
 	const limit, n = 3, 50
 	var running, peak, done int32
 	started := make(chan struct{}, n)
@@ -45,7 +49,7 @@ func TestGroupRunsAllWithinLimit(t *testing.T) {
 			t.Fatalf("only %d tasks started, want %d overlapping", i, limit)
 		}
 	}
-	time.Sleep(50 * time.Millisecond)
+	synctest.Wait()
 	if got := atomic.LoadInt32(&running); got != limit {
 		t.Fatalf("running = %d while held open, want %d", got, limit)
 	}
@@ -125,9 +129,7 @@ func TestGroupWaitIsNilWhenNoTaskPanics(t *testing.T) {
 
 func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("error")
+	return logging.CaptureRing(t, "error")
 }
 
 func onlyRecord(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {

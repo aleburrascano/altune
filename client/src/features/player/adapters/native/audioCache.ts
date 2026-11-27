@@ -2,7 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import type { TrackId } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import { libraryTrackId } from '@features/player/domain/playerStatus';
 
 const CACHE_SUBDIR = 'audio-prefetch';

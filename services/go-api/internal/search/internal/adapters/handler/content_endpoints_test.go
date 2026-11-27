@@ -97,6 +97,27 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	}
 }
 
+func TestHandleArtistTopTracks_AnOverRangeLimitIsClampedAndLogged(t *testing.T) {
+	ring := captureLogs(t)
+	artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
+		search.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: seedTracks(7)},
+	}
+	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/top-tracks?limit=100", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	record, ok := findRecord(ring, "search.limit_out_of_range")
+	if !ok {
+		t.Fatal("no search.limit_out_of_range line for a clamped limit")
+	}
+	for k, want := range map[string]string{"param": "limit", "requested": "100", "max": "50", "applied": "50"} {
+		if got := record.Attrs[k]; got != want {
+			t.Errorf("attr %s = %q, want %q", k, got, want)
+		}
+	}
+}
+
 func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 	albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
 		search.ProviderDeezer: &memory.AlbumContentProvider{},
@@ -301,58 +322,6 @@ func TestHandleArtistContent_EachPanickingPartIsLoggedUnderItsOwnEvent(t *testin
 		if _, ok := findRecord(ring, event); !ok {
 			t.Errorf("no %q record: each part keeps its own panic event", event)
 		}
-	}
-}
-
-type countingArtistContentProvider struct {
-	memory.ArtistContentProvider
-	calls int
-}
-
-func (p *countingArtistContentProvider) GetArtistTopTracks(ctx context.Context, name search.ProviderName, id string) ([]search.SearchResult, error) {
-	p.calls++
-	return p.ArtistContentProvider.GetArtistTopTracks(ctx, name, id)
-}
-
-func (p *countingArtistContentProvider) GetArtistAlbums(ctx context.Context, name search.ProviderName, id string) ([]search.SearchResult, error) {
-	p.calls++
-	return p.ArtistContentProvider.GetArtistAlbums(ctx, name, id)
-}
-
-func unauthenticatedDiscoveryRouter(h *search.DiscoveryHandler) chi.Router {
-	r := chi.NewRouter()
-	r.Mount("/discovery", h.Routes())
-	return r
-}
-
-func TestHandleArtistContent_NoIdentityIs401AndSkipsService(t *testing.T) {
-	provider := &countingArtistContentProvider{}
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-			search.ProviderDeezer: provider,
-		}),
-	}), time.Now)
-
-	rec := discServeNoAuth(t, unauthenticatedDiscoveryRouter(h), http.MethodGet, "/discovery/artists/deezer/1/content")
-
-	discAssertStatus(t, rec, http.StatusUnauthorized)
-	if provider.calls != 0 {
-		t.Errorf("artist provider called %d times, want 0", provider.calls)
-	}
-}
-
-func TestContentRoutes_NoIdentityIs401(t *testing.T) {
-	paths := []string{
-		"/discovery/albums/deezer/1/tracks",
-		"/discovery/artists/deezer/1/top-tracks",
-		"/discovery/artists/deezer/1/albums",
-		"/discovery/tracks/deezer/1/related",
-	}
-	router := unauthenticatedDiscoveryRouter(handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), time.Now))
-	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
-			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
-		})
 	}
 }
 

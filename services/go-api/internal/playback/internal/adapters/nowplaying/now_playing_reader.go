@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/shared/breaker"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -62,7 +63,7 @@ func (r *NowPlayingReader) Lookup(
 	id, err := ids.ParseTrackId(trackId)
 	if err != nil {
 		slog.WarnContext(ctx, "now_playing.malformed_track_id",
-			"user_id", userId.String(), "raw_len", len(trackId), "error", err)
+			"raw_len", len(trackId), logging.KeyError, err)
 		return nil, ports.ErrNowPlayingTrackNotFound
 	}
 

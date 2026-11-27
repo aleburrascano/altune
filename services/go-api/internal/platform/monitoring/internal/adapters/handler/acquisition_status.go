@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/core/ports"
+	"context"
 	"net/url"
 	"time"
 )
@@ -89,9 +90,9 @@ func redactSourceURL(raw string) string {
 	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
 }
 
-func readAcquisitionStatus(reader ports.AcquisitionReader) acquisitionStatusDTO {
+func readAcquisitionStatus(ctx context.Context, reader ports.AcquisitionReader) acquisitionStatusDTO {
 	if reader == nil {
 		return newAcquisitionStatusDTO(ports.DownloadStatusReport{})
 	}
-	return newAcquisitionStatusDTO(reader.Status())
+	return newAcquisitionStatusDTO(reader.Status(ctx))
 }

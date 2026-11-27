@@ -13,7 +13,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -263,9 +262,8 @@ func TestFindRelated_TimeoutReturnsPartialResults(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
-	time.Sleep(5 * time.Millisecond)
 
 	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(slowProvider))
 	slowTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Track", "Artist", nil)
@@ -547,9 +545,7 @@ func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
 }
 
 func TestFindRelated_EachPanickingLookupIsLoggedUnderItsOwnEvent(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(panickingQuerier{}), searchtest.RelatedAlbumTracks(panickingAlbumProvider{}), searchtest.RelatedArtistAlbums(panickingArtistProvider{}))
 	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.Album = "Some Album"

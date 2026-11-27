@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "genius_id": 1,
+      "title": "Cancun",
+      "cover_url": null,
+      "genius_url": null,
+      "release_date": null,
+      "has_media": null,
+      "quality": "lossless",
+      "quality_rank": 5,
+      "tracker_key": null,
+      "off_streaming": false,
+      "audio_links": [],
+      "extras": {},
+      "best_version_title": "Cancun",
+      "artist": {
+        "provider": "deezer",
+        "external_id": "42",
+        "name": "Playboi Carti"
+      }
+    }
+  ]
+}
+

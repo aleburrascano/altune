@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -19,13 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func newPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	pool := dbtest.Pool(t)
-	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	return pool
-}
 
 func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *download.TrackSnapshot {
 	t.Helper()
@@ -55,14 +47,20 @@ func (c contractPgxCooldowns) AddTrack(t *testing.T) ids.TrackId {
 
 func (c contractPgxCooldowns) PassCooldown(t *testing.T, d time.Duration) {
 	t.Helper()
-	if err := clock.Sleep(context.Background(), d); err != nil {
-		t.Fatalf("wait out the cooldown: %v", err)
+	passCooldown(t, c.pool, d)
+}
+
+func passCooldown(t *testing.T, pool *pgxpool.Pool, d time.Duration) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `UPDATE acquisition_cooldowns SET admitted_at = admitted_at - make_interval(secs => $1)`, d.Seconds()); err != nil {
+		t.Fatalf("age the admissions by %v: %v", d, err)
 	}
 }
 
 func TestPostgresCooldownStore_Contract(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	acquisitiontest.CooldownContract(t, func(*testing.T) acquisitiontest.CooldownUnderTest {
 		return contractPgxCooldowns{PostgresCooldownStore: download.NewPostgresCooldownStore(pool), pool: pool}
 	})
@@ -70,7 +68,9 @@ func TestPostgresCooldownStore_Contract(t *testing.T) {
 
 func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	first, second := newPool(t), dbtest.Pool(t)
+	first := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, first)
+	second := dbtest.Pool(t)
 	track := insertFailedTrack(t, first)
 	ctx := context.Background()
 
@@ -85,7 +85,8 @@ func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
 
 func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresCooldownStore(pool)
 	track := insertFailedTrack(t, pool)
 	ctx := context.Background()
@@ -97,9 +98,7 @@ func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing
 	if _, ok, _, _ := store.Reserve(ctx, track.ID, ports.CooldownReacquire, time.Minute); !ok {
 		t.Error("reacquire Reserve blocked by a retry admission; kinds must be independent")
 	}
-	if err := clock.Sleep(ctx, 20*time.Millisecond); err != nil {
-		t.Fatalf("wait out the cooldown: %v", err)
-	}
+	passCooldown(t, pool, 20*time.Millisecond)
 	newer, ok, _, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, 10*time.Millisecond)
 	if err != nil || !ok {
 		t.Fatalf("Reserve after window = %v, %v; want ok", ok, err)
@@ -122,7 +121,8 @@ func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing
 
 func TestPostgresCooldownStore_ConcurrentReservesAdmitOne(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	track := insertFailedTrack(t, pool)
 	const racers = 16
 	var wins atomic.Int32

@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
@@ -461,7 +462,7 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 	}
 }
 
-func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
+func TestHandleGet_ResponseIsUncached(t *testing.T) {
 	h := playback.MustNewQueueHandler(playback.MustNewQueueService(&recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
@@ -474,9 +475,6 @@ func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 
 	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
 		t.Errorf("Cache-Control = %q, want %q", got, "private, no-store")
-	}
-	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
 	}
 }
 
@@ -586,9 +584,7 @@ func (l *levelRecorder) errorCount() int {
 func recordLogLevels(t *testing.T) *levelRecorder {
 	t.Helper()
 	rec := &levelRecorder{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(rec))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, rec)
 	return rec
 }
 
@@ -728,10 +724,7 @@ func TestHandleSave_BadSourceWinsOverBadRepeatMode(t *testing.T) {
 }
 
 func TestHandleForget_AuditRecordNamesTheSelfServiceTrigger(t *testing.T) {
-	var buf strings.Builder
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	buf := logging.CaptureJSON(t, slog.LevelInfo)
 	rec := httptest.NewRecorder()
 
 	newHandler(&recordingRepo{}).Routes().ServeHTTP(rec, deleteReq())

@@ -3,6 +3,7 @@ package vocabulary
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
@@ -42,7 +43,7 @@ func (s *SuggestService) supplementWithFuzzy(
 	remaining := limit - len(prefix)
 	fuzzy, err := s.vocab.FindClosest(ctx, norm, remaining+len(prefix))
 	if err != nil {
-		slog.DebugContext(ctx, "suggest.fuzzy_supplement_failed", "error", err)
+		slog.DebugContext(ctx, "suggest.fuzzy_supplement_failed", logging.KeyError, err)
 		return prefix, nil
 	}
 	return deduplicateSuggestions(prefix, fuzzy, limit), nil

@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
@@ -29,9 +30,9 @@ import (
 )
 
 func coreStepsOver(sources *service.SourceRegistry, store *objectStore, workspace ports.ScratchFolder) service.Pipeline {
-	steps, err := service.CoreSteps(sources, ports.NoopAudioTagger(), store, ports.NoopAudioProber(),
+	steps, err := service.CoreSteps(sources, ports.NoopAudioTagger(), store, downloadtest.SilentAudioProber(),
 		ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopVerifySkipRecorder(),
-		service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup(), clock.Sleep, random.Real, time.Now, workspace, service.Unlimited(), nil)
+		service.MustDirectDeleteOrphans(store), downloadtest.SilentAudioRefLookup(), clock.Sleep, random.Real, time.Now, workspace, service.Unlimited(), nil)
 	if err != nil {
 		panic(err)
 	}
@@ -337,13 +338,6 @@ func ytdlpCookieErr() error {
 	return fmt.Errorf("yt-dlp download: %w (stderr: %s)", errors.New("exit status 1"), stderr)
 }
 
-func captureLogs(t *testing.T) *logging.RingBuffer {
-	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("debug")
-}
-
 func recordsNamed(ring *logging.RingBuffer, message string) []logging.CapturedRecord {
 	var found []logging.CapturedRecord
 	for _, r := range ring.Snapshot() {
@@ -415,7 +409,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 	svc := service.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(track), sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages(taggedBy(cancellingTagger{cancel})))
 
-	err := svc.Execute(ctx, track.UserId, track.ID)
+	err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute = %v, want the cancellation reported", err)
@@ -426,7 +420,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 }
 
 func TestRunPipeline_StepFailedLogRedactsCookiePath(t *testing.T) {
-	ring := captureLogs(t)
+	ring := logging.CaptureRing(t, "debug")
 	track := pending("Song", "Artist", "Album")
 	ledger := failingCommitLedger{Ledger: inmemoryledger.NewLedger(track), err: ytdlpCookieErr()}
 
@@ -439,7 +433,7 @@ func TestRunPipeline_StepFailedLogRedactsCookiePath(t *testing.T) {
 }
 
 func TestRunPipeline_RollbackFailedLogRedactsCookiePath(t *testing.T) {
-	ring := captureLogs(t)
+	ring := logging.CaptureRing(t, "debug")
 	synctest.Test(t, func(t *testing.T) {
 		track := pending("Song", "Artist", "Album")
 		ledger := failingCommitLedger{Ledger: inmemoryledger.NewLedger(track), err: errors.New("boom")}
@@ -484,7 +478,7 @@ func finesseOn(url, album string) ports.AudioCandidate {
 
 func shadowedRun(t *testing.T, source finesseSource) (*service.AcquisitionContext, []logging.CapturedRecord, error) {
 	t.Helper()
-	ring := captureLogs(t)
+	ring := logging.CaptureRing(t, "debug")
 	workspace := scratchfiles.New()
 	steps := coreStepsOver(service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, workspace)
 	ac := &service.AcquisitionContext{Track: service.TrackRef{
@@ -592,9 +586,7 @@ func (h panicOnShadowHandler) Handle(ctx context.Context, r slog.Record) error {
 
 func TestRunPipeline_APanicInsideTheShadowJudgeIsLoggedAndTheRunStillSucceeds(t *testing.T) {
 	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(panicOnShadowHandler{slog.NewTextHandler(&logs, nil)}))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, panicOnShadowHandler{slog.NewTextHandler(&logs, nil)})
 	workspace := scratchfiles.New()
 	source := finesseSource{candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}}
 	steps := coreStepsOver(service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, workspace)

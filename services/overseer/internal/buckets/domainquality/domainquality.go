@@ -54,6 +54,7 @@ type Bucket struct {
 	reader     reader
 	discoTrend core.Store
 	series     core.Series
+	acqSLO     *core.SLOWindow
 
 	now func() time.Time
 
@@ -81,6 +82,7 @@ func New(deps Deps) *Bucket {
 		reader:     deps.Reader,
 		discoTrend: core.NewRingStore(discoTrendCapacity),
 		series:     core.DiscardSeries{},
+		acqSLO:     core.NewSLOWindow(core.SongAcquiredSLO),
 		now:        deps.Now,
 	}
 	if b.reader == nil {
@@ -212,6 +214,7 @@ type Data struct {
 	Discography  *goapi.DiscographyQuality `json:"discography"`
 	DiscoStale   bool                      `json:"discoStale"`
 	DiscoTrend   []core.Signal             `json:"discoTrend"`
+	SLOs         []core.SLOStatus          `json:"slos"`
 }
 
 type AcqWindow struct {
@@ -249,6 +252,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 			Discography:  disco,
 			DiscoStale:   discoStale,
 			DiscoTrend:   b.discoTrend.Snapshot(),
+			SLOs:         []core.SLOStatus{b.acqSLO.Status(now)},
 		}),
 	}
 }
@@ -387,12 +391,30 @@ func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 	b.acqReason = ""
 	now := b.now()
 	b.updated = now
+	b.recordAcqSLO(now, a)
 	b.appendAcqSample(a)
 	w := b.acqWindowRate(now)
 	b.mu.Unlock()
 	if w != nil {
 		b.series.Record(bucketID, seriesAcquisitionRate, core.Point{At: now, Value: w.Rate})
 	}
+}
+
+func (b *Bucket) recordAcqSLO(at time.Time, a goapi.AcquisitionStatus) {
+	if len(b.acqSamples) == 0 {
+		return
+	}
+	prev := b.acqSamples[len(b.acqSamples)-1]
+	succeeded := counterDelta(prev.succeeded, a.Succeeded)
+	failed := counterDelta(prev.failed, a.Failed)
+	b.acqSLO.Record(at, succeeded, succeeded+failed)
+}
+
+func counterDelta(prev, cur uint64) uint64 {
+	if cur < prev {
+		return cur
+	}
+	return cur - prev
 }
 
 func (b *Bucket) appendAcqSample(a goapi.AcquisitionStatus) {

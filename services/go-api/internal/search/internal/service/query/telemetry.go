@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"time"
@@ -33,12 +34,16 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page fi
 	if err := ids.GuardNotSystem(run.userId); err != nil {
 		return
 	}
-	payload := searchPerformedPayload(page.shown, shownSignatures(page.fullSlate, page.related), page.explored, explorationRate)
+	payload := searchPerformedPayload(page.shown, shownSignatures(page.fullSlate, page.related))
+	if page.explored {
+		payload["exploration"] = true
+		payload["exploration_rate"] = explorationRate
+	}
 	page.timing.addTo(payload)
 	event := domain.InteractionEvent{
 		OccurredAt: run.startedAt,
 		UserId:     run.userId,
-		Type:       domain.EventTypeSearchPerformed,
+		Type:       domain.InteractionTypeSearchPerformed,
 		QueryNorm:  run.queryNorm,
 		SearchId:   run.searchId,
 		Payload:    payload,
@@ -46,17 +51,15 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page fi
 	t.bg.LaunchWithin(parentCtx, "telemetry.emit", emitTimeout, func(ctx context.Context) { t.append(ctx, event) })
 }
 
-func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) map[string]any {
+const tailNoiseTopK = 5
+
+func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string) map[string]any {
 	payload := map[string]any{
 		"result_count":                   len(shown),
 		domain.PayloadKeyZeroResult:      len(shown) == 0,
-		domain.PayloadKeyTailNoiseTop5:   rank.TailNoiseInTopK(shown, 5),
+		domain.PayloadKeyTailNoiseTop5:   rank.TailNoiseInTopK(shown, tailNoiseTopK),
 		"pipeline_version":               pipelineVersionV2,
 		domain.PayloadKeyShownSignatures: shownSigs,
-	}
-	if explored {
-		payload["exploration"] = true
-		payload["exploration_rate"] = explorationRate
 	}
 	if top := buildShownTop(shown); len(top) > 0 {
 		payload["top"] = top
@@ -65,14 +68,14 @@ func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string, exp
 }
 
 func (t *SearchTelemetry) append(ctx context.Context, event domain.InteractionEvent) {
+	ctx = logging.ContextWithSubjectUser(ctx, event.UserId.String())
 	if err := t.eventStore.Append(ctx, event); err != nil {
 		slog.WarnContext(ctx, "search.v2.telemetry_emit_failed",
 			"search_id", event.SearchId,
-			"user_id", event.UserId.String(),
-			"error", err)
+			logging.KeyError, err)
 		return
 	}
-	t.activity.EmitActivity(domain.EventTypeSearchPerformed.String())
+	t.activity.EmitActivity(domain.InteractionTypeSearchPerformed.String())
 }
 
 func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup) []string {

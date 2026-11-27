@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -46,7 +47,7 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -73,7 +74,7 @@ func TestExecuteReplace_SupersededAudioIsQueuedAfterTheGraceAndKept(t *testing.T
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -99,7 +100,7 @@ func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 	queue := &recordingOrphanQueue{err: errors.New("queue down")}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)))
 
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want success despite the queue failing", err)
 	}
 }
@@ -109,7 +110,7 @@ func TestExecuteReplace_NothingIsDeletedAtCommitAndExactlyOneEntryIsQueued(t *te
 	queue := &recordingOrphanQueue{}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(time.Hour))
 
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 	if !track.store.holds(track.originalRef) {
@@ -127,7 +128,7 @@ func TestExecuteReplace_FailedRollbackDeleteIsQueuedForTheSweep(t *testing.T) {
 	queue := &recordingOrphanQueue{}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)))
 
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err == nil {
 		t.Fatal("expected the replace to fail")
 	}
 
@@ -167,7 +168,7 @@ func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
 		userID, trackID := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		store := &objectStore{objects: map[string]string{"u/new.mp3": "new bytes"}, deleteErr: errors.New("down")}
 		queue := &recordingOrphanQueue{}
-		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, inmemoryledger.NewLedger(),
+		step := mustNewStoreStep(store, scratchfiles.New(), downloadtest.SilentAudioProber(), queue, inmemoryledger.NewLedger(),
 			service.WithStoreOwner(userID, trackID))
 
 		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/new.mp3"}); err == nil {
@@ -186,11 +187,11 @@ func TestStoreRollback_SharedRefIsNeverQueued(t *testing.T) {
 		userID, own := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		sharedRef := "u/shared.mp3"
 		refs := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
-			ID: ids.NewTrackId(), UserId: userID, Status: ports.TrackReady, AudioRef: &sharedRef,
+			ID: ids.NewTrackId(), UserId: userID, Status: ports.TrackReady, Streamable: true, AudioRef: &sharedRef,
 		}})
 		queue := &recordingOrphanQueue{}
 		store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}
-		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, refs, service.WithStoreOwner(userID, own))
+		step := mustNewStoreStep(store, scratchfiles.New(), downloadtest.SilentAudioProber(), queue, refs, service.WithStoreOwner(userID, own))
 
 		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: sharedRef}); err != nil {
 			t.Fatalf("Rollback: %v", err)

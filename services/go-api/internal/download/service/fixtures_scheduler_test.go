@@ -8,6 +8,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/random/randomtest"
 	"context"
 	"fmt"
 	"sync"
@@ -47,9 +49,9 @@ func (q *firstOutcomeQueue) Settle(ctx context.Context, trackID ids.TrackId, fen
 }
 
 type jobRunner interface {
-	Execute(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
-	ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
-	RefuseQueued(ctx context.Context, userId ids.UserId, trackId ids.TrackId)
+	Execute(ctx context.Context, job ports.AcquisitionJob) error
+	ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error
+	RefuseQueued(ctx context.Context, job ports.AcquisitionJob)
 }
 
 func runOneJob(t *testing.T, acquirer jobRunner, track inmemoryledger.LedgerTrack) jobOutcome {
@@ -87,6 +89,8 @@ func testSchedulerPorts() service.SchedulerPorts {
 		FingerprintVerified: func() bool { return false },
 		Timer:               clock.NewTimer,
 		Ticker:              clock.NewTicker,
+		Unit:                randomtest.Fixed(0.5),
+		Verification:        ports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true},
 	}
 }
 
@@ -103,11 +107,19 @@ func newTestScheduler(acquirer jobRunner, workers int, now func() time.Time, opt
 			panic(fmt.Sprintf("newTestScheduler: unsupported option %T", opt))
 		}
 	}
-	return service.MustNewBackgroundAcquisitionScheduler(service.NewProcessRoot(context.Background()), acquirer, workers, now, wiring, public...)
+	return service.MustNewBackgroundAcquisitionScheduler(context.Background(), acquirer, workers, now, wiring, public...)
 }
 
 func withTestOutcomes(r ports.OutcomeRecorder) schedulerPortsOption {
 	return func(wiring *service.SchedulerPorts) { wiring.Outcomes = r }
+}
+
+func withTestToolsPresent(v ports.Verification) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) { wiring.Verification = v }
+}
+
+func withTestUnit(unit random.Unit) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) { wiring.Unit = unit }
 }
 
 func withTestSchedulerEvents(pub events.Publisher) schedulerPortsOption {
@@ -134,5 +146,5 @@ func withTestUpgrades(runner upgradeRunner, workers int) schedulerPortsOption {
 }
 
 type upgradeRunner interface {
-	ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
+	ExecuteUpgrade(ctx context.Context, job ports.AcquisitionJob) error
 }

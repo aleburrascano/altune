@@ -4,7 +4,9 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,7 +94,7 @@ func TestSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
 
 func TestSearch_MixedOutputKeepsGoodEntriesAndLogsSkipped(t *testing.T) {
 	installSearch(t, `printf '%s\ngarbage\n%s\n' '{"title":"Good","webpage_url":"https://youtube.com/watch?v=aaaaaaaaaaa","duration":12}' '{"title":"No URL"}'`)
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	got, err := searchOneQuery(t)
 	if err != nil {
@@ -157,7 +159,7 @@ func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testi
 }
 
 func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	s := download.MustNewYtDlpAudioSearcher("", secretCookiePath, "", time.Now, clock.Sleep)
 
 	if _, err := s.SearchQueries(context.Background(), []string{"q"}); err == nil {
@@ -497,13 +499,16 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 	}
 }
 
-type panickingContext struct{ context.Context }
+type panickingContext struct{}
 
 func (panickingContext) Deadline() (time.Time, bool) { panic("deadline exploded") }
+func (panickingContext) Done() <-chan struct{}       { return nil }
+func (panickingContext) Err() error                  { return nil }
+func (panickingContext) Value(any) any               { return nil }
 
 func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAnEmptyAnswer(t *testing.T) {
 	candidates, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).
-		SearchQueries(panickingContext{context.Background()}, []string{"Blinding Lights"})
+		SearchQueries(panickingContext{}, []string{"Blinding Lights"})
 
 	if err == nil {
 		t.Fatalf("SearchQueries = %d candidates, nil; want an error so the track is not reported as having no match", len(candidates))
@@ -513,7 +518,7 @@ func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAn
 func TestYtDlpAudioSearcher_MarkUnplayable_APanicInsideAnInspectionLeavesTheCandidatePlayable(t *testing.T) {
 	candidates := []download.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
 
-	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(panickingContext{context.Background()}, candidates)
+	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(panickingContext{}, candidates)
 
 	if got := candidates[0].Unplayable; got != "" {
 		t.Errorf("Unplayable = %q, want it left empty", got)
@@ -561,7 +566,7 @@ func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
 
 func TestYtDlpAudioSearcher_InspectFailureLogCapsStderr(t *testing.T) {
 	installYtDlp(t, leakyStderr)
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	candidates := []download.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}}
 
 	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(context.Background(), candidates)

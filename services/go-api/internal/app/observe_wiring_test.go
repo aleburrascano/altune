@@ -5,6 +5,8 @@ import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -13,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-chi/chi/v5"
@@ -119,6 +122,25 @@ func TestObserveRoutes_EveryJSONRouteSendsNoStoreAndNosniff(t *testing.T) {
 		if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 			t.Errorf("%s %s: Cache-Control = %q, want no-store", route.method, route.path, got)
 		}
+	}
+}
+
+func TestObserveRoutes_EveryStreamSendsNosniff(t *testing.T) {
+	f := newObserveFixture(t, true)
+
+	streams := 0
+	for _, route := range observeRoutes(t, f.tree) {
+		if !strings.HasSuffix(route.path, "/stream") {
+			continue
+		}
+		streams++
+		rec := callObserve(t, f.tree, route.method, route.path, f.principal)
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s %s: X-Content-Type-Options = %q, want nosniff", route.method, route.path, got)
+		}
+	}
+	if streams == 0 {
+		t.Fatal("no observe stream routes found")
 	}
 }
 
@@ -232,7 +254,7 @@ func readObservedHealth(t *testing.T, handles app.Handles, wantCode int) observe
 func TestEvalMeter_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 	ring := captureLeaderLoopLogs(t)
 	passed := make(chan struct{}, 1)
-	var runner jobs.Runner
+	runner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	meter, err := app.NewEvalMeter(&runner, func(ctx context.Context) (monitoring.EvalMeterResult, error) {
 		slog.InfoContext(ctx, "eval pass line")
 		passed <- struct{}{}
@@ -244,7 +266,8 @@ func TestEvalMeter_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	meter.Start(ctx)
+	runner.Ticker(jobs.EvalMeter, 5*time.Millisecond, meter.Pass)
+	leadAlways(ctx, t, &runner)
 	awaitPass(t, passed)
 
 	rec := recordNamed(t, ring, "eval pass line")
@@ -257,7 +280,7 @@ func TestObserveHealth_ProbesTheAssembledDatabaseRedisAndAuth(t *testing.T) {
 	redisUp := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { _ = redisUp.Close() })
 
-	got := readObservedHealth(t, app.Handles{Pool: integrationPool(t), Redis: redisUp}, http.StatusOK)
+	got := readObservedHealth(t, app.Handles{Pool: dbtest.Pool(t), Redis: redisUp}, http.StatusOK)
 
 	if got.DB != monitoring.DepUp || got.Redis != monitoring.DepUp || got.Auth != monitoring.DepUp {
 		t.Errorf("health = %+v, want db, redis and auth all ok", got)

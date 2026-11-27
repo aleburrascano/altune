@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/internal/adapters/contracttest"
 	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -23,7 +24,7 @@ type playlistRepoWithTracks struct {
 
 func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId ids.UserId) library.TrackId {
 	t.Helper()
-	track, err := library.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album", time.Now)
+	track, err := library.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -45,12 +46,12 @@ func TestPlaylistRepoFake_Contract(t *testing.T) {
 func fullPlaylistRepo(t *testing.T, userId ids.UserId, size int) (*library.InMemoryPlaylistRepo, *library.Playlist) {
 	t.Helper()
 	repo := library.NewInMemoryPlaylistRepo()
-	pl, err := library.NewPlaylist(userId, "Full", time.Now())
+	pl, err := library.NewPlaylist(userId, "Full", time.Now(), ids.Real)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
 	for range size {
-		if err := pl.AddTrack(library.NewTrackId(), pl.CreatedAt); err != nil {
+		if err := pl.AddTrack(librarytest.NewTrackId(), pl.CreatedAt); err != nil {
 			t.Fatalf("fill: %v", err)
 		}
 	}
@@ -80,7 +81,7 @@ func TestPlaylistRepoFake_SeedWithTracksFailsWhenATrackDoesNotFit(t *testing.T) 
 
 	go func() {
 		defer close(done)
-		repo.SeedWithTracks(tb, pl, []*library.Track{{ID: library.NewTrackId()}})
+		repo.SeedWithTracks(tb, pl, []*library.Track{{ID: librarytest.NewTrackId()}})
 	}()
 	<-done
 
@@ -93,7 +94,7 @@ func TestPlaylistRepoFake_AddTrackRefusesPastTheCap(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	repo, pl := fullPlaylistRepo(t, userId, library.MaxPlaylistTracks)
 
-	err := repo.AddTrack(context.Background(), userId, pl.ID, library.NewTrackId())
+	err := repo.AddTrack(context.Background(), userId, pl.ID, librarytest.NewTrackId())
 
 	if !errors.Is(err, library.ErrPlaylistFull) {
 		t.Fatalf("AddTrack past the cap: err = %v, want ErrPlaylistFull", err)
@@ -103,7 +104,7 @@ func TestPlaylistRepoFake_AddTrackRefusesPastTheCap(t *testing.T) {
 func TestPlaylistRepoFake_AddTracksRefusesTheWholeBatchPastTheCap(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	repo, pl := fullPlaylistRepo(t, userId, library.MaxPlaylistTracks-1)
-	batch := []library.TrackId{library.NewTrackId(), library.NewTrackId()}
+	batch := []library.TrackId{librarytest.NewTrackId(), librarytest.NewTrackId()}
 
 	added, err := repo.AddTracks(context.Background(), userId, pl.ID, batch)
 

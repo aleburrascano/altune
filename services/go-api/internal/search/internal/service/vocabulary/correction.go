@@ -94,7 +94,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 
 		matches, err := s.vocab.SuggestByPrefix(ctx, token, 1)
 		if err != nil {
-			slog.DebugContext(ctx, "correction.prefix_lookup_failed", "token", token, "error", err)
+			slog.DebugContext(ctx, "correction.prefix_lookup_failed", "token", token, logging.KeyError, err)
 		}
 		if len(matches) > 0 && textnorm.NormalizeForMatch(matches[0].Term) == token {
 			corrected[i] = token
@@ -143,7 +143,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 func pickBestCorrection(ctx context.Context, queryNorm string, candidates []domain.SpellingHintsEntry) *CorrectionResult {
 	var best *CorrectionResult
 	bestDist := len([]rune(queryNorm)) + 1
-	maxDist := maxCorrectionDist(queryNorm)
+	maxDist := domain.MaxEditDistance(queryNorm)
 
 	for _, c := range candidates {
 		if c.TermNorm == queryNorm || textnorm.NormalizeForMatch(c.Term) == queryNorm {
@@ -169,15 +169,4 @@ func logCandidate(ctx context.Context, queryNorm string, c domain.SpellingHintsE
 		"distance", dist,
 		"score", c.MatchScore,
 	)
-}
-
-func maxCorrectionDist(query string) int {
-	n := len([]rune(query))
-	if n <= 4 {
-		return 1
-	}
-	if n <= 8 {
-		return 2
-	}
-	return 3
 }

@@ -45,10 +45,12 @@ function openClient(deps: ServerEventsDeps): ServerEventsClient {
 
 class ServerEventStream {
   private readonly deps: ServerEventsDeps;
+  private readonly foreground: AppForeground;
   private client: ServerEventsClient;
 
   constructor(deps: ServerEventsDeps) {
     this.deps = deps;
+    this.foreground = deps.foreground;
     this.client = openClient(deps);
   }
 
@@ -72,7 +74,7 @@ class ServerEventStream {
   }
 
   private connectInForeground(): void {
-    if (this.deps.foreground.isActive()) this.connect();
+    if (this.foreground.isActive()) this.connect();
   }
 }
 

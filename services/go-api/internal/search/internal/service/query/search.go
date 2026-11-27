@@ -1,10 +1,10 @@
 package query
 
 import (
-	"altune/go-api/internal/search/internal/core/favorites"
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/favorites"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/search/internal/service/vocabulary"
@@ -24,6 +24,7 @@ import (
 )
 
 type Service struct {
+	ids            ids.Source
 	providers      []ports.SearchProvider
 	circuitBreaker *providerguard.CircuitBreaker
 	providerCache  ports.ProviderResultCache
@@ -86,6 +87,7 @@ type Collaborators struct {
 	ExplorationDraw random.Unit
 	DeadlineTimer   clock.TimerFunc
 	Now             clock.Func
+	IDs             ids.Source
 }
 
 var ErrCollaboratorRequired = errors.New("search service needs every collaborator, pass the absent adapter to switch one off")
@@ -114,6 +116,7 @@ func (c Collaborators) missing(bg *background.Tracker, breaker *providerguard.Ci
 		{"explorationDraw", c.ExplorationDraw == nil},
 		{"deadlineTimer", c.DeadlineTimer == nil},
 		{"now", c.Now == nil},
+		{"ids", c.IDs == nil},
 	} {
 		if check.missing {
 			missing = append(missing, check.name)
@@ -193,7 +196,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 	if err != nil {
 		return nil, fmt.Errorf("favorites lifter: %w", err)
 	}
-	recorder, err := history.NewRecordSearchHistoryService(c.History, c.Now)
+	recorder, err := history.NewRecordSearchHistoryService(c.History, c.Now, c.IDs)
 	if err != nil {
 		return nil, fmt.Errorf("history recorder: %w", err)
 	}
@@ -225,6 +228,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 		vocab:          ingestor,
 		bg:             bg,
 		now:            c.Now,
+		ids:            c.IDs,
 		resolver:       newSharedResolver(),
 	}, nil
 }
@@ -302,14 +306,14 @@ func (s *Service) execute(
 		startedAt: startedAt,
 	}
 	stages := resolution.stages
-	favoritesDone := s.timeStage(&stages.favorites)
-	ranked := s.favorites.Lift(ctx, userId, resolution.ranked)
+	favoritesCtx, favoritesDone := s.timeStage(ctx, "favorites", &stages.favorites)
+	ranked := s.favorites.Lift(favoritesCtx, userId, resolution.ranked)
 	favoritesDone()
 
 	var relatedGroups []domain.RelatedGroup
-	relatedDone := s.timeStage(&stages.related)
+	relatedCtx, relatedDone := s.timeStage(ctx, "related", &stages.related)
 	if len(ranked) > 0 {
-		relatedGroups = s.related.Execute(ctx, userId, ranked)
+		relatedGroups = s.related.Execute(relatedCtx, userId, ranked)
 	}
 	relatedDone()
 
@@ -348,7 +352,7 @@ func (s *Service) execute(
 		"continued", searchId == continues,
 		"offset", query.Offset,
 		"total", total,
-		"tail_noise_top5", rank.TailNoiseInTopK(shown, 5),
+		"tail_noise_top5", rank.TailNoiseInTopK(shown, tailNoiseTopK),
 	}, stages.logAttrs(s.now().Sub(startedAt))...)...)
 
 	return &SearchOutput{
@@ -393,7 +397,7 @@ func (s *Service) slateForPage(
 	if held, ok := s.cache.heldSlate(ctx, continues, queryNorm, query.Kinds); ok {
 		return rankedResolution{ranked: held, cached: true}, continues
 	}
-	return s.resolveRanked(ctx, query, searchQuery, queryNorm), ids.NewEntityId()
+	return s.resolveRanked(ctx, query, searchQuery, queryNorm), s.ids.NewEntityId()
 }
 
 func (s *Service) resolveRanked(
@@ -424,8 +428,8 @@ func (s *Service) resolveCold(
 	searchQuery, queryNorm string,
 ) rankedResolution {
 	var stages stageTimings
-	fanOutDone := s.timeStage(&stages.fanOut)
-	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
+	fanOutCtx, fanOutDone := s.timeStage(ctx, "fanout", &stages.fanOut)
+	perProvider, statuses := s.fanOut(fanOutCtx, searchQuery, query.Kinds)
 	fanOutDone()
 	resolution := rankedResolution{
 		ranked:   s.mergeRankEnrich(ctx, perProvider, queryNorm, &stages),
@@ -491,7 +495,7 @@ func (s *Service) mergeRankEnrich(
 	queryNorm string,
 	stages *stageTimings,
 ) []domain.SearchResult {
-	rankDone := s.timeStage(&stages.rank)
+	_, rankDone := s.timeStage(ctx, "rank", &stages.rank)
 	ranked := rank.RankPipelineWith(perProvider, queryNorm, s.ranking.RankOptions())
 
 	for i := range ranked {
@@ -499,8 +503,8 @@ func (s *Service) mergeRankEnrich(
 	}
 	rankDone()
 
-	artworkDone := s.timeStage(&stages.artwork)
-	ranked = s.artwork.Fill(ctx, ranked)
+	artworkCtx, artworkDone := s.timeStage(ctx, "artwork", &stages.artwork)
+	ranked = s.artwork.Fill(artworkCtx, ranked)
 	artworkDone()
 	return ranked
 }

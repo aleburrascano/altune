@@ -19,9 +19,13 @@ import (
 	"time"
 )
 
-const ytmusicTimeout = 8 * time.Second
+const (
+	ytmusicTimeout         = 8 * time.Second
+	ytmusicSearchTimeout   = 3 * time.Second
+	ytmChallengeBackoffGap = 250 * time.Millisecond
+)
 
-var ytmChallengeBackoff = backoff.MustCapped(250*time.Millisecond, 250*time.Millisecond)
+var ytmChallengeBackoff = backoff.MustCapped(ytmChallengeBackoffGap, ytmChallengeBackoffGap)
 
 func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return outbound.MustNewClient(ytmusicTimeout, transport)
@@ -71,7 +75,7 @@ type upstreamStatusCoder interface {
 
 func isAuthChallenge(err error) bool {
 	var status upstreamStatusCoder
-	return errors.As(err, &status) && providerrequests.IsAuthStatus(status.UpstreamStatus())
+	return errors.As(err, &status) && outbound.IsAuthStatus(status.UpstreamStatus())
 }
 
 type YouTubeMusicAdapter struct {
@@ -97,7 +101,7 @@ func MustNewYouTubeMusicAdapter(transport http.RoundTripper, sleep clock.Sleeper
 
 func (a *YouTubeMusicAdapter) Name() domain.ProviderName { return domain.ProviderYouTube }
 
-func (a *YouTubeMusicAdapter) SearchTimeout() time.Duration { return 3 * time.Second }
+func (a *YouTubeMusicAdapter) SearchTimeout() time.Duration { return ytmusicSearchTimeout }
 
 func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 	return providersearch.AllSearchKinds()

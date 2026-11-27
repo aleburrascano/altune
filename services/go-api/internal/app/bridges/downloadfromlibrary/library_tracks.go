@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/tracklength"
 	"context"
@@ -24,19 +25,23 @@ type TrackStore interface {
 }
 
 type LibraryTracks struct {
-	store TrackStore
-	now   clock.Func
-	state download.UpgradeState
+	store  TrackStore
+	now    clock.Func
+	state  download.UpgradeState
+	source ids.Source
 }
 
-func NewLibraryTracks(store TrackStore, now clock.Func, state download.UpgradeState) *LibraryTracks {
+func NewLibraryTracks(store TrackStore, now clock.Func, state download.UpgradeState, source ids.Source) *LibraryTracks {
 	if now == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires a clock")
 	}
 	if state == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires the upgrade state, or rejected source keys are silently dropped")
 	}
-	return &LibraryTracks{store: store, now: now, state: state}
+	if source == nil {
+		panic("downloadfromlibrary: NewLibraryTracks requires an id source")
+	}
+	return &LibraryTracks{store: store, now: now, state: state, source: source}
 }
 
 type illegalTransitionError struct {
@@ -77,7 +82,10 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 	if track == nil {
 		return nil, download.ErrTrackNotFound
 	}
-	snapshot := snapshotOf(track)
+	snapshot, err := snapshotOf(track)
+	if err != nil {
+		return nil, err
+	}
 	state, err := l.state.State(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("read upgrade state: %w", err)
@@ -89,16 +97,20 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 	return snapshot, nil
 }
 
-func snapshotOf(track *library.Track) *download.TrackSnapshot {
+func snapshotOf(track *library.Track) (*download.TrackSnapshot, error) {
+	status, err := mapStatus(track.DownloadStatus)
+	if err != nil {
+		return nil, err
+	}
 	snapshot := catalogFactsOf(track)
 	snapshot.AudioRef = track.AudioRef
 	snapshot.AudioSourceURL = track.AudioSourceURL
 	snapshot.StoredDurationSeconds = track.DurationSeconds
 	snapshot.Evidence = track.AcquisitionEvidence()
-	snapshot.Status = mapStatus(track.DownloadStatus)
+	snapshot.Status = status
 	snapshot.Streamable = track.IsStreamable()
 	snapshot.Version = track.Version
-	return snapshot
+	return snapshot, nil
 }
 
 func catalogFactsOf(track *library.Track) *download.TrackSnapshot {
@@ -131,15 +143,18 @@ func snapshotSources(sources []library.CatalogSource) []download.CatalogSource {
 	return out
 }
 
-func mapStatus(s library.DownloadStatus) download.TrackStatus {
+var errUnmappedStatus = errors.New("library download status has no acquisition status")
+
+func mapStatus(s library.DownloadStatus) (download.TrackStatus, error) {
 	switch s {
+	case library.AcquisitionPending:
+		return download.TrackPending, nil
 	case library.AcquisitionReady:
-		return download.TrackReady
+		return download.TrackReady, nil
 	case library.AcquisitionFailed:
-		return download.TrackFailed
-	default:
-		return download.TrackPending
+		return download.TrackFailed, nil
 	}
+	return 0, fmt.Errorf("%w: %d", errUnmappedStatus, int(s))
 }
 
 func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {
@@ -147,13 +162,16 @@ func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids
 		return err
 	}
 	return l.loadAndUpdate(ctx, id, userId, fence, func(track *library.Track) error {
-		return complete(ctx, track, c)
+		return complete(ctx, track, c, l.source, l.now)
 	})
 }
 
 func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {
-	reset := evidenceAccepted(c)
-	if len(c.RejectedSourceKeys) == 0 && !reset {
+	evidence := download.KeepEvidence
+	if evidenceAccepted(c) {
+		evidence = download.ResetEvidence
+	}
+	if len(c.RejectedSourceKeys) == 0 && evidence == download.KeepEvidence {
 		return nil
 	}
 	_, err := l.store.GetByID(ctx, id, userId)
@@ -163,7 +181,7 @@ func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, 
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
-	if err := l.state.SettleAcquisition(ctx, id, fence, c.RejectedSourceKeys, reset); err != nil {
+	if err := l.state.SettleAcquisition(ctx, id, fence, c.RejectedSourceKeys, evidence); err != nil {
 		return fmt.Errorf("settle upgrade state: %w", err)
 	}
 	return nil
@@ -173,15 +191,15 @@ func evidenceAccepted(c download.Completion) bool {
 	return c.Evidence != nil && (&library.Track{}).SetAcquisitionConfidence(c.Confidence, c.Evidence) == nil
 }
 
-func complete(ctx context.Context, track *library.Track, c download.Completion) error {
-	if err := settleAudio(track, c); err != nil {
+func complete(ctx context.Context, track *library.Track, c download.Completion, source ids.Source, now clock.Func) error {
+	if err := settleAudio(track, c, source); err != nil {
 		return err
 	}
 	if err := setMeasuredDuration(track, c.Duration); err != nil {
 		return err
 	}
 	recordMetadata(ctx, track, c)
-	if err := relabel(ctx, track, c.Relabel); err != nil {
+	if err := relabel(ctx, track, c.Relabel, now); err != nil {
 		return err
 	}
 	track.AdoptISRC(c.ISRC)
@@ -199,20 +217,24 @@ func setMeasuredDuration(track *library.Track, length tracklength.TrackLength) e
 	return nil
 }
 
-func relabel(ctx context.Context, track *library.Track, given *download.TrackLabel) error {
+func relabel(ctx context.Context, track *library.Track, given *download.TrackLabel, now clock.Func) error {
 	if given == nil {
 		return nil
 	}
 	label := *given
+	if label.Year != 0 && !library.PlausibleYear(label.Year, now()) {
+		slog.WarnContext(ctx, "acquisition.relabel_year_dropped", logging.KeyTrackID, track.ID.String(), "year", label.Year)
+		label.Year = 0
+	}
 	oldMBID, oldTitle := "", track.Title
 	if track.CatalogMBID != nil {
 		oldMBID = *track.CatalogMBID
 	}
-	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds); err != nil {
+	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds, now); err != nil {
 		return fmt.Errorf("relabel as recording: %w", err)
 	}
 	slog.InfoContext(ctx, "acquisition.track_relabelled",
-		"track_id", track.ID.String(),
+		logging.KeyTrackID, track.ID.String(),
 		"old_mbid", oldMBID, "new_mbid", *track.CatalogMBID,
 		"old_title", oldTitle, "new_title", track.Title)
 	return nil
@@ -221,18 +243,18 @@ func relabel(ctx context.Context, track *library.Track, given *download.TrackLab
 func recordLengthCheck(ctx context.Context, track *library.Track, measured tracklength.TrackLength) {
 	if track.RecordAudioLength(measured) && track.AudioLengthMismatch {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
-			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measured.Seconds())
+			logging.KeyTrackID, track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measured.Seconds())
 	}
 }
 
-func settleAudio(track *library.Track, c download.Completion) error {
+func settleAudio(track *library.Track, c download.Completion, source ids.Source) error {
 	switch {
 	case c.ReplaceAudio:
-		if err := track.ReplaceAudio(c.AudioRef); err != nil {
+		if err := track.ReplaceAudio(c.AudioRef, source); err != nil {
 			return fmt.Errorf("replace audio: %w", err)
 		}
 	default:
-		if err := track.MarkReady(c.AudioRef); err != nil {
+		if err := track.MarkReady(c.AudioRef, source); err != nil {
 			return fmt.Errorf("mark ready: %w", err)
 		}
 	}
@@ -249,7 +271,7 @@ func recordMetadata(ctx context.Context, track *library.Track, c download.Comple
 	}
 	if err := track.SetAcquisitionConfidence(c.Confidence, c.Evidence); err != nil {
 		slog.WarnContext(ctx, "acquisition.confidence_rejected",
-			"track_id", track.ID.String(), "confidence", c.Confidence, "error", redact.LogError(err))
+			logging.KeyTrackID, track.ID.String(), "confidence", c.Confidence, logging.KeyError, redact.LogError(err))
 	}
 }
 

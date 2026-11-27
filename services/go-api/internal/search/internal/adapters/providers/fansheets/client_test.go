@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/fansheets"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -60,7 +60,6 @@ type sheetsServer struct {
 	tabs         string
 	released     []byte
 	releasedCode int
-	delay        time.Duration
 }
 
 func tabsBody(titles ...string) string {
@@ -79,7 +78,6 @@ func newSheetsServer(t *testing.T, hub, artist []byte) *sheetsServer {
 	t.Helper()
 	s := &sheetsServer{artistCode: http.StatusOK, tabs: tabsBody("Released", "Unreleased")}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(s.delay)
 		s.lastKey.Store(r.Header.Get("X-Goog-Api-Key"))
 		onArtistSheet := strings.HasSuffix(r.URL.Path, kenSheetID)
 		if onArtistSheet && r.URL.Query().Get("fields") == tabsFields {
@@ -148,13 +146,9 @@ func TestNewClient_RefusesAMissingIndexCache(t *testing.T) {
 	}
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
+func captureLog(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &buf
+	return logging.CaptureText(t, slog.LevelInfo)
 }
 
 func TestClient_ArtistSongsReturnsTheTrackersFullLeaks(t *testing.T) {
@@ -279,15 +273,14 @@ func TestClient_ABrokenHubBodyIsAnError(t *testing.T) {
 
 func TestNewClient_UsesItsOwnTimeoutWithoutTouchingTheSharedClient(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
-	srv.delay = 50 * time.Millisecond
 	shared := srv.httpClient()
-	shared.Timeout = 10 * time.Millisecond
+	shared.Timeout = time.Nanosecond
 
 	songs, err := newTrackersClient(t, shared, fansheets.NoIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) != 4 {
-		t.Errorf("ArtistSongs = %d songs, err %v; want the client's own timeout, not the shared 10ms", len(songs), err)
+		t.Errorf("ArtistSongs = %d songs, err %v; want the client's own timeout, not the shared 1ns", len(songs), err)
 	}
-	if shared.Timeout != 10*time.Millisecond {
+	if shared.Timeout != time.Nanosecond {
 		t.Errorf("shared timeout = %v, want it untouched", shared.Timeout)
 	}
 }

@@ -240,7 +240,10 @@ func orderByCompleteness(canonical, other domain.SearchResult) (domain.SearchRes
 func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchResult) {
 	proven, hasProven := provenIdentity(canonical, other)
 	identityAgrees := sameVersionIdentity(canonical, other)
-	merged.ISRC = identityCarriedField(canonical.ISRC, other.ISRC, identityAgrees)
+	merged.ISRC = canonical.ISRC
+	if identityAgrees {
+		merged.ISRC = albumgrouping.FirstNonEmpty(canonical.ISRC, other.ISRC)
+	}
 	if !identityAgrees && hasProven {
 		merged.ISRC = proven.ISRC
 	}
@@ -339,12 +342,10 @@ func provenIdentity(a, b domain.SearchResult) (proven domain.SearchResult, ok bo
 	}
 }
 
-func identityCarriedField(canonicalVal, otherVal string, identityAgrees bool) string {
-	if !identityAgrees {
-		return canonicalVal
-	}
-	return albumgrouping.FirstNonEmpty(canonicalVal, otherVal)
-}
+const (
+	versionToleranceFloorSeconds = 5
+	versionToleranceFraction     = 0.03
+)
 
 func sameVersionIdentity(a, b domain.SearchResult) bool {
 	title := textnorm.NormalizeForIdentity(a.Title)
@@ -354,7 +355,7 @@ func sameVersionIdentity(a, b domain.SearchResult) bool {
 	if a.Duration == 0 || b.Duration == 0 {
 		return true
 	}
-	tolerance := math.Max(5, 0.03*math.Max(float64(a.Duration), float64(b.Duration)))
+	tolerance := math.Max(versionToleranceFloorSeconds, versionToleranceFraction*math.Max(float64(a.Duration), float64(b.Duration)))
 	return math.Abs(float64(a.Duration-b.Duration)) <= tolerance
 }
 

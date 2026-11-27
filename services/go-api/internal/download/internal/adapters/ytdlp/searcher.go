@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -96,10 +97,7 @@ var (
 )
 
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clock.Func, sleep clock.Sleeper) (*YouTubeAudioSearcher, error) {
-	if err := errors.Join(
-		requirePort(now == nil, "NewYtDlpAudioSearcher", ErrSearcherClockRequired),
-		requirePort(sleep == nil, "NewYtDlpAudioSearcher", ErrSearcherSleeperRequired),
-	); err != nil {
+	if err := requirePorts(now, sleep); err != nil {
 		return nil, err
 	}
 	s := &YouTubeAudioSearcher{
@@ -126,11 +124,15 @@ func MustNewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now
 	return s
 }
 
-func requirePort(missing bool, owner string, err error) error {
-	if !missing {
-		return nil
+func requirePorts(now clock.Func, sleep clock.Sleeper) error {
+	var missing []error
+	if now == nil {
+		missing = append(missing, fmt.Errorf("NewYtDlpAudioSearcher: %w", ErrSearcherClockRequired))
 	}
-	return fmt.Errorf("%s: %w", owner, err)
+	if sleep == nil {
+		missing = append(missing, fmt.Errorf("NewYtDlpAudioSearcher: %w", ErrSearcherSleeperRequired))
+	}
+	return errors.Join(missing...)
 }
 
 const maxEmbeddedStderrBytes = 2048
@@ -153,8 +155,8 @@ func (s *YouTubeAudioSearcher) Available() bool {
 	return binpath.Runnable(ytDlpBinary)
 }
 
-func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, timedOut bool) error {
-	if s.Available() && !timedOut && !sharedytdlp.OutputShowsSourceUnavailable(stderr) {
+func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, parent, run context.Context) error {
+	if s.Available() && !ports.RunTimedOut(parent, run) && !sharedytdlp.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
 	return &acqdomain.SourceUnavailableError{Source: SourceName, Err: err}
@@ -188,9 +190,16 @@ func (s *YouTubeAudioSearcher) runSearchPairs(ctx context.Context, queries []str
 	return outcomes
 }
 
+func logDroppedCandidates(ctx context.Context, candidates []ports.AudioCandidate) {
+	for _, c := range candidates {
+		if !c.HasSourceKey() {
+			slog.WarnContext(ctx, "acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
+		}
+	}
+}
+
 func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query string, outcomes []pairOutcome) ([]ports.AudioCandidate, error) {
 	return ports.CollectCandidates(
-		ctx,
 		len(outcomes),
 		func(ei int) ([]ports.AudioCandidate, error) {
 			return outcomes[ei].candidates, outcomes[ei].err
@@ -198,10 +207,11 @@ func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query str
 		func(ei int, candidates []ports.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.engine_search_results",
 				"spec", searchEngines[ei]+query, "candidates", len(candidates))
+			logDroppedCandidates(ctx, candidates)
 		},
 		func(ei int, err error) {
 			slog.WarnContext(ctx, "acquisition.engine_search_failed",
-				"spec", searchEngines[ei]+query, "error", redact.LogError(err))
+				"spec", searchEngines[ei]+query, logging.KeyError, redact.LogError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("all search engines failed: %w", firstErr)
@@ -213,7 +223,6 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 	outcomes := s.runSearchPairs(ctx, queries)
 
 	return ports.CollectCandidates(
-		ctx,
 		len(queries),
 		func(qi int) ([]ports.AudioCandidate, error) {
 			return s.foldEngineOutcomes(ctx, queries[qi], outcomes[qi])
@@ -224,7 +233,7 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 		},
 		func(qi int, err error) {
 			slog.WarnContext(ctx, "acquisition.search_query_failed",
-				"query", queries[qi], "error", redact.LogError(err))
+				"query", queries[qi], logging.KeyError, redact.LogError(err))
 		},
 		func(firstErr error) error { return firstErr },
 	)
@@ -273,7 +282,7 @@ func (s *YouTubeAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec st
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
 	cookies.settle(ctx, err, stderr)
 	if err != nil {
-		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, searchCtx))
+		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ctx, searchCtx)
 	}
 
 	candidates, skipped := candidatesFromEntryLines(lines)
@@ -313,6 +322,8 @@ func (s *YouTubeAudioSearcher) DownloadPreview(ctx context.Context, url, outDir 
 const (
 	sourceFormatPrefix = "altune-source-format:"
 	outputPathPrefix   = "altune-output-path:"
+
+	sourceFormatFields = 3
 )
 
 func parseSourceFormat(stdout string) ports.SourceFormat {
@@ -322,7 +333,7 @@ func parseSourceFormat(stdout string) ports.SourceFormat {
 			continue
 		}
 		parts := strings.Split(fields, "|")
-		if len(parts) != 3 {
+		if len(parts) != sourceFormatFields {
 			return ports.SourceFormat{}
 		}
 		format := ports.SourceFormat{ID: parts[0], Codec: parts[1]}
@@ -370,7 +381,7 @@ func (s *YouTubeAudioSearcher) fetchAudio(
 	stdout, stderr, err := childprocess.Run(runCtx, ytDlpBinary, args...)
 	cookies.settle(ctx, err, stderr)
 	if err != nil {
-		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
+		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ctx, runCtx)
 	}
 
 	path, err := validatedOutputPath(outDir, parseOutputPath(stdout))

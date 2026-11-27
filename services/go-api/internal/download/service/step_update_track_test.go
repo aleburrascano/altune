@@ -29,7 +29,7 @@ func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	err := svc.Execute(context.Background(), track.UserId, track.ID)
+	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	requireReady(t, ledger, track.ID, err)
 	want := service.BuildAudioRef(service.TrackRef{
@@ -46,7 +46,7 @@ func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 func TestExecuteReplace_SwapsTheServingFileForTheOneItStored(t *testing.T) {
 	served := seedReadyTrack(t)
 
-	if err := served.service().ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+	if err := served.service().ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.
 	svc := service.MustNewAcquireTrackAudioService(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 
-	err := svc.Execute(context.Background(), track.UserId, track.ID)
+	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	if err == nil || !strings.Contains(err.Error(), "track not found for update") {
 		t.Fatalf("Execute = %v, want the update step's track-not-found failure", err)
@@ -137,7 +137,7 @@ func TestReplaceGated_AnUnprobedFileGetsNoLengthRescue(t *testing.T) {
 	}
 	gate := replacement.ReplacementGate{Current: audioquality.B, CatalogSeconds: 285, StoredSeconds: 231}
 
-	_, err = svc.ReplaceGated(context.Background(), served.userID, snapshot, gate)
+	_, err = svc.ReplaceGated(context.Background(), ports.AcquisitionJob{UserID: served.userID}, snapshot, gate)
 
 	if !errors.Is(err, replacement.ErrNotAnUpgrade) {
 		t.Fatalf("ReplaceGated = %v, want ErrNotAnUpgrade: the source's claimed 285 s was never measured", err)

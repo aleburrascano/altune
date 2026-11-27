@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
@@ -99,17 +100,16 @@ func (e *StepError) Unwrap() error { return e.Err }
 
 type pipelineRun struct {
 	ac        *AcquisitionContext
-	reporter  jobReporter
 	completed []undoable
 	current   named
 	now       clock.Func
 }
 
 func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error {
-	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx), current: pendingStep{}, now: p.now}
+	run := &pipelineRun{ac: ac, current: pendingStep{}, now: p.now}
 	var err error
 	panicked := background.SafeRun(ctx, "acquisition.pipeline_panic", func() { err = runStages(ctx, run, p) },
-		"step", run, "track_id", ac.Track.ID)
+		"step", run, logging.KeyTrackID, ac.Track.ID)
 	if panicked == nil {
 		return err
 	}
@@ -143,14 +143,14 @@ func runStages(ctx context.Context, run *pipelineRun, p Pipeline) error {
 }
 
 func logShadowJudge(ctx context.Context, ac *AcquisitionContext, downloadErr error) {
-	defer background.RecoverContext(ctx, "acquisition.judge_shadow_panic", "track_id", ac.Track.ID)
+	defer background.RecoverContext(ctx, "acquisition.judge_shadow_panic", logging.KeyTrackID, ac.Track.ID)
 	var kept *ports.AudioCandidate
 	if downloadErr == nil {
 		kept = ac.Selected
 	}
 	c := judgeshadow.Compare(shadowTarget(ac.Track), kept, ac.ProbedDuration.Seconds(), ac.Candidates)
 	slog.InfoContext(ctx, "acquisition.judge_shadow",
-		"track_id", ac.Track.ID,
+		logging.KeyTrackID, ac.Track.ID,
 		"pipeline_url", c.PipelineURL,
 		"judge_url", c.JudgeURL,
 		"judge_reason", c.Reason,
@@ -172,12 +172,12 @@ func keepFirstTierOutage(fallbackErr, firstTierErr error) error {
 func searchAndDownloadAnyTier(ctx context.Context, run *pipelineRun, p Pipeline) (afterDownload, error) {
 	ac := run.ac
 	downloaded, err := searchAndDownload(ctx, run, p)
-	if err == nil || !ac.FallbackSkipped || ctx.Err() != nil {
+	if err == nil || ac.Pass != PassFallbackSkipped || ctx.Err() != nil {
 		return downloaded, err
 	}
 	slog.InfoContext(ctx, "acquisition.first_tier_failed_trying_fallback",
-		"track_id", ac.Track.ID, "error", redact.LogError(err))
-	ac.FallbackSkipped, ac.FallbackOnly = false, true
+		logging.KeyTrackID, ac.Track.ID, logging.KeyError, redact.LogError(err))
+	ac.Pass = PassFallbackOnly
 	ac.clearCandidates()
 	run.completed = nil
 	downloaded, fallbackErr := searchAndDownload(ctx, run, p)
@@ -208,11 +208,11 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 func announceStage(ctx context.Context, run *pipelineRun, s named) {
 	ac := run.ac
 	run.current = s
-	run.reporter.stage(string(s.Name()))
+	ac.Job.Progress().Stage(ctx, string(s.Name()))
 	if ac.Selected != nil {
-		run.reporter.source(ac.Selected.URL)
+		ac.Job.Progress().Source(ac.Selected.URL)
 	}
-	slog.InfoContext(ctx, "pipeline step starting", "step", s.Name(), "track_id", ac.Track.ID)
+	slog.InfoContext(ctx, "pipeline step starting", "step", s.Name(), logging.KeyTrackID, ac.Track.ID)
 }
 
 func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[In, Out], prev In) (Out, error) {
@@ -225,12 +225,12 @@ func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[
 
 	announceStage(ctx, run, s)
 
-	start := run.now()
-	out, execErr := s.Execute(ctx, run.ac, prev)
-	timeStage(ctx, string(s.Name()), start, run.now)
+	stageCtx, stageDone := startStage(ctx, run.ac, run.now, string(s.Name()))
+	out, execErr := s.Execute(stageCtx, run.ac, prev)
+	stageDone(execErr)
 	if execErr != nil {
 		slog.ErrorContext(ctx, "pipeline step failed",
-			"step", s.Name(), "track_id", run.ac.Track.ID, "error", redact.LogError(execErr))
+			"step", s.Name(), logging.KeyTrackID, run.ac.Track.ID, logging.KeyError, redact.LogError(execErr))
 		rollback(ctx, run.completed, run.ac)
 		return none, &StepError{Step: s.Name(), Err: execErr}
 	}
@@ -243,20 +243,19 @@ const rollbackBudget = 30 * time.Second
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
 	rbCtx, cancel := background.Detach(ctx, rollbackBudget)
 	defer cancel()
-	if schedulerHandedOver(ctx) {
-		rbCtx = withRollbackHandedOver(rbCtx)
-	}
+	ac.rollbackHandedOver = ac.Job.HandedOverByScheduler(ctx)
 
 	for i := len(completed) - 1; i >= 0; i-- {
 		step := completed[i]
 		slog.InfoContext(rbCtx, "rolling back step", "step", step.Name())
 		if err := step.Rollback(rbCtx, ac); err != nil {
-			slog.ErrorContext(rbCtx, "rollback failed", "step", step.Name(), "error", redact.LogError(err))
+			slog.ErrorContext(rbCtx, "rollback failed", "step", step.Name(), logging.KeyError, redact.LogError(err))
 		}
 	}
 }
 
 type AcquisitionContext struct {
+	Job               ports.AcquisitionJob
 	Track             TrackRef
 	Identity          ports.RecordingIdentity
 	Candidates        []ports.AudioCandidate
@@ -280,12 +279,13 @@ type AcquisitionContext struct {
 
 	Replace ReplaceState
 
-	FallbackSkipped bool
-	FallbackOnly    bool
+	Pass SearchPass
 
 	PriorRejections []ports.PriorRejection
 
 	Relabel *ports.TrackLabel
+
+	rollbackHandedOver bool
 }
 
 func (ac *AcquisitionContext) Snapshot() AcquisitionContext {
@@ -320,7 +320,7 @@ func (ac *AcquisitionContext) clearCandidates() {
 
 func (ac *AcquisitionContext) retargetTo(label ports.TrackLabel) {
 	ac.clearCandidates()
-	ac.FallbackSkipped, ac.FallbackOnly = false, false
+	ac.Pass = PassAllTiers
 	ac.Identity = ports.RecordingIdentity{}
 	ac.Track.Title, ac.Track.Album, ac.Track.Year = label.Title, label.Album, label.Year
 	ac.Track.ISRC, ac.Track.CatalogMBID, ac.Track.CatalogDuration = label.ISRC, label.MBID, label.DurationSeconds

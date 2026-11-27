@@ -10,5 +10,5 @@ export function PlaylistRoute(): ReactElement {
   const navigator = useNavigator();
   const playlistId = parsePlaylistId(params.id ?? '');
   if (!playlistId.ok) return <Redirect href="/library" />;
-  return <PlaylistDetailScreen playlistId={playlistId.id} navigator={navigator} />;
+  return <PlaylistDetailScreen playlistId={playlistId.value} navigator={navigator} />;
 }

@@ -6,9 +6,12 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 )
+
+const wireRoot = "contracts/wire"
 
 var updateContract = flag.Bool("update-contract", false, "rewrite contract fixtures")
 
@@ -36,22 +39,29 @@ func driftLabel(path string) string {
 	return path
 }
 
-func walkDrift(path string, fixture, body any) []string {
+type driftMode int
+
+const (
+	ignoreExtraKeys driftMode = iota
+	strictKeys
+)
+
+func walkDrift(path string, fixture, body any, mode driftMode) []string {
 	want, got := jsonKind(fixture), jsonKind(body)
 	if want != got {
 		return []string{driftLabel(path) + ": kind " + want + ", got " + got}
 	}
 	switch f := fixture.(type) {
 	case map[string]any:
-		return objectDrift(path, f, body.(map[string]any))
+		return objectDrift(path, f, body.(map[string]any), mode)
 	case []any:
-		return arrayDrift(path, f, body.([]any))
+		return arrayDrift(path, f, body.([]any), mode)
 	default:
 		return nil
 	}
 }
 
-func objectDrift(path string, fixture, body map[string]any) []string {
+func objectDrift(path string, fixture, body map[string]any, mode driftMode) []string {
 	keys := make([]string, 0, len(fixture))
 	for key := range fixture {
 		keys = append(keys, key)
@@ -68,22 +78,52 @@ func objectDrift(path string, fixture, body map[string]any) []string {
 			drifts = append(drifts, child+": missing")
 			continue
 		}
-		drifts = append(drifts, walkDrift(child, fixture[key], value)...)
+		drifts = append(drifts, walkDrift(child, fixture[key], value, mode)...)
+	}
+	if mode == strictKeys {
+		drifts = append(drifts, unexpectedKeys(path, fixture, body)...)
 	}
 	return drifts
 }
 
-func arrayDrift(path string, fixture, body []any) []string {
+func unexpectedKeys(path string, fixture, body map[string]any) []string {
+	var extra []string
+	for key := range body {
+		if _, known := fixture[key]; !known {
+			extra = append(extra, key)
+		}
+	}
+	sort.Strings(extra)
+	drifts := make([]string, 0, len(extra))
+	for _, key := range extra {
+		child := key
+		if path != "" {
+			child = path + "." + key
+		}
+		drifts = append(drifts, child+": unexpected")
+	}
+	return drifts
+}
+
+func arrayDrift(path string, fixture, body []any, mode driftMode) []string {
 	if len(fixture) == 0 {
 		return nil
 	}
 	if len(body) == 0 {
 		return []string{driftLabel(path) + ": empty array"}
 	}
-	return walkDrift(path+"[0]", fixture[0], body[0])
+	return walkDrift(path+"[0]", fixture[0], body[0], mode)
 }
 
-func driftBetween(fixture, body json.RawMessage) []string {
+func looseDrift(fixture, body json.RawMessage) []string {
+	return drift(fixture, body, ignoreExtraKeys)
+}
+
+func strictDrift(fixture, body json.RawMessage) []string {
+	return drift(fixture, body, strictKeys)
+}
+
+func drift(fixture, body json.RawMessage, mode driftMode) []string {
 	var f, b any
 	if err := json.Unmarshal(fixture, &f); err != nil {
 		return []string{"fixture: invalid JSON: " + err.Error()}
@@ -91,20 +131,60 @@ func driftBetween(fixture, body json.RawMessage) []string {
 	if err := json.Unmarshal(body, &b); err != nil {
 		return []string{"body: invalid JSON: " + err.Error()}
 	}
-	return walkDrift("", f, b)
+	return walkDrift("", f, b, mode)
 }
 
 func AssertMatchesFixture(t testing.TB, path string, body []byte) {
 	t.Helper()
+	assertFixture(t, path, body, looseDrift)
+}
+
+func AssertWire(t testing.TB, name string, body []byte) {
+	t.Helper()
+	assertFixture(t, wirePath(name), body, strictDrift)
+}
+
+func AssertWireExact(t testing.TB, name string, body []byte) {
+	t.Helper()
+	assertFixture(t, wirePath(name), body, exactDrift)
+}
+
+func wirePath(name string) string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return filepath.Join(wireRoot, name+".json")
+	}
+	return filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "..", wireRoot, name+".json")
+}
+
+func exactDrift(fixture, body json.RawMessage) []string {
+	var want, got bytes.Buffer
+	if err := json.Compact(&want, fixture); err != nil {
+		return []string{"fixture: invalid JSON: " + err.Error()}
+	}
+	if err := json.Compact(&got, body); err != nil {
+		return []string{"body: invalid JSON: " + err.Error()}
+	}
+	if want.String() == got.String() {
+		return nil
+	}
+	return []string{"content changed (run -update-contract to accept it)"}
+}
+
+func assertFixture(t testing.TB, path string, body []byte, compare func(fixture, body json.RawMessage) []string) {
+	t.Helper()
+	fixture, err := os.ReadFile(path)
 	if *updateContract {
+		if err == nil && len(compare(fixture, body)) == 0 {
+			return
+		}
 		rewriteFixture(t, path, body)
 		return
 	}
-	fixture, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixture %s: %v (run with -update-contract to create it)", path, err)
 	}
-	for _, drift := range driftBetween(fixture, body) {
+	for _, drift := range compare(fixture, body) {
 		t.Errorf("%s drifted: %s", filepath.Base(path), drift)
 	}
 }

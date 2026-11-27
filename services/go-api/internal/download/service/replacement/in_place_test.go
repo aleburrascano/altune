@@ -99,7 +99,7 @@ func TestRunner_AnArtTrackGradedCWithAMatchingFingerprintBecomesAWithNoDownload(
 	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 	if err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestRunner_APreviewMatchProvesTheFileAsWellAsAFingerprint(t *testing.T) {
 	w.storedEvidence(evidenceFor(audioquality.D, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: previewHit}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: previewHit}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -137,7 +137,7 @@ func TestRunner_AMismatchRecordsTheVerdictThenFallsThroughToReacquire(t *testing
 	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: otherTake}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: otherTake}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 	if err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestRunner_AFingerprintThatNeverAnswersFallsThroughToReacquireWithoutChangi
 	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: noAnswer}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: noAnswer}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -174,7 +174,7 @@ func TestRunner_AMatchOnAnUnofficialSourceIsBAndStillLooksForAnOfficialOne(t *te
 	w.storedEvidence(evidenceFor(audioquality.C, audioquality.FanUpload))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -191,7 +191,7 @@ func TestRunner_ATrackCheckedThisGenerationIsNotCheckedAgain(t *testing.T) {
 	w.storedEvidence(fmt.Sprintf(`{"grade":"C","source_kind":"art_track","in_place_generation":%d}`, audioquality.PipelineGeneration))
 	checker := &fixedChecker{finding: hardMatch}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -205,7 +205,7 @@ func TestRunner_AUserUploadThatMatchesIsGradedAUserAndNeverReplaced(t *testing.T
 	w.asUserUpload()
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -224,7 +224,7 @@ func TestRunner_AUserUploadThatDoesNotMatchIsFlaggedAndNeverReplaced(t *testing.
 			w.asUserUpload()
 			recorder := &recordingInPlaceStore{}
 
-			if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+			if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
 			}
 
@@ -245,7 +245,7 @@ func TestRunner_AUserUploadWithNoAnswerOrOnlyASoftOneIsNeitherGradedNorFlagged(t
 			w.asUserUpload()
 			recorder := &recordingInPlaceStore{}
 
-			if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+			if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
 			}
 
@@ -265,7 +265,7 @@ func TestRunner_ACheckThatFailsRecordsNothingAndReportsTheError(t *testing.T) {
 	recorder := &recordingInPlaceStore{}
 	acoustIDDown := errors.New("acoustid unreachable")
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{err: acoustIDDown}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{err: acoustIDDown}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if !errors.Is(err, acoustIDDown) {
 		t.Errorf("ExecuteUpgrade = %v, want the outage reported", err)
@@ -285,14 +285,14 @@ func TestRunner_AfterThreeFailedChecksTheTrackFallsThroughToReacquire(t *testing
 	runner := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{err: errors.New("fpcalc cannot decode")}, recorder)
 
 	for try := 1; try <= 2; try++ {
-		if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err == nil {
+		if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err == nil {
 			t.Fatalf("try %d: ExecuteUpgrade = nil, want the failed check reported", try)
 		}
 	}
 	if w.source.finds != 0 {
 		t.Fatalf("sources searched %d times before the third failure, want 0", w.source.finds)
 	}
-	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
+	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("third try: %v", err)
 	}
 
@@ -309,7 +309,7 @@ func TestRunner_APreviewMatchAboveTheOfficialCutGradesBAndStillLooksForABetterSo
 	w.storedEvidence(evidenceFor(audioquality.D, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: looseHit}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: looseHit}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -331,7 +331,7 @@ func TestRunner_ATrackGradedBestAvailableIsNeitherCheckedNorReplaced(t *testing.
 	checker := &fixedChecker{finding: otherTake}
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || checker.calls != 0 || len(recorder.records) != 0 || w.source.finds != 0 {
 		t.Errorf("err = %v, checks = %d, records = %+v, searches = %d, want the track left alone", err, checker.calls, recorder.records, w.source.finds)
@@ -347,7 +347,7 @@ func TestRunner_AGradeATrackNotYetCheckedThisGenerationIsCheckedAndKeptWhenNothi
 	checker := &fixedChecker{finding: noAnswer}
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || checker.calls != 1 || w.source.finds != 0 {
 		t.Errorf("err = %v, checks = %d, searches = %d, want one check and no re-acquire: unknown changes nothing", err, checker.calls, w.source.finds)
@@ -362,7 +362,7 @@ func TestRunner_AGradeATrackCheckedThisGenerationIsSkipped(t *testing.T) {
 	w.storedEvidence(judgedEvidence(audioquality.A, audioquality.PipelineGeneration))
 	checker := &fixedChecker{finding: otherTake}
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || checker.calls != 0 || w.source.finds != 0 {
 		t.Errorf("err = %v, checks = %d, searches = %d, want the top grade skipped", err, checker.calls, w.source.finds)
@@ -375,7 +375,7 @@ func TestRunner_AWrongLengthGradeAIsLoweredAndReacquired(t *testing.T) {
 	wrongLength := replacement.Finding{Verdict: "hard", Fingerprint: audioquality.Approximates, Basis: "acoustid", Score: 0.97, Lowers: true}
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: wrongLength}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: wrongLength}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
@@ -393,7 +393,7 @@ func TestRunner_AProvenButNotLoweringFindingNeverLowersAStoredGrade(t *testing.T
 	w.storedEvidence(judgedEvidence(audioquality.A, 0))
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: softMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: softMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || w.source.finds != 0 {
 		t.Errorf("err = %v, searches = %d, want the stored A kept: weaker evidence now does not lower it", err, w.source.finds)

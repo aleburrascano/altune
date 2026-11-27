@@ -17,7 +17,7 @@ export class SSEConnectionError extends Error {
     super(
       correlationId === null
         ? 'SSE connection error'
-        : `SSE connection error (correlation_id=${correlationId})`,
+        : `SSE connection error (corr_id=${correlationId})`,
     );
     this.name = 'SSEConnectionError';
     this.correlationId = correlationId;
@@ -32,7 +32,7 @@ export class SSEHttpError extends Error {
     super(
       correlationId === null
         ? `SSE stream refused (status=${status})`
-        : `SSE stream refused (status=${status}, correlation_id=${correlationId})`,
+        : `SSE stream refused (status=${status}, corr_id=${correlationId})`,
     );
     this.name = 'SSEHttpError';
     this.status = status;

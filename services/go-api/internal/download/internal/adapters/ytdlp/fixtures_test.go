@@ -4,11 +4,11 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +18,28 @@ import (
 )
 
 const youTubeWatchURL = "https://youtube.com/watch?v=1"
+
+func cancelOnceFileExists(t *testing.T, path string) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		defer cancel()
+		polltest.Within(10*time.Second, func() bool {
+			if ctx.Err() != nil {
+				return true
+			}
+			_, err := os.Stat(path)
+			return err == nil
+		})
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-finished
+	})
+	return ctx
+}
 
 func installYtDlp(t *testing.T, body string) string {
 	t.Helper()
@@ -125,16 +147,7 @@ func searchedSpecs(t *testing.T, calls string) []string {
 	return specs
 }
 
-func captureLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &logs
-}
-
-func loggedErrors(t *testing.T, logs *bytes.Buffer, msg string) []string {
+func loggedErrors(t *testing.T, logs *logging.Capture, msg string) []string {
 	t.Helper()
 	var errs []string
 	for line := range strings.Lines(logs.String()) {

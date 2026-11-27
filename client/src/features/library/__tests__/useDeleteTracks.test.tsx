@@ -64,6 +64,8 @@ function recordedUserActions(): Record<string, unknown>[] {
     .map((e) => e.payload);
 }
 
+const SERVER_FAULT = 500;
+
 describe('useDeleteTracks', () => {
   const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
 
@@ -274,6 +276,27 @@ describe('useDeleteTracks', () => {
   });
 
   describe('track mutation hooks — respond to the failure class, not one generic path', () => {
+    it('a bulk delete counts a track whose row is gone but whose audio file is orphaned as deleted', async () => {
+      const { queryClient, wrapper, dialogs } = setup(ports);
+      queryClient.setQueryData(TRACKS_KEY, {
+        pages: [page([track('a'), track('b'), track('c')])],
+        pageParams: [0],
+      });
+      mockDeleteTrack.mockImplementation((id) =>
+        id === 'a'
+          ? Promise.reject(new ApiError(SERVER_FAULT, 'orphaned', 'catalog.audio_orphaned'))
+          : Promise.resolve(),
+      );
+
+      const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+      act(() => result.current.mutate([asTrackId('a'), asTrackId('b')]));
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
+      expect(pagedIds(queryClient)).toEqual(['c']);
+      expect(dialogs.alerts).toEqual([]);
+    });
+
     it('a bulk delete counts tracks already gone (404) as deleted, not as failures', async () => {
       const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
@@ -788,6 +811,25 @@ describe('useDeleteTrack', () => {
   });
 
   describe('track mutation hooks — respond to the failure class, not one generic path', () => {
+    it('a delete answered with an orphaned audio file keeps the track removed and shows no failure', async () => {
+      const { queryClient, wrapper, dialogs } = setup(ports);
+      queryClient.setQueryData(TRACKS_KEY, {
+        pages: [page([track('t1'), track('t2')])],
+        pageParams: [0],
+      });
+      mockDeleteTrack.mockRejectedValue(
+        new ApiError(SERVER_FAULT, 'orphaned', 'catalog.audio_orphaned'),
+      );
+
+      const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+      act(() => result.current.mutate(asTrackId('t2')));
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(pagedIds(queryClient)).toEqual(['t1']);
+      expect(dialogs.alerts).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
     it('a delete answered 404 keeps the track removed and shows no failure', async () => {
       const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {

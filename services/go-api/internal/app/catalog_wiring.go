@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"fmt"
 	"log/slog"
@@ -98,11 +99,11 @@ func (a *application) wireAudioSources(
 	tap *monitoring.EventTap,
 	disc *search.Discovery,
 ) (audioSourcesStaging, error) {
-	audioStore, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default())
+	audioStore, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}
-	trackRepo := library.NewPostgresTrackRepository(a.pool)
+	trackRepo := library.NewPostgresTrackRepository(a.pool, library.NewDBCallMetrics(a.metrics))
 	sources, tools, err := a.liveTiers(ctx, transport, audioStore)
 	if err != nil {
 		return audioSourcesStaging{}, err
@@ -114,7 +115,8 @@ func (a *application) wireAudioSources(
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
-		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, download.NewPostgresUpgradeStore(a.pool)),
+		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, download.NewPostgresUpgradeStore(a.pool), ids.Real),
+		scheduler:      library.NoopAcquisitionScheduler(),
 		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      ytmCanary,
@@ -145,7 +147,7 @@ func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring
 		return downloadsetup.Deps{}, fmt.Errorf("wire recording resolver: %w", err)
 	}
 	return downloadsetup.Deps{
-		Config: a.cfg, Pool: a.pool, Transport: transport, Events: tap, Recording: recording, Ledger: staging.ledger, AudioStore: staging.audioStore,
+		Config: a.cfg, Pool: a.pool, DBMetrics: library.NewDBCallMetrics(a.metrics), Transport: transport, Events: tap, Recording: recording, Ledger: staging.ledger, AudioStore: staging.audioStore,
 		Sources: sources, Verification: tools,
 	}, nil
 }
@@ -155,17 +157,17 @@ func (a *application) wireCatalogServices(
 	featuredBridge library.FeaturedArtistResolver,
 	audio audioSourcesStaging,
 ) (catalogServicesStaging, error) {
-	catalogTrackRepo := library.NewPostgresCatalogTrackRepository(a.pool)
-	playlistRepo := library.NewPostgresPlaylistRepository(a.pool)
-	orphanedAudio := library.NewPostgresOrphanedAudioRepository(a.pool)
-	audioStoreMetrics := library.NewExpvarAudioStoreMetrics()
-	library.SetDBCallMetrics(library.NewExpvarDBCallMetrics())
+	dbMetrics := library.NewDBCallMetrics(a.metrics)
+	catalogTrackRepo := library.NewPostgresCatalogTrackRepository(a.pool, dbMetrics)
+	playlistRepo := library.NewPostgresPlaylistRepository(a.pool, dbMetrics)
+	orphanedAudio := library.NewPostgresOrphanedAudioRepository(a.pool, dbMetrics)
+	audioStoreMetrics := library.NewAudioStoreMetrics(a.metrics)
 
-	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, addTrackScheduler(audio.scheduler), clock.Now)
+	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, audio.scheduler, clock.Now, ids.Real)
 	if err != nil {
 		return catalogServicesStaging{}, fmt.Errorf("build the add-track service: %w", err)
 	}
-	playlistLifecycleSvc, err := library.NewPlaylistLifecycleService(playlistRepo, tap, clock.Now)
+	playlistLifecycleSvc, err := library.NewPlaylistLifecycleService(playlistRepo, tap, clock.Now, ids.Real)
 	if err != nil {
 		return catalogServicesStaging{}, fmt.Errorf("build the playlist lifecycle service: %w", err)
 	}
@@ -186,16 +188,9 @@ func (a *application) wireCatalogServices(
 		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, clock.Now),
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, addTrackScheduler(audio.scheduler), audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
+		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, audio.scheduler, audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
 		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, clock.Now, audioStoreMetrics),
 	}, nil
-}
-
-func addTrackScheduler(scheduler library.AcquisitionScheduler) library.AcquisitionScheduler {
-	if scheduler == nil {
-		return library.NoopAcquisitionScheduler()
-	}
-	return scheduler
 }
 
 func (a *application) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {

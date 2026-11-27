@@ -2,6 +2,7 @@ package id3
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/bogem/id3v2/v2"
 )
+
+const id3v24 = 4
 
 var ErrUnsupportedContainer = errors.New("id3: only .mp3 files can be tagged")
 
@@ -31,7 +34,7 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 	defer func() { _ = tag.Close() }()
 
 	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
-	tag.SetVersion(4)
+	tag.SetVersion(id3v24)
 
 	tag.SetTitle(tags.Title)
 	tag.SetArtist(tags.Artist)
@@ -60,6 +63,6 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 		return fmt.Errorf("save tags: %w", err)
 	}
 
-	slog.InfoContext(ctx, "id3_tags_written", "path", filePath)
+	slog.InfoContext(ctx, "id3_tags_written", logging.KeyPath, filePath)
 	return nil
 }

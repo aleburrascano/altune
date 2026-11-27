@@ -2,6 +2,7 @@ package audiofiles_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -9,13 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestFromConfigScopesKeysWhenPrefixSet(t *testing.T) {
 	dir := t.TempDir()
-	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -46,7 +48,7 @@ func TestFromConfigFailsWhenOCIConfigIsBroken(t *testing.T) {
 		MusicDir:       t.TempDir(),
 	}
 
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err == nil {
 		t.Fatalf("broken OCI config must not fall back to a local store, got %v", store)
 	}
@@ -69,7 +71,7 @@ func TestFromConfigRejectsMisconfiguration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := library.NewAudioStoreFromConfig(tt.cfg, slog.Default())
+			_, err := library.NewAudioStoreFromConfig(tt.cfg, slog.Default(), librarytest.DiscardFSCallMetrics())
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("want error naming %q, got %v", tt.want, err)
 			}
@@ -79,7 +81,7 @@ func TestFromConfigRejectsMisconfiguration(t *testing.T) {
 
 func TestFromConfig_MusicDirTimeoutCapsAStalledOpenWithoutACallerDeadline(t *testing.T) {
 	dir := t.TempDir()
-	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir, MusicDirTimeout: 100 * time.Millisecond}, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir, MusicDirTimeout: 100 * time.Millisecond}, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -96,9 +98,15 @@ func TestFromConfig_MusicDirTimeoutCapsAStalledOpenWithoutACallerDeadline(t *tes
 	}
 }
 
+type countingFSCallMetrics struct{ refused, abandoned atomic.Int64 }
+
+func (m *countingFSCallMetrics) FSCallRefused()   { m.refused.Add(1) }
+func (m *countingFSCallMetrics) FSCallAbandoned() { m.abandoned.Add(1) }
+
 func TestFromConfig_AStalledMountRefusesNewCallsInsteadOfPilingUpGoroutines(t *testing.T) {
 	dir := t.TempDir()
-	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir, MusicDirTimeout: 50 * time.Millisecond}, slog.Default())
+	metrics := &countingFSCallMetrics{}
+	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir, MusicDirTimeout: 50 * time.Millisecond}, slog.Default(), metrics)
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -135,6 +143,22 @@ func TestFromConfig_AStalledMountRefusesNewCallsInsteadOfPilingUpGoroutines(t *t
 	if timedOut != library.MaxInFlightFilesystemCalls || refused != callers-library.MaxInFlightFilesystemCalls {
 		t.Fatalf("timed out %d and refused %d, want %d timed out and %d refused", timedOut, refused, library.MaxInFlightFilesystemCalls, callers-library.MaxInFlightFilesystemCalls)
 	}
+	if got := metrics.refused.Load(); got != int64(refused) {
+		t.Errorf("refused-call metric = %d, want %d", got, refused)
+	}
+	if got := metrics.abandoned.Load(); got != int64(timedOut) {
+		t.Errorf("abandoned-call metric = %d, want %d", got, timedOut)
+	}
+}
+
+func TestNewFilesystemAudioStore_RefusesNilFSCallMetrics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("construction without fs call metrics succeeded, want a panic")
+		}
+	}()
+
+	library.NewFilesystemAudioStore(t.TempDir(), nil)
 }
 
 func TestFromConfig_AnUnsetMusicDirTimeoutKeepsTheDefaultCap(t *testing.T) {
@@ -142,7 +166,7 @@ func TestFromConfig_AnUnsetMusicDirTimeoutKeepsTheDefaultCap(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "song.opus"), []byte("audio"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir}, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir}, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -178,7 +202,7 @@ func TestFromConfig_AMisconfiguredStoreFailsFastNamingWhatIsMissing(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store, err := library.NewAudioStoreFromConfig(tt.cfg, slog.Default())
+			store, err := library.NewAudioStoreFromConfig(tt.cfg, slog.Default(), librarytest.DiscardFSCallMetrics())
 			if err == nil {
 				t.Fatalf("expected startup error for misconfigured audio store, got store=%v", store)
 			}
@@ -196,7 +220,7 @@ func TestFromConfig_AMisconfiguredStoreFailsFastNamingWhatIsMissing(t *testing.T
 
 func TestFromConfig_AnEmptyKeyPrefixLeavesTheStoreUnscoped(t *testing.T) {
 	dir := t.TempDir()
-	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir}, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir}, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

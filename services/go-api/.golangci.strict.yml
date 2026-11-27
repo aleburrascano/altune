@@ -43,8 +43,17 @@ linters:
     - depguard
     - importas
     - contextcheck
+    - containedctx
+    - mnd
 
   settings:
+    mnd:
+      checks: [argument, case, condition, operation, return]
+      ignored-numbers: ["0", "1", "2", "10", "100", "1000"]
+      ignored-functions:
+        - '^os\.(WriteFile|MkdirAll|Mkdir|OpenFile|Exit)$'
+      ignored-files:
+        - '(^|/)[a-z]*test/'
     importas:
       no-unaliased: false
       no-extra-aliases: false
@@ -52,7 +61,8 @@ linters:
         - pkg: net/http
           alias: http
     exhaustive:
-      default-signifies-exhaustive: true
+      default-signifies-exhaustive: false
+      ignore-enum-types: '^github\.com/tdewolff/parse/v2/(css|js)\.TokenType$'
     rowserrcheck:
       packages:
         - github.com/jackc/pgx/v5
@@ -84,6 +94,14 @@ linters:
               desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
             - pkg: github.com/redis
               desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+        core-logging:
+          list-mode: lax
+          files:
+            - "**/internal/**/core/**"
+            - "!$test"
+          deny:
+            - pkg: log/slog
+              desc: core returns data and its caller in service or an adapter logs it, so move the log line out of core
         driver:
           list-mode: lax
           files:
@@ -154,11 +172,16 @@ linters:
           msg: take the caller's ctx; a context root belongs to a main package (cmd, scripts), and work that outlives the request goes through background.Detach (internal/shared/background)
         - pattern: ^time\.(Now|Since|Until|After|AfterFunc|NewTimer|NewTicker|Tick)$
           msg: take the clock as a clock.Func parameter and read it through clock.Now at the composition root (internal/shared/clock), the one home for time
+        - pattern: ^uuid\.New\w*$
+          msg: take an ids.Source parameter and mint through it (internal/shared/ids), the one home for UUIDs, so tests can predict them with idstest.Sequence
+        - pattern: ^expvar\.(NewInt|NewFloat|NewString|NewMap|Publish)$
+          msg: count through the telemetry.Registry that internal/app creates and passes in (internal/shared/telemetry), the one metrics home
     revive:
       rules:
         - name: indent-error-flow
         - name: superfluous-else
         - name: deep-exit
+        - name: flag-parameter
     gocritic:
       enabled-tags:
         - diagnostic
@@ -184,12 +207,19 @@ linters:
           - errcheck
           - gocritic
           - revive
-          - forbidigo
           - noctx
+      - path: _test\.go
+        linters:
+          - forbidigo
+        text: 'use of `(http\.|os\.|exec\.|slog\.(Debug|Info|Warn|Error)|recover|sync\.WaitGroup|context\.|time\.)'
       - path: internal/shared/httpserver/
         linters:
           - forbidigo
         text: 'use of `(http\.\w+|recover)`'
+      - path: internal/shared/telemetry/stage\.go
+        linters:
+          - spancheck
+        text: span\.End
       - path: (^internal/platform/outbound/|/[^/]*test/)
         linters:
           - forbidigo
@@ -202,6 +232,10 @@ linters:
         linters:
           - forbidigo
         text: 'use of `time\.'
+      - path: (^internal/shared/ids/|/[^/]*test/|_test\.go$)
+        linters:
+          - forbidigo
+        text: 'use of `uuid\.'
       - path: ^(internal/shared/(config|dbtest)/|cmd/|scripts/)
         linters:
           - forbidigo

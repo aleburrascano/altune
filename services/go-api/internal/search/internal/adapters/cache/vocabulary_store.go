@@ -17,6 +17,7 @@ const (
 	vocabMetaPrefix = "discovery:vocab:v1:meta:"
 	memberSep       = "\x00"
 	vocabEntryTTL   = 90 * 24 * time.Hour
+	memberFields    = 3
 )
 
 type NormalizeFunc func(string) string
@@ -81,8 +82,8 @@ func encodeMember(norm, term, kind string) string {
 }
 
 func decodeMember(member string) (norm, term, kind string) {
-	parts := strings.SplitN(member, memberSep, 3)
-	if len(parts) != 3 {
+	parts := strings.SplitN(member, memberSep, memberFields)
+	if len(parts) != memberFields {
 		return "", "", ""
 	}
 	return parts[0], parts[1], parts[2]

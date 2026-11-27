@@ -6,8 +6,12 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/logging"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -123,6 +127,66 @@ func TestSelectStep_OutageDoesNotLeakIntoTheNextRun(t *testing.T) {
 	}
 }
 
+func TestSelectStep_LogsOneEvaluationPerScoredCandidate(t *testing.T) {
+	buf := logging.CaptureJSON(t, slog.LevelInfo)
+	scored := ports.AudioCandidate{
+		Source: "youtube", Title: "Song", Channel: "Artist", Duration: 200, ViewCount: 50,
+		URL: "https://youtube.com/watch?v=scored11111", Categories: []string{"Music"},
+	}
+	topic := scored
+	topic.Channel = "Artist - Topic"
+	topic.URL = "https://youtube.com/watch?v=topic111111"
+	drm := ports.AudioCandidate{Title: "Song", URL: "sc:drm", Unplayable: ports.UnplayableDRM}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Song (feat. Guest)", Artist: "Artist", CatalogDuration: 200}}
+	searched, err := service.NewSearchStep(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{scored, topic, drm}}).Execute(context.Background(), ac, service.PipelineStart{})
+	if err != nil {
+		t.Fatalf("search Execute() = %v", err)
+	}
+	buf.Reset()
+
+	_, err = service.NewSelectStep().Execute(context.Background(), ac, searched)
+	if err != nil {
+		t.Fatalf("Execute() = %v, want the scored candidate selected", err)
+	}
+
+	byChannel := map[string]map[string]any{}
+	for line := range strings.Lines(buf.String()) {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("unparseable log line %q: %v", line, err)
+		}
+		if record["msg"] == "candidate_evaluated" {
+			byChannel[record["candidate_channel"].(string)] = record
+		}
+	}
+	if len(byChannel) != 2 {
+		t.Fatalf("logged evaluations for %d channels, want 2 (the DRM candidate is refused before scoring)", len(byChannel))
+	}
+	common := map[string]any{
+		"track_id": "t1", "source": "youtube", "candidate_title": "Song",
+		"candidate_duration": float64(200), "candidate_views": float64(50),
+		"qualifier_distance": float64(0), "artist_match": true, "feature_match": false,
+		"explicit": false, "track_artist": "Artist",
+	}
+	for channel, isTopic := range map[string]bool{"Artist": false, "Artist - Topic": true} {
+		record := byChannel[channel]
+		for k, v := range common {
+			if record[k] != v {
+				t.Errorf("%s: %s = %v, want %v", channel, k, record[k], v)
+			}
+		}
+		if record["is_topic"] != isTopic {
+			t.Errorf("%s: is_topic = %v, want %v", channel, record["is_topic"], isTopic)
+		}
+		if _, ok := record["identity_score"].(float64); !ok {
+			t.Errorf("%s: identity_score = %v, want a number", channel, record["identity_score"])
+		}
+		if _, ok := record["metadata_rank"].(float64); !ok {
+			t.Errorf("%s: metadata_rank = %v, want a number", channel, record["metadata_rank"])
+		}
+	}
+}
+
 func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t *testing.T) {
 	storedArtTrack := ports.AudioCandidate{
 		Title: "Phone (Interlude)", URL: "https://music.youtube.com/watch?v=TB0z2HVFxEE",
@@ -138,7 +202,7 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 	_ = runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
 
 	seen := fallback.seen()
-	if len(seen) != 1 || !seen[0].FallbackOnly {
+	if len(seen) != 1 || seen[0].Tier != ports.TierFallbackOnly {
 		t.Fatalf("fallback requests = %+v, want one fallback-only search after the first tier held only the stored file", seen)
 	}
 }

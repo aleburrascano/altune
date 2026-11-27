@@ -1,11 +1,12 @@
 package handler
 
 import (
-	audioservice "altune/go-api/internal/library/internal/core/audio"
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	audioservice "altune/go-api/internal/library/internal/service/audio"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
@@ -58,17 +59,22 @@ func WithStreamWriteIdleTimeout(idle time.Duration) func(*StreamHandler) {
 }
 
 func (h *StreamHandler) Routes(r chi.Router) {
+	h.StreamRoute(r)
+	h.RecoverRoute(r)
+}
+
+func (h *StreamHandler) StreamRoute(r chi.Router) {
 	r.With(h.limiter).Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
+}
+
+func (h *StreamHandler) RecoverRoute(r chi.Router) {
 	r.With(h.limiter).Post("/tracks/{trackId}/audio/recover", h.HandleRecover)
 }
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	start := h.now()
 	w = httpserver.ExtendWriteDeadlineOnWrite(h.now, w, h.writeIdleTimeout)
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, ok := httpserver.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
 	if !ok {
@@ -83,7 +89,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	defer func() { _ = out.Reader.Close() }()
 
 	slog.InfoContext(r.Context(), "stream.serving",
-		"track_id", trackId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"size_bytes", out.Size,
 		"setup_ms", h.now().Sub(start).Milliseconds(),
 	)
@@ -98,22 +104,21 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 func setAudioBodyHeaders(w http.ResponseWriter, audioRef string) {
 	w.Header().Set("Content-Type", ports.AudioContentType(audioRef))
 	w.Header().Set("Cache-Control", "private")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
 func logStreamOutcome(ctx context.Context, trackId domain.TrackId, body *countedAudioBody, elapsed time.Duration) {
 	outcome := streamOutcome(ctx, body.readErr)
 	attrs := []any{
-		"track_id", trackId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"outcome", outcome,
-		"bytes", body.read,
+		logging.KeyBytes, body.read,
 		"total_ms", elapsed.Milliseconds(),
 	}
 	if outcome != streamOutcomeError {
 		slog.InfoContext(ctx, "stream.served", attrs...)
 		return
 	}
-	slog.WarnContext(ctx, "stream.served", append(attrs, "error", body.readErr)...)
+	slog.WarnContext(ctx, "stream.served", append(attrs, logging.KeyError, body.readErr)...)
 }
 
 const (
@@ -155,10 +160,7 @@ func (b *countedAudioBody) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, ok := httpserver.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
 	if !ok {

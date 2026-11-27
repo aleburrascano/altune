@@ -3,11 +3,6 @@ package candidateranking_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/candidateranking"
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
-	"log/slog"
 	"strings"
 	"testing"
 )
@@ -17,7 +12,8 @@ func song(title, artist string, length float64) candidateranking.Track {
 }
 
 func rank(track candidateranking.Track, candidates ...download.AudioCandidate) ([]download.AudioCandidate, []candidateranking.Refusal) {
-	return candidateranking.Rank(context.Background(), track, candidates)
+	ranked, refused, _ := candidateranking.Rank(track, candidates)
+	return ranked, refused
 }
 
 func best(track candidateranking.Track, candidates ...download.AudioCandidate) *download.AudioCandidate {
@@ -36,29 +32,19 @@ func urls(candidates []download.AudioCandidate) []string {
 	return out
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
 func evaluations(t *testing.T, track candidateranking.Track, candidates ...download.AudioCandidate) []map[string]any {
 	t.Helper()
-	buf := captureLog(t)
-	rank(track, candidates...)
-	var records []map[string]any
-	lines := bufio.NewScanner(buf)
-	for lines.Scan() {
-		var record map[string]any
-		if err := json.Unmarshal(lines.Bytes(), &record); err != nil {
-			t.Fatalf("unparseable log line %q: %v", lines.Text(), err)
-		}
-		if record["msg"] == "candidate_evaluated" {
-			records = append(records, record)
-		}
+	_, _, evaluated := candidateranking.Rank(track, candidates)
+	records := make([]map[string]any, 0, len(evaluated))
+	for _, ev := range evaluated {
+		records = append(records, map[string]any{
+			"identity_score":     ev.IdentityScore,
+			"metadata_rank":      ev.MetadataRank,
+			"qualifier_distance": float64(ev.QualifierDistance),
+			"is_topic":           ev.IsTopic,
+			"artist_match":       ev.ArtistMatch,
+			"feature_match":      ev.FeatureMatch,
+		})
 	}
 	return records
 }
@@ -67,7 +53,7 @@ func evaluation(t *testing.T, track candidateranking.Track, c download.AudioCand
 	t.Helper()
 	records := evaluations(t, track, c)
 	if len(records) != 1 {
-		t.Fatalf("logged %d candidate_evaluated records for %q, want 1", len(records), c.Title)
+		t.Fatalf("evaluated %d candidates for %q, want 1", len(records), c.Title)
 	}
 	return records[0]
 }

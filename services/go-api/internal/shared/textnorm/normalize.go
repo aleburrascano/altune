@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mozillazg/go-unidecode"
 	"golang.org/x/text/unicode/norm"
@@ -15,20 +16,18 @@ var (
 )
 
 func NormalizeForMatch(text string) string {
-	return normalize(text, true)
+	return finishNormalize(bracketSuffixRe.ReplaceAllString(foldCase(text), " "))
 }
 
 func NormalizeForIdentity(text string) string {
-	return normalize(text, false)
+	return finishNormalize(foldCase(text))
 }
 
-func normalize(text string, dropBrackets bool) string {
-	s := norm.NFKC.String(text)
-	s = strings.ToLower(s)
-	s = stripDiacritics(s)
-	if dropBrackets {
-		s = bracketSuffixRe.ReplaceAllString(s, " ")
-	}
+func foldCase(text string) string {
+	return stripDiacritics(strings.ToLower(norm.NFKC.String(text)))
+}
+
+func finishNormalize(s string) string {
 	s = strings.ReplaceAll(s, "&", " and ")
 	s = stripApostrophes(s)
 	s = stripSymbols(s)
@@ -68,7 +67,7 @@ func stripSymbols(s string) string {
 }
 
 func isWordContent(r rune) bool {
-	if r < 128 {
+	if r < utf8.RuneSelf {
 		return isASCIIWordChar(r) || isASCIIWhitespace(r)
 	}
 	return unicode.IsLetter(r) || unicode.IsNumber(r)

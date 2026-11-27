@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"altune/go-api/internal/download/internal/core/audioquality"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/database"
@@ -50,10 +51,19 @@ WHERE t.acquisition_status = 'ready'
 		SELECT count(*) FROM acquisition_jobs q
 		WHERE q.job_kind = 'upgrade' AND q.available_at IS NOT NULL
 	) < $4
-ORDER BY COALESCE(t.acquisition_evidence->>'grade', 'D') DESC,
+ORDER BY array_position($7::text[], COALESCE(t.acquisition_evidence->>'grade', 'D')) ASC NULLS FIRST,
 	(s.evidence->>'upgrade_tried_at')::timestamptz ASC NULLS FIRST,
 	t.id
 LIMIT $1`
+
+func worstFirstGrades() []string {
+	grades := audioquality.WorstFirst()
+	names := make([]string, len(grades))
+	for i, g := range grades {
+		names[i] = string(g)
+	}
+	return names
+}
 
 func (s *PostgresUpgradeStore) Candidates(ctx context.Context, selection ports.UpgradeSelection) ([]ports.UpgradeCandidate, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
@@ -61,30 +71,25 @@ func (s *PostgresUpgradeStore) Candidates(ctx context.Context, selection ports.U
 
 	rows, err := s.pool.Query(ctx, upgradeCandidatesSQL,
 		selection.Limit, selection.Generation, selection.RetryAfter.Seconds(), selection.MaxQueued, selection.CheckInPlace,
-		selection.LowBitrateFloorKbps)
+		selection.LowBitrateFloorKbps, worstFirstGrades())
 	if err != nil {
 		return nil, fmt.Errorf("select upgrade candidates: %w", err)
 	}
 	defer rows.Close()
-	return collectUpgradeCandidates(rows)
-}
-
-func collectUpgradeCandidates(rows pgx.Rows) ([]ports.UpgradeCandidate, error) {
-	var candidates []ports.UpgradeCandidate
-	for rows.Next() {
-		var trackID, userID uuid.UUID
-		var grade string
-		if err := rows.Scan(&trackID, &userID, &grade); err != nil {
-			return nil, fmt.Errorf("scan upgrade candidate: %w", err)
-		}
-		candidates = append(candidates, ports.UpgradeCandidate{
-			TrackID: ids.TrackIdFromUUID(trackID), UserID: ids.NewUserId(userID), Grade: grade,
-		})
-	}
-	if err := rows.Err(); err != nil {
+	candidates, err := pgx.CollectRows(rows, scanUpgradeCandidate)
+	if err != nil {
 		return nil, fmt.Errorf("read upgrade candidates: %w", err)
 	}
 	return candidates, nil
+}
+
+func scanUpgradeCandidate(row pgx.CollectableRow) (ports.UpgradeCandidate, error) {
+	var trackID, userID uuid.UUID
+	var grade string
+	if err := row.Scan(&trackID, &userID, &grade); err != nil {
+		return ports.UpgradeCandidate{}, err
+	}
+	return ports.UpgradeCandidate{TrackID: ids.TrackIdFromUUID(trackID), UserID: ids.NewUserId(userID), Grade: grade}, nil
 }
 
 const noteUpgradeAttemptSQL = `
@@ -230,7 +235,7 @@ SET rejected_source_keys = $2,
 	evidence = CASE WHEN $3::boolean THEN '{}'::jsonb ELSE evidence END
 WHERE track_id = $1`
 
-func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, rejectedSourceKeys []string, resetEvidence bool) error {
+func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, rejectedSourceKeys []string, evidence ports.EvidenceFate) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
@@ -249,7 +254,7 @@ func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID id
 			return fmt.Errorf("lock upgrade state: %w", err)
 		}
 		merged := ports.AppendRejectedSourceKeys(existing, rejectedSourceKeys)
-		if _, err := tx.Exec(ctx, settleUpgradeStateSQL, trackID.UUID(), merged, resetEvidence); err != nil {
+		if _, err := tx.Exec(ctx, settleUpgradeStateSQL, trackID.UUID(), merged, evidence == ports.ResetEvidence); err != nil {
 			return fmt.Errorf("settle upgrade state: %w", err)
 		}
 		return nil

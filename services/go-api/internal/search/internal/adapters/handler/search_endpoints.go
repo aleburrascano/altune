@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/search/internal/service/useractivity"
 	apierror "altune/go-api/internal/shared/apierror"
@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,11 +19,6 @@ import (
 )
 
 func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
-	_, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-
 	q, ok := textParam(w, r, "q")
 	if !ok {
 		return
@@ -32,7 +28,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit, ok := parseLimit(w, r, "limit", 5, 10, resetToDefault)
+	limit, ok := parseLimit(w, r, "limit", suggestDefaultLimit, suggestMaxLimit, resetToDefault)
 	if !ok {
 		return
 	}
@@ -55,10 +51,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	q := r.URL.Query().Get("q")
 	if strings.TrimSpace(q) == "" {
@@ -66,7 +59,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit, ok := limitOrDefault(w, r, "limit", 20)
+	limit, ok := limitOrDefault(w, r, "limit", searchDefaultLimit)
 	if !ok {
 		return
 	}
@@ -130,12 +123,20 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		Offset:         result.Offset,
 		HasMore:        result.HasMore,
 	})
-	h.warmUnreleased(result.Results)
+	h.warmUnreleased(r.Context(), result.Results)
 }
 
-const warmArtistLimit = 3
+const (
+	warmArtistLimit = 3
 
-func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
+	suggestDefaultLimit = 5
+	suggestMaxLimit     = 10
+	searchDefaultLimit  = 20
+	historyDefaultLimit = 10
+	historyMaxLimit     = 100
+)
+
+func (h *DiscoveryHandler) warmUnreleased(ctx context.Context, results []domain.SearchResult) {
 	var artists []unreleased.ArtistToRefresh
 	for _, res := range results {
 		if res.Kind != domain.ResultKindArtist || len(res.Sources) == 0 {
@@ -151,16 +152,13 @@ func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
 			break
 		}
 	}
-	h.unreleasedSvc.Warm(artists)
+	h.unreleasedSvc.Warm(ctx, artists)
 }
 
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
-	limit, ok := parseLimit(w, r, "limit", 10, 100, clampToMax)
+	limit, ok := parseLimit(w, r, "limit", historyDefaultLimit, historyMaxLimit, clampToMax)
 	if !ok {
 		return
 	}
@@ -187,10 +185,7 @@ type RecordSearchHistoryRequest struct {
 }
 
 func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var req RecordSearchHistoryRequest
 	if !httpserver.DecodeJSONWithCode(w, r, &req, apierror.CodeDiscoveryInvalidBody) {
@@ -205,15 +200,11 @@ func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *h
 }
 
 func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
 		slog.WarnContext(r.Context(), "clear search history failed",
-			"action", history.ClearSearchHistoryAction,
-			"user_id", userId.String())
+			"action", history.ClearSearchHistoryAction)
 		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", history.ClearSearchHistoryAction, err))
 		return
 	}
@@ -222,18 +213,15 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 }
 
 func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var req DiscoveryEventRequest
 	if !httpserver.DecodeJSONWithCode(w, r, &req, apierror.CodeDiscoveryInvalidBody) {
 		return
 	}
 
-	eventType := domain.ParseEventType(req.Type)
-	if eventType == domain.EventTypeUnknown {
+	eventType := domain.ParseInteractionType(req.Type)
+	if eventType == domain.InteractionTypeUnknown {
 		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeDiscoveryInvalidEventType, "invalid event type"))
 		return
 	}
@@ -261,7 +249,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.EventType, userId ids.UserId, req DiscoveryEventRequest) {
+func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.InteractionType, userId ids.UserId, req DiscoveryEventRequest) {
 	h.clientEvents.Emit(r.Context(), telemetry.ClientEvent{
 		Type:       eventType.String(),
 		EventID:    req.EventID,

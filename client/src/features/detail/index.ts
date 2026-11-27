@@ -70,6 +70,7 @@ export {
   saveControlState,
   saveControlText,
   saveDisplayState,
+  saveFailureBanner,
   saveIdempotencyKey,
   toCreateTrackRequest,
 } from '@features/detail/core/saveTrack';

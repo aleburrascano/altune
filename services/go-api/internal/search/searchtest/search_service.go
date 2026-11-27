@@ -1,14 +1,15 @@
 package searchtest
 
 import (
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/service/artwork"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/query"
 	"altune/go-api/internal/search/internal/service/vocabulary"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
 	"testing"
 )
 
@@ -88,7 +89,7 @@ func NewCorrection(t testing.TB, vocab ports.SpellingHintsReader) *vocabulary.Co
 
 func NewHistoryRecorder(t testing.TB, repo ports.HistoryWriter) *history.RecordSearchHistoryService {
 	t.Helper()
-	svc, err := history.NewRecordSearchHistoryService(repo, clock.Now)
+	svc, err := history.NewRecordSearchHistoryService(repo, clock.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("history.NewRecordSearchHistoryService: %v", err)
 	}

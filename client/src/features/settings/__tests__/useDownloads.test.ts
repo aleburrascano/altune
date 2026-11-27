@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
-import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline';
+import { pinnedBytes, usePinnedStore, type PinnedEntry } from '@shared/offline';
 import {
   useDownloadStats,
   useRemoveDownloads,
@@ -32,7 +32,7 @@ function seedReady(...trackIds: string[]): void {
 }
 
 function currentStats(): ReturnType<typeof downloadStats> {
-  return downloadStats(usePinnedStore.getState().entries, pinnedByteTotal());
+  return downloadStats(usePinnedStore.getState().entries, pinnedBytes());
 }
 
 const clearHistory: ClearHistoryState = {
@@ -69,7 +69,7 @@ describe('download count and size stay in agreement when a file delete fails', (
     usePinnedStore.getState().unpinAll();
 
     const stats = currentStats();
-    expect(pinnedByteTotal()).toBeGreaterThan(0);
+    expect(pinnedBytes()).toBeGreaterThan(0);
     expect(stats.downloadCount).toBe(1);
     expect(stats.usageLabel).toBe('1 track');
     expect(removeDownloadsRowHidden()).toBe(false);
@@ -84,7 +84,7 @@ describe('download count and size stay in agreement when a file delete fails', (
     usePinnedStore.getState().unpinAll();
 
     expect(usePinnedStore.getState().entries).toEqual({});
-    expect(pinnedByteTotal()).toBe(0);
+    expect(pinnedBytes()).toBe(0);
     expect(removeDownloadsRowHidden()).toBe(true);
   });
 

@@ -1,6 +1,7 @@
 package applemusic
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/itunes"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
@@ -125,10 +126,10 @@ func (a *AppleMusicAdapter) fetchAlbumTracks(ctx context.Context, token, albumID
 }
 
 func (a *AppleMusicAdapter) getCatalogJSON(ctx context.Context, token, u string, dst any, what string) (int, error) {
-	status, err := providerrequests.GetJSONWithStatus(ctx, a.client, u, dst,
-		providerrequests.WithHeader("Authorization", "Bearer "+token),
-		providerrequests.WithHeader("Origin", appleMusicOrigin),
-		providerrequests.WithHeader("User-Agent", appleMusicUserAgent))
+	status, err := outbound.GetJSONWithStatus(ctx, a.client, u, dst,
+		outbound.WithHeader("Authorization", "Bearer "+token),
+		outbound.WithHeader("Origin", appleMusicOrigin),
+		outbound.WithHeader("User-Agent", appleMusicUserAgent))
 	if err != nil && status == http.StatusOK {
 		return status, fmt.Errorf("decode %s: %w", what, err)
 	}
@@ -267,7 +268,10 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 		appleMusicArtworkURL(a.Artwork.URL, appleMusicArtworkSize),
 		domain.ProviderLink{Provider: domain.ProviderAppleMusic, ExternalID: al.ID, URL: a.URL},
 		extras)
-	r.RecordType = appleMusicRecordType(a.IsSingle)
+	r.RecordType = domain.RecordTypeAlbum
+	if a.IsSingle {
+		r.RecordType = domain.RecordTypeSingle
+	}
 	r.ReleaseDate = a.ReleaseDate
 	r.TrackCount = a.TrackCount
 	r.UPC = a.UPC
@@ -275,13 +279,6 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 		r.Explicit = domain.BoolPtr(true)
 	}
 	return r
-}
-
-func appleMusicRecordType(isSingle bool) domain.RecordType {
-	if isSingle {
-		return domain.RecordTypeSingle
-	}
-	return domain.RecordTypeAlbum
 }
 
 func mapAppleMusicArtist(ar appleMusicArtist) domain.SearchResult {

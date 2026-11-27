@@ -19,31 +19,31 @@ const AggregateEventRetention = aggregateEventRetention
 const writeOnlyEventRetention = 30 * 24 * time.Hour
 
 var eventRetention = []struct {
-	eventType domain.EventType
+	eventType domain.InteractionType
 	window    time.Duration
 }{
-	{domain.EventTypeSearchPerformed, aggregateEventRetention},
-	{domain.EventTypeResultClicked, aggregateEventRetention},
-	{domain.EventTypePlay, aggregateEventRetention},
-	{domain.EventTypeSkip, aggregateEventRetention},
-	{domain.EventTypeCompleted, aggregateEventRetention},
-	{domain.EventTypeLibraryAdd, aggregateEventRetention},
-	{domain.EventTypeWrongAlbum, aggregateEventRetention},
-	{domain.EventTypeResultsShown, writeOnlyEventRetention},
-	{domain.EventTypeSearchFailed, writeOnlyEventRetention},
-	{domain.EventTypeSearchDegraded, writeOnlyEventRetention},
-	{domain.EventTypePlaybackHealth, writeOnlyEventRetention},
-	{domain.EventTypeDetailHealth, writeOnlyEventRetention},
-	{domain.EventTypeAcquisitionUi, writeOnlyEventRetention},
-	{domain.EventTypeClientError, writeOnlyEventRetention},
-	{domain.EventTypeUserAction, writeOnlyEventRetention},
-	{domain.EventTypeFailureShown, writeOnlyEventRetention},
-	{domain.EventTypeSseReconnect, writeOnlyEventRetention},
-	{domain.EventTypeOutboxFlushFailed, writeOnlyEventRetention},
-	{domain.EventTypeDownloadFailed, writeOnlyEventRetention},
-	{domain.EventTypeAuthFailed, writeOnlyEventRetention},
-	{domain.EventTypeScreenView, writeOnlyEventRetention},
-	{domain.EventTypePlayStart, writeOnlyEventRetention},
+	{domain.InteractionTypeSearchPerformed, aggregateEventRetention},
+	{domain.InteractionTypeResultClicked, aggregateEventRetention},
+	{domain.InteractionTypePlay, aggregateEventRetention},
+	{domain.InteractionTypeSkip, aggregateEventRetention},
+	{domain.InteractionTypeCompleted, aggregateEventRetention},
+	{domain.InteractionTypeLibraryAdd, aggregateEventRetention},
+	{domain.InteractionTypeWrongAlbum, aggregateEventRetention},
+	{domain.InteractionTypeResultsShown, writeOnlyEventRetention},
+	{domain.InteractionTypeSearchFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeSearchDegraded, writeOnlyEventRetention},
+	{domain.InteractionTypePlaybackHealth, writeOnlyEventRetention},
+	{domain.InteractionTypeDetailHealth, writeOnlyEventRetention},
+	{domain.InteractionTypeAcquisitionUi, writeOnlyEventRetention},
+	{domain.InteractionTypeClientError, writeOnlyEventRetention},
+	{domain.InteractionTypeUserAction, writeOnlyEventRetention},
+	{domain.InteractionTypeFailureShown, writeOnlyEventRetention},
+	{domain.InteractionTypeSseReconnect, writeOnlyEventRetention},
+	{domain.InteractionTypeOutboxFlushFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeDownloadFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeAuthFailed, writeOnlyEventRetention},
+	{domain.InteractionTypeScreenView, writeOnlyEventRetention},
+	{domain.InteractionTypePlayStart, writeOnlyEventRetention},
 }
 
 func (r *PostgresEventStore) PruneEvents(ctx context.Context, now time.Time) (int64, error) {
@@ -62,7 +62,7 @@ func (r *PostgresEventStore) PruneEvents(ctx context.Context, now time.Time) (in
 func (r *PostgresEventStore) PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error) {
 	cutoff := now.UTC().Add(-discographyRetentionWindow)
 	tag, err := r.pool.Exec(ctx, pruneEventsByTypeSQL,
-		domain.EventTypeDiscographyObserved.String(), cutoff,
+		domain.InteractionTypeDiscographyObserved.String(), cutoff,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("prune discography events: %w", err)

@@ -1,8 +1,12 @@
 package download
 
-import service "altune/go-api/internal/download/service"
+import (
+	"altune/go-api/internal/download/internal/core/ports"
+	service "altune/go-api/internal/download/service"
+)
 
 type (
+	AcquisitionJob                 = ports.AcquisitionJob
 	AcquireTrackAudioService       = service.AcquireTrackAudioService
 	BackgroundAcquisitionScheduler = service.BackgroundAcquisitionScheduler
 	StagePorts                     = service.StagePorts
@@ -17,7 +21,6 @@ var (
 	MustDirectDeleteOrphans               = service.MustDirectDeleteOrphans
 	MustNewAcquireTrackAudioService       = service.MustNewAcquireTrackAudioService
 	MustNewBackgroundAcquisitionScheduler = service.MustNewBackgroundAcquisitionScheduler
-	NewProcessRoot                        = service.NewProcessRoot
 	InMemoryQueue                         = service.InMemoryQueue
 	QueueOf                               = service.QueueOf
 	MustUpgradeLaneOf                     = service.MustUpgradeLaneOf
@@ -32,7 +35,6 @@ var (
 	WithProvenMaxBitErrorRate             = service.WithProvenMaxBitErrorRate
 	WithSchedulerPaused                   = service.WithSchedulerPaused
 	WithSupersededAudioGrace              = service.WithSupersededAudioGrace
-	WithVerificationStatus                = service.WithVerificationStatus
 )
 
 type SchedulerPorts = service.SchedulerPorts

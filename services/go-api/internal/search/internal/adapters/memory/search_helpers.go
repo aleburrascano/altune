@@ -7,8 +7,6 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type FakeProvider struct {
@@ -37,13 +35,15 @@ func (p *FakeProvider) SupportedKinds() map[domain.ResultKind]bool {
 	}
 }
 
+const fakeQueryLimit = 20
+
 func NewQuery(t TB, raw string) *domain.SearchQuery {
 	t.Helper()
 	q, err := domain.NewSearchQuery(raw, map[domain.ResultKind]bool{
 		domain.ResultKindTrack:  true,
 		domain.ResultKindAlbum:  true,
 		domain.ResultKindArtist: true,
-	}, 20)
+	}, fakeQueryLimit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func NewQuery(t TB, raw string) *domain.SearchQuery {
 }
 
 func NewUser() ids.UserId {
-	return ids.NewUserId(uuid.New())
+	return ids.Source(ids.Real).NewUserId()
 }
 
 type PanickingEventStore struct{ Calls int32 }

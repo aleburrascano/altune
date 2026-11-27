@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
@@ -44,19 +45,19 @@ func (a supersededAudio) handToRecorder(ctx context.Context, userId ids.UserId, 
 		return
 	}
 	slog.InfoContext(ctx, "acquisition.replace_superseded_audio_released",
-		"track_id", trackId.String(), "audio_ref", old, "grace", a.grace.String())
+		logging.KeyTrackID, trackId.String(), "audio_ref", old, "grace", a.grace.String())
 }
 
 func (a supersededAudio) servedByAnotherTrack(ctx context.Context, trackId ids.TrackId, audioRef string) bool {
 	inUse, err := a.ledger.AudioRefInUse(ctx, audioRef, trackId)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_audio_usage_unknown",
-			"track_id", trackId.String(), "audio_ref", audioRef, "error", redact.LogError(err))
+			logging.KeyTrackID, trackId.String(), "audio_ref", audioRef, logging.KeyError, redact.LogError(err))
 		return true
 	}
 	if inUse {
 		slog.InfoContext(ctx, "acquisition.replace_kept_shared_audio",
-			"track_id", trackId.String(), "audio_ref", audioRef)
+			logging.KeyTrackID, trackId.String(), "audio_ref", audioRef)
 	}
 	return inUse
 }

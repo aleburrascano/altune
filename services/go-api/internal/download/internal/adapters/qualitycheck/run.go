@@ -3,9 +3,9 @@ package qualitycheck
 import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
-	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/musicbrainzmatch"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
@@ -97,9 +97,9 @@ func (r recordedRerecording) FindRerecording(_ context.Context, q ports.Rerecord
 
 func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, track ports.TrackSnapshot) error {
 	if kase.Stored != nil {
-		return svc.ExecuteReplace(ctx, track.UserId, track.ID)
+		return svc.ExecuteReplace(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 	}
-	return svc.Execute(ctx, track.UserId, track.ID)
+	return svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }
 
 func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
@@ -125,7 +125,7 @@ func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
 		return track
 	}
 	ref := storedAudioRef
-	track.Status, track.AudioRef = ports.TrackReady, &ref
+	track.Status, track.AudioRef, track.Streamable = ports.TrackReady, &ref, true
 	if length := kase.Stored.Duration; length > 0 {
 		track.StoredDurationSeconds = &length
 	}
@@ -360,23 +360,24 @@ func savedTrackOf(ledger *inmemoryledger.Ledger, id ids.TrackId) SavedTrack {
 	if len(saved.Evidence) > 0 && json.Unmarshal(saved.Evidence, &evidence) != nil {
 		evidence.ISRCSource = unreadableEvidence
 	}
-	return SavedTrack{
-		ISRC:            derefOrZero(saved.ISRC),
-		ISRCSource:      evidence.ISRCSource,
-		Provenance:      string(saved.Provenance),
-		DurationSeconds: derefOrZero(saved.StoredDurationSeconds),
-		RejectedKeys:    saved.RejectedSourceKeys,
-		Title:           saved.Title,
-		Album:           saved.Album,
-		Year:            derefOrZero(saved.Year),
-		CatalogMBID:     derefOrZero(saved.CatalogMBID),
+	out := SavedTrack{
+		ISRCSource:   evidence.ISRCSource,
+		Provenance:   string(saved.Provenance),
+		RejectedKeys: saved.RejectedSourceKeys,
+		Title:        saved.Title,
+		Album:        saved.Album,
 	}
-}
-
-func derefOrZero[T any](p *T) T {
-	var zero T
-	if p == nil {
-		return zero
+	if saved.ISRC != nil {
+		out.ISRC = *saved.ISRC
 	}
-	return *p
+	if saved.StoredDurationSeconds != nil {
+		out.DurationSeconds = *saved.StoredDurationSeconds
+	}
+	if saved.Year != nil {
+		out.Year = *saved.Year
+	}
+	if saved.CatalogMBID != nil {
+		out.CatalogMBID = *saved.CatalogMBID
+	}
+	return out
 }

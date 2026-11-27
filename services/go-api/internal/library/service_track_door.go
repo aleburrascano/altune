@@ -16,6 +16,7 @@ const MaxFeaturedArtistsPerTrack = track.MaxFeaturedArtistsPerTrack
 
 var (
 	ErrTrackClockRequired        = track.ErrClockRequired
+	ErrTrackIDSourceRequired     = track.ErrIDSourceRequired
 	ErrTrackCollaboratorRequired = track.ErrCollaboratorRequired
 	MustNewAddTrackService       = track.MustNewAddTrackService
 	NewAddTrackService           = track.NewAddTrackService

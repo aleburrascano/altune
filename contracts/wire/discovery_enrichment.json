@@ -1,0 +1,17 @@
+{
+  "mbid": "resolved-mbid",
+  "genres": [
+    "conscious hip hop",
+    "hip hop"
+  ],
+  "year": 2017,
+  "rating": 0,
+  "rating_votes": 0,
+  "primary_type": "Album",
+  "secondary_types": [],
+  "external_ids": {},
+  "artwork_url": "https://coverartarchive.org/x-1200.jpg",
+  "has_content": true,
+  "degraded": false
+}
+

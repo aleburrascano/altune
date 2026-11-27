@@ -3,8 +3,8 @@ package providermetrics
 import (
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/telemetry"
 	"errors"
-	"expvar"
 	"net/http"
 	"strings"
 )
@@ -83,32 +83,18 @@ var hostSuffixes = []struct {
 	{"sheets.googleapis.com", providerSheets},
 }
 
-var counters = newCounters()
-
-var retryCounters = newRetryCounters()
-
-func newRetryCounters() map[string]*expvar.Int {
-	m := make(map[string]*expvar.Int, len(providerNames))
-	for _, p := range providerNames {
-		m[p] = expvar.NewInt("discovery_provider_" + p + "_retry_total")
-	}
-	return m
+func retryVarName(provider string) string {
+	return "discovery_provider_" + provider + "_retry_total"
 }
 
-func RecordRetry(host string) {
-	retryCounters[providerForHost(host)].Add(1)
-}
-
-func newCounters() map[string]map[string]*expvar.Int {
-	m := make(map[string]map[string]*expvar.Int, len(providerNames))
+func RetryRecorder(reg *telemetry.Registry) func(host string) {
+	retries := make(map[string]*telemetry.Counter, len(providerNames))
 	for _, p := range providerNames {
-		om := make(map[string]*expvar.Int, len(outcomeNames))
-		for _, o := range outcomeNames {
-			om[o] = expvar.NewInt(varName(p, o))
-		}
-		m[p] = om
+		retries[p] = reg.Counter(retryVarName(p))
 	}
-	return m
+	return func(host string) {
+		retries[providerForHost(host)].Add(1)
+	}
 }
 
 func varName(provider, outcome string) string {
@@ -116,13 +102,22 @@ func varName(provider, outcome string) string {
 }
 
 type CountingTransport struct {
-	base http.RoundTripper
+	base     http.RoundTripper
+	counters map[string]map[string]*telemetry.Counter
 }
 
 var _ http.RoundTripper = (*CountingTransport)(nil)
 
-func NewCountingTransport(base http.RoundTripper) *CountingTransport {
-	return &CountingTransport{base: base}
+func NewCountingTransport(base http.RoundTripper, reg *telemetry.Registry) *CountingTransport {
+	counters := make(map[string]map[string]*telemetry.Counter, len(providerNames))
+	for _, p := range providerNames {
+		byOutcome := make(map[string]*telemetry.Counter, len(outcomeNames))
+		for _, o := range outcomeNames {
+			byOutcome[o] = reg.Counter(varName(p, o))
+		}
+		counters[p] = byOutcome
+	}
+	return &CountingTransport{base: base, counters: counters}
 }
 
 func (t *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -134,12 +129,8 @@ func (t *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	if errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
 		return resp, err
 	}
-	record(providerForHost(hostOf(req)), outcomeFor(resp, err))
+	t.counters[providerForHost(hostOf(req))][outcomeFor(resp, err)].Add(1)
 	return resp, err
-}
-
-func record(provider, outcome string) {
-	counters[provider][outcome].Add(1)
 }
 
 func hostOf(req *http.Request) string {
@@ -166,7 +157,7 @@ func outcomeFor(resp *http.Response, err error) string {
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return outcomeQuota
 	}
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		return outcomeError
 	}
 	return outcomeOK
@@ -181,14 +172,14 @@ type Outcomes struct {
 
 type Snapshot map[string]Outcomes
 
-func ReadSnapshot() Snapshot {
+func ReadSnapshot(reg *telemetry.Registry) Snapshot {
 	s := make(Snapshot, len(providerNames))
 	for _, p := range providerNames {
 		s[p] = Outcomes{
-			OK:      counters[p][outcomeOK].Value(),
-			Quota:   counters[p][outcomeQuota].Value(),
-			Error:   counters[p][outcomeError].Value(),
-			Retries: retryCounters[p].Value(),
+			OK:      reg.Counter(varName(p, outcomeOK)).Value(),
+			Quota:   reg.Counter(varName(p, outcomeQuota)).Value(),
+			Error:   reg.Counter(varName(p, outcomeError)).Value(),
+			Retries: reg.Counter(retryVarName(p)).Value(),
 		}
 	}
 	return s

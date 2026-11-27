@@ -55,6 +55,7 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 		name        string
 		status      ports.TrackStatus
 		audioRef    *string
+		streamable  bool
 		store       reacquireStore
 		writeErr    error
 		wantErrIs   error
@@ -63,11 +64,11 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 		wantReason  string
 		wantVersion int
 	}{
-		{name: "ready exists check fails", status: ports.TrackReady, audioRef: &ref, store: reacquireStore{existsErr: existsErr}, wantErrIs: existsErr, wantStatus: ports.TrackReady},
-		{name: "ready file exists", status: ports.TrackReady, audioRef: &ref, store: reacquireStore{stored: true}, wantStatus: ports.TrackReady},
-		{name: "ready file missing", status: ports.TrackReady, audioRef: &ref, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 2},
+		{name: "ready exists check fails", status: ports.TrackReady, audioRef: &ref, streamable: true, store: reacquireStore{existsErr: existsErr}, wantErrIs: existsErr, wantStatus: ports.TrackReady},
+		{name: "ready file exists", status: ports.TrackReady, audioRef: &ref, streamable: true, store: reacquireStore{stored: true}, wantStatus: ports.TrackReady},
+		{name: "ready file missing", status: ports.TrackReady, audioRef: &ref, streamable: true, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 2},
 		{name: "ready without audio ref", status: ports.TrackReady, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 2},
-		{name: "ready file missing revert fails", status: ports.TrackReady, audioRef: &ref, writeErr: writeErr, wantErrIs: writeErr, wantStatus: ports.TrackReady},
+		{name: "ready file missing revert fails", status: ports.TrackReady, audioRef: &ref, streamable: true, writeErr: writeErr, wantErrIs: writeErr, wantStatus: ports.TrackReady},
 		{name: "failed retries", status: ports.TrackFailed, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 2},
 		{name: "failed revert fails", status: ports.TrackFailed, writeErr: writeErr, wantErrIs: writeErr, wantStatus: ports.TrackFailed, wantReason: "download_failed"},
 		{name: "pending proceeds untouched", status: ports.TrackPending, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 1},
@@ -77,7 +78,7 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 			t.Parallel()
 			track := inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 				ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
-				Title: "Song", Artist: "Artist", Album: "Album", Status: tt.status, AudioRef: tt.audioRef,
+				Title: "Song", Artist: "Artist", Album: "Album", Status: tt.status, Streamable: tt.streamable, AudioRef: tt.audioRef,
 			}}
 			if tt.status == ports.TrackFailed {
 				track.FailureReason = "download_failed"
@@ -88,7 +89,7 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 			svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), tt.store,
 				scratchfiles.New(), noVerification(), noStages())
 
-			err := svc.Execute(context.Background(), track.UserId, track.ID)
+			err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 			if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
 				t.Fatalf("Execute = %v, want %v", err, tt.wantErrIs)

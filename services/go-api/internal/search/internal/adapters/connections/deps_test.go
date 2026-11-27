@@ -6,8 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/useractivity"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
-	"context"
-	"expvar"
+	"altune/go-api/internal/shared/telemetry"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -17,14 +16,13 @@ import (
 
 func depsWithProviderTimeout(timeout time.Duration) connections.Deps {
 	return connections.Deps{
-		Lifecycle:       context.Background(),
 		Background:      &background.Tracker{},
 		Tracker:         &background.Tracker{},
 		Logger:          slog.Default(),
 		Transport:       http.DefaultTransport,
 		Activity:        useractivity.NoopActivityFeed{},
 		ClientEvents:    handler.NoClientEvents{},
-		CacheOps:        new(expvar.Map),
+		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		ProviderTimeout: timeout,
 		ChartTimeout:    time.Second,
 	}

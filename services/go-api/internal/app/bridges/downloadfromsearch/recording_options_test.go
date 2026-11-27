@@ -108,7 +108,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Previews:        download.NoopPreviewMatcher(),
 			Recordings:      recording.Resolver,
 		}, download.StagePorts{
-			Prober:        download.NoopAudioProber(),
+			Prober:        downloadtest.SilentAudioProber(),
 			Tagger:        download.NoopAudioTagger(),
 			Rejections:    download.NoopRejectionStore(),
 			StoredAudio:   download.NoopStoredAudioReader(),
@@ -122,7 +122,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Unit:          random.Real,
 		})
 
-	_ = svc.Execute(context.Background(), track.UserId, track.ID)
+	_ = svc.Execute(context.Background(), download.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	got, err := ledger.Get(context.Background(), track.ID, track.UserId)
 	if err != nil || got == nil || got.Status != download.TrackFailed {

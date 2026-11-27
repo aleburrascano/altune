@@ -2,6 +2,7 @@ package pacing
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
 	"errors"
@@ -14,34 +15,43 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	quarterPerSecond rate.Limit = 0.25
+	halfPerSecond    rate.Limit = 0.5
+	threePerSecond   rate.Limit = 3
+	fivePerSecond    rate.Limit = 5
+
+	acoustidBurst = 3
+)
+
 var providerRateLimits = map[string]rate.Limit{
 	"musicbrainz.org":            1,
-	"itunes.apple.com":           0.25,
-	"ws.audioscrobbler.com":      5,
+	"itunes.apple.com":           quarterPerSecond,
+	"ws.audioscrobbler.com":      fivePerSecond,
 	"music.youtube.com":          2,
 	"api.discogs.com":            1,
-	"api.deezer.com":             5,
-	"api-v2.soundcloud.com":      3,
+	"api.deezer.com":             fivePerSecond,
+	"api-v2.soundcloud.com":      threePerSecond,
 	"na.web.skill.music.a2z.com": 2,
-	"api-partner.spotify.com":    3,
+	"api-partner.spotify.com":    threePerSecond,
 	"api.genius.com":             2,
 	"sheets.googleapis.com":      2,
 	"webservice.fanart.tv":       2,
 	"coverartarchive.org":        2,
-	"api.music.apple.com":        3,
-	"open.spotify.com":           3,
+	"api.music.apple.com":        threePerSecond,
+	"open.spotify.com":           threePerSecond,
 	"auth.deezer.com":            1,
-	"pipe.deezer.com":            3,
-	"theaudiodb.com":             0.5,
+	"pipe.deezer.com":            threePerSecond,
+	"theaudiodb.com":             halfPerSecond,
 	"music.amazon.com":           2,
 	"music.apple.com":            2,
 	"clienttoken.spotify.com":    2,
 	"soundcloud.com":             2,
 	"imgur.gg":                   2,
 	"krakenfiles.com":            2,
-	"api.acoustid.org":           3,
+	"api.acoustid.org":           threePerSecond,
 	"cdnt-preview.dzcdn.net":     1,
-	"www.youtube.com":            5,
+	"www.youtube.com":            fivePerSecond,
 }
 
 const defaultProviderBurst = 4
@@ -49,7 +59,7 @@ const defaultProviderBurst = 4
 var providerBursts = map[string]int{
 	"musicbrainz.org":        1,
 	"api.discogs.com":        1,
-	"api.acoustid.org":       3,
+	"api.acoustid.org":       acoustidBurst,
 	"cdnt-preview.dzcdn.net": 1,
 	"www.youtube.com":        1,
 }
@@ -74,11 +84,15 @@ type hostLimiter struct {
 }
 
 type Pacer struct {
-	mu       sync.Mutex
 	now      clock.Func
 	sleep    clock.Sleeper
-	limiters map[string]*hostLimiter
+	limiters *expiringcache.Keyed[string, *hostLimiter]
 }
+
+const (
+	idleHostAfter = 10 * time.Minute
+	maxPacedHosts = 1024
+)
 
 var (
 	ErrClockRequired   = errors.New("pacer needs a clock")
@@ -92,7 +106,7 @@ func New(now clock.Func, sleep clock.Sleeper) (*Pacer, error) {
 	if sleep == nil {
 		return nil, fmt.Errorf("pacing.New: %w", ErrSleeperRequired)
 	}
-	return &Pacer{now: now, sleep: sleep, limiters: map[string]*hostLimiter{}}, nil
+	return &Pacer{now: now, sleep: sleep, limiters: expiringcache.NewKeyed[string, *hostLimiter](idleHostAfter, maxPacedHosts, now)}, nil
 }
 
 func (p *Pacer) Wait(req *http.Request) error {
@@ -172,18 +186,18 @@ func wouldPassDeadline(ctx context.Context, now time.Time, delay time.Duration) 
 }
 
 func (p *Pacer) limiter(host string) *hostLimiter {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if l, ok := p.limiters[host]; ok {
-		return l
+	lim, ok := providerRateLimits[host]
+	if !ok {
+		return nil
 	}
-	var l *hostLimiter
-	if lim, ok := providerRateLimits[host]; ok {
-		l = newHostLimiter(lim, providerBurst(host), boundedQueueHosts[host], p.now, p.sleep)
-	}
-	p.limiters[host] = l
-	return l
+	return p.limiters.Get(host, func() *hostLimiter {
+		return newHostLimiter(lim, providerBurst(host), boundedQueueHosts[host], p.now, p.sleep)
+	})
 }
+
+func (l *hostLimiter) TokensAt(t time.Time) float64 { return l.limiter.TokensAt(t) }
+
+func (l *hostLimiter) Burst() int { return l.limiter.Burst() }
 
 func newHostLimiter(lim rate.Limit, burst int, boundedQueue bool, now clock.Func, sleep clock.Sleeper) *hostLimiter {
 	interval := time.Duration(float64(time.Second) / float64(lim))

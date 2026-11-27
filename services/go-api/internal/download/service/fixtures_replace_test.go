@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -101,7 +102,7 @@ func seedReadyTrack(t *testing.T) servedTrack {
 	sourceURL := "https://www.youtube.com/watch?v=currentAAAA"
 	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
-		Status: ports.TrackReady, AudioRef: &originalRef, AudioSourceURL: &sourceURL,
+		Status: ports.TrackReady, Streamable: true, AudioRef: &originalRef, AudioSourceURL: &sourceURL,
 	}})
 	store := &objectStore{objects: map[string]string{originalRef: "original bytes"}}
 	return servedTrack{ledger: ledger, store: store, userID: userID, trackID: trackID, originalRef: originalRef}
@@ -127,7 +128,7 @@ type stageMod func(*service.StagePorts)
 
 func noStages(mods ...stageMod) service.StagePorts {
 	stages := service.StagePorts{
-		Prober:        ports.NoopAudioProber(),
+		Prober:        downloadtest.SilentAudioProber(),
 		Tagger:        ports.NoopAudioTagger(),
 		Rejections:    ports.NoopRejectionStore(),
 		StoredAudio:   ports.NoopStoredAudioReader(),

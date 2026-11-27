@@ -8,8 +8,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type PlaylistRepositoryUnderTest interface {
@@ -29,7 +27,7 @@ type PlaylistRepositoryUnderTest interface {
 
 func contractPlaylist(t *testing.T, repo PlaylistRepositoryUnderTest, userId sharedids.UserId, createdAt time.Time) *domain.Playlist {
 	t.Helper()
-	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.NewString()[:8], createdAt)
+	pl, err := domain.NewPlaylist(userId, "Playlist-"+randomIDs.NewString()[:8], createdAt, randomIDs)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
@@ -84,7 +82,6 @@ func contractSameIds(t *testing.T, label string, got, want []domain.TrackId) {
 
 func PlaylistRepositoryContract(t *testing.T, newRepo func(t *testing.T) PlaylistRepositoryUnderTest) {
 	suite := &playlistContractSuite{
-		ctx:     context.Background(),
 		now:     time.Now().UTC(),
 		newRepo: newRepo,
 	}
@@ -104,17 +101,16 @@ func PlaylistRepositoryContract(t *testing.T, newRepo func(t *testing.T) Playlis
 }
 
 type playlistContractSuite struct {
-	ctx     context.Context
 	now     time.Time
 	newRepo func(t *testing.T) PlaylistRepositoryUnderTest
 }
 
 func (s *playlistContractSuite) createThenGetReturnsPlaylist(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 
-	got, summary, err := repo.GetByID(s.ctx, pl.ID, userId)
+	got, summary, err := repo.GetByID(t.Context(), pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
@@ -127,7 +123,7 @@ func (s *playlistContractSuite) createThenGetReturnsPlaylist(t *testing.T) {
 	if summary.TrackCount != 0 {
 		t.Errorf("TrackCount = %d, want 0", summary.TrackCount)
 	}
-	exists, err := repo.Exists(s.ctx, pl.ID, userId)
+	exists, err := repo.Exists(t.Context(), pl.ID, userId)
 	if err != nil || !exists {
 		t.Errorf("Exists = %v, %v, want true, nil", exists, err)
 	}
@@ -135,14 +131,14 @@ func (s *playlistContractSuite) createThenGetReturnsPlaylist(t *testing.T) {
 
 func (s *playlistContractSuite) unknownPlaylistIsAbsent(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
-	missing := domain.PlaylistIdFromUUID(uuid.New())
+	userId := randomIDs.NewUserId()
+	missing := domain.PlaylistId{EntityId: randomIDs.NewEntityId()}
 
-	got, _, err := repo.GetByID(s.ctx, missing, userId)
+	got, _, err := repo.GetByID(t.Context(), missing, userId)
 	if err != nil || got != nil {
 		t.Errorf("GetByID = %v, %v, want nil, nil", got, err)
 	}
-	exists, err := repo.Exists(s.ctx, missing, userId)
+	exists, err := repo.Exists(t.Context(), missing, userId)
 	if err != nil || exists {
 		t.Errorf("Exists = %v, %v, want false, nil", exists, err)
 	}
@@ -159,12 +155,12 @@ type foreignPlaylistFixture struct {
 
 func (s *playlistContractSuite) foreignPlaylistIsInvisibleAndUntouchable(t *testing.T) {
 	repo := s.newRepo(t)
-	owner := sharedids.NewUserId(uuid.New())
-	intruder := sharedids.NewUserId(uuid.New())
+	owner := randomIDs.NewUserId()
+	intruder := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, owner, s.now)
 	tracks := contractSeedTracks(t, repo, owner, 2)
 	mine := contractSeedTracks(t, repo, intruder, 1)
-	if _, err := repo.AddTracks(s.ctx, owner, pl.ID, tracks); err != nil {
+	if _, err := repo.AddTracks(t.Context(), owner, pl.ID, tracks); err != nil {
 		t.Fatalf("AddTracks: %v", err)
 	}
 	fx := foreignPlaylistFixture{repo: repo, owner: owner, intruder: intruder, pl: pl, tracks: tracks, mine: mine}
@@ -175,19 +171,19 @@ func (s *playlistContractSuite) foreignPlaylistIsInvisibleAndUntouchable(t *test
 }
 
 func (s *playlistContractSuite) intruderCannotSeeOrDelete(t *testing.T, fx foreignPlaylistFixture) {
-	got, _, err := fx.repo.GetByID(s.ctx, fx.pl.ID, fx.intruder)
+	got, _, err := fx.repo.GetByID(t.Context(), fx.pl.ID, fx.intruder)
 	if err != nil || got != nil {
 		t.Errorf("GetByID = %v, %v, want nil, nil", got, err)
 	}
-	withTracks, list, err := fx.repo.GetWithTracks(s.ctx, fx.pl.ID, fx.intruder)
+	withTracks, list, err := fx.repo.GetWithTracks(t.Context(), fx.pl.ID, fx.intruder)
 	if err != nil || withTracks != nil || len(list) != 0 {
 		t.Errorf("GetWithTracks = %v, %v, %v, want nil, empty, nil", withTracks, list, err)
 	}
-	exists, err := fx.repo.Exists(s.ctx, fx.pl.ID, fx.intruder)
+	exists, err := fx.repo.Exists(t.Context(), fx.pl.ID, fx.intruder)
 	if err != nil || exists {
 		t.Errorf("Exists = %v, %v, want false, nil", exists, err)
 	}
-	deleted, err := fx.repo.Delete(s.ctx, fx.pl.ID, fx.intruder)
+	deleted, err := fx.repo.Delete(t.Context(), fx.pl.ID, fx.intruder)
 	if err != nil || deleted {
 		t.Errorf("Delete = %v, %v, want false, nil", deleted, err)
 	}
@@ -197,23 +193,23 @@ func (s *playlistContractSuite) intruderCannotModify(t *testing.T, fx foreignPla
 	hijack := *fx.pl
 	hijack.UserId = fx.intruder
 	hijack.Name = "hijacked"
-	if err := fx.repo.Update(s.ctx, &hijack); !errors.Is(err, ports.ErrPlaylistNotOwned) {
+	if err := fx.repo.Update(t.Context(), &hijack); !errors.Is(err, ports.ErrPlaylistNotOwned) {
 		t.Errorf("Update error = %v, want ErrPlaylistNotOwned", err)
 	}
-	if _, err := fx.repo.AddTracks(s.ctx, fx.intruder, fx.pl.ID, fx.mine); !errors.Is(err, ports.ErrPlaylistNotOwned) {
+	if _, err := fx.repo.AddTracks(t.Context(), fx.intruder, fx.pl.ID, fx.mine); !errors.Is(err, ports.ErrPlaylistNotOwned) {
 		t.Errorf("AddTracks error = %v, want ErrPlaylistNotOwned", err)
 	}
-	if _, err := fx.repo.RemoveTracks(s.ctx, fx.intruder, fx.pl.ID, fx.tracks[:1]); !errors.Is(err, ports.ErrPlaylistNotOwned) {
+	if _, err := fx.repo.RemoveTracks(t.Context(), fx.intruder, fx.pl.ID, fx.tracks[:1]); !errors.Is(err, ports.ErrPlaylistNotOwned) {
 		t.Errorf("RemoveTracks error = %v, want ErrPlaylistNotOwned", err)
 	}
 	plan := []domain.PlaylistTrack{{TrackId: fx.tracks[1], Position: 0}, {TrackId: fx.tracks[0], Position: 1}}
-	if err := fx.repo.ReorderTracks(s.ctx, fx.intruder, fx.pl.ID, plan); !errors.Is(err, ports.ErrPlaylistNotOwned) {
+	if err := fx.repo.ReorderTracks(t.Context(), fx.intruder, fx.pl.ID, plan); !errors.Is(err, ports.ErrPlaylistNotOwned) {
 		t.Errorf("ReorderTracks error = %v, want ErrPlaylistNotOwned", err)
 	}
 }
 
 func (s *playlistContractSuite) ownerPlaylistIsIntact(t *testing.T, fx foreignPlaylistFixture) {
-	owned, _, err := fx.repo.GetByID(s.ctx, fx.pl.ID, fx.owner)
+	owned, _, err := fx.repo.GetByID(t.Context(), fx.pl.ID, fx.owner)
 	if err != nil || owned == nil || owned.Name != fx.pl.Name {
 		t.Errorf("owner's playlist after attacks = %v, %v, want name %q", owned, err, fx.pl.Name)
 	}
@@ -222,16 +218,16 @@ func (s *playlistContractSuite) ownerPlaylistIsIntact(t *testing.T, fx foreignPl
 
 func (s *playlistContractSuite) updateRenamesPlaylist(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 
 	renamed := *pl
-	renamed.Name = "Renamed-" + uuid.NewString()[:8]
+	renamed.Name = "Renamed-" + randomIDs.NewString()[:8]
 	renamed.UpdatedAt = s.now.Add(time.Minute)
-	if err := repo.Update(s.ctx, &renamed); err != nil {
+	if err := repo.Update(t.Context(), &renamed); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	got, _, err := repo.GetByID(s.ctx, pl.ID, userId)
+	got, _, err := repo.GetByID(t.Context(), pl.ID, userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID = %v, %v", got, err)
 	}
@@ -242,36 +238,36 @@ func (s *playlistContractSuite) updateRenamesPlaylist(t *testing.T) {
 
 func (s *playlistContractSuite) updateRefusesMissingPlaylist(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
-	ghost, err := domain.NewPlaylist(userId, "Ghost", s.now)
+	userId := randomIDs.NewUserId()
+	ghost, err := domain.NewPlaylist(userId, "Ghost", s.now, randomIDs)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
-	if err := repo.Update(s.ctx, ghost); !errors.Is(err, ports.ErrPlaylistNotOwned) {
+	if err := repo.Update(t.Context(), ghost); !errors.Is(err, ports.ErrPlaylistNotOwned) {
 		t.Errorf("Update error = %v, want ErrPlaylistNotOwned", err)
 	}
 }
 
 func (s *playlistContractSuite) addTracksKeepsRequestOrderAndAppends(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 	ids := contractSeedTracks(t, repo, userId, 4)
 
-	added, err := repo.AddTracks(s.ctx, userId, pl.ID, []domain.TrackId{ids[2], ids[0]})
+	added, err := repo.AddTracks(t.Context(), userId, pl.ID, []domain.TrackId{ids[2], ids[0]})
 	if err != nil {
 		t.Fatalf("AddTracks: %v", err)
 	}
 	contractSameIds(t, "added", added, []domain.TrackId{ids[2], ids[0]})
 
-	added, err = repo.AddTracks(s.ctx, userId, pl.ID, []domain.TrackId{ids[3], ids[1]})
+	added, err = repo.AddTracks(t.Context(), userId, pl.ID, []domain.TrackId{ids[3], ids[1]})
 	if err != nil {
 		t.Fatalf("AddTracks second batch: %v", err)
 	}
 	contractSameIds(t, "added second batch", added, []domain.TrackId{ids[3], ids[1]})
 
 	contractSameIds(t, "members", contractMembers(t, repo, pl), []domain.TrackId{ids[2], ids[0], ids[3], ids[1]})
-	_, summary, err := repo.GetByID(s.ctx, pl.ID, userId)
+	_, summary, err := repo.GetByID(t.Context(), pl.ID, userId)
 	if err != nil || summary.TrackCount != 4 {
 		t.Errorf("TrackCount = %d, %v, want 4", summary.TrackCount, err)
 	}
@@ -279,21 +275,21 @@ func (s *playlistContractSuite) addTracksKeepsRequestOrderAndAppends(t *testing.
 
 func (s *playlistContractSuite) addTracksSkipsMembersAndRepeats(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 	ids := contractSeedTracks(t, repo, userId, 3)
-	if _, err := repo.AddTracks(s.ctx, userId, pl.ID, ids[:1]); err != nil {
+	if _, err := repo.AddTracks(t.Context(), userId, pl.ID, ids[:1]); err != nil {
 		t.Fatalf("AddTracks: %v", err)
 	}
 
-	added, err := repo.AddTracks(s.ctx, userId, pl.ID, []domain.TrackId{ids[0], ids[1], ids[1], ids[2]})
+	added, err := repo.AddTracks(t.Context(), userId, pl.ID, []domain.TrackId{ids[0], ids[1], ids[1], ids[2]})
 	if err != nil {
 		t.Fatalf("AddTracks with duplicates: %v", err)
 	}
 	contractSameIds(t, "added", added, ids[1:])
 	contractSameIds(t, "members", contractMembers(t, repo, pl), ids)
 
-	added, err = repo.AddTracks(s.ctx, userId, pl.ID, ids)
+	added, err = repo.AddTracks(t.Context(), userId, pl.ID, ids)
 	if err != nil {
 		t.Fatalf("AddTracks of only members: %v", err)
 	}
@@ -305,26 +301,26 @@ func (s *playlistContractSuite) addTracksSkipsMembersAndRepeats(t *testing.T) {
 
 func (s *playlistContractSuite) removeTracksClosesGapAndReportsRemoved(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 	ids := contractSeedTracks(t, repo, userId, 5)
 	stranger := contractSeedTracks(t, repo, userId, 1)[0]
-	if _, err := repo.AddTracks(s.ctx, userId, pl.ID, ids); err != nil {
+	if _, err := repo.AddTracks(t.Context(), userId, pl.ID, ids); err != nil {
 		t.Fatalf("AddTracks: %v", err)
 	}
 
-	removed, err := repo.RemoveTracks(s.ctx, userId, pl.ID, []domain.TrackId{ids[3], stranger, ids[1], ids[3]})
+	removed, err := repo.RemoveTracks(t.Context(), userId, pl.ID, []domain.TrackId{ids[3], stranger, ids[1], ids[3]})
 	if err != nil {
 		t.Fatalf("RemoveTracks: %v", err)
 	}
 	contractSameIds(t, "removed", removed, []domain.TrackId{ids[3], ids[1]})
 	contractSameIds(t, "members", contractMembers(t, repo, pl), []domain.TrackId{ids[0], ids[2], ids[4]})
-	_, summary, err := repo.GetByID(s.ctx, pl.ID, userId)
+	_, summary, err := repo.GetByID(t.Context(), pl.ID, userId)
 	if err != nil || summary.TrackCount != 3 {
 		t.Errorf("TrackCount = %d, %v, want 3", summary.TrackCount, err)
 	}
 
-	removed, err = repo.RemoveTracks(s.ctx, userId, pl.ID, []domain.TrackId{ids[1]})
+	removed, err = repo.RemoveTracks(t.Context(), userId, pl.ID, []domain.TrackId{ids[1]})
 	if err != nil || len(removed) != 0 {
 		t.Errorf("RemoveTracks of a non-member = %v, %v, want none, nil", removed, err)
 	}
@@ -332,10 +328,10 @@ func (s *playlistContractSuite) removeTracksClosesGapAndReportsRemoved(t *testin
 
 func (s *playlistContractSuite) reorderWithPermutationSucceeds(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 	ids := contractSeedTracks(t, repo, userId, 3)
-	if _, err := repo.AddTracks(s.ctx, userId, pl.ID, ids); err != nil {
+	if _, err := repo.AddTracks(t.Context(), userId, pl.ID, ids); err != nil {
 		t.Fatalf("AddTracks: %v", err)
 	}
 
@@ -344,7 +340,7 @@ func (s *playlistContractSuite) reorderWithPermutationSucceeds(t *testing.T) {
 		{TrackId: ids[0], Position: 1},
 		{TrackId: ids[1], Position: 2},
 	}
-	if err := repo.ReorderTracks(s.ctx, userId, pl.ID, plan); err != nil {
+	if err := repo.ReorderTracks(t.Context(), userId, pl.ID, plan); err != nil {
 		t.Fatalf("ReorderTracks: %v", err)
 	}
 	contractSameIds(t, "members", contractMembers(t, repo, pl), []domain.TrackId{ids[2], ids[0], ids[1]})
@@ -352,11 +348,11 @@ func (s *playlistContractSuite) reorderWithPermutationSucceeds(t *testing.T) {
 
 func (s *playlistContractSuite) reorderRefusesPlanThatIsNotTheMembers(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 	ids := contractSeedTracks(t, repo, userId, 3)
 	outsider := contractSeedTracks(t, repo, userId, 1)[0]
-	if _, err := repo.AddTracks(s.ctx, userId, pl.ID, ids[:2]); err != nil {
+	if _, err := repo.AddTracks(t.Context(), userId, pl.ID, ids[:2]); err != nil {
 		t.Fatalf("AddTracks: %v", err)
 	}
 
@@ -366,7 +362,7 @@ func (s *playlistContractSuite) reorderRefusesPlanThatIsNotTheMembers(t *testing
 		"a swapped-in track": {{TrackId: ids[1], Position: 0}, {TrackId: outsider, Position: 1}},
 	}
 	for name, plan := range plans {
-		err := repo.ReorderTracks(s.ctx, userId, pl.ID, plan)
+		err := repo.ReorderTracks(t.Context(), userId, pl.ID, plan)
 		if !errors.Is(err, ports.ErrPlaylistChangedDuringReorder) {
 			t.Errorf("%s: error = %v, want ErrPlaylistChangedDuringReorder", name, err)
 		}
@@ -376,23 +372,23 @@ func (s *playlistContractSuite) reorderRefusesPlanThatIsNotTheMembers(t *testing
 
 func (s *playlistContractSuite) listPagesNewestFirstAndCounts(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
-	other := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
+	other := randomIDs.NewUserId()
 	var created []*domain.Playlist
 	for i := range 3 {
 		created = append(created, contractPlaylist(t, repo, userId, s.now.Add(time.Duration(i)*time.Minute)))
 	}
 	contractPlaylist(t, repo, other, s.now)
 	ids := contractSeedTracks(t, repo, userId, 2)
-	if _, err := repo.AddTracks(s.ctx, userId, created[0].ID, ids); err != nil {
+	if _, err := repo.AddTracks(t.Context(), userId, created[0].ID, ids); err != nil {
 		t.Fatalf("AddTracks: %v", err)
 	}
 
-	first, err := repo.ListForUser(s.ctx, userId, 2, 0)
+	first, err := repo.ListForUser(t.Context(), userId, 2, 0)
 	if err != nil {
 		t.Fatalf("ListForUser: %v", err)
 	}
-	second, err := repo.ListForUser(s.ctx, userId, 2, 2)
+	second, err := repo.ListForUser(t.Context(), userId, 2, 2)
 	if err != nil {
 		t.Fatalf("ListForUser second page: %v", err)
 	}
@@ -402,7 +398,7 @@ func (s *playlistContractSuite) listPagesNewestFirstAndCounts(t *testing.T) {
 	s.assertPagesNewestFirst(t, first, second, created)
 	s.assertPageTrackCounts(t, append(first, second...), created[0].ID)
 
-	beyond, err := repo.ListForUser(s.ctx, userId, 2, 3)
+	beyond, err := repo.ListForUser(t.Context(), userId, 2, 3)
 	if err != nil || len(beyond) != 0 {
 		t.Errorf("page past the end = %d rows, %v, want none", len(beyond), err)
 	}
@@ -432,11 +428,11 @@ func (s *playlistContractSuite) assertPageTrackCounts(t *testing.T, rows []domai
 }
 
 func (s *playlistContractSuite) assertCountForUser(t *testing.T, repo PlaylistRepositoryUnderTest, userId sharedids.UserId) {
-	held, err := repo.CountForUser(s.ctx, userId, 10)
+	held, err := repo.CountForUser(t.Context(), userId, 10)
 	if err != nil || held != 3 {
 		t.Errorf("CountForUser = %d, %v, want 3", held, err)
 	}
-	held, err = repo.CountForUser(s.ctx, userId, 2)
+	held, err = repo.CountForUser(t.Context(), userId, 2)
 	if err != nil || held != 2 {
 		t.Errorf("CountForUser capped at 2 = %d, %v, want 2", held, err)
 	}
@@ -444,22 +440,22 @@ func (s *playlistContractSuite) assertCountForUser(t *testing.T, repo PlaylistRe
 
 func (s *playlistContractSuite) deleteRemovesPlaylistOnce(t *testing.T) {
 	repo := s.newRepo(t)
-	userId := sharedids.NewUserId(uuid.New())
+	userId := randomIDs.NewUserId()
 	pl := contractPlaylist(t, repo, userId, s.now)
 
-	deleted, err := repo.Delete(s.ctx, pl.ID, userId)
+	deleted, err := repo.Delete(t.Context(), pl.ID, userId)
 	if err != nil || !deleted {
 		t.Fatalf("Delete = %v, %v, want true, nil", deleted, err)
 	}
-	got, _, err := repo.GetByID(s.ctx, pl.ID, userId)
+	got, _, err := repo.GetByID(t.Context(), pl.ID, userId)
 	if err != nil || got != nil {
 		t.Errorf("GetByID after delete = %v, %v, want nil, nil", got, err)
 	}
-	deleted, err = repo.Delete(s.ctx, pl.ID, userId)
+	deleted, err = repo.Delete(t.Context(), pl.ID, userId)
 	if err != nil || deleted {
 		t.Errorf("second Delete = %v, %v, want false, nil", deleted, err)
 	}
-	held, err := repo.CountForUser(s.ctx, userId, 10)
+	held, err := repo.CountForUser(t.Context(), userId, 10)
 	if err != nil || held != 0 {
 		t.Errorf("CountForUser after delete = %d, %v, want 0", held, err)
 	}

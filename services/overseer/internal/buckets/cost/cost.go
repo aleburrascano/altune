@@ -44,16 +44,15 @@ type Bucket struct {
 	start      panicguard.Once
 	series     core.Series
 
-	mu                sync.RWMutex
-	lastSpend         *oci.Spend
-	spendStale        bool
-	spendUpdated      time.Time
-	spendBaseline     oci.Spend
-	haveSpendBaseline bool
-	lastUsage         *goapi.ProviderUsage
-	usageStale        bool
-	usageUpdated      time.Time
-	usageReason       string
+	mu            sync.RWMutex
+	lastSpend     *oci.Spend
+	spendStale    bool
+	spendUpdated  time.Time
+	spendBaseline *oci.Spend
+	lastUsage     *goapi.ProviderUsage
+	usageStale    bool
+	usageUpdated  time.Time
+	usageReason   string
 }
 
 type Deps struct {
@@ -247,29 +246,28 @@ func totalCalls(usage *goapi.ProviderUsage) int64 {
 
 func (b *Bucket) recordSpend(s oci.Spend) {
 	b.mu.Lock()
-	baseline, haveBaseline := b.spendBaseline, b.haveSpendBaseline
-	unchanged := haveBaseline && sameSpendReading(baseline, s)
+	baseline := b.spendBaseline
+	unchanged := baseline != nil && sameSpendReading(*baseline, s)
 	b.lastSpend = &s
 	b.spendStale = false
 	b.spendUpdated = time.Now().UTC()
-	b.spendBaseline = s
-	b.haveSpendBaseline = true
+	b.spendBaseline = &s
 	b.mu.Unlock()
 
 	if unchanged {
 		return
 	}
-	b.recordSpendSeries(s, baseline, haveBaseline)
+	b.recordSpendSeries(s, baseline)
 }
 
-func (b *Bucket) recordSpendSeries(s, baseline oci.Spend, haveBaseline bool) {
+func (b *Bucket) recordSpendSeries(s oci.Spend, baseline *oci.Spend) {
 	at := time.Now().UTC()
 	b.series.Record(bucketID, seriesSpendMonthToDate, core.Point{At: at, Value: s.Amount})
-	b.series.Record(bucketID, seriesSpendDaily, core.Point{At: at, Value: spendDailyDelta(s, baseline, haveBaseline)})
+	b.series.Record(bucketID, seriesSpendDaily, core.Point{At: at, Value: spendDailyDelta(s, baseline)})
 }
 
-func spendDailyDelta(s, baseline oci.Spend, haveBaseline bool) float64 {
-	if !haveBaseline || !s.PeriodStart.Equal(baseline.PeriodStart) {
+func spendDailyDelta(s oci.Spend, baseline *oci.Spend) float64 {
+	if baseline == nil || !s.PeriodStart.Equal(baseline.PeriodStart) {
 		return s.Amount
 	}
 	if delta := s.Amount - baseline.Amount; delta >= 0 {

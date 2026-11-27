@@ -1,0 +1,28 @@
+{
+  "provider_name": "soundcloud",
+  "status": "ok",
+  "items": [
+    {
+      "kind": "track",
+      "title": "Similar",
+      "subtitle": "Someone",
+      "image_url": "https://img.example/t9.jpg",
+      "confidence": "low",
+      "result_signature": "track|similar|someone",
+      "favorite_key": "someone|similar",
+      "sources": [
+        {
+          "provider": "deezer",
+          "external_id": "t9",
+          "url": "https://deezer.com/t9"
+        }
+      ],
+      "extras": {
+        "duration_seconds": 215,
+        "explicit": false
+      }
+    }
+  ],
+  "partial": false
+}
+

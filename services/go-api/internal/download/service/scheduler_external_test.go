@@ -41,16 +41,16 @@ func (r *ranTracks) has(id ids.TrackId) bool {
 
 type recordingAcquirer struct{ ranTracks }
 
-func (a *recordingAcquirer) Execute(_ context.Context, _ ids.UserId, id ids.TrackId) error {
-	a.record(id)
+func (a *recordingAcquirer) Execute(_ context.Context, job ports.AcquisitionJob) error {
+	a.record(job.TrackID)
 	return nil
 }
 
-func (a *recordingAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (a *recordingAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
 	return nil
 }
 
-func (a *recordingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *recordingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 func (r *ranTracks) count() int {
 	r.mu.Lock()
@@ -60,8 +60,8 @@ func (r *ranTracks) count() int {
 
 type recordingUpgrader struct{ ranTracks }
 
-func (u *recordingUpgrader) ExecuteUpgrade(_ context.Context, _ ids.UserId, id ids.TrackId) error {
-	u.record(id)
+func (u *recordingUpgrader) ExecuteUpgrade(_ context.Context, job ports.AcquisitionJob) error {
+	u.record(job.TrackID)
 	return nil
 }
 
@@ -70,17 +70,17 @@ type holdingAcquirer struct {
 	release chan struct{}
 }
 
-func (a *holdingAcquirer) Execute(_ context.Context, _ ids.UserId, id ids.TrackId) error {
-	a.record(id)
+func (a *holdingAcquirer) Execute(_ context.Context, job ports.AcquisitionJob) error {
+	a.record(job.TrackID)
 	<-a.release
 	return nil
 }
 
-func (a *holdingAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (a *holdingAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
 	return nil
 }
 
-func (a *holdingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *holdingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 func TestScheduler_ABurstOfAddsStartsOnEveryIdleAcquireWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -231,15 +231,15 @@ func TestScheduler_ASelectOutageOnTheFinalRunIsNotRetried(t *testing.T) {
 
 type failingAcquirer struct{}
 
-func (failingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (failingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
 	return errors.New("every source refused the track")
 }
 
-func (failingAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (failingAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
 	return errors.New("every source refused the track")
 }
 
-func (failingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (failingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 type panicOnMessage struct {
 	slog.Handler
@@ -254,9 +254,7 @@ func (h panicOnMessage) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	slog.SetDefault(slog.New(panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"}))
+	logging.UseHandler(t, panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"})
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 	scheduler := newTestScheduler(failingAcquirer{}, 1, time.Now, withTestQueue(queue))
 	defer scheduler.Shutdown(context.Background())
@@ -268,7 +266,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 	<-queue.outcome
 
 	var records []ports.JobRecord
-	for _, r := range scheduler.Status().Recent {
+	for _, r := range scheduler.Status(t.Context()).Recent {
 		if r.TrackID == trackID.String() {
 			records = append(records, r)
 		}
@@ -283,7 +281,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 
 type succeedingAcquirer struct{ failingAcquirer }
 
-func (succeedingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error { return nil }
+func (succeedingAcquirer) Execute(context.Context, ports.AcquisitionJob) error { return nil }
 
 type capturedLogs struct {
 	mu      *sync.Mutex
@@ -304,16 +302,14 @@ func (h capturedLogs) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h capturedLogs) WithGroup(string) slog.Handler { return h }
 
 func logsOfOneJob(t *testing.T, acquirer interface {
-	Execute(context.Context, ids.UserId, ids.TrackId) error
-	ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error
-	RefuseQueued(context.Context, ids.UserId, ids.TrackId)
+	Execute(context.Context, ports.AcquisitionJob) error
+	ExecuteReplace(context.Context, ports.AcquisitionJob) error
+	RefuseQueued(context.Context, ports.AcquisitionJob)
 },
 ) []slog.Record {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
 	var records []slog.Record
-	slog.SetDefault(slog.New(capturedLogs{mu: &sync.Mutex{}, records: &records}))
+	logging.UseHandler(t, capturedLogs{mu: &sync.Mutex{}, records: &records})
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 	scheduler := newTestScheduler(acquirer, 1, time.Now, withTestQueue(queue))
 	if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
@@ -383,7 +379,7 @@ func TestScheduler_ShutdownWaitsForAnInFlightJobToFinishAndDoesNotCancelIt(t *te
 		default:
 			t.Fatal("Shutdown did not return after the in-flight job finished")
 		}
-		if status := scheduler.Status(); status.Succeeded != 1 || status.Failed != 0 {
+		if status := scheduler.Status(t.Context()); status.Succeeded != 1 || status.Failed != 0 {
 			t.Errorf("succeeded = %d, failed = %d, want the job to finish normally (1, 0), not be cancelled", status.Succeeded, status.Failed)
 		}
 	})
@@ -439,16 +435,16 @@ type alwaysPanickingAcquirer struct {
 	refusedCorrID atomic.Value
 }
 
-func (a *alwaysPanickingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a *alwaysPanickingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, user ids.UserId, track ids.TrackId) error {
-	return a.Execute(ctx, user, track)
+func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
+	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *alwaysPanickingAcquirer) RefuseQueued(ctx context.Context, _ ids.UserId, _ ids.TrackId) {
+func (a *alwaysPanickingAcquirer) RefuseQueued(ctx context.Context, job ports.AcquisitionJob) {
 	a.refusedCorrID.Store(logging.CorrelationIDFromContext(ctx))
 	a.refused.Add(1)
 }
@@ -583,7 +579,7 @@ type correlationNotingAcquirer struct {
 	finished chan struct{}
 }
 
-func (a *correlationNotingAcquirer) Execute(ctx context.Context, _ ids.UserId, _ ids.TrackId) error {
+func (a *correlationNotingAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.corrIDs = append(a.corrIDs, logging.CorrelationIDFromContext(ctx))
@@ -594,11 +590,11 @@ func (a *correlationNotingAcquirer) Execute(ctx context.Context, _ ids.UserId, _
 	return nil
 }
 
-func (a *correlationNotingAcquirer) ExecuteReplace(ctx context.Context, user ids.UserId, track ids.TrackId) error {
-	return a.Execute(ctx, user, track)
+func (a *correlationNotingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
+	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *correlationNotingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *correlationNotingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 func (a *correlationNotingAcquirer) seen() []string {
 	a.mu.Lock()

@@ -3,12 +3,14 @@ package ytdlp_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/clock"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -153,7 +155,7 @@ func TestCookieJar_EveryKindOfRunKeepsTheCookiesYtDlpRenewed(t *testing.T) {
 func TestCookieJar_EveryKindOfRunRecordsItsFirstSignInFailure(t *testing.T) {
 	for _, kind := range everyRunKind {
 		t.Run(kind.name, func(t *testing.T) {
-			logs := captureLogs(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpFailing(t, botCheck)
 
@@ -185,7 +187,7 @@ func TestCookieJar_AFailedRunLeavesTheLiveJarAsItWas(t *testing.T) {
 func TestCookieJar_ARenewalThatDropsAnySessionCookieIsNotKeptAndSaysWhichOne(t *testing.T) {
 	for _, dropped := range sessionCookieNames {
 		t.Run(dropped, func(t *testing.T) {
-			logs := captureLogs(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpRenewing(t, jarWith(".youtube.com", "new", append(sessionCookiesWithout(dropped), "SIDCC")...), "exit 0")
 
@@ -200,7 +202,7 @@ func TestCookieJar_ARenewalThatDropsAnySessionCookieIsNotKeptAndSaysWhichOne(t *
 }
 
 func TestCookieJar_ARenewalThatSignsOutNamesEveryMissingSessionCookie(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	jar := liveJar(t, signedInJar("old"))
 	ytDlpRenewing(t, jarWith(".youtube.com", "new", "SIDCC"), "exit 0")
 
@@ -209,7 +211,7 @@ func TestCookieJar_ARenewalThatSignsOutNamesEveryMissingSessionCookie(t *testing
 	assertOneRefusal(t, logs, sessionCookieNames...)
 }
 
-func assertOneRefusal(t *testing.T, logs *bytes.Buffer, missing ...string) {
+func assertOneRefusal(t *testing.T, logs *logging.Capture, missing ...string) {
 	t.Helper()
 	records := logRecords(t, logs, "acquisition.cookie_renewal_refused")
 	if len(records) != 1 {
@@ -231,7 +233,7 @@ func TestCookieJar_ASessionCookieOnAnotherHostDoesNotCount(t *testing.T) {
 	for name, renewed := range cases {
 		t.Run(name, func(t *testing.T) {
 			jar := liveJar(t, signedInJar("old"))
-			logs := captureLogs(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			ytDlpRenewing(t, renewed, "exit 0")
 
 			_ = canaryWith(jar)
@@ -253,7 +255,7 @@ func TestCookieJar_EveryFormOfAYouTubeCookieKeepsTheSession(t *testing.T) {
 	}
 	for name, renewed := range cases {
 		t.Run(name, func(t *testing.T) {
-			logs := captureLogs(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpRenewing(t, renewed, "exit 0")
 
@@ -342,7 +344,7 @@ func TestCookieJar_CookiesYtDlpLeftAsTheyWereDoNotRewriteTheLiveJar(t *testing.T
 }
 
 func TestCookieJar_AJarThatCannotBeUpdatedWarnsAndTheRunStillSucceeds(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	jar := liveJar(t, signedInJar("old"))
 	if err := os.Mkdir(jar+".lock", 0o755); err != nil {
 		t.Fatal(err)
@@ -362,7 +364,7 @@ func TestCookieJar_AJarThatCannotBeUpdatedWarnsAndTheRunStillSucceeds(t *testing
 }
 
 func TestCookieJar_WithNoJarConfiguredNothingIsCopiedOrKept(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	calls := installYtDlp(t, "echo 212")
 
 	if err := canaryWith(""); err != nil {
@@ -377,12 +379,12 @@ func TestCookieJar_WithNoJarConfiguredNothingIsCopiedOrKept(t *testing.T) {
 	}
 }
 
-func firstSignInFailures(t *testing.T, logs *bytes.Buffer) []map[string]any {
+func firstSignInFailures(t *testing.T, logs *logging.Capture) []map[string]any {
 	t.Helper()
 	return logRecords(t, logs, "acquisition.cookie_session_first_signin_failure")
 }
 
-func logRecords(t *testing.T, logs *bytes.Buffer, msg string) []map[string]any {
+func logRecords(t *testing.T, logs *logging.Capture, msg string) []map[string]any {
 	t.Helper()
 	var records []map[string]any
 	for line := range strings.Lines(logs.String()) {
@@ -432,7 +434,7 @@ func firstFailureOnRecord(t *testing.T, jar string) *recordedFailure {
 }
 
 func TestCookieJar_TheFirstSignInFailureIsLoggedAndKeptInTheSessionFileWithItsEnvironment(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	installed := time.Now().Add(-50 * time.Hour)
 	jar := liveJarAt(t, signedInJar("old"), 0o644, installed)
 	ytDlpFailing(t, botCheck)
@@ -454,7 +456,7 @@ func TestCookieJar_TheFirstSignInFailureIsLoggedAndKeptInTheSessionFileWithItsEn
 }
 
 func TestCookieJar_AFailureStagingCaughtFirstStaysOnRecordWhenProductionHitsItToo(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	jar := liveJarAt(t, signedInJar("old"), 0o644, time.Now().Add(-50*time.Hour))
 	ytDlpFailing(t, botCheck)
 
@@ -471,7 +473,7 @@ func TestCookieJar_AFailureStagingCaughtFirstStaysOnRecordWhenProductionHitsItTo
 }
 
 func TestCookieJar_AFirstFailureIsLoggedOnlyOnceItIsOnRecord(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	jar := liveJar(t, signedInJar("old"))
 	if err := os.MkdirAll(filepath.Join(jar+".session.json", "blocker"), 0o755); err != nil {
 		t.Fatal(err)
@@ -489,7 +491,7 @@ func TestCookieJar_AFirstFailureIsLoggedOnlyOnceItIsOnRecord(t *testing.T) {
 }
 
 func TestCookieJar_TheFirstSignInFailureLogsTheSessionAgeSinceTheJarWasDroppedIn(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	installed := time.Now().Add(-50 * time.Hour)
 	jar := liveJarAt(t, signedInJar("old"), 0o644, installed)
 	ytDlpFailing(t, botCheck)
@@ -500,7 +502,7 @@ func TestCookieJar_TheFirstSignInFailureLogsTheSessionAgeSinceTheJarWasDroppedIn
 }
 
 func TestCookieJar_OnlyTheFirstSignInFailureOfAJarIsLoggedEvenAcrossRestarts(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	installed := time.Now().Add(-50 * time.Hour)
 	jar := liveJarAt(t, signedInJar("old"), 0o644, installed)
 	ytDlpFailing(t, botCheck)
@@ -512,7 +514,7 @@ func TestCookieJar_OnlyTheFirstSignInFailureOfAJarIsLoggedEvenAcrossRestarts(t *
 }
 
 func TestCookieJar_TheSessionAgeCountsFromTheDropInNotFromTheLastRenewal(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	installed := time.Now().Add(-50 * time.Hour)
 	jar := liveJarAt(t, signedInJar("old"), 0o644, installed)
 
@@ -533,7 +535,7 @@ func TestCookieJar_AJarDroppedInAfterAFailureStartsANewSession(t *testing.T) {
 	ytDlpFailing(t, botCheck)
 	_ = canaryWith(jar)
 
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	dropped := time.Now().Add(-150 * time.Minute)
 	if err := os.WriteFile(jar, []byte(signedInJar("human")), 0o644); err != nil {
 		t.Fatal(err)
@@ -552,7 +554,7 @@ func TestCookieJar_OnlyTheBotCheckCountsAsASignInFailure(t *testing.T) {
 		"ERROR: [youtube] jNQXAC9IVRw: Sign in to confirm your age. This video may be inappropriate for some users.",
 	} {
 		t.Run(stderr, func(t *testing.T) {
-			logs := captureLogs(t)
+			logs := logging.CaptureJSON(t, slog.LevelDebug)
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpFailing(t, stderr)
 
@@ -566,7 +568,7 @@ func TestCookieJar_OnlyTheBotCheckCountsAsASignInFailure(t *testing.T) {
 }
 
 func TestCookieJar_ABotCheckOnAJarReplacedMidRunIsNotChargedToTheNewJar(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	jar := liveJarAt(t, signedInJar("old"), 0o644, time.Now().Add(-50*time.Hour))
 	ytDlpReplacingTheLiveJar(t, jar, signedInJar("hum"), "echo \""+botCheck+"\" >&2\nexit 1")
 	_ = canaryWith(jar)
@@ -588,16 +590,14 @@ const waitLimit = 5 * time.Second
 
 func waitFor(t *testing.T, what string, done <-chan error, ready func() bool) {
 	t.Helper()
-	deadline := time.After(waitLimit)
-	for !ready() {
+	polltest.Until(t, waitLimit, what, func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("the run returned %v before %s", err, what)
-		case <-deadline:
-			t.Fatalf("still waiting after %v for %s", waitLimit, what)
-		case <-time.After(time.Millisecond):
+		default:
 		}
-	}
+		return ready()
+	})
 }
 
 func returnedWithin(t *testing.T, limit time.Duration, what string, done <-chan error) error {

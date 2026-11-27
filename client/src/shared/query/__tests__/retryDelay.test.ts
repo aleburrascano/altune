@@ -13,19 +13,21 @@ const SAMPLES_PER_ATTEMPT = 20;
 const A_MIDDLE_ATTEMPT = 3;
 
 function retryDelayMs(failureCount: number, random: number): number {
-  return createTransientRetryOptions({ random: () => random }).retryDelay(failureCount);
+  return createTransientRetryOptions({ random: () => random }).retryDelay(failureCount, undefined);
 }
 
 function scheduleForOneClient(): number[] {
   return ATTEMPTS_IN_A_SESSION.map((failureCount) =>
-    transientRetryOptions.retryDelay(failureCount),
+    transientRetryOptions.retryDelay(failureCount, undefined),
   );
 }
 
 describe('jitter: clients that fail together do not retry together', () => {
   it('spreads the wait for one attempt number across many values instead of one', () => {
     const waits = new Set(
-      Array.from({ length: 100 }, () => transientRetryOptions.retryDelay(A_MIDDLE_ATTEMPT)),
+      Array.from({ length: 100 }, () =>
+        transientRetryOptions.retryDelay(A_MIDDLE_ATTEMPT, undefined),
+      ),
     );
 
     expect(waits.size).toBeGreaterThan(1);
@@ -85,7 +87,7 @@ describe('the app-wide QueryClient retries on the jittered schedule', () => {
   it('waits within the jitter band of retryDelayMs for each failed attempt', () => {
     for (const failureCount of [...ATTEMPTS_IN_A_SESSION, ATTEMPTS_PAST_THE_CAP]) {
       for (let sample = 0; sample < SAMPLES_PER_ATTEMPT; sample += 1) {
-        const delay = transientRetryOptions.retryDelay(failureCount);
+        const delay = transientRetryOptions.retryDelay(failureCount, undefined);
 
         expect(delay).toBeGreaterThanOrEqual(retryDelayMs(failureCount, 0));
         expect(delay).toBeLessThanOrEqual(retryDelayMs(failureCount, 1));
@@ -116,5 +118,44 @@ describe('the app-wide QueryClient retries only transient failures, at most five
   it('never retries a failure that a retry cannot fix', () => {
     expect(retry(0, new ApiError(NOT_FOUND, 'not found'))).toBe(false);
     expect(retry(0, new Error('bug'))).toBe(false);
+  });
+});
+
+const TOO_MANY_REQUESTS = 429;
+const ASKED_MS = 4_000;
+const AN_HOUR_MS = 3_600_000;
+const FLOOR_MS = 1_000;
+const SPREAD = 0.25;
+const ALMOST_ONE = 0.999999;
+
+function askedBy(retryAfterMs: number): ApiError {
+  return new ApiError(TOO_MANY_REQUESTS, 'x', undefined, undefined, { retryAfterMs });
+}
+
+function delayWith(random: number, error: ApiError): number {
+  return createTransientRetryOptions({ random: () => random }).retryDelay(0, error);
+}
+
+describe('a server-asked delay', () => {
+  it('replaces the backoff and is never earlier than the server asked', () => {
+    expect(delayWith(0, askedBy(ASKED_MS))).toBe(ASKED_MS);
+  });
+
+  it('spreads clients told the same delay over a quarter more, so they do not retry together', () => {
+    const latest = delayWith(ALMOST_ONE, askedBy(ASKED_MS));
+
+    expect(latest).toBeGreaterThan(ASKED_MS);
+    expect(latest).toBeLessThanOrEqual(ASKED_MS * (1 + SPREAD));
+  });
+
+  it('never retries at once when the server asks for zero seconds', () => {
+    expect(delayWith(0, askedBy(0))).toBe(FLOOR_MS);
+  });
+
+  it('is capped so a hostile header cannot park the client', () => {
+    expect(delayWith(0, askedBy(AN_HOUR_MS))).toBe(RETRY_BACKOFF_CAP_MS);
+    expect(delayWith(ALMOST_ONE, askedBy(AN_HOUR_MS))).toBeLessThanOrEqual(
+      RETRY_BACKOFF_CAP_MS * (1 + SPREAD),
+    );
   });
 });

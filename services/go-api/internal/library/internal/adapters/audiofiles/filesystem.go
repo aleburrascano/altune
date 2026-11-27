@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/parallel"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +13,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -26,18 +27,22 @@ var errFilesystemCallPanicked = errors.New("filesystem call panicked")
 type FilesystemAudioStore struct {
 	baseDir   string
 	opTimeout time.Duration
-	gate      *fsGate
+	gate      *parallel.Slots
+	metrics   ports.FSCallMetrics
 }
 
-func NewFilesystemAudioStore(baseDir string) *FilesystemAudioStore {
-	return newFilesystemAudioStore(baseDir, storageOpTimeout)
+func NewFilesystemAudioStore(baseDir string, metrics ports.FSCallMetrics) *FilesystemAudioStore {
+	return newFilesystemAudioStore(baseDir, storageOpTimeout, metrics)
 }
 
-func newFilesystemAudioStore(baseDir string, opTimeout time.Duration) *FilesystemAudioStore {
+func newFilesystemAudioStore(baseDir string, opTimeout time.Duration, metrics ports.FSCallMetrics) *FilesystemAudioStore {
+	if metrics == nil {
+		panic("audiofiles: the filesystem audio store requires fs call metrics")
+	}
 	if opTimeout <= 0 {
 		opTimeout = storageOpTimeout
 	}
-	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: opTimeout, gate: &fsGate{}}
+	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: opTimeout, gate: parallel.MustNewSlots(MaxInFlightFilesystemCalls), metrics: metrics}
 }
 
 func (s *FilesystemAudioStore) Exists(ctx context.Context, audioRef string) (bool, error) {
@@ -48,7 +53,7 @@ func (s *FilesystemAudioStore) Exists(ctx context.Context, audioRef string) (boo
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	return boundedFSCall(ctx, s.gate, "exists", func() (bool, error) {
+	return boundedFSCall(ctx, s.gate, s.metrics, "exists", func() (bool, error) {
 		_, err := os.Stat(path)
 		if os.IsNotExist(err) {
 			return false, nil
@@ -66,7 +71,7 @@ func (s *FilesystemAudioStore) Store(ctx context.Context, sourcePath, audioRef s
 		return err
 	}
 
-	_, err = boundedFSCall(ctx, s.gate, "store", func() (struct{}, error) {
+	_, err = boundedFSCall(ctx, s.gate, s.metrics, "store", func() (struct{}, error) {
 		return struct{}{}, moveIntoPlace(ctx, sourcePath, destPath)
 	}, nil)
 	return err
@@ -92,7 +97,7 @@ func copyThenRemoveAcrossFilesystems(ctx context.Context, sourcePath, destPath s
 		return fmt.Errorf("copy audio into place: %w", err)
 	}
 	if err := os.Remove(sourcePath); err != nil {
-		slog.WarnContext(ctx, "audio_temp_source_remove_failed", "path", sourcePath, "error", err)
+		slog.WarnContext(ctx, "audio_temp_source_remove_failed", logging.KeyPath, sourcePath, logging.KeyError, err)
 	}
 	return nil
 }
@@ -133,7 +138,7 @@ func (s *FilesystemAudioStore) Stream(ctx context.Context, audioRef string) (por
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	opened, err := boundedFSCall(ctx, s.gate, "stream open", func() (openedAudio, error) {
+	opened, err := boundedFSCall(ctx, s.gate, s.metrics, "stream open", func() (openedAudio, error) {
 		return openAudio(path)
 	}, func(late openedAudio) { closeLateAudio(ctx, late) })
 	if err != nil {
@@ -160,7 +165,7 @@ func closeLateAudio(ctx context.Context, late openedAudio) {
 		return
 	}
 	if err := late.file.Close(); err != nil {
-		slog.WarnContext(ctx, "audio_late_open_close_failed", "path", late.file.Name(), "error", err)
+		slog.WarnContext(ctx, "audio_late_open_close_failed", logging.KeyPath, late.file.Name(), logging.KeyError, err)
 	}
 }
 
@@ -172,7 +177,7 @@ func (s *FilesystemAudioStore) Delete(ctx context.Context, audioRef string) erro
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	_, err = boundedFSCall(ctx, s.gate, "delete", func() (struct{}, error) {
+	_, err = boundedFSCall(ctx, s.gate, s.metrics, "delete", func() (struct{}, error) {
 		err := os.Remove(path)
 		if os.IsNotExist(err) {
 			return struct{}{}, nil
@@ -193,7 +198,7 @@ func (s *FilesystemAudioStore) ListWithAge(ctx context.Context, prefix string) (
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	objects, err := boundedFSCall(ctx, s.gate, "list", func() ([]ports.ObjectAge, error) {
+	objects, err := boundedFSCall(ctx, s.gate, s.metrics, "list", func() ([]ports.ObjectAge, error) {
 		return walkObjectAges(ctx, s.baseDir, root)
 	}, nil)
 	if err != nil {
@@ -260,33 +265,20 @@ type fsCallResult[T any] struct {
 
 const MaxInFlightFilesystemCalls = 64
 
-type fsGate struct {
-	inFlight atomic.Int64
-}
-
-func (g *fsGate) enter() bool {
-	if g.inFlight.Add(1) > MaxInFlightFilesystemCalls {
-		g.inFlight.Add(-1)
-		return false
-	}
-	return true
-}
-
-func (g *fsGate) leave() { g.inFlight.Add(-1) }
-
-func boundedFSCall[T any](ctx context.Context, gate *fsGate, op string, call func() (T, error), discard func(T)) (T, error) {
+func boundedFSCall[T any](ctx context.Context, gate *parallel.Slots, metrics ports.FSCallMetrics, op string, call func() (T, error), discard func(T)) (T, error) {
 	var zero T
 	if err := ctx.Err(); err != nil {
 		return zero, fmt.Errorf("filesystem %s: %w", op, err)
 	}
-	if !gate.enter() {
+	if !gate.TryAcquire() {
+		metrics.FSCallRefused()
 		slog.WarnContext(ctx, "catalog.storage_stalled", "op", op, "in_flight", MaxInFlightFilesystemCalls)
 		return zero, fmt.Errorf("filesystem %s: %w", op, domain.ErrStorageStalled)
 	}
 
 	done := make(chan fsCallResult[T], 1)
 	background.Go(ctx, "catalog.filesystem_call_panic", func() {
-		defer gate.leave()
+		defer gate.Release()
 		res := fsCallResult[T]{err: errFilesystemCallPanicked}
 		defer func() { done <- res }()
 		value, err := call()
@@ -297,6 +289,7 @@ func boundedFSCall[T any](ctx context.Context, gate *fsGate, op string, call fun
 	case res := <-done:
 		return res.value, res.err
 	case <-ctx.Done():
+		metrics.FSCallAbandoned()
 		if discard != nil {
 			background.Go(ctx, "catalog.filesystem_discard_panic", func() { discardLateResult(done, discard) })
 		}

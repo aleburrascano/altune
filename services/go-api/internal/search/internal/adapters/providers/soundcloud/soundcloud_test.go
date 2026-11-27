@@ -801,25 +801,35 @@ func TestSoundCloudAPIAdapter_Search_capsEmptyPageWalk(t *testing.T) {
 }
 
 type ignoreDoneContext struct {
-	context.Context
+	cancelled *atomic.Bool
 }
+
+func (ignoreDoneContext) Deadline() (time.Time, bool) { return time.Time{}, false }
 
 func (ignoreDoneContext) Done() <-chan struct{} { return nil }
 
+func (c ignoreDoneContext) Err() error {
+	if c.cancelled.Load() {
+		return context.Canceled
+	}
+	return nil
+}
+
+func (ignoreDoneContext) Value(any) any { return nil }
+
 func TestSoundCloudAPIAdapter_Search_cancelledAfterFirstPageReturnsPartialSuccess(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var cancelled atomic.Bool
 	var requests atomic.Int64
 	a := newTestSoundCloudAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		if requests.Add(1) == 1 {
 			_, _ = w.Write([]byte(`{"collection":[{"id":1,"kind":"track","title":"Page One","user":{"username":"Che"}}],"next_href":"` + scAPIOrigin + `/search/tracks?offset=next"}`))
-			cancel()
+			cancelled.Store(true)
 			return
 		}
 		t.Error("no request expected after the context is cancelled")
 	}, nil)
 
-	results, err := a.Search(ignoreDoneContext{ctx}, "query", providertest.TrackKinds())
+	results, err := a.Search(ignoreDoneContext{cancelled: &cancelled}, "query", providertest.TrackKinds())
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -998,8 +1008,8 @@ func TestSoundCloud_GetArtistAlbums_singlesFailureLogsAWarningNamingTheUser(t *t
 	if !strings.Contains(event, `"level":"WARN"`) {
 		t.Errorf("soundcloud.singles_skipped = %s, want level WARN", event)
 	}
-	if !strings.Contains(event, `"user_id":"909010162"`) && !strings.Contains(event, `"user_id":909010162`) {
-		t.Errorf("soundcloud.singles_skipped = %s, want user_id 909010162", event)
+	if !strings.Contains(event, `"soundcloud_user_id":"909010162"`) && !strings.Contains(event, `"soundcloud_user_id":909010162`) {
+		t.Errorf("soundcloud.singles_skipped = %s, want soundcloud_user_id 909010162", event)
 	}
 	if !strings.Contains(event, `"error":"`) || strings.Contains(event, `"error":""`) {
 		t.Errorf("soundcloud.singles_skipped = %s, want a non-empty error", event)

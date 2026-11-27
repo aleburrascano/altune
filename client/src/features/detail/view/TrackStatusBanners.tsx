@@ -32,7 +32,8 @@ function SearchingIndicator(): ReactElement {
 const dangerBannerProps = { tone: 'danger' as const, style: styles.banner };
 
 function SaveFailureBanner({ saveFailure }: { saveFailure: SaveFailure }): ReactElement {
-  const { trackId, message } = saveFailure;
+  const { trackId, copy } = saveFailure;
+  const message = copy.body;
   useEffect(() => {
     if (trackId !== undefined) recordFailureShownOnce(trackId, message);
   }, [trackId, message]);

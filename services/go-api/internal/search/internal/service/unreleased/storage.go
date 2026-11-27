@@ -3,6 +3,7 @@ package unreleased
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
@@ -14,7 +15,7 @@ type Storage interface {
 	persist(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time)
 	list(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error)
 	lookup(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error)
-	warm(s *Service, artists []ArtistToRefresh)
+	warm(ctx context.Context, s *Service, artists []ArtistToRefresh)
 	due(ctx context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error)
 	search(ctx context.Context, query string) ([]ports.UnreleasedHit, error)
 }
@@ -40,8 +41,12 @@ func (c cachedStorage) list(ctx context.Context, s *Service, provider domain.Pro
 	if err != nil {
 		return nil, err
 	}
-	if err := c.cache.Set(ctx, provider, externalID, nameKey, songs, s.cacheTTL(songs, complete)); err != nil {
-		slog.WarnContext(ctx, "unreleased.cache_set_failed", "error", err)
+	ttl := s.cacheTTL(songs)
+	if !complete {
+		ttl = s.cfg.EmptyTTL
+	}
+	if err := c.cache.Set(ctx, provider, externalID, nameKey, songs, ttl); err != nil {
+		slog.WarnContext(ctx, "unreleased.cache_set_failed", logging.KeyError, err)
 	}
 	return songs, nil
 }
@@ -57,7 +62,7 @@ func (c cachedStorage) lookup(ctx context.Context, s *Service, provider domain.P
 	return s.awaitJob(ctx, j)
 }
 
-func (cachedStorage) warm(*Service, []ArtistToRefresh) {}
+func (cachedStorage) warm(context.Context, *Service, []ArtistToRefresh) {}
 
 func (cachedStorage) due(context.Context, time.Time, int) ([]ports.UnreleasedDueArtist, error) {
 	return nil, nil
@@ -78,7 +83,7 @@ func NewStoredStorage(store ports.UnreleasedStore) (Storage, error) {
 
 func (st storedStorage) persist(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) {
 	if err := st.store.Write(ctx, key, songs, complete, startedAt, CurrentBuildVersion); err != nil {
-		slog.WarnContext(ctx, "unreleased.store_write_failed", "error", err)
+		slog.WarnContext(ctx, "unreleased.store_write_failed", logging.KeyError, err)
 	}
 }
 
@@ -104,21 +109,21 @@ func (st storedStorage) lookup(ctx context.Context, s *Service, provider domain.
 
 func (st storedStorage) storedSongsOrNotBuilt(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, int, bool) {
 	if err := st.store.Record(ctx, key, artistName, known); err != nil {
-		slog.WarnContext(ctx, "unreleased.store_record_failed", "error", err)
+		slog.WarnContext(ctx, "unreleased.store_record_failed", logging.KeyError, err)
 	}
 	songs, _, built, version, err := st.store.Read(ctx, key)
 	if err != nil {
-		slog.WarnContext(ctx, "unreleased.store_read_failed", "error", err)
+		slog.WarnContext(ctx, "unreleased.store_read_failed", logging.KeyError, err)
 		return nil, 0, false
 	}
 	return songs, version, built
 }
 
-func (st storedStorage) warm(s *Service, artists []ArtistToRefresh) {
+func (st storedStorage) warm(ctx context.Context, s *Service, artists []ArtistToRefresh) {
 	if len(artists) == 0 {
 		return
 	}
-	s.jobs.Track(func() { s.runWarm(st.store, artists) })
+	s.jobs.Track(func() { s.runWarm(ctx, st.store, artists) })
 }
 
 func (st storedStorage) due(ctx context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error) {

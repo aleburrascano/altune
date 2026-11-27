@@ -20,17 +20,17 @@ func (a *application) startAlertMonitor(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	monitor, err := newAlertMonitor(&a.jobs, notifier, alertCheckInterval, conditions)
+	monitor, err := newAlertMonitor(notifier, alertCheckInterval, conditions)
 	if err != nil {
 		return err
 	}
 	a.alertMonitor = monitor
-	a.jobs.WhenLeader(jobs.AlertMonitor, a.alertMonitor.Start)
+	a.jobs.Ticker(jobs.AlertMonitor, alertCheckInterval, monitor.Pass)
 	return nil
 }
 
-func newAlertMonitor(runner *jobs.Runner, notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
-	monitor, err := monitoring.NewAlertMonitor(notifier, interval, clock.Now, clock.NewTicker, runner.LeaderContextFor(jobs.AlertMonitor), conditions...)
+func newAlertMonitor(notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
+	monitor, err := monitoring.NewAlertMonitor(notifier, interval, clock.Now, conditions...)
 	if err != nil {
 		return nil, fmt.Errorf("alert monitor: %w", err)
 	}
@@ -43,6 +43,7 @@ func (a *application) alertConditions(coverage alerts.CoverageEvents) ([]monitor
 		Coverage:              coverage,
 		YouTubeSignedOutSince: downloadsetup.YtDlpSearcher(a.cfg).SignedOutSince,
 		Jobs:                  &a.jobs,
+		Requests:              a.latency.Snapshot,
 		Clock:                 clock.Now,
 	})
 }

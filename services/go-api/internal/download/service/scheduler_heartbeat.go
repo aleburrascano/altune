@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -37,13 +38,13 @@ func (s *BackgroundAcquisitionScheduler) sendHeartbeat(jobCtx context.Context, j
 		return true
 	}
 	if errors.Is(err, acqdomain.ErrLeaseLost) {
-		slog.WarnContext(ctx, "acquisition.lease_lost", "track_id", job.TrackID.String())
+		slog.WarnContext(ctx, "acquisition.lease_lost", logging.KeyTrackID, job.TrackID.String())
 		return false
 	}
 	if s.now().Sub(*lastSuccess) >= s.leaseDuration {
-		slog.ErrorContext(ctx, "acquisition.heartbeat_lease_expired", "track_id", job.TrackID.String(), "error", err)
+		slog.ErrorContext(ctx, "acquisition.heartbeat_lease_expired", logging.KeyTrackID, job.TrackID.String(), logging.KeyError, err)
 		return false
 	}
-	slog.ErrorContext(ctx, "acquisition.heartbeat_failed", "track_id", job.TrackID.String(), "error", err)
+	slog.ErrorContext(ctx, "acquisition.heartbeat_failed", logging.KeyTrackID, job.TrackID.String(), logging.KeyError, err)
 	return true
 }

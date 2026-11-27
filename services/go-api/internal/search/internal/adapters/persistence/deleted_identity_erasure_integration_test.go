@@ -120,7 +120,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner ids.User
 	if err := events.Append(ctx, domain.InteractionEvent{
 		OccurredAt: time.Now().UTC(),
 		UserId:     owner,
-		Type:       domain.EventTypeSearchPerformed,
+		Type:       domain.InteractionTypeSearchPerformed,
 		QueryNorm:  seededQuery,
 		Payload:    map[string]any{},
 	}); err != nil {

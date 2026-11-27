@@ -117,16 +117,25 @@ func TestCheck_EachDependencyReportsItsOwnFailure(t *testing.T) {
 }
 
 func TestCheck_LatencyIsTheProbesOwnDuration(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	clockNow := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
 	slow := func(context.Context) error {
-		time.Sleep(30 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		now = now.Add(30 * time.Millisecond)
 		return nil
 	}
 
-	got := health.Check(context.Background(), clock.Now, health.Probes{DB: slow, Redis: slow, Auth: slow}, time.Second)
+	got := health.Check(context.Background(), clockNow, health.Probes{DB: slow, Redis: slow, Auth: slow}, time.Second)
 
 	for name, ms := range map[string]int64{"db": got.Detail.DBLatencyMs, "redis": got.Detail.RedisLatencyMs, "auth": got.Detail.AuthLatencyMs} {
-		if ms < 30 || ms > 1000 {
-			t.Errorf("%s latency = %dms, want the probe's ~30ms", name, ms)
+		if ms != 30 {
+			t.Errorf("%s latency = %dms, want the probe's own 30ms", name, ms)
 		}
 	}
 }

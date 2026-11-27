@@ -527,7 +527,10 @@ describe('useTrackSave', () => {
       const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
 
       expect(result.current.state).toBe('failed');
-      expect(result.current.failure).toEqual({ message: 'network error', isRetryable: true });
+      expect(result.current.failure).toEqual({
+        copy: { title: "Couldn't save this track", body: 'network error' },
+        isRetryable: true,
+      });
     });
 
     it('is saving once onSave dispatches a create for an unowned track', async () => {
@@ -551,7 +554,10 @@ describe('useTrackSave', () => {
 
       await waitFor(() => expect(result.current.state).toBe('failed'));
       expect(result.current.failure).toEqual({
-        message: '503 unavailable',
+        copy: {
+          title: "Couldn't save this track",
+          body: 'Something went wrong on our end. Please try again.',
+        },
         isRetryable: true,
         trackId: expect.anything(),
       });

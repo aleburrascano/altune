@@ -1,8 +1,8 @@
 package handler
 
 import (
-	featuredservice "altune/go-api/internal/library/internal/core/featured"
 	"altune/go-api/internal/library/internal/domain"
+	featuredservice "altune/go-api/internal/library/internal/service/featured"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"fmt"
@@ -34,10 +34,7 @@ func (h *FeaturedArtistHandler) Routes(r chi.Router) {
 }
 
 func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	_, offset, err := pageBounds(r)
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)
@@ -60,10 +57,7 @@ func withBackfillProgress(err error, result *featuredservice.BackfillFeaturedRes
 }
 
 func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	fa, err := featuredArtistFromQuery(r.URL.Query())
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)

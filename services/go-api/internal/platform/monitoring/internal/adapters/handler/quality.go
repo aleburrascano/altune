@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"context"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -35,9 +34,8 @@ func emptyDiscographyQualityResponse(windowDays int, groupBy ports.DiscographyGr
 }
 
 func (h *Handler) serveDiscographyQuality(w http.ResponseWriter, r *http.Request) {
-	windowDays, err := parseWindowDays(r.URL.Query().Get("window_days"))
-	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+	windowDays, ok := httpserver.QueryInt(w, r, "window_days", defaultQualityWindowDays, 1, maxQualityWindowDays, apierror.CodeObserveInvalidWindowDays)
+	if !ok {
 		return
 	}
 	groupBy, err := groupByFromQuery(r.URL.Query().Get("by"))
@@ -73,15 +71,4 @@ func groupByFromQuery(raw string) (ports.DiscographyGroupBy, error) {
 		return "", invalidGroupBy(err)
 	}
 	return groupBy, nil
-}
-
-func parseWindowDays(raw string) (int, error) {
-	if raw == "" {
-		return defaultQualityWindowDays, nil
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n <= 0 {
-		return 0, apierror.NewError(apierror.CodeObserveInvalidWindowDays, "window_days must be a positive integer")
-	}
-	return min(n, maxQualityWindowDays), nil
 }

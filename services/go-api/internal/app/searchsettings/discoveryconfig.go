@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
-	"expvar"
 	"log/slog"
 	"net/http"
 	"time"
@@ -19,14 +18,14 @@ const (
 	discoveryChartTimeout    = 15 * time.Second
 )
 
-func Deps(ctx context.Context, cfg *config.Config, transport http.RoundTripper) search.Deps {
+func Deps(ctx context.Context, cfg *config.Config, transport http.RoundTripper, metrics *telemetry.Registry) search.Deps {
 	return search.Deps{
-		Lifecycle:       ctx,
+		Shutdown:        ctx.Done(),
 		Logger:          slog.Default(),
 		Transport:       transport,
 		ProviderTimeout: discoveryProviderTimeout,
 		ChartTimeout:    discoveryChartTimeout,
-		CacheOps:        cacheOps(),
+		CacheOps:        metrics.LabeledCounter(cacheOpsVarName),
 		Providers:       discoveryProviderSettings(cfg),
 		Search:          discoverySearchSettings(cfg),
 		Unreleased:      search.UnreleasedSettings{ServeFromCache: cfg.UnreleasedSource == "cache", Tuning: unreleasedConfig(cfg)},
@@ -77,11 +76,3 @@ func ClientEvents(cfg *config.Config) search.ClientEventSink {
 }
 
 const cacheOpsVarName = "discovery_cache_ops"
-
-func cacheOps() *expvar.Map {
-	ops, ok := expvar.Get(cacheOpsVarName).(*expvar.Map)
-	if !ok {
-		ops = expvar.NewMap(cacheOpsVarName)
-	}
-	return ops
-}

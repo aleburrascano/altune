@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"testing"
@@ -14,17 +13,22 @@ import (
 
 const acquireTakes = 2 * time.Second
 
-type slowAcquirer struct{}
+type slowAcquirer struct{ finish chan struct{} }
 
-func (slowAcquirer) Execute(ctx context.Context, _ ids.UserId, _ ids.TrackId) error {
-	return clock.Sleep(ctx, acquireTakes)
+func (a slowAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
+	select {
+	case <-a.finish:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
-func (slowAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (slowAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
 	return nil
 }
 
-func (slowAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (slowAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -40,7 +44,7 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 
 		time.Sleep(3 * time.Second)
 
-		active := scheduler.Status().ActiveJobs
+		active := scheduler.Status(t.Context()).ActiveJobs
 		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != ports.JobRunning {
 			t.Fatalf("ActiveJobs = %+v, want the running job of %s", active, track)
 		}
@@ -52,17 +56,20 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 
 func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		scheduler := newTestScheduler(slowAcquirer{}, 1, time.Now)
+		acquirer := slowAcquirer{finish: make(chan struct{})}
+		scheduler := newTestScheduler(acquirer, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		track := ids.NewTrackId()
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), track, ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
 		}
-
-		time.Sleep(acquireTakes)
 		synctest.Wait()
 
-		status := scheduler.Status()
+		time.Sleep(acquireTakes)
+		close(acquirer.finish)
+		synctest.Wait()
+
+		status := scheduler.Status(t.Context())
 		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != ports.JobSucceeded {
 			t.Fatalf("Recent = %+v, want the succeeded job of %s", status.Recent, track)
 		}

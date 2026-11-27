@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
 	"bytes"
@@ -17,7 +18,7 @@ import (
 
 func TestPostgresTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 
@@ -52,7 +53,7 @@ func TestPostgresTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 
 func TestPostgresFeaturedArtistRepo_ReplaceFeaturedArtists_RefusesAnotherUsersTrackAndLeavesItsArtists(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool)
+	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	owner, intruder := sharedids.NewUserId(uuid.New()), sharedids.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, owner)
@@ -85,7 +86,7 @@ func addTrackForFeaturing(t *testing.T, pool *pgxpool.Pool, userId sharedids.Use
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track.ID, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool).Add(context.Background(), track); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 	return track
@@ -110,7 +111,7 @@ func cleanupFeaturedArtists(t *testing.T, pool *pgxpool.Pool, userId sharedids.U
 
 func TestPostgresFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool)
+	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, userId)
@@ -140,7 +141,7 @@ func TestPostgresFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T)
 
 func TestPostgresFeaturedArtistRepo_LegacyKeyRowStillMatches(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool)
+	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, userId)
@@ -200,7 +201,7 @@ func seedFeaturedOnAll(ctx context.Context, t *testing.T, pool *pgxpool.Pool, us
 func ascendingTrackIds(n int) []library.TrackId {
 	ids := make([]library.TrackId, n)
 	for i := range ids {
-		ids[i] = library.NewTrackId()
+		ids[i] = librarytest.NewTrackId()
 	}
 	slices.SortFunc(ids, func(a, b library.TrackId) int {
 		x, y := a.UUID(), b.UUID()
@@ -219,7 +220,7 @@ func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_StopsAtTheLibraryPageCap
 	fa := library.FeaturedArtist{Name: "Capped Guest", MBID: "mb-capped-guest", Role: library.RoleFeatured}
 	seedFeaturedOnAll(ctx, t, pool, userId, fa, ids)
 
-	got, err := library.NewPostgresCatalogTrackRepository(pool).ListTracksFeaturing(ctx, userId, fa)
+	got, err := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics()).ListTracksFeaturing(ctx, userId, fa)
 
 	if err != nil || len(got) != library.MaxLibraryPageSize {
 		t.Fatalf("ListTracksFeaturing = %d tracks, err %v; want the %d cap of %d featuring", len(got), err, library.MaxLibraryPageSize, len(ids))
@@ -237,7 +238,7 @@ func addFeaturedTrackAt(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 	track.ID = id
 	track.AddedAt = addedAt
 	cleanupTrack(t, pool, id, userId)
-	repo := library.NewPostgresCatalogTrackRepository(pool)
+	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -266,7 +267,7 @@ func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_LeavesOutAnotherUsersTra
 	addFeaturedTrackAt(ctx, t, pool, owner, ids[0], addedAt, fa)
 	addFeaturedTrackAt(ctx, t, pool, other, ids[1], addedAt, fa)
 
-	got, err := library.NewPostgresCatalogTrackRepository(pool).ListTracksFeaturing(ctx, owner, fa)
+	got, err := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics()).ListTracksFeaturing(ctx, owner, fa)
 
 	if err != nil || !slices.Equal(featuringIds(got), ids[:1]) {
 		t.Fatalf("ListTracksFeaturing(owner) = %v, err %v; want only the owner's track %v, none of the other user's", featuringIds(got), err, ids[:1])
@@ -284,7 +285,7 @@ func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_NewestAddedComesFirst(t 
 	addFeaturedTrackAt(ctx, t, pool, userId, ids[0], addedAt, fa)
 	addFeaturedTrackAt(ctx, t, pool, userId, ids[1], addedAt.Add(-time.Hour), fa)
 
-	got, err := library.NewPostgresCatalogTrackRepository(pool).ListTracksFeaturing(ctx, userId, fa)
+	got, err := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics()).ListTracksFeaturing(ctx, userId, fa)
 
 	if err != nil || !slices.Equal(featuringIds(got), ids) {
 		t.Fatalf("ListTracksFeaturing = %v, err %v; want %v: the newest added first, though its id is the smaller", featuringIds(got), err, ids)

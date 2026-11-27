@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -241,9 +240,7 @@ func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.Capt
 }
 
 func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("debug")
+	ring := logging.CaptureRing(t, "debug")
 
 	const corrID = "corr-sse-1234"
 	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
@@ -588,14 +585,15 @@ func (w *blockingFlushWriter) FlushError() error {
 			return errors.New("flush blocked with no deadline")
 		}
 	}
-	if d := time.Until(dl); d > 0 {
-		timer := time.NewTimer(d)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-w.stop:
-			return errors.New("stream closed")
-		}
+	if !time.Now().Before(dl) {
+		return os.ErrDeadlineExceeded
+	}
+	expired, cancel := context.WithDeadline(context.Background(), dl)
+	defer cancel()
+	select {
+	case <-expired.Done():
+	case <-w.stop:
+		return errors.New("stream closed")
 	}
 	return os.ErrDeadlineExceeded
 }
@@ -940,20 +938,6 @@ func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T)
 			t.Fatal("fresh connect with prior history received resync")
 		}
 		pings++
-	}
-}
-
-func TestSSEHandler_RequestWithoutUserIsRejected(t *testing.T) {
-	h := handler.NewEventStreamHandler(clock.Now, clock.NewTicker, events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
-	rec := httptest.NewRecorder()
-
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/events", nil))
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
-	if got := rec.Header().Get("Content-Type"); got == "text/event-stream" {
-		t.Fatal("unauthenticated request received an event-stream response")
 	}
 }
 

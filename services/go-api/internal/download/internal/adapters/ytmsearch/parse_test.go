@@ -128,3 +128,55 @@ func TestParseOEmbed_ReadsTitleAndAuthor(t *testing.T) {
 		})
 	}
 }
+
+func seedFromFixtures(f *testing.F, pattern string) {
+	f.Helper()
+	paths, err := filepath.Glob(filepath.Join("testdata", pattern))
+	if err != nil || len(paths) == 0 {
+		f.Fatalf("no fixtures match %q: %v", pattern, err)
+	}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			f.Fatalf("read fixture: %v", err)
+		}
+		f.Add(raw)
+	}
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`null`))
+	f.Add([]byte(`[]`))
+	f.Add([]byte(``))
+}
+
+func assertParsesTheSameTwice[T any](t *testing.T, parse func([]byte) (T, error), raw []byte) {
+	t.Helper()
+	first, firstErr := parse(raw)
+	second, secondErr := parse(raw)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("parsing %q twice gave %+v then %+v", raw, first, second)
+	}
+	if (firstErr == nil) != (secondErr == nil) || (firstErr != nil && firstErr.Error() != secondErr.Error()) {
+		t.Fatalf("parsing %q twice failed differently: %v then %v", raw, firstErr, secondErr)
+	}
+}
+
+func FuzzParseWatch(f *testing.F) {
+	seedFromFixtures(f, "next_*.json")
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		assertParsesTheSameTwice(t, ytmsearch.ParseWatch, raw)
+	})
+}
+
+func FuzzParseSongs(f *testing.F) {
+	seedFromFixtures(f, "search_*.json")
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		assertParsesTheSameTwice(t, ytmsearch.ParseSongs, raw)
+	})
+}
+
+func FuzzParseOEmbed(f *testing.F) {
+	seedFromFixtures(f, "oembed_*.json")
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		assertParsesTheSameTwice(t, ytmsearch.ParseOEmbed, raw)
+	})
+}

@@ -126,7 +126,7 @@ type evalSource struct {
 func (s *evalSource) Name() acqdomain.SourceName { return acqdomain.SourceName(s.spec.Name) }
 
 func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	s.shared.clock.recordSearch(req.FallbackOnly, s.spec.searchSeconds())
+	s.shared.clock.recordSearch(req.Tier == ports.TierFallbackOnly, s.spec.searchSeconds())
 	if s.spec.Fails {
 		return nil, &acqdomain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
 	}

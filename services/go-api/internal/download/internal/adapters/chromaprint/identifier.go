@@ -3,15 +3,13 @@ package chromaprint
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
-	"altune/go-api/internal/shared/retrysafe"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -153,19 +151,15 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	form.Set("duration", strconv.Itoa(int(fp.Duration)))
 	form.Set("fingerprint", fp.Fingerprint)
 
-	resp, err := i.send(ctx, i.endpoint, form, "acoustid lookup")
-	if err != nil {
-		return ports.RecordingMatch{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, lookupBodyCap+1))
-	if err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("read acoustid response: %w", err)
+	status, body, err := outbound.PostBytesCapped(ctx, i.client, i.endpoint, strings.NewReader(form.Encode()), lookupBodyCap+1,
+		outbound.WithHeader("Content-Type", "application/x-www-form-urlencoded"))
+	switch {
+	case err != nil:
+		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %w", err)
+	case status == http.StatusTooManyRequests:
+		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d: %w", status, acqdomain.ErrIdentifyThrottled)
+	case status != http.StatusOK:
+		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", status)
 	}
 	if len(body) >= lookupBodyCap {
 		return ports.RecordingMatch{}, fmt.Errorf("read acoustid response: exceeds %d byte cap", lookupBodyCap)
@@ -180,23 +174,6 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	}
 
 	return matchOf(acoustIDResults(parsed)), nil
-}
-
-func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values, label string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(retrysafe.Mark(ctx), http.MethodPost, endpoint, bytes.NewBufferString(form.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("build %s request: %w", label, err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := i.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", label, err)
-	}
-	if resp.StatusCode == http.StatusTooManyRequests {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("%s: status %d: %w", label, resp.StatusCode, acqdomain.ErrIdentifyThrottled)
-	}
-	return resp, nil
 }
 
 func matchOf(results []ports.AcoustIDResult) ports.RecordingMatch {

@@ -3,6 +3,7 @@ package vocabulary
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -51,7 +52,7 @@ func chartOutage(providerCount int, fetchErrs []error) error {
 
 func (s *SpellingHintsRefreshService) trim(ctx context.Context) {
 	if err := s.vocab.Trim(ctx, maxVocabEntries); err != nil {
-		slog.WarnContext(ctx, "vocabulary trim failed", "error", err)
+		slog.WarnContext(ctx, "vocabulary trim failed", logging.KeyError, err)
 	}
 }
 
@@ -65,7 +66,7 @@ func (s *SpellingHintsRefreshService) collectEntries(
 		if err != nil {
 			provider := cp.Name().String()
 			reason := redact.Secrets(err.Error())
-			slog.WarnContext(ctx, "chart fetch failed", "provider", provider, "error", reason)
+			slog.WarnContext(ctx, "chart fetch failed", "provider", provider, logging.KeyError, reason)
 			fetchErrs = append(fetchErrs, fmt.Errorf("%s: %s", provider, reason))
 			continue
 		}

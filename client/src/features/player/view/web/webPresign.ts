@@ -11,7 +11,7 @@ import {
 import {
   redactedPlaybackFailure,
   type RedactedPlaybackFailure,
-} from '@features/player/domain/playbackError';
+} from '@features/player/core/playbackError';
 import {
   isPresignStale,
   type PendingPresign,

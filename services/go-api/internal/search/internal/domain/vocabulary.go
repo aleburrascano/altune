@@ -4,6 +4,23 @@ import "unicode/utf8"
 
 const MaxVocabularyTermRunes = 200
 
+const (
+	shortQueryRunes  = 4
+	mediumQueryRunes = 8
+	longQueryEdits   = 3
+)
+
+func MaxEditDistance(query string) int {
+	n := utf8.RuneCountInString(query)
+	if n <= shortQueryRunes {
+		return 1
+	}
+	if n <= mediumQueryRunes {
+		return 2
+	}
+	return longQueryEdits
+}
+
 func IsIndexableVocabularyTerm(term, norm string) bool {
 	return utf8.RuneCountInString(term) <= MaxVocabularyTermRunes &&
 		utf8.RuneCountInString(norm) <= MaxVocabularyTermRunes

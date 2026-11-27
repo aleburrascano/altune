@@ -7,14 +7,15 @@ import (
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/telemetry"
 )
 
-func FeatureMetrics(latency *requestmetrics.Registry) monitoring.LiveMetrics {
+func FeatureMetrics(metrics *telemetry.Registry, latency *requestmetrics.Registry) monitoring.LiveMetrics {
 	return monitoring.LiveMetrics{
-		"auth":      auth.ReadSnapshot(),
-		"catalog":   library.ReadSnapshot(),
-		"playback":  playback.ReadSnapshot(),
-		"providers": search.ReadProviderMetricsSnapshot(),
+		"auth":      auth.ReadSnapshot(metrics),
+		"catalog":   library.ReadSnapshot(metrics),
+		"playback":  playback.ReadSnapshot(metrics),
+		"providers": search.ReadProviderMetricsSnapshot(metrics),
 		"latency":   latency.Snapshot(),
 	}
 }

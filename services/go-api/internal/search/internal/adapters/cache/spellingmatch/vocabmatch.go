@@ -33,17 +33,25 @@ func NewQuery(norm string) Query {
 
 func (q Query) Trigrams() []string { return q.trigrams }
 
-func (q Query) Score(candidate string, sharedTrigrams int, phonetic bool) (float64, bool) {
+func (q Query) Score(candidate string, sharedTrigrams int) (float64, bool) {
 	dist := textnorm.LevenshteinDistance(q.norm, candidate)
-	if dist > maxEditDistance(q.norm) && !phonetic {
+	if dist > domain.MaxEditDistance(q.norm) {
 		return 0, false
 	}
+	return q.combine(candidate, sharedTrigrams, dist, 0), true
+}
+
+func (q Query) ScorePhonetic(candidate string, sharedTrigrams int) float64 {
+	return q.combine(candidate, sharedTrigrams, textnorm.LevenshteinDistance(q.norm, candidate), 1)
+}
+
+func (q Query) combine(candidate string, sharedTrigrams, dist int, phonetic float64) float64 {
 	return domain.SpellingHintsMatchScore(
 		jaccardCoefficient(sharedTrigrams, len(q.trigrams), len(Trigrams(candidate))),
 		editSimilarity(q.norm, candidate, dist),
-		phoneticScore(phonetic),
+		phonetic,
 		lengthSimilarity(q.norm, candidate),
-	), true
+	)
 }
 
 func jaccardCoefficient(shared, totalA, totalB int) float64 {
@@ -54,30 +62,12 @@ func jaccardCoefficient(shared, totalA, totalB int) float64 {
 	return float64(shared) / float64(union)
 }
 
-func maxEditDistance(query string) int {
-	n := len([]rune(query))
-	if n <= 4 {
-		return 1
-	}
-	if n <= 8 {
-		return 2
-	}
-	return 3
-}
-
 func editSimilarity(a, b string, dist int) float64 {
 	maxLen := max(len([]rune(a)), len([]rune(b)))
 	if maxLen == 0 {
 		return 0.0
 	}
 	return 1.0 - float64(dist)/float64(maxLen)
-}
-
-func phoneticScore(inPhoneticSet bool) float64 {
-	if inPhoneticSet {
-		return 1.0
-	}
-	return 0.0
 }
 
 func lengthSimilarity(a, b string) float64 {

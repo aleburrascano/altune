@@ -1,12 +1,12 @@
 package handler
 
 import (
-	"altune/go-api/internal/search/internal/core/details"
-	"altune/go-api/internal/search/internal/core/favorites"
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/artistpage"
+	"altune/go-api/internal/search/internal/service/details"
+	"altune/go-api/internal/search/internal/service/favorites"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/internal/service/query"
 	"altune/go-api/internal/search/internal/service/related"
 	"altune/go-api/internal/search/internal/service/unreleased"
@@ -14,7 +14,6 @@ import (
 	"altune/go-api/internal/search/internal/service/vocabulary"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
-	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
@@ -59,7 +58,7 @@ type DetailEnrichers struct {
 type UnreleasedReader interface {
 	Search(ctx context.Context, query string) ([]ports.UnreleasedHit, error)
 	Lookup(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (unreleased.Lookup, error)
-	Warm(artists []unreleased.ArtistToRefresh)
+	Warm(ctx context.Context, artists []unreleased.ArtistToRefresh)
 }
 
 type NoUnreleased struct{}
@@ -72,7 +71,7 @@ func (NoUnreleased) Lookup(context.Context, domain.ProviderName, string, string,
 	return unreleased.Lookup{}, nil
 }
 
-func (NoUnreleased) Warm([]unreleased.ArtistToRefresh) {}
+func (NoUnreleased) Warm(context.Context, []unreleased.ArtistToRefresh) {}
 
 type ClientEventSink interface {
 	Emit(ctx context.Context, event telemetry.ClientEvent)
@@ -190,13 +189,13 @@ const maxHistoryBodyBytes = 4 << 10
 
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.With(noStorePerUser, h.searchLimiter).Get("/search", h.handleSearch)
+	r.With(h.searchLimiter).Get("/search", h.handleSearch)
 	r.With(h.suggestLimiter).Get("/suggest", h.handleSuggest)
-	r.With(noStorePerUser, h.historyLimiter).Get("/search-history", h.handleSearchHistory)
+	r.With(h.historyLimiter).Get("/search-history", h.handleSearchHistory)
 	r.With(h.historyLimiter, httpserver.MaxBodySize(maxHistoryBodyBytes)).Post("/search-history", h.handleRecordSearchHistory)
 	r.With(h.historyLimiter).Delete("/search-history", h.handleClearSearchHistory)
 	r.With(h.eventLimiter, httpserver.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
-	r.With(noStorePerUser, h.favoritesLimiter).Get("/favorites", h.handleListFavorites)
+	r.With(h.favoritesLimiter).Get("/favorites", h.handleListFavorites)
 	r.With(h.favoritesLimiter, httpserver.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
 	r.With(h.favoritesLimiter, httpserver.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)
 	r.Group(h.contentRoutes)
@@ -204,7 +203,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 }
 
 func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
-	r.Use(requireUser, h.contentLimiter)
+	r.Use(h.contentLimiter)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
@@ -215,21 +214,4 @@ func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
 	r.Get("/enrichment", h.handleEnrichment)
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	r.Get("/lyrics", h.handleLyrics)
-}
-
-func noStorePerUser(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "private, no-store")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		next.ServeHTTP(w, r)
-	})
-}
-
-func requireUser(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := requestuser.RequireUserID(w, r); !ok {
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }

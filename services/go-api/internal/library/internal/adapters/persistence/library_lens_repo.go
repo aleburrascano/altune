@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -13,16 +14,20 @@ import (
 )
 
 type PostgresLibraryLensRepository struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics ports.DBCallMetrics
 }
 
-func NewPostgresLibraryLensRepository(pool *pgxpool.Pool) *PostgresLibraryLensRepository {
-	return &PostgresLibraryLensRepository{pool: pool}
+func NewPostgresLibraryLensRepository(pool *pgxpool.Pool, metrics ports.DBCallMetrics) *PostgresLibraryLensRepository {
+	requireDBCallMetrics("NewPostgresLibraryLensRepository", metrics)
+	return &PostgresLibraryLensRepository{pool: pool, metrics: metrics}
 }
 
 const (
 	albumGroupKey  = `lower(t.album) || '|||' || lower(coalesce(t.album_artist, t.artist))`
 	artistGroupKey = `lower(t.artist)`
+
+	lensArgCapacity = 4
 )
 
 const albumSelect = `
@@ -69,9 +74,10 @@ func albumOrderBy(sort domain.LibrarySort) string {
 		return ` ORDER BY min(t.album) ASC, ` + albumGroupKey
 	case domain.SortYear:
 		return ` ORDER BY (array_agg(t.year ORDER BY t.added_at DESC) FILTER (WHERE t.year IS NOT NULL))[1] DESC NULLS LAST, ` + albumGroupKey
-	default:
+	case domain.SortRecent:
 		return ` ORDER BY max(t.added_at) DESC, ` + albumGroupKey
 	}
+	return ` ORDER BY max(t.added_at) DESC, ` + albumGroupKey
 }
 
 func artistOrderBy(sort domain.LibrarySort) string {
@@ -86,7 +92,7 @@ func (r *PostgresLibraryLensRepository) ListAlbumsForUser(
 	userId ids.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.AlbumGroup, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	sql := albumSelect
@@ -121,7 +127,7 @@ func (r *PostgresLibraryLensRepository) ListArtistsForUser(
 	userId ids.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.ArtistGroup, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	sql := artistSelect
@@ -157,9 +163,10 @@ func trackOrderBy(sort domain.LibrarySort) string {
 		return ` ORDER BY lower(title) ASC, id DESC`
 	case domain.SortYear:
 		return ` ORDER BY year DESC NULLS LAST, id DESC`
-	default:
+	case domain.SortRecent:
 		return ` ORDER BY added_at DESC, id DESC`
 	}
+	return ` ORDER BY added_at DESC, id DESC`
 }
 
 func (r *PostgresLibraryLensRepository) ListFilteredForUser(
@@ -167,10 +174,10 @@ func (r *PostgresLibraryLensRepository) ListFilteredForUser(
 	userId ids.UserId,
 	query domain.LibraryQuery,
 ) ([]*domain.Track, int, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
-	args := make([]any, 0, 4)
+	args := make([]any, 0, lensArgCapacity)
 	placeholder := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))

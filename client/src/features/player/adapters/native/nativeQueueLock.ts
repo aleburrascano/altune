@@ -1,4 +1,4 @@
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import { withDeadline } from '@shared/timing';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;

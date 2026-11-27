@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -58,7 +59,7 @@ func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.Find
 		return FindResult{}, ErrNoAudioSources
 	}
 
-	if req.FallbackOnly {
+	if req.Tier == ports.TierFallbackOnly {
 		slots, errs := findAll(ctx, req, r.fallback)
 		return mergeSlotsReportingOutage(ctx, r.fallback, slots, errs)
 	}
@@ -123,16 +124,20 @@ func mergeSlotsReportingOutage(
 	errs []error,
 ) (FindResult, error) {
 	candidates, outage, err := ports.CollectCandidatesReportingOutage(
-		ctx,
 		len(sources),
 		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
 		func(i int, candidates []ports.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.source_find_results",
 				"source", sources[i].Name(), "candidates", len(candidates))
+			for _, c := range candidates {
+				if !c.HasSourceKey() {
+					slog.WarnContext(ctx, "acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
+				}
+			}
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.source_find_failed",
-				"source", sources[i].Name(), "error", redact.LogError(err))
+				"source", sources[i].Name(), logging.KeyError, redact.LogError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("every audio source failed: %w", firstErr)

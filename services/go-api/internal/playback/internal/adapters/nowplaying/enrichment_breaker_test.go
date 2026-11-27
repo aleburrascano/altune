@@ -3,7 +3,7 @@ package nowplaying_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/ids"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -168,16 +168,12 @@ func TestBreaker_GaugeMatchesStateWhenARecoverySuccessFollowsTheTrip(t *testing.
 	}
 }
 
-func captureBreakerLogs(t *testing.T) *bytes.Buffer {
+func captureBreakerLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureText(t, slog.LevelDebug)
 }
 
-func logLines(buf *bytes.Buffer) []string {
+func logLines(buf *logging.Capture) []string {
 	var lines []string
 	for _, l := range strings.Split(buf.String(), "\n") {
 		if l != "" {
@@ -187,7 +183,7 @@ func logLines(buf *bytes.Buffer) []string {
 	return lines
 }
 
-func assertLogs(t *testing.T, buf *bytes.Buffer, want ...[2]string) {
+func assertLogs(t *testing.T, buf *logging.Capture, want ...[2]string) {
 	t.Helper()
 	lines := logLines(buf)
 	if len(lines) != len(want) {

@@ -35,6 +35,13 @@ type ObjectStorageConfig struct {
 	Region    string
 }
 
+const (
+	objectStorageDialTimeout   = 10 * time.Second
+	objectStorageTLSTimeout    = 10 * time.Second
+	objectStorageHeaderTimeout = 30 * time.Second
+	objectStorageIdleTimeout   = 90 * time.Second
+)
+
 func NewObjectStorageAudioStore(cfg ObjectStorageConfig) (*ObjectStorageAudioStore, error) {
 	secure := true
 	host := cfg.Endpoint
@@ -48,10 +55,10 @@ func NewObjectStorageAudioStore(cfg ObjectStorageConfig) (*ObjectStorageAudioSto
 	host = strings.TrimRight(host, "/")
 
 	transport := outbound.NewTransport(outbound.TransportOptions{
-		DialTimeout:           10 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 30 * time.Second,
-		IdleConnTimeout:       90 * time.Second,
+		DialTimeout:           objectStorageDialTimeout,
+		TLSHandshakeTimeout:   objectStorageTLSTimeout,
+		ResponseHeaderTimeout: objectStorageHeaderTimeout,
+		IdleConnTimeout:       objectStorageIdleTimeout,
 		MaxIdleConns:          10,
 		MaxIdleConnsPerHost:   10,
 	})

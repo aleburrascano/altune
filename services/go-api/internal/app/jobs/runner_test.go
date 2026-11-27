@@ -12,7 +12,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"bytes"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"fmt"
@@ -84,25 +84,16 @@ func lead(t *testing.T, r *jobs.Runner, e jobs.Election) {
 	r.Lead(ctx, e)
 }
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(restore) })
-	return &buf
+	return logging.CaptureText(t, slog.LevelInfo)
 }
 
 func waitForAtLeast(t *testing.T, c *atomic.Int32, want int32) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if c.Load() >= want {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	if !polltest.Within(2*time.Second, func() bool { return c.Load() >= want }) {
+		t.Fatalf("counter never reached %d (got %d)", want, c.Load())
 	}
-	t.Fatalf("counter never reached %d (got %d)", want, c.Load())
 }
 
 func findHealth(t *testing.T, r *jobs.Runner, name string) background.JobHealth {
@@ -116,15 +107,15 @@ func findHealth(t *testing.T, r *jobs.Runner, name string) background.JobHealth 
 	return background.JobHealth{}
 }
 
-func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int32) {
+func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int32, advance func(time.Duration)) {
 	t.Helper()
 	waitForAtLeast(t, passes, 3)
 
 	e.lose()
-	time.Sleep(30 * leaderLoopTick)
+	advance(30 * leaderLoopTick)
 	stopped := passes.Load()
 
-	time.Sleep(60 * leaderLoopTick)
+	advance(60 * leaderLoopTick)
 	if extra := passes.Load() - stopped; extra > 1 {
 		t.Fatalf("job made %d more passes after the term ended, want none", extra)
 	}
@@ -186,50 +177,54 @@ func TestSetEnabled_AnUnknownJobRegistersNothing(t *testing.T) {
 }
 
 func TestTicker_KillSwitchStopsAndResumesTheJob(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	var runs atomic.Int32
-	r.Ticker("sweep", time.Millisecond, func(context.Context) error {
-		runs.Add(1)
-		return nil
+	synctest.Test(t, func(t *testing.T) {
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		var runs atomic.Int32
+		r.Ticker("sweep", time.Millisecond, func(context.Context) error {
+			runs.Add(1)
+			return nil
+		})
+		lead(t, &r, leading())
+
+		waitForAtLeast(t, &runs, 3)
+
+		r.SetEnabled("sweep", false)
+		time.Sleep(30 * time.Millisecond)
+		baseline := runs.Load()
+		time.Sleep(60 * time.Millisecond)
+		if extra := runs.Load() - baseline; extra > 0 {
+			t.Fatalf("disabled job kept running: %d extra runs", extra)
+		}
+
+		r.SetEnabled("sweep", true)
+		waitForAtLeast(t, &runs, baseline+3)
 	})
-	lead(t, &r, leading())
-
-	waitForAtLeast(t, &runs, 3)
-
-	r.SetEnabled("sweep", false)
-	time.Sleep(30 * time.Millisecond)
-	baseline := runs.Load()
-	time.Sleep(60 * time.Millisecond)
-	if extra := runs.Load() - baseline; extra > 0 {
-		t.Fatalf("disabled job kept running: %d extra runs", extra)
-	}
-
-	r.SetEnabled("sweep", true)
-	waitForAtLeast(t, &runs, baseline+3)
 }
 
 func TestEveryInstance_RunsWithoutLeadershipAndHonoursItsKillSwitch(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, &fakeElection{})
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	synctest.Test(t, func(t *testing.T) {
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		lead(t, &r, &fakeElection{})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
 
-	var runs atomic.Int32
-	r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Millisecond, func(context.Context) error {
-		runs.Add(1)
-		return nil
+		var runs atomic.Int32
+		r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Millisecond, func(context.Context) error {
+			runs.Add(1)
+			return nil
+		})
+
+		waitForAtLeast(t, &runs, 3)
+		if _, ok := r.SetEnabled(jobs.BehavioralRankingRefresh, false); !ok {
+			t.Fatal("SetEnabled must find the behavioral ranking refresh job")
+		}
+		time.Sleep(30 * time.Millisecond)
+		baseline := runs.Load()
+		time.Sleep(30 * time.Millisecond)
+		if extra := runs.Load() - baseline; extra > 0 {
+			t.Fatalf("disabled job kept running: %d extra runs", extra)
+		}
 	})
-
-	waitForAtLeast(t, &runs, 3)
-	if _, ok := r.SetEnabled(jobs.BehavioralRankingRefresh, false); !ok {
-		t.Fatal("SetEnabled must find the behavioral ranking refresh job")
-	}
-	time.Sleep(30 * time.Millisecond)
-	baseline := runs.Load()
-	time.Sleep(30 * time.Millisecond)
-	if extra := runs.Load() - baseline; extra > 0 {
-		t.Fatalf("disabled job kept running: %d extra runs", extra)
-	}
 }
 
 func waitAsync(r *jobs.Runner) <-chan struct{} {
@@ -388,68 +383,29 @@ func TestLeaderContext_WithoutAnElectionEveryPassLeads(t *testing.T) {
 	release()
 }
 
-func TestLeaderContextFor_EachPassBindsTheJobAndAFreshRunID(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("info")
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	scope := r.LeaderContextFor(jobs.AlertMonitor)
-
-	for _, msg := range []string{"first pass", "second pass"} {
-		ctx, release, ok := scope(context.Background())
-		if !ok {
-			t.Fatal("a runner with no election refused the pass")
-		}
-		slog.InfoContext(ctx, msg)
-		release()
-	}
-
-	snap := ring.Snapshot()
-	if len(snap) != 2 {
-		t.Fatalf("captured %d records, want 2", len(snap))
-	}
-	for _, rec := range snap {
-		if rec.Attrs["job"] != string(jobs.AlertMonitor) || rec.Attrs["run_id"] == "" {
-			t.Errorf("record %q attrs job=%q run_id=%q, want the job name and a run_id", rec.Message, rec.Attrs["job"], rec.Attrs["run_id"])
-		}
-	}
-	if snap[0].Attrs["run_id"] == snap[1].Attrs["run_id"] {
-		t.Errorf("both passes logged run_id %q, want a fresh id per pass", snap[0].Attrs["run_id"])
-	}
-}
-
-func TestLeaderContextFor_APassWithoutTheTermIsRefused(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	r.Lead(t.Context(), &fakeElection{})
-
-	ctx, release, ok := r.LeaderContextFor(jobs.EvalMeter)(context.Background())
-
-	if ok || ctx != nil || release != nil {
-		t.Fatalf("a follower was given a pass: ok=%v ctx=%v", ok, ctx)
-	}
-}
-
 func TestTicker_TheOldLeaderStopsAfterAHandoff(t *testing.T) {
-	oldE, newE := leading(), &fakeElection{}
-	oldRunner, newRunner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}, jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	var oldRuns, newRuns atomic.Int32
-	oldRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { oldRuns.Add(1); return nil })
-	newRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { newRuns.Add(1); return nil })
-	lead(t, &oldRunner, oldE)
+	synctest.Test(t, func(t *testing.T) {
+		oldE, newE := leading(), &fakeElection{}
+		oldRunner, newRunner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}, jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		var oldRuns, newRuns atomic.Int32
+		oldRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { oldRuns.Add(1); return nil })
+		newRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { newRuns.Add(1); return nil })
+		lead(t, &oldRunner, oldE)
 
-	waitForAtLeast(t, &oldRuns, 3)
+		waitForAtLeast(t, &oldRuns, 3)
 
-	oldE.lose()
-	newE.win()
-	lead(t, &newRunner, newE)
+		oldE.lose()
+		newE.win()
+		lead(t, &newRunner, newE)
 
-	time.Sleep(30 * leaderLoopTick)
-	baseline := oldRuns.Load()
-	time.Sleep(60 * leaderLoopTick)
-	if extra := oldRuns.Load() - baseline; extra > 1 {
-		t.Fatalf("old leader kept running the job after handoff: %d extra runs", extra)
-	}
-	waitForAtLeast(t, &newRuns, 3)
+		time.Sleep(30 * leaderLoopTick)
+		baseline := oldRuns.Load()
+		time.Sleep(60 * leaderLoopTick)
+		if extra := oldRuns.Load() - baseline; extra > 1 {
+			t.Fatalf("old leader kept running the job after handoff: %d extra runs", extra)
+		}
+		waitForAtLeast(t, &newRuns, 3)
+	})
 }
 
 func TestTicker_AStaleLeadersWriteIsNotApplied(t *testing.T) {
@@ -536,68 +492,66 @@ func TestTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
 	})
 }
 
-func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
-	e := leading()
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, e)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func TestTicker_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := leading()
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
-	var evaluations atomic.Int32
-	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, clock.NewTicker, r.LeaderContext, monitoring.Condition{
-		Key: "dependency_down",
-		Eval: func(context.Context) *monitoring.Alert {
-			evaluations.Add(1)
-			return nil
-		},
+		var evaluations atomic.Int32
+		monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, monitoring.Condition{
+			Key: "dependency_down",
+			Eval: func(context.Context) *monitoring.Alert {
+				evaluations.Add(1)
+				return nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewAlertMonitor: %v", err)
+		}
+		r.Ticker(jobs.AlertMonitor, leaderLoopTick, monitor.Pass)
+		lead(t, &r, e)
+
+		assertPassesFollowTheTerm(t, e, &evaluations, time.Sleep)
 	})
-	if err != nil {
-		t.Fatalf("NewAlertMonitor: %v", err)
-	}
-	monitor.Start(ctx)
-
-	assertPassesFollowTheTerm(t, e, &evaluations)
 }
 
-func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
-	e := leading()
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, e)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func TestTicker_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := leading()
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
-	var runs atomic.Int32
-	meter, err := monitoring.NewEvalMeter(leaderLoopTick, clock.Now, clock.NewTicker, func(context.Context) (monitoring.EvalMeterResult, error) {
-		runs.Add(1)
-		return monitoring.EvalMeterResult{}, nil
-	}, r.LeaderContext)
-	if err != nil {
-		t.Fatalf("NewEvalMeter: %v", err)
-	}
-	meter.Start(ctx)
+		var runs atomic.Int32
+		meter, err := monitoring.NewEvalMeter(clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
+			runs.Add(1)
+			return monitoring.EvalMeterResult{}, nil
+		}, r.Control(jobs.EvalMeter).Disabled)
+		if err != nil {
+			t.Fatalf("NewEvalMeter: %v", err)
+		}
+		r.Ticker(jobs.EvalMeter, leaderLoopTick, meter.Pass)
+		lead(t, &r, e)
 
-	assertPassesFollowTheTerm(t, e, &runs)
+		assertPassesFollowTheTerm(t, e, &runs, time.Sleep)
+	})
 }
 
-func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
+func TestTicker_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 	e := leading()
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, e)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, clock.NewTicker, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(clock.Now, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)
 		return monitoring.EvalMeterResult{}, runCtx.Err()
-	}, r.LeaderContext)
+	}, r.Control(jobs.EvalMeter).Disabled)
 	if err != nil {
 		t.Fatalf("NewEvalMeter: %v", err)
 	}
-	meter.Start(ctx)
+	r.Ticker(jobs.EvalMeter, time.Hour, meter.Pass)
+	lead(t, &r, e)
 	<-started
 
 	e.lose()
@@ -620,13 +574,13 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 	store := librarytest.NewAudioStore()
 	store.ErrOnStream = errors.New("not found")
 	sched := &librarytest.Scheduler{}
-	svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), r.Switch(jobs.StreamRecovery), clock.Now)
-	track, err := library.NewTrack(user, "Track", "Artist", "Album", time.Now)
+	svc := library.NewStreamTrackService(repo, store, sched, &librarytest.Metrics{}, r.Switch(jobs.StreamRecovery), clock.Now)
+	track, err := library.NewTrack(user, "Track", "Artist", "Album", time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	repo.Seed(track)
-	if err := track.MarkReady("audio/gone.opus"); err != nil {
+	if err := track.MarkReady("audio/gone.opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
 
@@ -680,9 +634,7 @@ func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t 
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	won := make(lockWonRecords, 1)
-	prev := slog.Default()
-	slog.SetDefault(slog.New(won))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, won)
 
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	election, err := jobs.NewElection(leader.AdaptLocks(database.NewAdvisoryLocks(pool).Acquire))

@@ -1,10 +1,9 @@
 package httpserver
 
 import (
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"net/http"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -16,7 +15,7 @@ func CorrelationID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := inboundCorrelationID(r)
 		if id == "" {
-			id = uuid.New().String()[:8]
+			id = ids.Real().String()[:8]
 		}
 		ctx := logging.ContextWithCorrelationID(r.Context(), id)
 		w.Header().Set(CorrelationIDHeader, id)

@@ -55,6 +55,91 @@ func TestSleepOutsideABubbleIsFlaggedWithFileAndLine(t *testing.T) {
 	}
 }
 
+const clockImport = "\"altune/go-api/internal/shared/clock\""
+
+func TestClockSleepCallInATestOutsideABubbleIsFlagged(t *testing.T) {
+	cases := map[string]string{
+		"plain call":       "package p\n\nimport (\n\t" + clockImport + "\n\t\"context\"\n)\n\nfunc f() { _ = clock.Sleep(context.Background(), 1) }\n",
+		"aliased import":   "package p\n\nimport (\n\tc " + clockImport + "\n\t\"context\"\n)\n\nfunc f() { _ = c.Sleep(context.Background(), 1) }\n",
+		"in a helper":      "package p\n\nimport (\n\t" + clockImport + "\n\t\"context\"\n)\n\nfunc wait() error { return clock.Sleep(context.Background(), 1) }\n",
+		"next to a bubble": "package p\n\nimport (\n\t" + clockImport + "\n\t\"context\"\n\t\"testing\"\n\t\"testing/synctest\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) {})\n\t_ = clock.Sleep(context.Background(), 1)\n}\n",
+		"in a method":      "package p\n\nimport (\n\t" + clockImport + "\n\t\"context\"\n)\n\ntype s struct{}\n\nfunc (s) Fetch(ctx context.Context) error { return clock.Sleep(ctx, 1) }\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "a_test.go", body)
+
+			code, out, _ := lint(t, dir)
+
+			if code != 1 || !strings.Contains(out, "outside a synctest bubble: 1") {
+				t.Fatalf("exit = %d, want 1 with a count of 1; output:\n%s", code, out)
+			}
+		})
+	}
+}
+
+func TestTimerUsedAsAWaitInATestOutsideABubbleIsFlagged(t *testing.T) {
+	cases := map[string]string{
+		"delayed trigger":  "package p\n\nimport \"time\"\n\nfunc f(cancel func()) { time.AfterFunc(time.Second, cancel) }\n",
+		"timer":            "package p\n\nimport \"time\"\n\nfunc f() { <-time.NewTimer(1).C }\n",
+		"tick":             "package p\n\nimport \"time\"\n\nfunc f() { <-time.Tick(1) }\n",
+		"bare receive":     "package p\n\nimport \"time\"\n\nfunc f() { <-time.After(1) }\n",
+		"aliased time":     "package p\n\nimport t \"time\"\n\nfunc f(cancel func()) { t.AfterFunc(1, cancel) }\n",
+		"next to a bubble": "package p\n\nimport (\n\t\"testing\"\n\t\"testing/synctest\"\n\t\"time\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) {})\n\t<-time.After(1)\n}\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "a_test.go", body)
+
+			code, out, _ := lint(t, dir)
+
+			if code != 1 || !strings.Contains(out, "outside a synctest bubble: 1") {
+				t.Fatalf("exit = %d, want 1 with a count of 1; output:\n%s", code, out)
+			}
+		})
+	}
+}
+
+func TestTimerThatIsABoundOrAStimulusPasses(t *testing.T) {
+	cases := map[string]struct{ name, body string }{
+		"timeout in a select":       {"a_test.go", "package p\n\nimport \"time\"\n\nfunc f(ch chan int) {\n\tselect {\n\tcase <-ch:\n\tcase <-time.After(time.Second):\n\t}\n}\n"},
+		"pacing ticker":             {"a_test.go", "package p\n\nimport \"time\"\n\nfunc f() { t := time.NewTicker(1); <-t.C }\n"},
+		"delayed trigger in prod":   {"a.go", "package p\n\nimport \"time\"\n\nfunc f(cancel func()) { time.AfterFunc(time.Second, cancel) }\n"},
+		"delayed trigger in bubble": {"a_test.go", "package p\n\nimport (\n\t\"testing\"\n\t\"testing/synctest\"\n\t\"time\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) { time.AfterFunc(1, func() {}) })\n}\n"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, tc.name, tc.body)
+
+			if code, out, _ := lint(t, dir); code != 0 {
+				t.Fatalf("exit = %d, want 0; output:\n%s", code, out)
+			}
+		})
+	}
+}
+
+func TestClockSleepThatIsNotAFlaggedCallPasses(t *testing.T) {
+	cases := map[string]struct{ name, body string }{
+		"inside a bubble":        {"a_test.go", "package p\n\nimport (\n\t" + clockImport + "\n\t\"context\"\n\t\"testing\"\n\t\"testing/synctest\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) { _ = clock.Sleep(context.Background(), 1) })\n}\n"},
+		"passed as a dependency": {"a_test.go", "package p\n\nimport " + clockImport + "\n\nfunc build(f func()) {}\n\nfunc g() { build(nil); _ = clock.Sleep }\n"},
+		"in production code":     {"a.go", "package p\n\nimport (\n\t" + clockImport + "\n\t\"context\"\n)\n\nfunc backoff() error { return clock.Sleep(context.Background(), 1) }\n"},
+		"another clock package":  {"a_test.go", "package p\n\nimport \"other/clock\"\n\nfunc f() { _ = clock.Sleep(1) }\n"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, tc.name, tc.body)
+
+			if code, out, _ := lint(t, dir); code != 0 {
+				t.Fatalf("exit = %d, want 0; output:\n%s", code, out)
+			}
+		})
+	}
+}
+
 func TestSleepInsideABubbleIsAllowed(t *testing.T) {
 	cases := map[string]string{
 		"synctest.Test":                  "package p\n\nimport (\n\t\"testing\"\n\t\"testing/synctest\"\n\t\"time\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) { time.Sleep(time.Second) })\n}\n",

@@ -13,6 +13,7 @@ import {
   ownedRetryTrackId,
   saveControlInteractive,
   saveDisplayState,
+  saveFailureBanner,
   ownedTrack,
   type OwnedTrack,
 } from '@features/detail';
@@ -432,5 +433,25 @@ describe('save control state', () => {
     it('announces that the track could not be saved', () => {
       expect(saveControlLabel('rejected', 'Song')).toBe("Couldn't save Song");
     });
+  });
+});
+
+describe('saveFailureBanner', () => {
+  it('keeps the reason the server remembered, ends it with a period, and offers Retry', () => {
+    const banner = saveFailureBanner({
+      copy: { title: "Couldn't save this track", body: "Couldn't find this track" },
+      isRetryable: true,
+    });
+
+    expect(banner).toBe("Couldn't save this track. Couldn't find this track. Tap Retry.");
+  });
+
+  it('offers no Retry for a refusal and does not double a period', () => {
+    const banner = saveFailureBanner({
+      copy: { title: "Couldn't save this track", body: 'We could not complete that request.' },
+      isRetryable: false,
+    });
+
+    expect(banner).toBe("Couldn't save this track. We could not complete that request.");
   });
 });
