@@ -9,7 +9,7 @@ import (
 )
 
 func WithSchedulerPaused(paused bool) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) { s.paused.Store(paused) }
+	return func(s *BackgroundAcquisitionScheduler) { s.gate.paused.Store(paused) }
 }
 
 func WithDrainBudget(d time.Duration) func(*BackgroundAcquisitionScheduler) {

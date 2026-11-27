@@ -2,18 +2,15 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -43,26 +40,18 @@ type BackgroundAcquisitionScheduler struct {
 	notifier ports.JobNotifier
 
 	pending *pendingTracker
-	jobs    background.Tracker
 	runners background.Tracker
 
 	workers int
 
 	cancel context.CancelFunc
 
-	closed    atomic.Bool
-	paused    atomic.Bool
-	stop      chan struct{}
-	closeOnce sync.Once
-	wake      chan struct{}
-	lanes     laneWakes
-
-	admitMu sync.RWMutex
+	gate *admission
+	wake chan struct{}
 
 	leaseDuration     time.Duration
 	heartbeatInterval time.Duration
 	pollInterval      time.Duration
-	timer             clock.TimerFunc
 	drainBudget       time.Duration
 
 	rejected atomic.Uint64
@@ -74,6 +63,7 @@ type BackgroundAcquisitionScheduler struct {
 	now                 func() time.Time
 	finisher            *jobFinisher
 	runner              *jobRunner
+	claimer             *claimer
 
 	upgrades UpgradeLane
 }
@@ -171,14 +161,12 @@ func NewBackgroundAcquisitionScheduler(
 		pending:             newPendingTracker(),
 		workers:             max(workers, 1),
 		cancel:              cancel,
-		stop:                make(chan struct{}),
+		gate:                newAdmission(),
 		wake:                make(chan struct{}, 1),
-		lanes:               newLaneWakes(),
 		log:                 newJobLog(now),
 		now:                 now,
 		upgrades:            wiring.Upgrades,
 		events:              wiring.Events,
-		timer:               wiring.Timer,
 		verification:        wiring.Verification,
 		notifier:            wiring.Notifier,
 		skipCount:           wiring.VerifySkips,
@@ -207,10 +195,20 @@ func NewBackgroundAcquisitionScheduler(
 		leaseDuration:     s.leaseDuration,
 	}
 	s.runners.Track(func() { s.notifier.Listen(ctx, s.wake) })
-	s.runners.Track(s.fanOutWakes)
+	s.claimer = &claimer{
+		gate:          s.gate,
+		queue:         s.queue,
+		runner:        s.runner,
+		wake:          s.wake,
+		lanes:         newLaneWakes(),
+		timer:         wiring.Timer,
+		pollInterval:  s.pollInterval,
+		leaseDuration: s.leaseDuration,
+	}
+	s.runners.Track(s.claimer.fanOutWakes)
 
 	for range s.workers {
-		s.runners.Track(func() { s.runWorker(ctx, s.claimJob, s.lanes.acquire) })
+		s.runners.Track(func() { s.claimer.runWorker(ctx, s.claimer.claimJob, s.claimer.lanes.acquire) })
 	}
 	s.startUpgradeWorkers(ctx)
 	return s, nil
@@ -240,9 +238,9 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers(ctx context.Context
 		slog.ErrorContext(ctx, "acquisition.upgrade_lane_unavailable", "reason", "the job queue cannot claim upgrade jobs")
 		return
 	}
-	claim := func(ctx context.Context) (<-chan struct{}, bool) { return s.claimFrom(ctx, queue.ClaimUpgrade) }
+	claim := func(ctx context.Context) (<-chan struct{}, bool) { return s.claimer.claimFrom(ctx, queue.ClaimUpgrade) }
 	for range s.upgrades.workers {
-		s.runners.Track(func() { s.runWorker(ctx, claim, s.lanes.upgrade) })
+		s.runners.Track(func() { s.claimer.runWorker(ctx, claim, s.claimer.lanes.upgrade) })
 	}
 }
 
@@ -256,110 +254,9 @@ func (s *BackgroundAcquisitionScheduler) verifySkipped() uint64 {
 	return s.skipCount()
 }
 
-func (s *BackgroundAcquisitionScheduler) Pause() { s.paused.Store(true) }
+func (s *BackgroundAcquisitionScheduler) Pause() { s.gate.paused.Store(true) }
 
 func (s *BackgroundAcquisitionScheduler) Resume() {
-	s.paused.Store(false)
+	s.gate.paused.Store(false)
 	notifyWake(s.wake)
-}
-
-func (s *BackgroundAcquisitionScheduler) runWorker(ctx context.Context, claim func(context.Context) (<-chan struct{}, bool), wake chan struct{}) {
-	for {
-		if s.closed.Load() {
-			return
-		}
-		done, ok := s.nextJob(ctx, claim)
-		if !ok && !s.idleWait(wake) {
-			return
-		}
-		if !ok {
-			continue
-		}
-		notifyWake(wake)
-		<-done
-	}
-}
-
-func (s *BackgroundAcquisitionScheduler) nextJob(ctx context.Context, claim func(context.Context) (<-chan struct{}, bool)) (<-chan struct{}, bool) {
-	if s.paused.Load() {
-		return nil, false
-	}
-	return claim(ctx)
-}
-
-func (s *BackgroundAcquisitionScheduler) claimJob(ctx context.Context) (<-chan struct{}, bool) {
-	return s.claimFrom(ctx, s.queue.Claim)
-}
-
-type claimFunc func(ctx context.Context, lease time.Duration) (ports.Job, error)
-
-func (s *BackgroundAcquisitionScheduler) claimFrom(ctx context.Context, claim claimFunc) (<-chan struct{}, bool) {
-	s.admitMu.RLock()
-	defer s.admitMu.RUnlock()
-	if s.closed.Load() {
-		return nil, false
-	}
-	job, ok := s.claimNext(ctx, claim)
-	if !ok {
-		return nil, false
-	}
-	done := make(chan struct{})
-	s.jobs.Track(func() {
-		defer close(done)
-		s.runner.runClaimedJob(ctx, job)
-	})
-	return done, true
-}
-
-func (s *BackgroundAcquisitionScheduler) claimNext(ctx context.Context, claim claimFunc) (ports.Job, bool) {
-	job, err := claim(ctx, s.leaseDuration)
-	if errors.Is(err, acqdomain.ErrNoJobAvailable) {
-		return ports.Job{}, false
-	}
-	if err != nil {
-		slog.ErrorContext(ctx, "acquisition.claim_failed", logging.KeyError, err)
-		return ports.Job{}, false
-	}
-	return job, true
-}
-
-type laneWakes struct {
-	acquire chan struct{}
-	upgrade chan struct{}
-}
-
-func newLaneWakes() laneWakes {
-	return laneWakes{acquire: make(chan struct{}, 1), upgrade: make(chan struct{}, 1)}
-}
-
-func (s *BackgroundAcquisitionScheduler) fanOutWakes() {
-	for {
-		select {
-		case <-s.wake:
-			notifyWake(s.lanes.acquire)
-			notifyWake(s.lanes.upgrade)
-		case <-s.stop:
-			return
-		}
-	}
-}
-
-func notifyWake(wake chan<- struct{}) {
-	select {
-	case wake <- struct{}{}:
-	default:
-	}
-}
-
-func (s *BackgroundAcquisitionScheduler) idleWait(wake <-chan struct{}) bool {
-	fires, stop := s.timer(s.pollInterval)
-	defer stop()
-	select {
-	case <-wake:
-		return true
-	case <-fires:
-		return true
-	case <-s.stop:
-		return false
-	}
 }
