@@ -5,9 +5,12 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"log/slog"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -141,15 +144,15 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	user := newUser()
 	floorPath := testFloorPath(t)
 
-	bus1 := events.NewInProcessBus(context.Background(), time.Now, floorPath)
+	frozen := func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
+
+	bus1 := events.NewInProcessBus(context.Background(), frozen, floorPath)
 	ch1, cancel1 := bus1.Subscribe(user)
 	defer cancel1()
 	bus1.Publish(context.Background(), user, eventstest.Named("e"))
 	id1 := (<-ch1).ID
 
-	time.Sleep(time.Millisecond)
-
-	bus2 := events.NewInProcessBus(context.Background(), time.Now, floorPath)
+	bus2 := events.NewInProcessBus(context.Background(), frozen, floorPath)
 	ch2, cancel2 := bus2.Subscribe(user)
 	defer cancel2()
 	bus2.Publish(context.Background(), user, eventstest.Named("e"))
@@ -451,7 +454,23 @@ func holdUserLockWithStaleActivity(bus *events.InProcessBus, clock *gatedClock, 
 	return release
 }
 
-func startEvictionQueuedOnUserLock(bus *events.InProcessBus, clock *gatedClock) chan struct{} {
+func awaitQueuedOnLock(t *testing.T, function string) {
+	t.Helper()
+	polltest.Until(t, 5*time.Second, "a goroutine in "+function+" to queue on the user lock", func() bool {
+		buf := make([]byte, 1<<20)
+		dump := string(buf[:runtime.Stack(buf, true)])
+		for _, g := range strings.Split(dump, "\n\n") {
+			header, _, _ := strings.Cut(g, "\n")
+			queued := strings.Contains(header, "Mutex.Lock") || strings.Contains(header, "semacquire")
+			if queued && strings.Contains(g, function) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func startEvictionQueuedOnUserLock(t *testing.T, bus *events.InProcessBus, clock *gatedClock) chan struct{} {
 	done := make(chan struct{})
 	released := make(chan struct{})
 	close(released)
@@ -461,7 +480,7 @@ func startEvictionQueuedOnUserLock(bus *events.InProcessBus, clock *gatedClock) 
 		bus.Publish(context.Background(), newUser(), eventstest.Named("trigger"))
 	}()
 	<-cutoffRead.entered
-	time.Sleep(50 * time.Millisecond)
+	awaitQueuedOnLock(t, "(*userState).evictIfReclaimable")
 	return done
 }
 
@@ -474,13 +493,13 @@ func TestEvictIdleUsers_SubscribeQueuedBehindTheEvictionIsNotOrphaned(t *testing
 	clock.advance(userIdleTTL + time.Minute)
 
 	releaseUser := holdUserLockWithStaleActivity(bus, clock, idle, start)
-	evicted := startEvictionQueuedOnUserLock(bus, clock)
+	evicted := startEvictionQueuedOnUserLock(t, bus, clock)
 	subscribed := make(chan subscription, 1)
 	go func() {
 		ch, cancel := bus.Subscribe(idle)
 		subscribed <- subscription{ch, cancel}
 	}()
-	time.Sleep(50 * time.Millisecond)
+	awaitQueuedOnLock(t, "(*InProcessBus).Subscribe")
 	close(releaseUser)
 	<-evicted
 	sub := <-subscribed

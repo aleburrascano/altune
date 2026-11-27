@@ -3,6 +3,7 @@ package background_test
 import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"log/slog"
@@ -91,13 +92,9 @@ func TestLaunchWithin_AtTheCapDropsAndCountsTheTask(t *testing.T) {
 func TestLaunchWithin_AFinishedTaskFreesItsSlot(t *testing.T) {
 	bg := newTracker(t, 1)
 	mustLaunch(t, bg, context.Background(), "first", time.Minute, func(context.Context) {})
-	deadline := time.Now().Add(5 * time.Second)
-	for !bg.LaunchWithin(context.Background(), "next", time.Minute, func(context.Context) {}) {
-		if time.Now().After(deadline) {
-			t.Fatal("the slot was never freed after the first task finished")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	polltest.Until(t, 5*time.Second, "the first task to free its slot", func() bool {
+		return bg.LaunchWithin(context.Background(), "next", time.Minute, func(context.Context) {})
+	})
 	if !drainWithin(t, bg, 5*time.Second) {
 		t.Fatal("Drain timed out")
 	}

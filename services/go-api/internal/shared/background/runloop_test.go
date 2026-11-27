@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -61,19 +62,21 @@ func TestBackground_SecondSpawnStartsNoSecondLoop(t *testing.T) {
 }
 
 func TestBackground_ShutdownBeforeSpawnKeepsTheLoopFromRunning(t *testing.T) {
-	var b background.Background
-	var starts atomic.Int64
-	exited := make(chan struct{}, 1)
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		var b background.Background
+		var starts atomic.Int64
+		exited := make(chan struct{}, 1)
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
+		defer cancel()
 
-	b.Shutdown(ctx)
-	b.Spawn(context.Background(), countingLoop(&starts, exited))
+		b.Shutdown(ctx)
+		b.Spawn(context.Background(), countingLoop(&starts, exited))
 
-	time.Sleep(loopStartWindow)
-	if got := starts.Load(); got != 0 {
-		t.Fatalf("a loop spawned after Shutdown ran %d times, want 0", got)
-	}
+		synctest.Wait()
+		if got := starts.Load(); got != 0 {
+			t.Fatalf("a loop spawned after Shutdown ran %d times, want 0", got)
+		}
+	})
 }
 
 func TestBackground_ConcurrentSpawnAndShutdownLeavesNoLoopRunning(t *testing.T) {
