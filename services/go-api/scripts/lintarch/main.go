@@ -119,7 +119,7 @@ func newLinter(root string) (*linter, error) {
 	l := &linter{root: root, tables: map[string]bool{}}
 	raw, err := os.ReadFile(filepath.Join(root, "architecture.json"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read file: %w", err)
 	}
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
@@ -139,7 +139,7 @@ func newLinter(root string) (*linter, error) {
 func modulePathOf(root string) (string, error) {
 	goMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read file: %w", err)
 	}
 	for _, line := range strings.Split(string(goMod), "\n") {
 		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
@@ -154,12 +154,12 @@ var tableDDL = regexp.MustCompile(`(?i)\b(CREATE|DROP)\s+TABLE\s+(?:IF\s+(?:NOT\
 func (l *linter) loadTables() error {
 	files, err := filepath.Glob(filepath.Join(l.root, "migrations", "*.sql"))
 	if err != nil {
-		return err
+		return fmt.Errorf("glob: %w", err)
 	}
 	for _, f := range files {
 		body, err := os.ReadFile(f)
 		if err != nil {
-			return err
+			return fmt.Errorf("read file: %w", err)
 		}
 		for _, m := range tableDDL.FindAllStringSubmatch(string(body), -1) {
 			name := strings.ToLower(m[2])
@@ -186,7 +186,7 @@ func (l *linter) splitModule(rest string) (module, sub string) {
 }
 
 func (l *linter) scan() error {
-	return filepath.WalkDir(l.root, func(p string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(l.root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -201,7 +201,10 @@ func (l *linter) scan() error {
 			return nil
 		}
 		return l.scanFile(p)
-	})
+	}); err != nil {
+		return fmt.Errorf("walk dir: %w", err)
+	}
+	return nil
 }
 
 var writeStatement = regexp.MustCompile(`(?i)\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?(?:[a-z_]+\.)?"?([a-z_][a-z0-9_]*)"?`)
@@ -217,7 +220,7 @@ func (l *linter) scanFile(file string) error {
 	}
 	rel, err := filepath.Rel(l.root, filepath.Dir(file))
 	if err != nil {
-		return err
+		return fmt.Errorf("rel: %w", err)
 	}
 	dir := filepath.ToSlash(rel)
 	ownModule := ""

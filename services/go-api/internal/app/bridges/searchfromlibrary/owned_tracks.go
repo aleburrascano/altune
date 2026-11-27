@@ -23,7 +23,7 @@ func NewOwnedTracks(refs OwnedTrackRefLister) search.OwnedTrackLister {
 func (o ownedTracks) ListOwnedTracks(ctx context.Context, userId ids.UserId) ([]search.OwnedTrack, error) {
 	refs, err := o.refs.ListOwnedTrackRefs(ctx, userId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list owned track refs: %w", err)
 	}
 	tracks := make([]search.OwnedTrack, len(refs))
 	for i, ref := range refs {

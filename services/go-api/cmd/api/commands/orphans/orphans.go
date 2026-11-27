@@ -50,7 +50,7 @@ func markTrackFailed(ctx context.Context, repo library.TrackReadWriter, t librar
 		return errors.New("track disappeared")
 	}
 	if err := track.MarkFailed(missingAudioReason); err != nil {
-		return err
+		return fmt.Errorf("mark failed: %w", err)
 	}
 	return repo.Update(ctx, track, track.Version)
 }

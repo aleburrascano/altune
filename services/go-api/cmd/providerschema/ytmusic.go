@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -37,7 +38,7 @@ func newYTMusicSource(client *http.Client, base string) liveSource {
 		fetchers[entity] = func(ctx context.Context, query string) (json.RawMessage, error) {
 			body, err := json.Marshal(youtubemusicapi.Body(ytMusicSearchFields(query, endpoint.filter)))
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("marshal: %w", err)
 			}
 			return fetch(ctx, client, request{
 				method: http.MethodPost,

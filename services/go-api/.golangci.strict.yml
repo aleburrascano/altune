@@ -45,6 +45,7 @@ linters:
     - contextcheck
     - containedctx
     - mnd
+    - wrapcheck
 
   settings:
     mnd:
@@ -59,11 +60,21 @@ linters:
         - domain.WrapRepoError(
         - providerrequests.ArtworkFailure(
         - database.WrapUnreadable(
+        - journey.StepFailed(
+        - providersearch.KindsOutcome(
+        - providersearch.SearchAcrossKinds(
+        - providerrequests.WithAuthRetry[
+        - providerrequests.FetchPaged[
+        - outbound.GetJSON
+        - outbound.PostJSON
+        - outbound.PostBytesCapped
+        - outbound.GetBytesCapped
       ignore-package-globs:
         - altune/go-api/internal/*/internal/core/ports
       ignore-sig-regexps:
         - '\(context\.Context\)\.Err\(\)'
         - '\(io\.Reader\)\.Read\('
+        - '\(net\.Listener\)\.Accept\('
     importas:
       no-unaliased: false
       no-extra-aliases: false

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -57,7 +58,10 @@ func markdownComments(src []byte) ([]span, error) {
 		}
 		return ast.WalkContinue, nil
 	})
-	return spans, err
+	if err != nil {
+		return spans, fmt.Errorf("walk markdown: %w", err)
+	}
+	return spans, nil
 }
 
 func rawHTMLRange(n ast.Node) (lo, hi int, ok bool) {
@@ -97,7 +101,7 @@ func renderMarkdown(src []byte) ([]byte, error) {
 	var out bytes.Buffer
 	md := goldmark.New(goldmark.WithRendererOptions(html.WithUnsafe()))
 	if err := md.Convert(src, &out); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert: %w", err)
 	}
 	return out.Bytes(), nil
 }

@@ -17,7 +17,7 @@ func envKey(name string) (string, error) {
 func loadEnvFile(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("open: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 	lines := bufio.NewScanner(file)
@@ -26,7 +26,10 @@ func loadEnvFile(path string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 	}
-	return lines.Err()
+	if err := lines.Err(); err != nil {
+		return fmt.Errorf("err: %w", err)
+	}
+	return nil
 }
 
 func setFromLine(line string) error {
@@ -34,7 +37,10 @@ func setFromLine(line string) error {
 	if !isSetting || name == "" || strings.HasPrefix(name, "#") || os.Getenv(name) != "" {
 		return nil
 	}
-	return os.Setenv(name, unquote(value))
+	if err := os.Setenv(name, unquote(value)); err != nil {
+		return fmt.Errorf("setenv: %w", err)
+	}
+	return nil
 }
 
 func unquote(value string) string {

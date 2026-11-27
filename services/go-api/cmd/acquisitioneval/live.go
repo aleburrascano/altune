@@ -126,7 +126,7 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 func budgetedClient(ctx context.Context, getenv func(string) string, timeout time.Duration, out io.Writer) (*http.Client, error) {
 	budgeted, budget, err := youtubemusicapi.ToolClient(ctx, getenv, timeout)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("tool client: %w", err)
 	}
 	_, _ = fmt.Fprintln(out, budget.Describe())
 	return budgeted, nil
@@ -153,8 +153,10 @@ func executeLive(args []string, stdout io.Writer, client *download.YouTubeMusicS
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(stdout, renderLiveSummary(rows))
-	return err
+	if _, err = io.WriteString(stdout, renderLiveSummary(rows)); err != nil {
+		return fmt.Errorf("write live summary: %w", err)
+	}
+	return nil
 }
 
 func parseLiveArgs(args []string) (tracksPath, outPath string, err error) {
@@ -163,7 +165,7 @@ func parseLiveArgs(args []string) (tracksPath, outPath string, err error) {
 	tracks := fs.String("tracks", "", "jsonl of stored tracks (acq-debug.sh export-tracks)")
 	out := fs.String("out", "", "jsonl file to write one judged row per track")
 	if err := fs.Parse(args); err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("parse: %w", err)
 	}
 	if *tracks == "" || *out == "" {
 		return "", "", errLiveFlagsRequired

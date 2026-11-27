@@ -24,7 +24,7 @@ func (s *Store) Load() ([]byte, error) {
 		return nil, idfloor.ErrNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read file: %w", err)
 	}
 	return raw, nil
 }

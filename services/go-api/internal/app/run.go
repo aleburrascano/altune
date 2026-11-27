@@ -33,7 +33,7 @@ func (a *application) Run(ctx context.Context) error {
 	metrics := telemetry.NewRegistry()
 	transport, err := providertransport.New(metrics)
 	if err != nil {
-		return err
+		return fmt.Errorf("new: %w", err)
 	}
 	assembly, err := assemble(ctx, a.cfg, handles{Pool: pool, Redis: redisClient, Transport: transport, Tracker: tracker, LogRing: a.logRing, Metrics: metrics})
 	if err != nil {

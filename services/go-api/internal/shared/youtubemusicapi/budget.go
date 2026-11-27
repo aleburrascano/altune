@@ -106,7 +106,7 @@ func ToolClient(ctx context.Context, env func(string) string, timeout time.Durat
 	}
 	client, err := outbound.NewClient(timeout, budget.Transport(nil))
 	if err != nil {
-		return nil, Settings{}, err
+		return nil, Settings{}, fmt.Errorf("new client: %w", err)
 	}
 	return client, settings, nil
 }
@@ -213,5 +213,8 @@ func (t budgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			slog.WarnContext(req.Context(), "ytminnertube: could not start the cooldown after a 403", logging.KeyError, coolErr)
 		}
 	}
-	return resp, err
+	if err != nil {
+		return resp, fmt.Errorf("round trip: %w", err)
+	}
+	return resp, nil
 }

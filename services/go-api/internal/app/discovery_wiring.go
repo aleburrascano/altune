@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -36,7 +37,11 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	deps.ClientEvents = search.NoClientEvents{}
 	deps.Tracker = h.Tracker
 	deps.Pool = h.Pool
-	return search.New(ctx, deps)
+	r0, err := search.New(ctx, deps)
+	if err != nil {
+		return r0, fmt.Errorf("call failed: %w", err)
+	}
+	return r0, nil
 }
 
 func (a *application) discoveryDeps(ctx context.Context, transport http.RoundTripper) search.Deps {

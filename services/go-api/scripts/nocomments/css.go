@@ -31,7 +31,7 @@ func cssTokens(src []byte) ([]scanToken, error) {
 			if errors.Is(lexer.Err(), io.EOF) {
 				return tokens, nil
 			}
-			return nil, lexer.Err()
+			return nil, fmt.Errorf("lex css: %w", lexer.Err())
 		}
 		tokens = append(tokens, scanToken{cssTokenClass(tokenType), tokenBytes, input.Offset() - len(tokenBytes)})
 	}

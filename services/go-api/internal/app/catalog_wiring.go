@@ -101,7 +101,7 @@ func (a *application) wireAudioSources(
 ) (audioSourcesStaging, error) {
 	audioStore, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
 	if err != nil {
-		return audioSourcesStaging{}, err
+		return audioSourcesStaging{}, fmt.Errorf("call failed: %w", err)
 	}
 	trackRepo := library.NewPostgresTrackRepository(a.pool, library.NewDBCallMetrics(a.metrics))
 	sources, tools, err := a.liveTiers(ctx, transport, audioStore)
@@ -138,7 +138,11 @@ func (a *application) liveTiers(ctx context.Context, transport http.RoundTripper
 	if audioStore == nil {
 		return downloadsetup.SourceOrder{}, download.Verification{}, nil
 	}
-	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient, transport)
+	r0, r1, err := downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient, transport)
+	if err != nil {
+		return r0, r1, fmt.Errorf("enabled sources: %w", err)
+	}
+	return r0, r1, nil
 }
 
 func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
@@ -225,9 +229,13 @@ func (a *application) wireCatalogHandlers(audio audioSourcesStaging, svc catalog
 }
 
 func newOwnershipEnrichment(cat catalogWiring, bg *background.Tracker) (*search.OwnershipEnrichmentService, error) {
-	return search.NewOwnershipEnrichmentService(
+	r0, err := search.NewOwnershipEnrichmentService(
 		bg,
 		search.NewOwnershipReader(searchfromlibrary.NewOwnedTracks(cat.trackRepo)),
 		searchfromlibrary.NewTrackNumberFiller(cat.setTrackNumberSvc),
 	)
+	if err != nil {
+		return r0, fmt.Errorf("call failed: %w", err)
+	}
+	return r0, nil
 }

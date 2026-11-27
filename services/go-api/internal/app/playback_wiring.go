@@ -51,11 +51,19 @@ func newQueueService(
 	if err != nil {
 		return nil, fmt.Errorf("build the now-playing reader: %w", err)
 	}
-	return playback.NewQueueService(queueStateRepo, nowPlayingReader, clock.Now)
+	r0, err := playback.NewQueueService(queueStateRepo, nowPlayingReader, clock.Now)
+	if err != nil {
+		return r0, fmt.Errorf("call failed: %w", err)
+	}
+	return r0, nil
 }
 
 func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueSaveLimit) (*playback.QueueHandler, error) {
-	return playback.NewQueueHandler(queueSvc, limit, clock.Now, metrics)
+	r0, err := playback.NewQueueHandler(queueSvc, limit, clock.Now, metrics)
+	if err != nil {
+		return r0, fmt.Errorf("call failed: %w", err)
+	}
+	return r0, nil
 }
 
 func queueRateLimit(cfg *config.Config) playback.QueueSaveLimit {

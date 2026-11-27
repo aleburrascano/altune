@@ -31,7 +31,7 @@ func runSweepStagingAudio(cfg *config.Config, mode RunMode) error {
 func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, mode RunMode) error {
 	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NewFSCallMetrics(telemetry.NewRegistry()))
 	if err != nil {
-		return err
+		return fmt.Errorf("call failed: %w", err)
 	}
 	lister, ok := store.(library.AudioAgeLister)
 	if !ok {
@@ -45,7 +45,7 @@ func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.Audio
 		tally, err = stagingsweep.Preview(ctx, lister, refs, clock.Now())
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("preview: %w", err)
 	}
 	return reportSweep(ctx, tally.Deleted, tally.KeptReferenced, tally.KeptFresh, tally.Failed, mode)
 }

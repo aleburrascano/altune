@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -51,7 +52,10 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	w.hasWrittenHeader = true
 	n, err := w.ResponseWriter.Write(b)
 	w.bytes += n
-	return n, err
+	if err != nil {
+		return n, fmt.Errorf("write response body: %w", err)
+	}
+	return n, nil
 }
 
 func (w *statusWriter) Flush() {

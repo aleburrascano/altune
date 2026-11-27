@@ -86,7 +86,7 @@ type request struct {
 func fetch(ctx context.Context, client *http.Client, r request) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, r.method, r.url, bytes.NewReader(r.body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new request with context: %w", err)
 	}
 	for name, value := range r.header {
 		req.Header.Set(name, value)
@@ -98,7 +98,7 @@ func fetch(ctx context.Context, client *http.Client, r request) ([]byte, error) 
 	case status != http.StatusOK:
 		return nil, statusError{request: r.label(req.URL), status: status}
 	case err != nil:
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", r.label(req.URL), withoutURL(err))
 	}
 	return body, nil
 }
@@ -150,7 +150,7 @@ func (gate *intervalGate) wait(ctx context.Context) error {
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
 	if err := clock.Sleep(ctx, gate.next.Sub(gate.now())); err != nil {
-		return err
+		return fmt.Errorf("sleep: %w", err)
 	}
 	gate.next = gate.now().Add(gate.gap)
 	return nil

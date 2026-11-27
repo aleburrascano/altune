@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -79,7 +80,7 @@ func (m *Meter) runContained(ctx context.Context) (res Result, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, m.runTimeout)
 	defer cancel()
 	if panicked := background.SafeRun(ctx, "observe.eval_run_panicked", func() { res, err = m.runner(runCtx) }); panicked != nil {
-		return Result{}, panicked
+		return Result{}, fmt.Errorf("run background task: %w", panicked)
 	}
 	return res, err
 }

@@ -2,6 +2,7 @@ package slowconn
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -60,7 +61,12 @@ type connBody struct {
 	conn net.Conn
 }
 
-func (b connBody) Close() error { return b.conn.Close() }
+func (b connBody) Close() error {
+	if err := b.conn.Close(); err != nil {
+		return fmt.Errorf("close connection: %w", err)
+	}
+	return nil
+}
 
 type smallBufferListener struct{ net.Listener }
 

@@ -56,7 +56,7 @@ func setup(name, envFile string) (provider, source, string, error) {
 	}
 	client, err := outbound.NewClient(sourceFetchTimeout, nil)
 	if err != nil {
-		return provider{}, nil, "", err
+		return provider{}, nil, "", fmt.Errorf("new client: %w", err)
 	}
 	src, err := p.source(client)
 	return p, src, root, err
@@ -67,13 +67,13 @@ type auditor func(s providerfields.Schema) (map[string]providerfields.Reads, err
 func refresh(ctx context.Context, src source, path string, audit auditor, out io.Writer) error {
 	s, err := providerfields.Load(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("call failed: %w", err)
 	}
 	if err := fetchAndMerge(ctx, src, s, audit); err != nil {
 		return err
 	}
 	if err := providerfields.Save(path, s); err != nil {
-		return err
+		return fmt.Errorf("call failed: %w", err)
 	}
 	for _, named := range inOrder(s.Entities) {
 		report(out, named.name, named.entity)

@@ -26,7 +26,7 @@ func matchDockerfile(path string, _ []byte) bool {
 func dockerfileComments(src []byte) ([]span, error) {
 	res, err := parser.Parse(bytes.NewReader(src))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse: %w", err)
 	}
 	lines := bytes.SplitAfter(src, []byte("\n"))
 	directiveLines, err := leadingDirectiveLines(lines)
@@ -62,7 +62,7 @@ func leadingDirectiveLines(lines [][]byte) (int, error) {
 	for i, raw := range lines {
 		d, err := directives.ParseLine(trimLine(raw))
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("parse line: %w", err)
 		}
 		if d == nil {
 			return i, nil

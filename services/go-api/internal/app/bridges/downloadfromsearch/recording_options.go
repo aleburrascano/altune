@@ -3,6 +3,7 @@ package downloadfromsearch
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/search"
+	"fmt"
 )
 
 type RecordingWiring struct {
@@ -27,7 +28,7 @@ func searchOnlyRecording(none RecordingWiring, searcher Search) (RecordingWiring
 		Rerecording: download.NoopRerecordingLookup(),
 	})
 	if err != nil {
-		return RecordingWiring{}, err
+		return RecordingWiring{}, fmt.Errorf("call failed: %w", err)
 	}
 	none.Resolver = resolver
 	return none, nil
@@ -50,7 +51,7 @@ func RecordingOptions(disc *search.Discovery) (RecordingWiring, error) {
 		Rerecording: recordings,
 	})
 	if err != nil {
-		return RecordingWiring{}, err
+		return RecordingWiring{}, fmt.Errorf("call failed: %w", err)
 	}
 	return RecordingWiring{
 		Resolver:     resolver,

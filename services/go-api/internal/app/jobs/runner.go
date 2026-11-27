@@ -24,7 +24,11 @@ type Election interface {
 }
 
 func NewElection(locks leader.LockStore) (*leader.Election, error) {
-	return leader.NewElection(locks, backgroundLockKey, backgroundLockInterval, clock.Now, clock.NewTimer, clock.NewTicker)
+	r0, err := leader.NewElection(locks, backgroundLockKey, backgroundLockInterval, clock.Now, clock.NewTimer, clock.NewTicker)
+	if err != nil {
+		return r0, fmt.Errorf("new election: %w", err)
+	}
+	return r0, nil
 }
 
 type Runner struct {
