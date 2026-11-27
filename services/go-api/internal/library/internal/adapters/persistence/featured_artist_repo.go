@@ -164,7 +164,7 @@ func (r *PostgresFeaturedArtistRepository) ReplaceFeaturedArtists(
 }
 
 func (r *PostgresFeaturedArtistRepository) replaceInTx(ctx context.Context, id domain.TrackId, userId sharedids.UserId, feats []domain.FeaturedArtist) error {
-	return database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+	err := database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := requireOwnedTrack(ctx, tx, id, userId); err != nil {
 			return err
 		}
@@ -173,6 +173,10 @@ func (r *PostgresFeaturedArtistRepository) replaceInTx(ctx context.Context, id d
 		}
 		return writeTrackFeatured(ctx, tx, userId.UUID(), id.UUID(), feats)
 	})
+	if err != nil {
+		return fmt.Errorf("replace featured artists: %w", err)
+	}
+	return nil
 }
 
 func requireOwnedTrack(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId sharedids.UserId) error {

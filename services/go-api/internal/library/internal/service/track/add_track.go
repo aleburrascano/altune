@@ -83,7 +83,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	}
 	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album, s.now, s.source)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new track: %w", err)
 	}
 	if err := whenGiven(input.DurationSeconds, track.SetCatalogDuration); err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 		sources = domain.AttachSoundCloudURL(sources, *input.SourceURL)
 	}
 	if err := track.SetCatalogIdentity(input.CatalogMBID, input.CatalogExplicit, sources); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set catalog identity: %w", err)
 	}
 	track.ArtworkURL = input.ArtworkURL
 	track.Year = input.Year
@@ -177,8 +177,10 @@ func validateAddTrackNumbers(input AddTrackInput, now time.Time) error {
 		return err
 	}
 	if err := whenGiven(input.DurationSeconds, func(seconds float64) error {
-		_, err := domain.TrackLengthOf(seconds)
-		return err
+		if _, err := domain.TrackLengthOf(seconds); err != nil {
+			return fmt.Errorf("track length of: %w", err)
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
@@ -196,7 +198,7 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 		return err
 	}
 	if err := domain.ValidateFeaturedArtists(input.FeaturedArtists); err != nil {
-		return err
+		return fmt.Errorf("validate featured artists: %w", err)
 	}
 	if err := validateCatalogIdentity(input); err != nil {
 		return err
@@ -209,13 +211,17 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 
 func validateCatalogIdentity(input AddTrackInput) error {
 	if err := whenGiven(input.CatalogMBID, func(mbid string) error {
-		_, err := domain.NormalizeCatalogMBID(mbid)
-		return err
+		if _, err := domain.NormalizeCatalogMBID(mbid); err != nil {
+			return fmt.Errorf("normalize catalog mbid: %w", err)
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
-	_, err := domain.NormalizeCatalogSources(input.CatalogSources)
-	return err
+	if _, err := domain.NormalizeCatalogSources(input.CatalogSources); err != nil {
+		return fmt.Errorf("normalize catalog sources: %w", err)
+	}
+	return nil
 }
 
 func validateAddTrackText(input AddTrackInput) error {
@@ -230,7 +236,7 @@ func validateAddTrackText(input AddTrackInput) error {
 	}
 	for _, f := range fields {
 		if err := domain.ValidateOptionalTrackText(f.value, f.name); err != nil {
-			return err
+			return fmt.Errorf("validate optional track text: %w", err)
 		}
 	}
 	return nil

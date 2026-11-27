@@ -92,7 +92,7 @@ func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Tra
 		return r.storedConflict(ctx, track)
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("run transaction: %w", err)
 	}
 	return track, true, nil
 }
@@ -705,7 +705,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 	build = func() (*domain.Track, error) {
 		status, err := domain.ParseAcquisitionStatus(acqStatus)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse acquisition status: %w", err)
 		}
 
 		albumVal := ""
@@ -762,7 +762,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 func scanTrackColumns(s scanner) (*domain.Track, error) {
 	dest, build := trackScanDest()
 	if err := s.Scan(dest...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan: %w", err)
 	}
 	return build()
 }

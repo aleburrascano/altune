@@ -55,7 +55,7 @@ func MustNewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleReposit
 func (s *PlaylistLifecycleService) Create(ctx context.Context, userId ids.UserId, name string) (*domain.Playlist, error) {
 	playlist, err := domain.NewPlaylist(userId, name, s.now(), s.source)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new playlist: %w", err)
 	}
 	if err := s.requirePlaylistSpace(ctx, userId); err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (s *PlaylistLifecycleService) requirePlaylistSpace(ctx context.Context, use
 func (s *PlaylistLifecycleService) List(ctx context.Context, userId ids.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {
 	limit, err := domain.NormalizePage(limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize page: %w", err)
 	}
 	result, err := s.playlistRepo.ListForUser(ctx, userId, limit, offset)
 	if err != nil {
@@ -130,7 +130,7 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId ids.UserId
 		return nil, domain.PlaylistSummary{}, domain.ErrPlaylistNotFound
 	}
 	if err := playlist.Rename(name, s.now()); err != nil {
-		return nil, domain.PlaylistSummary{}, err
+		return nil, domain.PlaylistSummary{}, fmt.Errorf("rename: %w", err)
 	}
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
 		return nil, domain.PlaylistSummary{}, renameWriteError(ctx, err)
