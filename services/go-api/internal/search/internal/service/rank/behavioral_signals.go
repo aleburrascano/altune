@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -75,5 +76,8 @@ func (l *listeningScoring) Snapshot() map[string]float64 {
 }
 
 func (r *RankingExperiments) RefreshBehavioralScores(ctx context.Context) error {
-	return r.behavior.Refresh(ctx)
+	if err := r.behavior.Refresh(ctx); err != nil {
+		return fmt.Errorf("refresh: %w", err)
+	}
+	return nil
 }

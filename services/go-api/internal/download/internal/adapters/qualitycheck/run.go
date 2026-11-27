@@ -97,9 +97,15 @@ func (r recordedRerecording) FindRerecording(_ context.Context, q ports.Rerecord
 
 func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, track ports.TrackSnapshot) error {
 	if kase.Stored != nil {
-		return service.NewReplaceService(svc).ExecuteReplace(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+		if err := service.NewReplaceService(svc).ExecuteReplace(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err != nil {
+			return fmt.Errorf("execute replace: %w", err)
+		}
+		return nil
 	}
-	return svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err != nil {
+		return fmt.Errorf("execute acquisition: %w", err)
+	}
+	return nil
 }
 
 func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {

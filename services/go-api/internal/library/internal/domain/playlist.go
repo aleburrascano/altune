@@ -3,6 +3,7 @@ package domain
 import (
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/ids"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -12,7 +13,7 @@ type PlaylistId struct{ ids.EntityId }
 func ParsePlaylistId(s string) (PlaylistId, error) {
 	id, err := ids.ParseEntityId(s)
 	if err != nil {
-		return PlaylistId{}, err
+		return PlaylistId{}, fmt.Errorf("parse playlist id: %w", err)
 	}
 	return PlaylistId{id}, nil
 }

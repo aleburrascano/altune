@@ -47,7 +47,10 @@ func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
 	case limitUncapped:
 		return nil
 	case limitCapped:
-		return l.slots.Acquire(ctx)
+		if err := l.slots.Acquire(ctx); err != nil {
+			return fmt.Errorf("acquire download slot: %w", err)
+		}
+		return nil
 	case limitUnset:
 		return ErrLimitNotConfigured
 	default:

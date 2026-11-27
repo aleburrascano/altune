@@ -240,7 +240,7 @@ func fetchContentPart(
 	ctx context.Context, panicEvent string, fetch func() (*providerguard.ContentFetchResponse, error),
 ) (resp *providerguard.ContentFetchResponse, err error) {
 	if panicked := background.SafeRun(ctx, panicEvent, func() { resp, err = fetch() }); panicked != nil {
-		return nil, panicked
+		return nil, fmt.Errorf("run background task: %w", panicked)
 	}
 	return resp, err
 }

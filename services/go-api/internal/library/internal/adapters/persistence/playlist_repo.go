@@ -235,12 +235,16 @@ func (r *PostgresPlaylistRepository) withOwnedPlaylistLock(ctx context.Context, 
 }
 
 func (r *PostgresPlaylistRepository) runOwnedPlaylistLock(ctx context.Context, playlistId domain.PlaylistId, userId sharedids.UserId, fn func(pgx.Tx) error) error {
-	return database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+	err := database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := lockOwnedPlaylist(ctx, tx, playlistId, userId); err != nil {
 			return err
 		}
 		return fn(tx)
 	})
+	if err != nil {
+		return fmt.Errorf("run owned playlist lock: %w", err)
+	}
+	return nil
 }
 
 func lockOwnedPlaylist(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId, userId sharedids.UserId) error {

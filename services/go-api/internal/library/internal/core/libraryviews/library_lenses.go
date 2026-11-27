@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/ids"
 	"context"
+	"fmt"
 )
 
 type LibraryViewService struct {
@@ -22,7 +23,7 @@ func (s *LibraryViewService) Albums(
 ) ([]domain.AlbumGroup, error) {
 	query, err := domain.NormalizeLibraryPage(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize library page: %w", err)
 	}
 	albums, err := s.lensRepo.ListAlbumsForUser(ctx, userId, query)
 	if err != nil {
@@ -41,7 +42,7 @@ func (s *LibraryViewService) Artists(
 	}
 	query, err := domain.NormalizeLibraryPage(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize library page: %w", err)
 	}
 	artists, err := s.lensRepo.ListArtistsForUser(ctx, userId, query)
 	if err != nil {

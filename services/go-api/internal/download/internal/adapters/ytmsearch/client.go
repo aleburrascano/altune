@@ -148,7 +148,7 @@ func (c *Client) postOnce(ctx context.Context, target string, payload []byte) (i
 func (c *Client) call(ctx context.Context, label string, fetch func(context.Context) (int, []byte, error)) ([]byte, error) {
 	ctx, err := youtubemusicapi.ReserveSlot(ctx, c.http)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reserve slot: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()

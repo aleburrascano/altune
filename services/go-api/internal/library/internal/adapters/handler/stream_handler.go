@@ -156,7 +156,11 @@ func (b *countedAudioBody) Read(p []byte) (int, error) {
 }
 
 func (b *countedAudioBody) Seek(offset int64, whence int) (int64, error) {
-	return b.stream.Seek(offset, whence)
+	pos, err := b.stream.Seek(offset, whence)
+	if err != nil {
+		return pos, fmt.Errorf("seek audio stream: %w", err)
+	}
+	return pos, nil
 }
 
 func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {

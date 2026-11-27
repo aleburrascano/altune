@@ -262,7 +262,7 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 		return nil, fmt.Errorf("discogs rate limited")
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get bytes: %w", err)
 	}
 	return body, nil
 }
