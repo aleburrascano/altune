@@ -84,7 +84,7 @@ func (r *PostgresQueueStateRepository) runOp(
 
 func (r *PostgresQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
 	if err := state.Validate(); err != nil {
-		return err
+		return fmt.Errorf("refuse invalid queue state: %w", err)
 	}
 
 	var tag pgconn.CommandTag
@@ -119,7 +119,10 @@ func (r *PostgresQueueStateRepository) Upsert(ctx context.Context, state *domain
 			handlingAge{stampedAt: state.UpdatedAt, now: r.now},
 			defaultQueueStateOpTimeout.Microseconds(),
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("upsert queue state: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
@@ -135,12 +138,12 @@ const storedTrackIdMatches = `regexp_replace(lower(q.track_ids[$2::int + 1]), '^
 
 func (r *PostgresQueueStateRepository) UpdatePosition(ctx context.Context, position *domain.QueuePosition) error {
 	if err := position.Validate(); err != nil {
-		return err
+		return fmt.Errorf("refuse invalid queue position: %w", err)
 	}
 
 	var applied, matched bool
 	err := r.runOp(ctx, "update_position", position.UserId, func(opCtx context.Context) error {
-		return r.pool.QueryRow(opCtx,
+		err := r.pool.QueryRow(opCtx,
 			`WITH handled AS (
 		   SELECT statement_timestamp() - $4::bigint * interval '1 microsecond' AS at
 		 ), q AS (
@@ -165,6 +168,10 @@ func (r *PostgresQueueStateRepository) UpdatePosition(ctx context.Context, posit
 			handlingAge{stampedAt: position.UpdatedAt, now: r.now},
 			position.CurrentTrackId,
 		).Scan(&applied, &matched)
+		if err != nil {
+			return fmt.Errorf("update queue position: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
@@ -200,12 +207,16 @@ func (r *PostgresQueueStateRepository) GetForUser(
 ) (*domain.QueueState, error) {
 	var row scannedRow
 	err := r.runOp(ctx, "get_for_user", userId, func(opCtx context.Context) error {
-		return r.pool.QueryRow(opCtx,
+		err := r.pool.QueryRow(opCtx,
 			`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
 		 WHERE user_id = $1 AND erased_at IS NULL`,
 			userId.UUID(),
 		).Scan(&row.trackIds, &row.currentIdx, &row.positionMs, &row.shuffled, &row.repeatMode, &row.sourceId, &row.naturalOrder, &row.updatedAt)
+		if err != nil {
+			return fmt.Errorf("read queue state: %w", err)
+		}
+		return nil
 	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -248,7 +259,10 @@ func (r *PostgresQueueStateRepository) DeleteForUser(ctx context.Context, userId
 			int64(erasureFenceWindow.Seconds()),
 			domain.RepeatOff.String(),
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("erase queue state: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -260,7 +274,10 @@ func (r *PostgresQueueStateRepository) ReapErasedStates(ctx context.Context) (in
 		 WHERE erased_at < clock_timestamp() - $1::bigint * interval '1 second'`,
 			int64(erasureFenceWindow.Seconds()))
 		reaped = tag.RowsAffected()
-		return err
+		if err != nil {
+			return fmt.Errorf("reap erased queue states: %w", err)
+		}
+		return nil
 	})
 	return reaped, err
 }
