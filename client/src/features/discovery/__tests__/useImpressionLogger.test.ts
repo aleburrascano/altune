@@ -8,6 +8,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import type { ViewToken } from 'react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -34,7 +35,7 @@ function sentEvents(): RecordedEvent[] {
 
 async function settle(): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
 }
 

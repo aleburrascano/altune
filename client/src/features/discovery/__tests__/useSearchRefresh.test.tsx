@@ -57,7 +57,10 @@ function pageOf(offset: number, searchId: string, titles: string[]): DiscoverySe
   };
 }
 
+const RETRY_WINDOW_MS = 200;
+
 beforeEach(async () => {
+  jest.useFakeTimers();
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   recordLogs();
   await signInTestUser();
@@ -67,6 +70,7 @@ beforeEach(async () => {
 afterEach(() => {
   queryClient.clear();
   jest.restoreAllMocks();
+  jest.useRealTimers();
 });
 
 describe('held-slate expiry', () => {
@@ -116,7 +120,7 @@ describe('held-slate expiry when the restart fails', () => {
     });
     await waitFor(() => expect(result.current.refreshFailed).toBe(true));
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await jest.advanceTimersByTimeAsync(RETRY_WINDOW_MS);
     });
 
     expect(searchRequests()).toHaveLength(RESTART_AND_ITS_RETRY);

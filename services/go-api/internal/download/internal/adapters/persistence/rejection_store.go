@@ -111,7 +111,7 @@ func scanActiveRejection(row pgx.CollectableRow) (ports.PriorRejection, error) {
 	var expectedSeconds *float64
 	var referenceMBID *string
 	if err := row.Scan(&key, &expectedSeconds, &referenceMBID); err != nil {
-		return ports.PriorRejection{}, err
+		return ports.PriorRejection{}, fmt.Errorf("scan prior rejection: %w", err)
 	}
 	return ports.PriorRejection{SourceKey: key, Basis: recordedBasis(expectedSeconds, referenceMBID)}, nil
 }

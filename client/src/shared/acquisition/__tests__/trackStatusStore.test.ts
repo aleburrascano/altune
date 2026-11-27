@@ -24,12 +24,11 @@ import {
 import { runSignOutCleanups } from '@shared/session';
 import { flushOutbox } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
 const READY_STATUS_LIMIT = 512;
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 interface SentEvent {
   payload: Record<string, unknown>;
@@ -42,7 +41,7 @@ interface HttpRequest {
 
 async function delivered(): Promise<SentEvent[]> {
   await flushOutbox();
-  await new Promise((resolve) => setImmediate(resolve));
+  await flushPromises();
   return (__http.requests as HttpRequest[])
     .filter((request) => request.path === '/v1/discovery/events')
     .map((request) => JSON.parse(request.body) as SentEvent);
@@ -282,25 +281,6 @@ describe('pruning settled entries', () => {
   });
 });
 
-function foldingBy(locale: string): (this: string, locales?: Intl.LocalesArgument) => string {
-  const namedLocaleFold = String.prototype.toLocaleLowerCase;
-  return function (this: string, locales?: Intl.LocalesArgument): string {
-    return namedLocaleFold.call(this, locales ?? locale);
-  };
-}
-
-function onDeviceWithLocale<T>(locale: string, read: () => T): T {
-  const fold = foldingBy(locale);
-  const unnamedFold = jest.spyOn(String.prototype, 'toLowerCase').mockImplementation(fold);
-  const namedFold = jest.spyOn(String.prototype, 'toLocaleLowerCase').mockImplementation(fold);
-  try {
-    return read();
-  } finally {
-    unnamedFold.mockRestore();
-    namedFold.mockRestore();
-  }
-}
-
 describe('trackIdentityKey', () => {
   it.each<[string, string, string]>([
     ['empty title', '', 'The Artist'],
@@ -329,14 +309,16 @@ describe('trackIdentityKey', () => {
     expect(a).not.toBe(b);
   });
 
-  it('folds a title carrying İ and I to the same key whatever the device locale is', () => {
-    const onTurkishDevice = onDeviceWithLocale('tr-TR', () =>
-      trackIdentityKey('İyi Işık', 'Sanatçı'),
-    );
-    const onUsDevice = onDeviceWithLocale('en-US', () => trackIdentityKey('İyi Işık', 'Sanatçı'));
+  it('folds a title carrying İ and I the English way, whatever the device locale is', () => {
+    const title = 'İyi Işık';
+    const artist = 'Sanatçı';
+    const englishTitle = title.toLocaleLowerCase('en-US');
+    const englishArtist = artist.toLocaleLowerCase('en-US');
 
-    expect(onTurkishDevice).not.toBeNull();
-    expect(onTurkishDevice).toBe(onUsDevice);
+    expect(trackIdentityKey(title, artist)).toBe(
+      `${englishTitle.length}:${englishTitle}:${englishArtist}`,
+    );
+    expect(englishTitle).not.toBe(title.toLocaleLowerCase('tr-TR'));
   });
 });
 

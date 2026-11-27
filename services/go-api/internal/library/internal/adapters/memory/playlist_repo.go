@@ -6,6 +6,7 @@ import (
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sort"
 )
@@ -238,8 +239,14 @@ func (r *PlaylistRepo) AddTracks(_ context.Context, userId sharedids.UserId, pla
 }
 
 func (r *PlaylistRepo) appendTrack(p *domain.Playlist, trackId domain.TrackId) error {
-	if err := p.AddTrack(trackId, p.UpdatedAt); err != nil {
-		return err
+	err := p.AddTrack(trackId, p.UpdatedAt)
+	switch {
+	case errors.Is(err, domain.ErrTrackAlreadyInPlaylist):
+		return domain.ErrTrackAlreadyInPlaylist
+	case errors.Is(err, domain.ErrPlaylistFull):
+		return domain.ErrPlaylistFull
+	case err != nil:
+		return fmt.Errorf("add track: %w", err)
 	}
 	r.Added = append(r.Added, p.Tracks[len(p.Tracks)-1])
 	return nil

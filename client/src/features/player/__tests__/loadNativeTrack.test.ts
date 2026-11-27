@@ -38,6 +38,7 @@ import {
 } from '@features/player/__tests__/memoryPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 provideOfflinePort(apiClientOfflinePort);
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
@@ -547,7 +548,7 @@ describe('the presign window', () => {
   }
 
   function settled(): Promise<void> {
-    return new Promise((resolve) => setImmediate(resolve));
+    return flushPromises();
   }
 
   describe('a presign slide whose native reorder rejects', () => {

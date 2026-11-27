@@ -24,6 +24,7 @@ import {
   type RecordingNavigator,
 } from '@features/detail/__tests__/recordingNavigator';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 beforeEach(() => {
   recordLogs();
@@ -125,7 +126,7 @@ function albumSeed(tracks: DiscoveryResult[], seed: MemoryDetailSeed = {}): Memo
 
 async function tick(): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
 }
 

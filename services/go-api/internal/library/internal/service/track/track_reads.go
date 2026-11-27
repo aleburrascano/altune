@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
+	"fmt"
 )
 
 type GetTrackStatusService struct {
@@ -45,7 +46,7 @@ func NewListTracksService(lensRepo ports.LibraryViewRepository) *ListTracksServi
 func (s *ListTracksService) Execute(ctx context.Context, userId ids.UserId, query domain.LibraryQuery) (*ListTracksOutput, error) {
 	query, err := domain.NormalizeLibraryPage(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize library page: %w", err)
 	}
 
 	tracks, total, err := s.lensRepo.ListFilteredForUser(ctx, userId, query)

@@ -8,6 +8,7 @@ import { trackKey, type PlaybackTrack, orderedQueueTracks, useQueueStore } from 
 import { notifyIdentityChange } from '@shared/session';
 import { authClientOver } from '@testing/fakeAuthClient';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 const player = require('react-native-track-player').__player;
 
@@ -22,7 +23,7 @@ function libraryTrack(id: string): PlaybackTrack {
 
 function sendWidgetCommand(command: string): Promise<void> {
   nativeWidget.send(command);
-  return new Promise((resolve) => setImmediate(resolve));
+  return flushPromises();
 }
 
 const playPrevious = jest.fn(() => Promise.resolve());
@@ -139,7 +140,7 @@ describe('startWidgetCommands', () => {
 });
 
 function settle(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
+  return flushPromises();
 }
 
 const SETTLE_ROUNDS = 10;

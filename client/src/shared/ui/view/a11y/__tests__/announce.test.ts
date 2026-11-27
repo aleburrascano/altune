@@ -1,6 +1,5 @@
 import { createAnnounce, type ScreenReader } from '@shared/ui';
-
-const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+import { flushPromises } from '@testing/flushPromises';
 
 type SpeakingReader = { reader: ScreenReader; spoken: string[]; asked: () => number };
 
@@ -36,7 +35,7 @@ describe('announce', () => {
     const { reader, spoken } = readerSaying(true);
 
     createAnnounce(reader)('Saved');
-    await flush();
+    await flushPromises();
 
     expect(spoken).toEqual(['Saved']);
   });
@@ -45,7 +44,7 @@ describe('announce', () => {
     const { reader, spoken } = readerSaying(false);
 
     createAnnounce(reader)('Saved');
-    await flush();
+    await flushPromises();
 
     expect(spoken).toEqual([]);
   });
@@ -56,7 +55,7 @@ describe('announce', () => {
 
     announce('First');
     announce('Second');
-    await flush();
+    await flushPromises();
 
     expect(spoken).toEqual(['First']);
   });

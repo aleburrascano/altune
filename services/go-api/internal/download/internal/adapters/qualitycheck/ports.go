@@ -141,7 +141,11 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 		if err != nil {
 			return nil, fmt.Errorf("build the saved-link source: %w", err)
 		}
-		return source.Find(ctx, req)
+		r0, err := source.Find(ctx, req)
+		if err != nil {
+			return r0, fmt.Errorf("find replayed candidates: %w", err)
+		}
+		return r0, nil
 	}
 	variants := queryVariantsFor(req)
 	out := make([]ports.AudioCandidate, 0, len(s.spec.Candidates))
@@ -157,9 +161,17 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 func (s *evalSource) recordedFind(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	fetcher := evalFetcher{shared: s.shared}
 	if s.Name() == ytmsearch.SourceName {
-		return ytmsearch.NewSource(recordedSongs(s.spec.ObservedSongs), fetcher).Find(ctx, req)
+		r0, err := ytmsearch.NewSource(recordedSongs(s.spec.ObservedSongs), fetcher).Find(ctx, req)
+		if err != nil {
+			return r0, fmt.Errorf("find replayed candidates: %w", err)
+		}
+		return r0, nil
 	}
-	return youtubemusic.NewSource(fetcher, recordedWatches(s.spec.ObservedWatches)).Find(ctx, req)
+	r0, err := youtubemusic.NewSource(fetcher, recordedWatches(s.spec.ObservedWatches)).Find(ctx, req)
+	if err != nil {
+		return r0, fmt.Errorf("find replayed candidates: %w", err)
+	}
+	return r0, nil
 }
 
 type recordedSongs []ObservedSong
@@ -190,7 +202,11 @@ func (f evalFetcher) Download(ctx context.Context, url, outDir string) (ports.Fe
 }
 
 func (s *evalSource) pinnedVideos(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return youtubemusic.NewSource(nil, goldenWatches{candidates: s.spec.Candidates}).Find(ctx, req)
+	r0, err := youtubemusic.NewSource(nil, goldenWatches{candidates: s.spec.Candidates}).Find(ctx, req)
+	if err != nil {
+		return r0, fmt.Errorf("find replayed candidates: %w", err)
+	}
+	return r0, nil
 }
 
 type goldenWatches struct{ candidates []Candidate }

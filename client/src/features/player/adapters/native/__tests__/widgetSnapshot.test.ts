@@ -7,6 +7,7 @@ import type { PlaybackTrack } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 const player = require('react-native-track-player').__player;
 
@@ -21,7 +22,7 @@ function track(id: string, artworkUrl: string | null): PlaybackTrack {
 }
 
 function settle(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
+  return flushPromises();
 }
 
 function writtenSnapshots(): unknown[] {

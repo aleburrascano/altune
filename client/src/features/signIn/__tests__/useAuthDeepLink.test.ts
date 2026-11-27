@@ -2,6 +2,7 @@ import { startAuthDeepLinks, type LinkEvents } from '@features/signIn';
 import { createMemoryNavigator } from '@testing/fakes/navigation/inMemoryNavigator';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
+import { flushPromises } from '@testing/flushPromises';
 
 type AuthStub = Parameters<typeof startAuthDeepLinks>[0]['auth'];
 type UrlListener = (url: string) => void;
@@ -47,7 +48,7 @@ function verificationRefusedWith(error: unknown): void {
 }
 
 function flushMacrotask(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
+  return flushPromises();
 }
 
 type LinkSource = { links: LinkEvents; emit(url: string): void; subscribers(): number };

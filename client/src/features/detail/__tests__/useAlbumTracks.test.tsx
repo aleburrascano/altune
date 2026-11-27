@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useAlbumTracks } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 import { freezeDate } from '@testing/freezeDate';
+import { flushPromises } from '@testing/flushPromises';
 
 const CLOCK_START = 1_700_000_000_000;
 
@@ -172,7 +173,7 @@ describe('useAlbumTracks reopened against the 30-minute content cache window', (
     clock.advance(elapsedMs);
     renderHook(useHook, { wrapper });
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
 
     expect(__http.countFor(CACHED_ALBUM_PATH)).toBe(expectedRequests);

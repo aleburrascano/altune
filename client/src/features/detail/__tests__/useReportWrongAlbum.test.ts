@@ -5,6 +5,7 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { DetailHandoffProvider, useReportWrongAlbum } from '@features/detail';
 import type { DiscoveryResult } from '@shared/catalog';
 import { signInTestUser } from '@testing/queryHarness';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -58,7 +59,7 @@ describe('useReportWrongAlbum guards against double submits', () => {
 
     await waitFor(() => expect(__http.countFor(EVENTS)).toBe(1));
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
     expect(__http.countFor(EVENTS)).toBe(1);
   });

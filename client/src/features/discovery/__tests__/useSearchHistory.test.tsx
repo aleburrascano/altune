@@ -13,6 +13,7 @@ import {
 import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDiscoverPort';
 import type { DiscoverPort } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
+import { flushPromises } from '@testing/flushPromises';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS = 'POST /v1/discovery/events';
@@ -300,7 +301,7 @@ describe('discover clear-history racing an unrelated history invalidation', () =
 
   async function flushPendingCacheWrites() {
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
     });
   }
 

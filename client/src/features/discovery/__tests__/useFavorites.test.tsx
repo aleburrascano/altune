@@ -11,6 +11,7 @@ import { discoveryKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';
 import { ObservedQueryClient } from '@testing/observedQueryClient';
 import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
+import { flushPromises } from '@testing/flushPromises';
 
 let mockedAdd: jest.MockedFunction<FavoritesPort['addFavorite']>;
 let mockedList: jest.MockedFunction<FavoritesPort['listFavorites']>;
@@ -309,7 +310,7 @@ function heldServer(): ServerDouble {
 
 async function settle(): Promise<void> {
   await flush();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushPromises();
 }
 
 async function deliverNewestFirst(server: ServerDouble): Promise<void> {

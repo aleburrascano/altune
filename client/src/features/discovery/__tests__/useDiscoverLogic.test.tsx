@@ -86,6 +86,7 @@ function clearRequests(): number {
 }
 
 beforeEach(async () => {
+  jest.useFakeTimers();
   fake = discoverEnv();
   queryClient = new QueryClient({
     defaultOptions: {
@@ -105,6 +106,7 @@ beforeEach(async () => {
 afterEach(() => {
   queryClient.clear();
   setSearchState('', '');
+  jest.useRealTimers();
 });
 
 describe('useDiscoverLogic opens every query gate at the same minimum length', () => {
@@ -585,15 +587,12 @@ describe('a direct account switch with Discover still mounted', () => {
     portRecordHistory.mockClear();
 
     switchAccount();
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+    await settle(SHORT_WAIT_MS);
 
     expect(portRecordHistory).not.toHaveBeenCalled();
   });
 
   it('drops a pending debounced commit', () => {
-    jest.useFakeTimers();
     const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
 
@@ -601,7 +600,6 @@ describe('a direct account switch with Discover still mounted', () => {
     act(() => {
       jest.advanceTimersByTime(5000);
     });
-    jest.useRealTimers();
 
     expect(portSearch).not.toHaveBeenCalled();
   });
@@ -627,7 +625,7 @@ function submitPage(query: string): DiscoverySearchResponse {
 
 async function settle(ms: number = DEBOUNCE_SETTLED_MS) {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, ms));
+    await jest.advanceTimersByTimeAsync(ms);
   });
 }
 function searchedQueries(): string[] {

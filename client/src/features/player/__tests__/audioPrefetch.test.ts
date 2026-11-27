@@ -35,6 +35,7 @@ import {
   type DownloadTarget,
   type DownloadedFile,
 } from '@testing/fakes/files/expoFileSystemDouble';
+import { flushPromises } from '@testing/flushPromises';
 
 const __fs = fileSystemDouble;
 
@@ -871,7 +872,7 @@ describe('prefetch health tally', () => {
 
       flushPlaybackHealth();
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await flushPromises();
       });
 
       expect(__http.countFor(HEALTH_ROUTE)).toBe(0);

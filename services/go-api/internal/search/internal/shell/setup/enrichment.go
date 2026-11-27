@@ -15,7 +15,11 @@ func newEnrichment(t *providerTable, s connections.Stores, artwork ports.Tagging
 		return handler.UnconfiguredEnrichment{}, nil
 	}
 	enrichmentCache := cache.NewRedisEnrichmentCache(s.Redis, s.CacheOption())
-	return details.NewEnrichmentService(enricher, artwork, enrichmentCache, enrichmentCache)
+	r0, err := details.NewEnrichmentService(enricher, artwork, enrichmentCache, enrichmentCache)
+	if err != nil {
+		return r0, fmt.Errorf("new enrichment service: %w", err)
+	}
+	return r0, nil
 }
 
 func newDetailEnrichers(t *providerTable, s connections.Stores) (handler.DetailEnrichers, error) {

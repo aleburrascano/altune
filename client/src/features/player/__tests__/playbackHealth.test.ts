@@ -36,6 +36,7 @@ import {
   driveAppState,
   type AppStateDriver,
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
+import { flushPromises } from '@testing/flushPromises';
 
 const player = TrackPlayer as unknown as { getQueue: jest.Mock };
 const { __player } = jest.requireMock('react-native-track-player') as {
@@ -64,7 +65,7 @@ let app: AppStateDriver;
 
 async function settleRequests(): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
 }
 
@@ -219,7 +220,7 @@ describe('playback health metric — user-visible failures', () => {
       .find(([event]) => event === Event.PlaybackError);
     if (!registration) throw new Error('no PlaybackError listener was registered');
     (registration[1] as PlaybackErrorHandler)({ code, message });
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
   }
 
   function nativeError(code: string): Error {

@@ -87,7 +87,7 @@ func scanUpgradeCandidate(row pgx.CollectableRow) (ports.UpgradeCandidate, error
 	var trackID, userID uuid.UUID
 	var grade string
 	if err := row.Scan(&trackID, &userID, &grade); err != nil {
-		return ports.UpgradeCandidate{}, err
+		return ports.UpgradeCandidate{}, fmt.Errorf("scan upgrade candidate: %w", err)
 	}
 	return ports.UpgradeCandidate{TrackID: ids.TrackIdFromUUID(trackID), UserID: ids.NewUserId(userID), Grade: grade}, nil
 }

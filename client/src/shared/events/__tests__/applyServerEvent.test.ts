@@ -27,6 +27,7 @@ import type { JsonObject } from '@shared/files';
 import type { ServerEvent } from '@shared/events';
 
 import { recordingCache } from '@shared/events/__tests__/recordingCache';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -1568,7 +1569,7 @@ describe('status_changed telemetry', () => {
 
   async function sourcesSent(): Promise<unknown[]> {
     await flushOutbox();
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
     return (__http.requests as { path: string; body: string }[])
       .filter((request) => request.path === TELEMETRY_PATH)
       .map((request) => (JSON.parse(request.body) as SentEvent).payload)

@@ -15,7 +15,7 @@ import (
 
 type TrackId = ids.TrackId
 
-func ParseTrackId(s string) (TrackId, error) { return ids.ParseTrackId(s) }
+var ParseTrackId = ids.ParseTrackId
 
 func TrackIdFromUUID(id [16]byte) TrackId { return ids.TrackIdFromUUID(id) }
 

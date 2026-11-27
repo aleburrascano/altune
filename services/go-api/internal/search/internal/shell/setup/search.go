@@ -119,7 +119,11 @@ func newFindRelatedService(t *providerTable, s connections.Stores, breaker *prov
 	if err != nil {
 		return nil, fmt.Errorf("build the artist albums source: %w", err)
 	}
-	return related.NewFindRelatedService(clock.Now, library, albumTracks, artistAlbums)
+	r0, err := related.NewFindRelatedService(clock.Now, library, albumTracks, artistAlbums)
+	if err != nil {
+		return r0, fmt.Errorf("new find related service: %w", err)
+	}
+	return r0, nil
 }
 
 func newArtworkFiller(w wiring) (*artwork.ArtworkFiller, error) {
@@ -129,15 +133,23 @@ func newArtworkFiller(w wiring) (*artwork.ArtworkFiller, error) {
 		identities = s.Identities
 	}
 	if s.Redis == nil {
-		return artwork.NewPendingFiller(identities, w.deps.Tracker)
+		r0, err := artwork.NewPendingFiller(identities, w.deps.Tracker)
+		if err != nil {
+			return r0, fmt.Errorf("new pending filler: %w", err)
+		}
+		return r0, nil
 	}
-	return artwork.NewArtworkFiller(
+	r0, err := artwork.NewArtworkFiller(
 		w.artwork,
 		cache.NewRedisArtworkCache(s.Redis, s.CacheOption()),
 		identities,
 		cache.NewRedisEnrichmentCache(s.Redis, s.CacheOption()),
 		w.deps.Tracker,
 	)
+	if err != nil {
+		return r0, fmt.Errorf("new artwork filler: %w", err)
+	}
+	return r0, nil
 }
 
 func planIdentityAndFavorites(p *searchPlan, s connections.Stores) {

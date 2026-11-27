@@ -1,3 +1,5 @@
+import { flushPromises } from '@testing/flushPromises';
+
 const { __http } = require('../fetch.js') as {
   __http: {
     reply(spec: string, response?: { status?: number; json?: unknown; malformed?: boolean }): void;
@@ -103,7 +105,7 @@ describe('http double', () => {
       status = response.status;
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
     expect(status).toBeNull();
 
     release();

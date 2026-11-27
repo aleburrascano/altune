@@ -30,6 +30,7 @@ import {
 } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';
 import { captureWarnings } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 provideOfflinePort(apiClientOfflinePort);
 
@@ -3040,7 +3041,7 @@ describe('work stays bounded on a large pinned library', () => {
 
   async function settle(): Promise<void> {
     for (let i = 0; i < 20 && usePinnedStore.getState().isWorking; i += 1) {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     }
   }
 

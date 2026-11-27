@@ -53,7 +53,7 @@ type wiring struct {
 
 func New(ctx context.Context, d connections.Deps) (*Discovery, error) {
 	if err := d.MissingHandles(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set up discovery: %w", err)
 	}
 	w, err := newWiring(ctx, d)
 	if err != nil {
@@ -176,7 +176,11 @@ func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryService
 }
 
 func newEventService(activity ports.ActivityFeed, s connections.Stores) (*useractivity.RecordEventService, error) {
-	return useractivity.NewRecordEventService(s.Events, activity, clock.Now)
+	r0, err := useractivity.NewRecordEventService(s.Events, activity, clock.Now)
+	if err != nil {
+		return r0, fmt.Errorf("new record event service: %w", err)
+	}
+	return r0, nil
 }
 
 func newHandler(services handler.DiscoveryServices, unreleasedLookup handler.UnreleasedReader) (*handler.DiscoveryHandler, error) {

@@ -32,6 +32,7 @@ import type { LibraryPort } from '@features/library';
 import type { RecordingDialogs } from '@features/library/__tests__/recordingDialogs';
 import { libraryKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
+import { rejectAfter } from '@testing/delays';
 
 const realUnpin = usePinnedStore.getState().unpin;
 
@@ -189,11 +190,8 @@ describe('useDeleteTracks', () => {
       jest.useFakeTimers();
       try {
         const { wrapper, dialogs } = setup(ports);
-        mockDeleteTrack.mockImplementation(
-          () =>
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('timed out')), REQUEST_TIMEOUT_MS),
-            ),
+        mockDeleteTrack.mockImplementation(() =>
+          rejectAfter(REQUEST_TIMEOUT_MS, new Error('timed out')),
         );
 
         const { result } = renderHook(() => useDeleteTracks(), { wrapper });

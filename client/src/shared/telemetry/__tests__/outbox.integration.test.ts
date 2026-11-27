@@ -1,6 +1,7 @@
 import { createAppTelemetry, type DiscoveryEvent, type OutboxEntry } from '@shared/telemetry';
 import { driveAppState } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { signInTestUser } from '@testing/signInTestUser';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -266,7 +267,7 @@ describe('idempotence / replay across restarts', () => {
     __http.replyOnce(EVENTS_PATH, { status: 503 });
     await outbox1.enqueueCritical(libraryAdd('trk-first'));
     await outbox1.enqueueCritical(libraryAdd('trk-second'));
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
 
     const queuedBeforeRestart = readOutboxFile();
     expect(queuedBeforeRestart).toHaveLength(2);

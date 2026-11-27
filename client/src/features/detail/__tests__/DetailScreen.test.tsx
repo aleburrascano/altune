@@ -84,9 +84,14 @@ function searchResponse(results: DiscoveryResult[]) {
 }
 
 beforeEach(async () => {
+  jest.useFakeTimers();
   runSignOutCleanups();
   await signInTestUser();
   __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('DetailScreen on a library artist page', () => {
@@ -106,7 +111,7 @@ describe('DetailScreen on a library artist page', () => {
 
   async function settle(): Promise<void> {
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+      await jest.advanceTimersByTimeAsync(SETTLE_MS);
     });
   }
 

@@ -10,6 +10,7 @@ import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort
 import type { DetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 beforeEach(() => {
   recordLogs();
@@ -264,7 +265,7 @@ describe('useSaveTrack', () => {
           acquisition_status: 'pending',
         } as TrackResponse);
         await pendingSave;
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushPromises();
       });
 
       expect(useTrackStatusStore.getState().statuses).toBe(statusesAfterSignOut);

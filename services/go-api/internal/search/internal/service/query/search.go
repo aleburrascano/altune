@@ -545,5 +545,8 @@ func pageOf(ranked []domain.SearchResult, offset, limit int) []domain.SearchResu
 }
 
 func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
-	return s.ranking.RefreshBehavioralScores(ctx)
+	if err := s.ranking.RefreshBehavioralScores(ctx); err != nil {
+		return fmt.Errorf("refresh behavioral scores: %w", err)
+	}
+	return nil
 }

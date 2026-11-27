@@ -24,7 +24,7 @@ func (s *SetTrackNumberService) Execute(
 	trackNumber int,
 ) (updated bool, err error) {
 	if err := domain.ValidateTrackNumber(trackNumber); err != nil {
-		return false, err
+		return false, fmt.Errorf("validate track number: %w", err)
 	}
 	updated, err = s.trackRepo.SetTrackNumber(ctx, trackId, userId, trackNumber)
 	if err != nil {

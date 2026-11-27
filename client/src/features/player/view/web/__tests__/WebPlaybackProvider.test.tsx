@@ -22,6 +22,7 @@ import {
 import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
@@ -30,7 +31,7 @@ const HTTP_ACCEPTED = 202;
 async function recordedFailures(): Promise<string[]> {
   flushPlaybackHealth();
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
   });
   return (__http.requests as { path: string; body: string }[])
     .filter((request) => request.path === '/v1/discovery/events')

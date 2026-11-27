@@ -67,7 +67,11 @@ func CandidateFor(hit Song) ports.AudioCandidate {
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
-	return s.downloader.Download(ctx, candidate.URL, outDir)
+	r0, err := s.downloader.Download(ctx, candidate.URL, outDir)
+	if err != nil {
+		return r0, fmt.Errorf("download audio: %w", err)
+	}
+	return r0, nil
 }
 
 func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {

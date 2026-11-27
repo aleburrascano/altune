@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -51,7 +52,7 @@ type ArtistGroupDTO struct {
 func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	sort, err := domain.ParseLibrarySort(r.URL.Query().Get("sort"))
 	if err != nil {
-		return domain.LibraryQuery{}, err
+		return domain.LibraryQuery{}, fmt.Errorf("parse library sort: %w", err)
 	}
 	search, err := librarySearchTerm(r.URL.Query().Get("q"))
 	if err != nil {
@@ -72,7 +73,7 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 func librarySearchTerm(raw string) (string, error) {
 	search := strings.TrimSpace(raw)
 	if err := domain.ValidateText(search, "search term"); err != nil {
-		return "", err
+		return "", fmt.Errorf("validate text: %w", err)
 	}
 	if len(search) > domain.MaxLibrarySearchLength {
 		return "", domain.NewValidationError(
@@ -94,7 +95,11 @@ func pageBounds(r *http.Request) (limit, offset int, err error) {
 }
 
 func optionalIntParam(r *http.Request, name string) (int, error) {
-	return httpserver.ParseQueryInt(r, name, 0, math.MinInt, math.MaxInt, apierror.CodeCatalogValidation)
+	n, err := httpserver.ParseQueryInt(r, name, 0, math.MinInt, math.MaxInt, apierror.CodeCatalogValidation)
+	if err != nil {
+		return 0, fmt.Errorf("parse query int %q: %w", name, err)
+	}
+	return n, nil
 }
 
 func formatAddedAt(t time.Time) string {

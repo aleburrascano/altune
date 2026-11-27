@@ -99,10 +99,15 @@ function typeQuery(text: string): void {
 }
 
 beforeEach(() => {
+  jest.useFakeTimers();
   fake = discoverEnv();
   resetSearchState();
   startQueue.mockClear();
   signInTestUser();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('unreleased search in Discover', () => {
@@ -166,7 +171,7 @@ describe('unreleased search in Discover', () => {
 
     typeQuery('l');
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_WAIT_MS));
+      await jest.advanceTimersByTimeAsync(DEBOUNCE_WAIT_MS);
     });
     expect(__http.countFor(UNRELEASED_SEARCH)).toBe(0);
 

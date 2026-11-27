@@ -97,7 +97,7 @@ func execUnderSearchTextLock(ctx context.Context, pool *pgxpool.Pool, userId uui
 }
 
 func execUnderLocks(ctx context.Context, pool *pgxpool.Pool, userId uuid.UUID, locks []string, sql string, args ...any) error {
-	return database.InTx(ctx, pool, func(tx pgx.Tx) error {
+	if err := database.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for _, lock := range locks {
 			if _, err := tx.Exec(ctx, lock, userId); err != nil {
 				return fmt.Errorf("lock search history of user %s: %w", userId, err)
@@ -108,7 +108,10 @@ func execUnderLocks(ctx context.Context, pool *pgxpool.Pool, userId uuid.UUID, l
 			return fmt.Errorf("write search history of user %s: %w", userId, err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("run transaction: %w", err)
+	}
+	return nil
 }
 
 const stampHistoryClearedSQL = `INSERT INTO discovery_search_history_cleared (user_id, cleared_at)

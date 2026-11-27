@@ -85,7 +85,11 @@ type inPlaceCheck struct {
 func (c *inPlaceCheck) waitForSlot(ctx context.Context) error { return c.pacer.wait(ctx) }
 
 func (c *inPlaceCheck) check(ctx context.Context, track *ports.TrackSnapshot) (Finding, error) {
-	return c.checker.CheckInPlace(ctx, track)
+	r0, err := c.checker.CheckInPlace(ctx, track)
+	if err != nil {
+		return r0, fmt.Errorf("check in place: %w", err)
+	}
+	return r0, nil
 }
 
 func (c *inPlaceCheck) noteFailure(ctx context.Context, trackID ids.TrackId) (int, error) {

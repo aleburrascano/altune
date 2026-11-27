@@ -1,6 +1,7 @@
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { recordFailureShown, recordUserAction } from '@shared/telemetry';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 const SecureStore = require('expo-secure-store');
@@ -10,7 +11,7 @@ function sentBody(): { type: string; payload: Record<string, unknown> } {
 }
 
 async function settle(): Promise<void> {
-  await new Promise<void>((resolve) => setImmediate(resolve));
+  await flushPromises();
 }
 
 beforeEach(async () => {
@@ -66,7 +67,7 @@ describe('recordUserAction()', () => {
 
     expect(() => recordUserAction({ action: 'library.retry', outcome: 'tapped' })).not.toThrow();
     await settle();
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
 
     process.off('unhandledRejection', onUnhandled);
     expect(unhandled).toEqual([]);
@@ -114,7 +115,7 @@ describe('recordFailureShown()', () => {
       recordFailureShown({ surface: 'banner.track_status', message: 'boom' }),
     ).not.toThrow();
     await settle();
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
 
     process.off('unhandledRejection', onUnhandled);
     expect(unhandled).toEqual([]);
@@ -313,8 +314,8 @@ describe('user telemetry: errors are swallowed (fire-and-forget, never throws)',
 
   async function flushMacrotasks(): Promise<void> {
     await settle();
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
+    await flushPromises();
   }
 
   it('does not throw when reading the stored session fails', async () => {
