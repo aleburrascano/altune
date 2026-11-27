@@ -54,9 +54,10 @@ func contentFetchFailure(resp *providerguard.ContentFetchResponse) *apierror.Cod
 		return apierror.NewError(apierror.CodeDiscoveryProviderRateLimited, "")
 	case domain.ProviderStatusCircuitOpen:
 		return apierror.NewError(apierror.CodeDiscoveryProviderCircuitOpen, "")
-	default:
+	case domain.ProviderStatusError, domain.ProviderStatusPending:
 		return apierror.NewError(apierror.CodeDiscoveryProviderError, "")
 	}
+	return apierror.NewError(apierror.CodeDiscoveryProviderError, "")
 }
 
 func codeOf(failure *apierror.CodedError) string {

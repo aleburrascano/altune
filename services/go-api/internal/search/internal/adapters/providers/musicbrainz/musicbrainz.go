@@ -68,9 +68,10 @@ func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 		return "artist:" + providersearch.DslQuote(providersearch.MbLuceneEscape(artist)) + " AND release:" + providersearch.DslQuote(providersearch.MbLuceneEscape(track))
 	case domain.ResultKindArtist:
 		return providersearch.MbLuceneEscape(artist)
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return providersearch.MbLuceneEscape(artist) + " " + providersearch.MbLuceneEscape(track)
 	}
+	return providersearch.MbLuceneEscape(artist) + " " + providersearch.MbLuceneEscape(track)
 }
 
 func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
@@ -127,9 +128,10 @@ func mbEntity(kind domain.ResultKind) string {
 		return "release-group"
 	case domain.ResultKindArtist:
 		return "artist"
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return "recording"
 	}
+	return "recording"
 }
 
 func mapMBRecording(rec mbRecording) domain.SearchResult {

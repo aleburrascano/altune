@@ -434,9 +434,10 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 		return s.svc.ExecuteReplace
 	case ports.JobKindUpgrade:
 		return s.upgrades.runner.ExecuteUpgrade
-	default:
+	case ports.JobKindAcquire:
 		return s.svc.Execute
 	}
+	return s.svc.Execute
 }
 
 func (s *BackgroundAcquisitionScheduler) jobContextFor(ctx context.Context, job ports.Job) (context.Context, context.CancelFunc) {

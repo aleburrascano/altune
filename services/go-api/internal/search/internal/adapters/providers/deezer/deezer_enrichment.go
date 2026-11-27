@@ -49,9 +49,10 @@ func (a *DeezerAdapter) Lookup(
 		return a.lookupTrackDetail(ctx, id)
 	case domain.ResultKindAlbum:
 		return a.lookupAlbumDetail(ctx, id)
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindArtist, domain.ResultKindPlaylist:
 		return domain.EmptyDeezerEnrichment(), nil
 	}
+	return domain.EmptyDeezerEnrichment(), nil
 }
 
 func (a *DeezerAdapter) lookupTrackDetail(ctx context.Context, id string) (domain.DeezerEnrichment, error) {

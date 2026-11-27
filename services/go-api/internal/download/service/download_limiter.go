@@ -48,6 +48,8 @@ func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
 		return nil
 	case limitCapped:
 		return l.slots.Acquire(ctx)
+	case limitUnset:
+		return ErrLimitNotConfigured
 	default:
 		return ErrLimitNotConfigured
 	}

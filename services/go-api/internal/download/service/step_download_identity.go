@@ -297,9 +297,10 @@ func judgeVerdict(
 		return nil
 	case VerdictContradicted:
 		return fingerprintRejection(candidate, "contradicted: "+strings.Join(result.verdict.Judged.Reasons, "; "))
-	default:
+	case VerdictOtherVersion, VerdictDifferentSong, VerdictUnknown:
 		return judgeUnknown(ctx, ac, candidate, match)
 	}
+	return judgeUnknown(ctx, ac, candidate, match)
 }
 
 func judgeUnknown(

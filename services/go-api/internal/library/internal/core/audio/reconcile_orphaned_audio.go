@@ -90,10 +90,15 @@ func (s *CleanUpUnusedAudioService) reconcile(ctx context.Context, orphan ports.
 	case ports.AudioReferenced:
 		sweep.Released++
 		return s.queue.ResolveOrphanedAudio(ctx, orphan.AudioRef)
-	default:
-		sweep.Deferred++
-		return s.queue.MarkOrphanedAudioAttempt(ctx, orphan.AudioRef, "deferred: owner has a pending acquisition")
+	case ports.AudioOwnerAcquiring:
+		return s.deferOrphan(ctx, orphan, sweep)
 	}
+	return s.deferOrphan(ctx, orphan, sweep)
+}
+
+func (s *CleanUpUnusedAudioService) deferOrphan(ctx context.Context, orphan ports.OrphanedAudio, sweep *OrphanedAudioSweep) error {
+	sweep.Deferred++
+	return s.queue.MarkOrphanedAudioAttempt(ctx, orphan.AudioRef, "deferred: owner has a pending acquisition")
 }
 
 func (s *CleanUpUnusedAudioService) deleteOrphan(ctx context.Context, orphan ports.OrphanedAudio, sweep *OrphanedAudioSweep) error {

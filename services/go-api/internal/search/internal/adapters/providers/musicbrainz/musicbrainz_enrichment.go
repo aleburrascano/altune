@@ -57,9 +57,10 @@ func (a *MusicBrainzAdapter) Lookup(ctx context.Context, kind domain.ResultKind,
 		}
 		return e, nil
 
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindTrack, domain.ResultKindPlaylist:
 		return domain.EmptyEnrichment(), nil
 	}
+	return domain.EmptyEnrichment(), nil
 }
 
 func (a *MusicBrainzAdapter) ResolveMBID(ctx context.Context, kind domain.ResultKind, title, subtitle string) (string, error) {
@@ -76,9 +77,10 @@ func (a *MusicBrainzAdapter) ResolveMBID(ctx context.Context, kind domain.Result
 		return a.findAlbumMBID(ctx, title, titleNorm, subtitleNorm)
 	case domain.ResultKindTrack:
 		return a.findTrackMBID(ctx, title, titleNorm, subtitleNorm)
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return "", nil
 	}
+	return "", nil
 }
 
 func (a *MusicBrainzAdapter) findArtistMBID(ctx context.Context, title, titleNorm string) (string, error) {
