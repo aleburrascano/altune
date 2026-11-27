@@ -6,6 +6,7 @@ type (
 	EvalCandidate     = eval.Candidate
 	EvalCase          = eval.Case
 	EvalCatalogSource = eval.CatalogSource
+	EvalReport        = eval.Report
 	EvalSource        = eval.Source
 	EvalTrack         = eval.Track
 )

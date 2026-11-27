@@ -815,7 +815,10 @@ func rejectionBasisOf(ac *service.AcquisitionContext) ports.RejectionBasis {
 }
 
 func lengthsOf(ac *service.AcquisitionContext) length.Policy {
-	return length.New(ac.Track.CatalogDuration, ac.Identity.Duration, ac.Identity.ReferenceDoubted)
+	if ac.Identity.ReferenceDoubted {
+		return length.Doubted(ac.Track.CatalogDuration)
+	}
+	return length.New(ac.Track.CatalogDuration, ac.Identity.Duration)
 }
 
 func provenISRCOf(ac *service.AcquisitionContext) (string, isrcwriteback.Source) {

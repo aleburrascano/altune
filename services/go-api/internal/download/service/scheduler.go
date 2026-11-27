@@ -105,7 +105,7 @@ type UpgradeLane struct {
 var ErrUpgradeWorkersBelowOne = errors.New("an upgrade lane needs at least one worker")
 
 func UpgradeLaneOf(runner upgradeRunner, workers int) (UpgradeLane, error) {
-	if err := missingPort("UpgradeLaneOf", "runner", runner == nil); err != nil {
+	if err := missingPort("UpgradeLaneOf", "runner", runner); err != nil {
 		return UpgradeLane{}, err
 	}
 	if workers < 1 {
@@ -120,6 +120,13 @@ func MustUpgradeLaneOf(runner upgradeRunner, workers int) UpgradeLane {
 		panic(err)
 	}
 	return lane
+}
+
+func (l UpgradeLane) require(owner string) error {
+	if l.declared {
+		return nil
+	}
+	return errMissingPort(owner, "Upgrades")
 }
 
 func NoUpgradeLane() UpgradeLane { return UpgradeLane{declared: true, none: true} }
@@ -138,15 +145,15 @@ type SchedulerPorts struct {
 
 func (p SchedulerPorts) validate(owner string) error {
 	return errors.Join(
-		missingPort(owner, "Queue", p.Queue == nil),
-		missingPort(owner, "Upgrades", !p.Upgrades.declared),
-		missingPort(owner, "Notifier", p.Notifier == nil),
-		missingPort(owner, "Outcomes", p.Outcomes == nil),
-		missingPort(owner, "Events", p.Events == nil),
-		missingPort(owner, "VerifySkips", p.VerifySkips == nil),
-		missingPort(owner, "FingerprintVerified", p.FingerprintVerified == nil),
-		missingPort(owner, "Timer", p.Timer == nil),
-		missingPort(owner, "Ticker", p.Ticker == nil),
+		missingPort(owner, "Queue", p.Queue),
+		p.Upgrades.require(owner),
+		missingPort(owner, "Notifier", p.Notifier),
+		missingPort(owner, "Outcomes", p.Outcomes),
+		missingPort(owner, "Events", p.Events),
+		missingPort(owner, "VerifySkips", p.VerifySkips),
+		missingPort(owner, "FingerprintVerified", p.FingerprintVerified),
+		missingPort(owner, "Timer", p.Timer),
+		missingPort(owner, "Ticker", p.Ticker),
 	)
 }
 
@@ -163,7 +170,7 @@ func NewBackgroundAcquisitionScheduler(
 	opts ...func(*BackgroundAcquisitionScheduler),
 ) (*BackgroundAcquisitionScheduler, error) {
 	const owner = "NewBackgroundAcquisitionScheduler"
-	if err := errors.Join(missingPort(owner, "clock", now == nil), wiring.validate(owner)); err != nil {
+	if err := errors.Join(missingPort(owner, "clock", now), wiring.validate(owner)); err != nil {
 		return nil, err
 	}
 	ctx, cancel := background.DetachCancelable(processRoot.ctx)

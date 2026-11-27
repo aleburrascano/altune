@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"regexp"
-	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -50,22 +49,21 @@ type youtubeSource struct {
 
 func youtubeFlags(track liveTrack, src youtubeSource) []string {
 	qualifiers := unrequestedQualifiers(src.Title, track.Title)
-	return append([]string{}, slices.Concat(
-		videoTypeFlags(src.Type),
-		flagIf(hasAny(qualifiers, videoQualifiers), "video_title"),
-		flagIf(isFanReuploadChannel(src.Author, track.Artist), "fan_reupload_channel"),
-		flagIf(hasCleanEditWithExplicitTwin(track, src), "clean_edit(explicit exists)"),
-		qualifierFlags(qualifiers),
-		flagIf(hasAny(qualifiers, cleanTitleQualifiers), "clean_edit(title)"),
-		durationDeltaFlags(track.durationDeltaSeconds()),
-	)...)
-}
-
-func flagIf(condition bool, flag string) []string {
-	if condition {
-		return []string{flag}
+	flags := append([]string{}, videoTypeFlags(src.Type)...)
+	if hasAny(qualifiers, videoQualifiers) {
+		flags = append(flags, "video_title")
 	}
-	return nil
+	if isFanReuploadChannel(src.Author, track.Artist) {
+		flags = append(flags, "fan_reupload_channel")
+	}
+	if hasCleanEditWithExplicitTwin(track, src) {
+		flags = append(flags, "clean_edit(explicit exists)")
+	}
+	flags = append(flags, qualifierFlags(qualifiers)...)
+	if hasAny(qualifiers, cleanTitleQualifiers) {
+		flags = append(flags, "clean_edit(title)")
+	}
+	return append(flags, durationDeltaFlags(track.durationDeltaSeconds())...)
 }
 
 func videoTypeFlags(videoType download.YouTubeMusicVideoType) []string {
@@ -89,7 +87,10 @@ func qualifierFlags(qualifiers []string) []string {
 }
 
 func durationDeltaFlags(delta float64) []string {
-	return flagIf(math.Abs(delta) > durationDeltaFlagSeconds, fmt.Sprintf("duration_delta:%.0fs", delta))
+	if math.Abs(delta) > durationDeltaFlagSeconds {
+		return []string{fmt.Sprintf("duration_delta:%.0fs", delta)}
+	}
+	return nil
 }
 
 func hasAny(qualifiers []string, wanted map[string]bool) bool {

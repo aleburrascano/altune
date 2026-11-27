@@ -46,12 +46,12 @@ type StoreStep struct {
 func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, sleep clock.Sleeper, unit random.Unit, opts ...func(*StoreStep)) (*StoreStep, error) {
 	const owner = "NewStoreStep"
 	if err := errors.Join(
-		missingPort(owner, "audio store", audioStore == nil),
-		missingPort(owner, "prober", prober == nil),
-		missingPort(owner, "orphan recorder", orphans == nil),
-		missingPort(owner, "audio ref lookup", refs == nil),
-		missingPort(owner, "sleeper", sleep == nil),
-		missingPort(owner, "jitter source", unit == nil),
+		missingPort(owner, "audio store", audioStore),
+		missingPort(owner, "prober", prober),
+		missingPort(owner, "orphan recorder", orphans),
+		missingPort(owner, "audio ref lookup", refs),
+		missingPort(owner, "sleeper", sleep),
+		missingPort(owner, "jitter source", unit),
 		requireWorkspace(owner, workspace),
 	); err != nil {
 		return nil, err

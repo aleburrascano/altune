@@ -59,7 +59,11 @@ func TestQuery_ScoreWeighsTrigramsEditsPhoneticsAndLength(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, matched := spellingmatch.NewQuery(tt.query).Score(tt.candidate, tt.shared, tt.phonetic)
+			q := spellingmatch.NewQuery(tt.query)
+			got, matched := q.Score(tt.candidate, tt.shared)
+			if tt.phonetic {
+				got, matched = q.ScorePhonetic(tt.candidate, tt.shared), true
+			}
 			if !matched {
 				t.Fatalf("Score(%q vs %q) did not match", tt.query, tt.candidate)
 			}
@@ -88,10 +92,10 @@ func TestQuery_ScoreToleratesMoreEditsForLongerQueries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			q := spellingmatch.NewQuery(tt.query)
-			if _, matched := q.Score(tt.within, 0, false); !matched {
+			if _, matched := q.Score(tt.within, 0); !matched {
 				t.Errorf("%q is %d edits from %q and was rejected, want a match", tt.within, tt.tolerance, tt.query)
 			}
-			if _, matched := q.Score(tt.beyond, 0, false); matched {
+			if _, matched := q.Score(tt.beyond, 0); matched {
 				t.Errorf("%q is %d edits from %q and matched, want it rejected", tt.beyond, tt.tolerance+1, tt.query)
 			}
 		})
@@ -100,10 +104,10 @@ func TestQuery_ScoreToleratesMoreEditsForLongerQueries(t *testing.T) {
 
 func TestQuery_APhoneticMatchSurvivesAnyEditDistance(t *testing.T) {
 	q := spellingmatch.NewQuery("kitten")
-	if _, matched := q.Score("sitting", 1, false); matched {
+	if _, matched := q.Score("sitting", 1); matched {
 		t.Fatal("kitten vs sitting is 3 edits, beyond the 2 a six-rune query allows, want it rejected")
 	}
-	if _, matched := q.Score("sitting", 1, true); !matched {
+	if q.ScorePhonetic("sitting", 1) == 0 {
 		t.Error("a phonetic match was rejected for its edit distance")
 	}
 }

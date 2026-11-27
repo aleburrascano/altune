@@ -11,11 +11,12 @@ type Policy struct {
 	resolved float64
 }
 
-func New(saved, resolved float64, resolvedDoubted bool) Policy {
-	if resolvedDoubted {
-		resolved = 0
-	}
+func New(saved, resolved float64) Policy {
 	return Policy{saved: saved, resolved: resolved}
+}
+
+func Doubted(saved float64) Policy {
+	return Policy{saved: saved}
 }
 
 func (p Policy) Resolved() float64 {

@@ -190,8 +190,10 @@ func (q *QueueState) canonicalizeTrackIds() error {
 	if err != nil {
 		return err
 	}
-	if err := naturalOrderPermutes(trackIds, naturalOrder, q.Shuffled); err != nil {
-		return err
+	if len(naturalOrder) > 0 || q.Shuffled {
+		if err := naturalOrderPermutes(trackIds, naturalOrder); err != nil {
+			return err
+		}
 	}
 	q.TrackIds = trackIds
 	q.NaturalOrder = naturalOrder
@@ -218,10 +220,7 @@ func canonicalTrackId(field, id string) (string, error) {
 	return parsed.String(), nil
 }
 
-func naturalOrderPermutes(trackIds, naturalOrder []string, shuffled bool) error {
-	if len(naturalOrder) == 0 && !shuffled {
-		return nil
-	}
+func naturalOrderPermutes(trackIds, naturalOrder []string) error {
 	if !sameTracks(trackIds, naturalOrder) {
 		return newValidationError(codeNaturalOrderMismatch, "naturalOrder must hold exactly the tracks in trackIds")
 	}

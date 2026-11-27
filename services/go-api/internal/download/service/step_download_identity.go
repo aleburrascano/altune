@@ -368,7 +368,7 @@ func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch rec
 		return known.facts, known.found, nil
 	}
 	pending := c.flight.DoChan(mbid, func() (any, error) {
-		if known, ok := c.memo.Get(mbid); ok {
+		if known, ok := c.memo.Peek(mbid); ok {
 			return known, nil
 		}
 		flightCtx, cancel := background.Detach(ctx, recordingLookupBudget)
@@ -412,6 +412,10 @@ func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup port
 		if recording, found := cachedRecordingFacts(ctx, cache, lookup, mbid); found {
 			facts[mbid] = recording
 		}
+	}
+	if len(candidates) > 0 {
+		stats := cache.memo.Stats()
+		slog.InfoContext(ctx, "acquisition.recording_facts_memo", "hits", stats.Hits, "misses", stats.Misses)
 	}
 	return facts
 }

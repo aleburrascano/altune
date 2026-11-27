@@ -66,9 +66,16 @@ type UpgradeStateSnapshot struct {
 	RejectedSourceKeys []string
 }
 
+type EvidenceFate int
+
+const (
+	KeepEvidence EvidenceFate = iota
+	ResetEvidence
+)
+
 type UpgradeState interface {
 	State(ctx context.Context, trackID ids.TrackId) (UpgradeStateSnapshot, error)
-	SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ClaimNumber, rejectedSourceKeys []string, resetEvidence bool) error
+	SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ClaimNumber, rejectedSourceKeys []string, evidence EvidenceFate) error
 }
 
 func MergeUpgradeEvidence(trackEvidence, state json.RawMessage) (json.RawMessage, error) {

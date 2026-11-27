@@ -34,11 +34,11 @@ export function forgetSwap(trackId: TrackId): void {
 async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
   try {
     const [resolved] = await playbackPort().fetchAudioUrls([trackId]);
-    recordPresignOutcome(true);
+    recordPresignOutcome('ok');
     return resolved?.url ?? null;
   } catch (err) {
     warnPlayback('presign failed', { trackIds: [trackId] }, err);
-    recordPresignOutcome(false);
+    recordPresignOutcome('failed');
     return null;
   }
 }

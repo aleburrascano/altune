@@ -118,22 +118,21 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId ids.Us
 	if exists {
 		return nil
 	}
-	return s.reconcileMissingAudio(ctx, userId, loaded, false, nil)
+	return s.markMissingAndReacquire(ctx, userId, loaded)
 }
 
 func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId ids.UserId, current *domain.Track) (confirmedMissing bool, err error) {
-	exists, existsErr := s.audioStore.Exists(ctx, *current.AudioRef)
-	recErr := s.reconcileMissingAudio(ctx, userId, current, exists, existsErr)
-	return existsErr == nil && !exists, recErr
-}
-
-func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId ids.UserId, current *domain.Track, exists bool, err error) error {
+	exists, err := s.audioStore.Exists(ctx, *current.AudioRef)
 	if err != nil {
-		return fmt.Errorf("audio existence check: %w", err)
+		return false, fmt.Errorf("audio existence check: %w", err)
 	}
 	if exists {
-		return nil
+		return false, nil
 	}
+	return true, s.markMissingAndReacquire(ctx, userId, current)
+}
+
+func (s *StreamTrackService) markMissingAndReacquire(ctx context.Context, userId ids.UserId, current *domain.Track) error {
 	if err := s.markAudioMissing(ctx, userId, current); err != nil {
 		return err
 	}

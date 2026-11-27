@@ -5,3 +5,10 @@ import (
 )
 
 type ClaimNumber = ports.ClaimNumber
+
+type EvidenceFate = ports.EvidenceFate
+
+const (
+	KeepEvidence  = ports.KeepEvidence
+	ResetEvidence = ports.ResetEvidence
+)

@@ -1,6 +1,7 @@
 package requestuser_test
 
 import (
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
@@ -305,5 +306,33 @@ func TestClientKey(t *testing.T) {
 				t.Errorf("ClientKey: got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLimitPerUser_GivesEachUserTheirOwnBucketAndSkipsTheAnonymous(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	refusals := 0
+	limit := requestuser.LimitPerUser(httpserver.RateLimit{Every: time.Hour, Burst: 1}, func() time.Time { return now },
+		errors.New("refused"), func() { refusals++ })
+	handler := limit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	call := func(user *ids.UserId) int {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		if user != nil {
+			req = req.WithContext(requestuser.ContextWithUserID(req.Context(), *user))
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	alice, bob := ids.NewUserId(uuid.New()), ids.NewUserId(uuid.New())
+
+	first, again, other := call(&alice), call(&alice), call(&bob)
+	anonymous := []int{call(nil), call(nil)}
+
+	if first != http.StatusNoContent || other != http.StatusNoContent || again == http.StatusNoContent {
+		t.Fatalf("alice=%d alice again=%d bob=%d, want 204, refused, 204", first, again, other)
+	}
+	if anonymous[0] != http.StatusNoContent || anonymous[1] != http.StatusNoContent || refusals != 1 {
+		t.Fatalf("anonymous=%v refusals=%d, want both passed through and one refusal", anonymous, refusals)
 	}
 }
