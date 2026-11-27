@@ -680,6 +680,8 @@ func rowsAroundTheBaseline() map[string]domain.UpgradeRow {
 			r.InPlaceGeneration = audioquality.PipelineGeneration
 		},
 		"grade A muxed":            func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "18"; r.SourceKbps = 96 },
+		"grade A muxed high kbps":  func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "18"; r.SourceKbps = 130 },
+		"no source url judged now": func(r *domain.UpgradeRow) { r.SourceURL = ""; r.InPlaceGeneration = audioquality.PipelineGeneration },
 		"grade A low kbps":         func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "140"; r.SourceKbps = 64 },
 		"grade A at the floor":     func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "140"; r.SourceKbps = 112 },
 		"grade A high kbps":        func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "140"; r.SourceKbps = 130 },
