@@ -46,6 +46,9 @@ func validateFeaturedArtistMBID(mbid string) error {
 }
 
 func ValidateFeaturedArtists(feats []FeaturedArtist) error {
+	if len(feats) > MaxFeaturedArtistsPerTrack {
+		return NewValidationError("featured_artists exceeds maximum count")
+	}
 	for _, f := range feats {
 		if err := ValidateFeaturedArtist(f); err != nil {
 			return err

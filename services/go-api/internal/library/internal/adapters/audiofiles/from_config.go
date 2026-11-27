@@ -10,8 +10,8 @@ import (
 
 const ociS3ConfigKeys = 4
 
-func NewAudioStoreFromConfig(cfg *config.Config, logger *slog.Logger) (ports.AudioStore, error) {
-	store, err := unscopedFromConfig(cfg, logger)
+func NewAudioStoreFromConfig(cfg *config.Config, logger *slog.Logger, metrics ports.FSCallMetrics) (ports.AudioStore, error) {
+	store, err := unscopedFromConfig(cfg, logger, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func NewAudioStoreFromConfig(cfg *config.Config, logger *slog.Logger) (ports.Aud
 	return NewScopedAudioStore(store, cfg.AudioKeyPrefix), nil
 }
 
-func unscopedFromConfig(cfg *config.Config, logger *slog.Logger) (ports.AudioStore, error) {
+func unscopedFromConfig(cfg *config.Config, logger *slog.Logger, metrics ports.FSCallMetrics) (ports.AudioStore, error) {
 	if missing := missingOCIS3Keys(cfg); len(missing) > 0 && len(missing) < ociS3ConfigKeys {
 		return nil, missingAudioStoreError(missing)
 	}
@@ -31,7 +31,7 @@ func unscopedFromConfig(cfg *config.Config, logger *slog.Logger) (ports.AudioSto
 	}
 	if cfg.MusicDir != "" {
 		logger.Info("audio store: filesystem", "dir", cfg.MusicDir)
-		return newFilesystemAudioStore(cfg.MusicDir, cfg.MusicDirTimeout), nil
+		return newFilesystemAudioStore(cfg.MusicDir, cfg.MusicDirTimeout, metrics), nil
 	}
 	return nil, missingAudioStoreError(nil)
 }

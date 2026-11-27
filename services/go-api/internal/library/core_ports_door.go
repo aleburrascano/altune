@@ -9,6 +9,7 @@ type (
 	AudioLister           = ports.AudioLister
 	AudioRefPrefixLister  = ports.AudioRefPrefixLister
 	DBCallMetrics         = ports.DBCallMetrics
+	FSCallMetrics         = ports.FSCallMetrics
 	AudioStore            = ports.AudioStore
 	AudioStream           = ports.AudioStream
 	AudioLinkSigner       = ports.AudioLinkSigner
@@ -23,6 +24,7 @@ type (
 var (
 	NoopAcquisitionScheduler = ports.NoopAcquisitionScheduler
 	NoopDBCallMetrics        = ports.NoopDBCallMetrics
+	NoopFSCallMetrics        = ports.NoopFSCallMetrics
 )
 
 var (

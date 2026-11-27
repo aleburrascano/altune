@@ -8,6 +8,6 @@ import (
 
 func TestFilesystemAudioStore_Contract(t *testing.T) {
 	contracttest.AudioStoreContract(t, func(t *testing.T) library.AudioStore {
-		return library.NewFilesystemAudioStore(t.TempDir())
+		return library.NewFilesystemAudioStore(t.TempDir(), library.NoopFSCallMetrics())
 	})
 }

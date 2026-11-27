@@ -281,9 +281,6 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	slog.InfoContext(r.Context(), "track.delete",
-		logging.KeyTrackID, trackId.String())
-
 	err := h.deleteTrack.Execute(r.Context(), userId, trackId)
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)

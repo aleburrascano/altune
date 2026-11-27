@@ -19,7 +19,7 @@ const maxPresignTTL = time.Hour
 
 func newObjectStore(t *testing.T, cfg *config.Config) library.AudioLinkSigner {
 	t.Helper()
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.New(slog.DiscardHandler))
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.New(slog.DiscardHandler), library.NoopFSCallMetrics())
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}

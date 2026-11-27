@@ -84,7 +84,7 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 		Config:     cfg,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
+		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, library.NoopFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    sources,
 	})
@@ -113,7 +113,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 		DBMetrics:  library.NoopDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(musicDir),
+		AudioStore: library.NewFilesystemAudioStore(musicDir, library.NoopFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -179,7 +179,7 @@ func TestNewScheduler_ZeroUpgradeWorkersBuildsNoUpgradeLaneInsteadOfPanicking(t 
 		DBMetrics:  library.NoopDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(musicDir),
+		AudioStore: library.NewFilesystemAudioStore(musicDir, library.NoopFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -287,7 +287,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		DBMetrics:  library.NoopDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
+		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), library.NoopFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -387,7 +387,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		DBMetrics:  library.NoopDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, library.NoopDBCallMetrics()), time.Now, download.NewPostgresUpgradeStore(pool), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
+		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, library.NoopFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{sourceWithNothing{}}},
 	})
@@ -473,7 +473,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		DBMetrics:  library.NoopDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
+		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), library.NoopFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{hang}},
 	})

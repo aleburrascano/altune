@@ -32,7 +32,7 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *library.Postgres
 	totalChecked := len(tracks)
 	fmt.Printf("\nChecking %d tracks with status=ready...\n\n", totalChecked)
 
-	audioStore, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
+	audioStore, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NoopFSCallMetrics())
 	if err != nil {
 		return err
 	}

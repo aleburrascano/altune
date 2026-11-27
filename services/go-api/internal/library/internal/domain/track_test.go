@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/ids/idstest"
@@ -988,7 +989,7 @@ func TestTrack_RelabelAsRecordingNamesTheStoredRecording(t *testing.T) {
 		t.Fatal("Relabelled() = true before any relabel")
 	}
 
-	err := track.RelabelAsRecording(reRecordingMBID, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194)
+	err := track.RelabelAsRecording(reRecordingMBID, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1020,7 +1021,7 @@ func TestTrack_RelabelAsRecordingClearsWhatTheRecordingDoesNotKnow(t *testing.T)
 	t.Parallel()
 	track := studioLabelledTrack(t)
 
-	if err := track.RelabelAsRecording(reRecordingMBID, "Live Cut", "", 0, "", 0); err != nil {
+	if err := track.RelabelAsRecording(reRecordingMBID, "Live Cut", "", 0, "", 0, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1050,7 +1051,7 @@ func TestTrack_RelabelAsRecordingRefusesAndChangesNothing(t *testing.T) {
 			track := studioLabelledTrack(t)
 			before := *track
 
-			if err := track.RelabelAsRecording(tt.mbid, tt.title, "Album", 2025, "IETLH2500023", tt.duration); err == nil {
+			if err := track.RelabelAsRecording(tt.mbid, tt.title, "Album", 2025, "IETLH2500023", tt.duration, clock.Now); err == nil {
 				t.Fatal("expected an error")
 			}
 
@@ -1069,7 +1070,7 @@ func TestTrack_ARelabelledTrackKeepsItsArtistAndDedupsLikeOneAddedUnderTheNewLab
 	track := studioLabelledTrack(t)
 	studioKey := track.DedupKey
 
-	if err := track.RelabelAsRecording(reRecordingMBID, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := track.RelabelAsRecording(reRecordingMBID, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1100,7 +1101,7 @@ func TestTrack_RelabelAsRecordingRefusesBadAlbumTextAndChangesNothing(t *testing
 			track := studioLabelledTrack(t)
 			before := *track
 
-			if err := track.RelabelAsRecording(reRecordingMBID, "Title", tt.album, 2025, tt.isrc, 194); err == nil {
+			if err := track.RelabelAsRecording(reRecordingMBID, "Title", tt.album, 2025, tt.isrc, 194, clock.Now); err == nil {
 				t.Fatal("expected an error")
 			}
 			if !reflect.DeepEqual(*track, before) {
@@ -1118,7 +1119,7 @@ func TestTrack_RelabelAsRecordingAcceptsAnAlbumAtTheTextLimit(t *testing.T) {
 	track := studioLabelledTrack(t)
 	album := strings.Repeat("a", library.MaxLibrarySearchLength)
 
-	if err := track.RelabelAsRecording(reRecordingMBID, "Title", album, 2025, "IETLH2500023", 194); err != nil {
+	if err := track.RelabelAsRecording(reRecordingMBID, "Title", album, 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatalf("album at the limit refused: %v", err)
 	}
 	if track.Album != album {
@@ -1287,5 +1288,48 @@ func TestRevertToPending_StampsTheStartFromTheInjectedClock(t *testing.T) {
 	}
 	if track.AcquisitionStartedAt == nil || !track.AcquisitionStartedAt.Equal(pinned) {
 		t.Errorf("AcquisitionStartedAt = %v, want the injected %v", track.AcquisitionStartedAt, pinned)
+	}
+}
+
+func TestTrack_RelabelAsRecordingRefusesAnImplausibleYearAndChangesNothing(t *testing.T) {
+	t.Parallel()
+	frozen := func() time.Time { return time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC) }
+	for name, year := range map[string]int{"before recorded music": 1859, "far future": 2028, "negative": -5} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			track := studioLabelledTrack(t)
+			before := *track
+
+			err := track.RelabelAsRecording(reRecordingMBID, "Title", "Album", year, "IETLH2500023", 194, frozen)
+
+			if !errors.Is(err, library.NewValidationError("year is implausible")) {
+				t.Fatalf("err = %v, want a validation error", err)
+			}
+			if !reflect.DeepEqual(*track, before) {
+				t.Errorf("track changed on a refused relabel: %+v", *track)
+			}
+		})
+	}
+}
+
+func TestTrack_RelabelAsRecordingAcceptsTheBoundaryYears(t *testing.T) {
+	t.Parallel()
+	frozen := func() time.Time { return time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC) }
+	for _, year := range []int{1860, 2027} {
+		track := studioLabelledTrack(t)
+		if err := track.RelabelAsRecording(reRecordingMBID, "Title", "Album", year, "", 0, frozen); err != nil {
+			t.Errorf("year %d: %v", year, err)
+		}
+	}
+}
+
+func TestTrack_RelabelAsRecordingRefusesANilClock(t *testing.T) {
+	t.Parallel()
+	track := studioLabelledTrack(t)
+
+	err := track.RelabelAsRecording(reRecordingMBID, "Title", "Album", 2025, "", 0, nil)
+
+	if !errors.Is(err, library.ErrTrackTimestampClockRequired) {
+		t.Errorf("err = %v, want ErrTrackTimestampClockRequired", err)
 	}
 }

@@ -81,14 +81,9 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId sharedi
 		return err
 	}
 
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
-	if err != nil {
+	if _, err := s.trackRepo.GetByID(ctx, trackId, userId); err != nil {
 		return domain.WrapRepoError(ctx, "add track to playlist", err)
 	}
-	if track == nil {
-		return domain.ErrTrackNotFound
-	}
-
 	if err := s.playlistRepo.AddTrack(ctx, userId, playlistId, trackId); err != nil {
 		return membershipWriteError(ctx, "add track to playlist", err)
 	}

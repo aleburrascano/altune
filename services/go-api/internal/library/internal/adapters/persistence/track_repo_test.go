@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/tracklength"
@@ -1109,7 +1110,7 @@ func TestPostgresTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t 
 	}
 
 	const mbid = "25d68187-ee71-4f06-9e58-0b49d66bf8a8"
-	if err := loaded.RelabelAsRecording(mbid, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording(mbid, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
@@ -1173,7 +1174,7 @@ func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothi
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
 
-	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
@@ -1207,7 +1208,7 @@ func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
 
-	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
@@ -1237,7 +1238,7 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 		t.Fatal(err)
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
-	if err := loaded.RelabelAsRecording("7933a65c-2c66-4ec1-9880-e46b5d2f05de", "Studio", "Reckless", 1984, "USAM18490008", 195); err != nil {
+	if err := loaded.RelabelAsRecording("7933a65c-2c66-4ec1-9880-e46b5d2f05de", "Studio", "Reckless", 1984, "USAM18490008", 195, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
@@ -1249,7 +1250,7 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 	}
 
 	const title = "It’s Only Love (classic version)"
-	if err := labelled.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", title, "", 0, "", 0); err != nil {
+	if err := labelled.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", title, "", 0, "", 0, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Update(ctx, labelled, labelled.Version); err != nil {
@@ -1279,7 +1280,7 @@ func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNext
 		t.Fatal(err)
 	}
 	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
-	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194, clock.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {

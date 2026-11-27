@@ -70,8 +70,8 @@ func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, track
 	out := make([]ResolvedAudioURL, 0, len(trackIds))
 	presignStart := s.now()
 	for _, id := range trackIds {
-		track := byID[id]
-		if track == nil || !track.IsStreamable() {
+		track, found := byID[id]
+		if !found || !track.IsStreamable() {
 			continue
 		}
 

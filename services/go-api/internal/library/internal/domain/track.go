@@ -397,10 +397,16 @@ func validateRecordingLabel(mbid, title, album string, durationSeconds float64) 
 	return recordingLabel{mbid: normalizedMBID, title: title, album: resolved, duration: durationSeconds}, nil
 }
 
-func (t *Track) RelabelAsRecording(mbid, title, album string, year int, isrc string, durationSeconds float64) error {
+func (t *Track) RelabelAsRecording(mbid, title, album string, year int, isrc string, durationSeconds float64, wallClock clock.Func) error {
+	if wallClock == nil {
+		return ErrTrackTimestampClockRequired
+	}
 	label, err := validateRecordingLabel(mbid, title, album, durationSeconds)
 	if err != nil {
 		return err
+	}
+	if year != 0 && !PlausibleYear(year, wallClock()) {
+		return NewValidationError("year is implausible")
 	}
 	t.Title = label.title
 	t.Album = label.album
@@ -410,6 +416,12 @@ func (t *Track) RelabelAsRecording(mbid, title, album string, year int, isrc str
 	t.setRelabelOptionals(year, isrc, durationSeconds)
 	t.relabelled = true
 	return nil
+}
+
+const minPlausibleYear = 1860
+
+func PlausibleYear(year int, now time.Time) bool {
+	return year >= minPlausibleYear && year <= now.UTC().Year()+1
 }
 
 func (t *Track) setRelabelOptionals(year int, isrc string, durationSeconds float64) {

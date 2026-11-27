@@ -233,27 +233,6 @@ func TestHandleDeleteTrack(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteTrack_LogsTheTrack(t *testing.T) {
-	ring := logging.CaptureRing(t, "info")
-
-	repo := library.NewInMemoryTrackRepo()
-	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "To Delete", "Artist", "Album")
-	router := trackRoutes(repo)
-
-	assertStatus(t, request(t, router, http.MethodDelete, "/tracks/"+track.ID.UUID().String(), nil), http.StatusNoContent)
-
-	for _, r := range ring.Snapshot() {
-		if r.Message != "track.delete" {
-			continue
-		}
-		if r.Attrs["track_id"] != track.ID.String() {
-			t.Fatalf("track.delete attrs = %v, want track_id %s", r.Attrs, track.ID)
-		}
-		return
-	}
-	t.Fatal("no track.delete log line")
-}
-
 func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 	withNul := "a\x00b"
 	tests := []struct {

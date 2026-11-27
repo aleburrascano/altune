@@ -152,7 +152,7 @@ func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids
 		return err
 	}
 	return l.loadAndUpdate(ctx, id, userId, fence, func(track *library.Track) error {
-		return complete(ctx, track, c, l.source)
+		return complete(ctx, track, c, l.source, l.now)
 	})
 }
 
@@ -181,7 +181,7 @@ func evidenceAccepted(c download.Completion) bool {
 	return c.Evidence != nil && (&library.Track{}).SetAcquisitionConfidence(c.Confidence, c.Evidence) == nil
 }
 
-func complete(ctx context.Context, track *library.Track, c download.Completion, source ids.Source) error {
+func complete(ctx context.Context, track *library.Track, c download.Completion, source ids.Source, now clock.Func) error {
 	if err := settleAudio(track, c, source); err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func complete(ctx context.Context, track *library.Track, c download.Completion, 
 		return err
 	}
 	recordMetadata(ctx, track, c)
-	if err := relabel(ctx, track, c.Relabel); err != nil {
+	if err := relabel(ctx, track, c.Relabel, now); err != nil {
 		return err
 	}
 	track.AdoptISRC(c.ISRC)
@@ -207,7 +207,7 @@ func setMeasuredDuration(track *library.Track, length tracklength.TrackLength) e
 	return nil
 }
 
-func relabel(ctx context.Context, track *library.Track, given *download.TrackLabel) error {
+func relabel(ctx context.Context, track *library.Track, given *download.TrackLabel, now clock.Func) error {
 	if given == nil {
 		return nil
 	}
@@ -216,7 +216,7 @@ func relabel(ctx context.Context, track *library.Track, given *download.TrackLab
 	if track.CatalogMBID != nil {
 		oldMBID = *track.CatalogMBID
 	}
-	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds); err != nil {
+	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds, now); err != nil {
 		return fmt.Errorf("relabel as recording: %w", err)
 	}
 	slog.InfoContext(ctx, "acquisition.track_relabelled",

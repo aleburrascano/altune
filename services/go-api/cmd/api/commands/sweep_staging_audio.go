@@ -28,7 +28,7 @@ func runSweepStagingAudio(cfg *config.Config, mode RunMode) error {
 }
 
 func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, mode RunMode) error {
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NoopFSCallMetrics())
 	if err != nil {
 		return err
 	}

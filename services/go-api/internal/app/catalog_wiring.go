@@ -99,7 +99,7 @@ func (a *application) wireAudioSources(
 	tap *monitoring.EventTap,
 	disc *search.Discovery,
 ) (audioSourcesStaging, error) {
-	audioStore, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default())
+	audioStore, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}

@@ -13,11 +13,7 @@ import (
 	"time"
 )
 
-const minPlausibleYear = 1860
-
-const maxTrackNumber = 2147483647
-
-const MaxFeaturedArtistsPerTrack = 100
+const MaxFeaturedArtistsPerTrack = domain.MaxFeaturedArtistsPerTrack
 
 type AddTrackInput struct {
 	Title           string
@@ -177,11 +173,8 @@ func whenGiven[T any](value *T, apply func(T) error) error {
 }
 
 func validateAddTrackNumbers(input AddTrackInput, now time.Time) error {
-	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
-		return domain.NewValidationError("track_number must be positive")
-	}
-	if input.TrackNumber != nil && *input.TrackNumber > maxTrackNumber {
-		return domain.NewValidationError("track_number exceeds maximum (int4)")
+	if err := whenGiven(input.TrackNumber, domain.ValidateTrackNumber); err != nil {
+		return err
 	}
 	if err := whenGiven(input.DurationSeconds, func(seconds float64) error {
 		_, err := domain.TrackLengthOf(seconds)
@@ -189,7 +182,7 @@ func validateAddTrackNumbers(input AddTrackInput, now time.Time) error {
 	}); err != nil {
 		return err
 	}
-	if input.Year != nil && !plausibleYear(*input.Year, now) {
+	if input.Year != nil && !domain.PlausibleYear(*input.Year, now) {
 		return domain.NewValidationError("year is implausible")
 	}
 	return nil
@@ -202,9 +195,6 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if err := validateAddTrackText(input); err != nil {
 		return err
 	}
-	if len(input.FeaturedArtists) > MaxFeaturedArtistsPerTrack {
-		return domain.NewValidationError("featured_artists exceeds maximum count")
-	}
 	if err := domain.ValidateFeaturedArtists(input.FeaturedArtists); err != nil {
 		return err
 	}
@@ -214,10 +204,7 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if err := whenGiven(input.SourceURL, domain.ValidateSourceURL); err != nil {
 		return err
 	}
-	if err := validateIdempotencyKey(input.IdempotencyKey); err != nil {
-		return err
-	}
-	return nil
+	return whenGiven(input.IdempotencyKey, domain.ValidateIdempotencyKey)
 }
 
 func validateCatalogIdentity(input AddTrackInput) error {
@@ -229,24 +216,6 @@ func validateCatalogIdentity(input AddTrackInput) error {
 	}
 	_, err := domain.NormalizeCatalogSources(input.CatalogSources)
 	return err
-}
-
-const maxIdempotencyKeyLength = 200
-
-func validateIdempotencyKey(key *string) error {
-	if key == nil {
-		return nil
-	}
-	if *key == "" {
-		return domain.NewValidationError("idempotency_key must not be empty")
-	}
-	if err := domain.ValidateText(*key, "idempotency_key"); err != nil {
-		return err
-	}
-	if len(*key) > maxIdempotencyKeyLength {
-		return domain.NewValidationError("idempotency_key exceeds maximum length")
-	}
-	return nil
 }
 
 func validateAddTrackText(input AddTrackInput) error {
@@ -265,8 +234,4 @@ func validateAddTrackText(input AddTrackInput) error {
 		}
 	}
 	return nil
-}
-
-func plausibleYear(year int, now time.Time) bool {
-	return year >= minPlausibleYear && year <= now.UTC().Year()+1
 }
