@@ -54,6 +54,16 @@ linters:
         - '^os\.(WriteFile|MkdirAll|Mkdir|OpenFile|Exit)$'
       ignored-files:
         - '(^|/)[a-z]*test/'
+    wrapcheck:
+      extra-ignore-sigs:
+        - domain.WrapRepoError(
+        - providerrequests.ArtworkFailure(
+        - database.WrapUnreadable(
+      ignore-package-globs:
+        - altune/go-api/internal/*/internal/core/ports
+      ignore-sig-regexps:
+        - '\(context\.Context\)\.Err\(\)'
+        - '\.Context\(\)\.Err\(\)'
     importas:
       no-unaliased: false
       no-extra-aliases: false
@@ -208,6 +218,7 @@ linters:
           - gocritic
           - revive
           - noctx
+          - wrapcheck
       - path: _test\.go
         linters:
           - forbidigo

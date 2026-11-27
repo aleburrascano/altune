@@ -84,7 +84,7 @@ func (r *PostgresQueueStateRepository) runOp(
 
 func (r *PostgresQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
 	if err := state.Validate(); err != nil {
-		return err
+		return fmt.Errorf("refuse invalid queue state: %w", err)
 	}
 
 	var tag pgconn.CommandTag
@@ -119,7 +119,10 @@ func (r *PostgresQueueStateRepository) Upsert(ctx context.Context, state *domain
 			handlingAge{stampedAt: state.UpdatedAt, now: r.now},
 			defaultQueueStateOpTimeout.Microseconds(),
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("upsert queue state: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
@@ -135,7 +138,7 @@ const storedTrackIdMatches = `regexp_replace(lower(q.track_ids[$2::int + 1]), '^
 
 func (r *PostgresQueueStateRepository) UpdatePosition(ctx context.Context, position *domain.QueuePosition) error {
 	if err := position.Validate(); err != nil {
-		return err
+		return fmt.Errorf("refuse invalid queue position: %w", err)
 	}
 
 	var applied, matched bool
@@ -248,7 +251,10 @@ func (r *PostgresQueueStateRepository) DeleteForUser(ctx context.Context, userId
 			int64(erasureFenceWindow.Seconds()),
 			domain.RepeatOff.String(),
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("erase queue state: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -260,7 +266,10 @@ func (r *PostgresQueueStateRepository) ReapErasedStates(ctx context.Context) (in
 		 WHERE erased_at < clock_timestamp() - $1::bigint * interval '1 second'`,
 			int64(erasureFenceWindow.Seconds()))
 		reaped = tag.RowsAffected()
-		return err
+		if err != nil {
+			return fmt.Errorf("reap erased queue states: %w", err)
+		}
+		return nil
 	})
 	return reaped, err
 }
