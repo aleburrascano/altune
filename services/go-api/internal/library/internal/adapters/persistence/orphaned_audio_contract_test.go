@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/internal/adapters/contracttest"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"testing"
@@ -27,10 +28,10 @@ func TestPostgresOrphanedAudioRepo_Contract(t *testing.T) {
 		seed := func(track *library.Track) {
 			t.Helper()
 			cleanupTrack(t, pool, track.ID, track.UserId)
-			if _, _, err := library.NewPostgresTrackRepository(pool).Add(context.Background(), track); err != nil {
+			if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 				t.Fatalf("Add: %v", err)
 			}
 		}
-		return &cleaningOrphanQueue{PostgresOrphanedAudioRepository: library.NewPostgresOrphanedAudioRepository(pool), t: t, pool: pool}, seed
+		return &cleaningOrphanQueue{PostgresOrphanedAudioRepository: library.NewPostgresOrphanedAudioRepository(pool, librarytest.DiscardDBCallMetrics()), t: t, pool: pool}, seed
 	})
 }

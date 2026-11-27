@@ -72,7 +72,7 @@ func trackRoutesWith(repo *library.InMemoryTrackRepo, deps trackDeps, opts ...fu
 
 func mountTracks(router chi.Router, repo *library.InMemoryTrackRepo, deps trackDeps, now func() time.Time, opts ...func(*library.TrackHandler)) {
 	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, events.NoopPublisher(), deps.addScheduler(), time.Now),
+		library.MustNewAddTrackService(repo, events.NoopPublisher(), deps.addScheduler(), time.Now, ids.Real),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
 		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
@@ -90,7 +90,7 @@ func playlistRoutes(playlists *library.InMemoryPlaylistRepo, tracks *library.InM
 
 func mountPlaylists(router chi.Router, playlists *library.InMemoryPlaylistRepo, tracks *library.InMemoryTrackRepo, now func() time.Time, opts ...func(*library.PlaylistHandler)) {
 	h := library.MustNewPlaylistHandler(
-		library.MustNewPlaylistLifecycleService(playlists, events.NoopPublisher(), time.Now),
+		library.MustNewPlaylistLifecycleService(playlists, events.NoopPublisher(), time.Now, ids.Real),
 		library.MustNewPlaylistMembershipService(playlists, tracks, events.NoopPublisher(), time.Now), now,
 		opts...)
 	router.Mount("/playlists", h.Routes())
@@ -274,9 +274,9 @@ func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (librar
 }
 
 func postgresTrackRoutes(pool *pgxpool.Pool) chi.Router {
-	repo := library.NewPostgresCatalogTrackRepository(pool)
+	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now),
+		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
 		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
@@ -345,7 +345,7 @@ func (r *failingTrackRepo) Delete(context.Context, library.TrackId, ids.UserId) 
 func failingRepoRoutes(err error) chi.Router {
 	repo := &failingTrackRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), err: err}
 	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now),
+		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
 		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),

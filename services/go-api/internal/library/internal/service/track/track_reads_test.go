@@ -35,7 +35,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 		{
 			name: "non-existent track returns ErrTrackNotFound",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
-				return library.NewTrackId()
+				return librarytest.NewTrackId()
 			},
 			wantErr: library.ErrTrackNotFound,
 		},
@@ -52,7 +52,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 			name: "repo error propagates",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
 				repo.ErrOnGetBy = errRepo
-				return library.NewTrackId()
+				return librarytest.NewTrackId()
 			},
 			wantErr: errRepo,
 		},

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/cmd/api/commands/orphans"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"fmt"
 	"log/slog"
@@ -21,7 +22,7 @@ func runHealthCheck(cfg *config.Config, mode RunMode) error {
 	}
 	defer pool.Close()
 
-	return healthCheck(ctx, cfg, library.NewPostgresTrackRepository(pool), mode)
+	return healthCheck(ctx, cfg, library.NewPostgresTrackRepository(pool, library.NewDBCallMetrics(telemetry.NewRegistry())), mode)
 }
 
 func healthCheck(ctx context.Context, cfg *config.Config, repo *library.PostgresTrackRepository, mode RunMode) error {
@@ -32,7 +33,7 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *library.Postgres
 	totalChecked := len(tracks)
 	fmt.Printf("\nChecking %d tracks with status=ready...\n\n", totalChecked)
 
-	audioStore, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
+	audioStore, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NewFSCallMetrics(telemetry.NewRegistry()))
 	if err != nil {
 		return err
 	}

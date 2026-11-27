@@ -14,6 +14,5 @@ var (
 	NewPostgresOrphanedAudioRepository = persistence.NewPostgresOrphanedAudioRepository
 	NewPostgresPlaylistRepository      = persistence.NewPostgresPlaylistRepository
 	NewPostgresTrackRepository         = persistence.NewPostgresTrackRepository
-	SetDBCallMetrics                   = persistence.SetDBCallMetrics
 	WithLibraryCap                     = persistence.WithLibraryCap
 )

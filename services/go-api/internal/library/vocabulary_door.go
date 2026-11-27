@@ -29,5 +29,4 @@ var (
 	ErrPlaylistNotFound              = domain.ErrPlaylistNotFound
 	ErrTrackNotFound                 = domain.ErrTrackNotFound
 	NewFeaturedArtistIdentityOnly    = domain.NewFeaturedArtistIdentityOnly
-	NewPlaylistId                    = domain.NewPlaylistId
 )

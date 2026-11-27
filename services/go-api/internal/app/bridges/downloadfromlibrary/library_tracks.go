@@ -25,19 +25,23 @@ type TrackStore interface {
 }
 
 type LibraryTracks struct {
-	store TrackStore
-	now   clock.Func
-	state download.UpgradeState
+	store  TrackStore
+	now    clock.Func
+	state  download.UpgradeState
+	source ids.Source
 }
 
-func NewLibraryTracks(store TrackStore, now clock.Func, state download.UpgradeState) *LibraryTracks {
+func NewLibraryTracks(store TrackStore, now clock.Func, state download.UpgradeState, source ids.Source) *LibraryTracks {
 	if now == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires a clock")
 	}
 	if state == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires the upgrade state, or rejected source keys are silently dropped")
 	}
-	return &LibraryTracks{store: store, now: now, state: state}
+	if source == nil {
+		panic("downloadfromlibrary: NewLibraryTracks requires an id source")
+	}
+	return &LibraryTracks{store: store, now: now, state: state, source: source}
 }
 
 type illegalTransitionError struct {
@@ -148,7 +152,7 @@ func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids
 		return err
 	}
 	return l.loadAndUpdate(ctx, id, userId, fence, func(track *library.Track) error {
-		return complete(ctx, track, c)
+		return complete(ctx, track, c, l.source, l.now)
 	})
 }
 
@@ -177,15 +181,15 @@ func evidenceAccepted(c download.Completion) bool {
 	return c.Evidence != nil && (&library.Track{}).SetAcquisitionConfidence(c.Confidence, c.Evidence) == nil
 }
 
-func complete(ctx context.Context, track *library.Track, c download.Completion) error {
-	if err := settleAudio(track, c); err != nil {
+func complete(ctx context.Context, track *library.Track, c download.Completion, source ids.Source, now clock.Func) error {
+	if err := settleAudio(track, c, source); err != nil {
 		return err
 	}
 	if err := setMeasuredDuration(track, c.Duration); err != nil {
 		return err
 	}
 	recordMetadata(ctx, track, c)
-	if err := relabel(ctx, track, c.Relabel); err != nil {
+	if err := relabel(ctx, track, c.Relabel, now); err != nil {
 		return err
 	}
 	track.AdoptISRC(c.ISRC)
@@ -203,16 +207,20 @@ func setMeasuredDuration(track *library.Track, length tracklength.TrackLength) e
 	return nil
 }
 
-func relabel(ctx context.Context, track *library.Track, given *download.TrackLabel) error {
+func relabel(ctx context.Context, track *library.Track, given *download.TrackLabel, now clock.Func) error {
 	if given == nil {
 		return nil
 	}
 	label := *given
+	if label.Year != 0 && !library.PlausibleYear(label.Year, now()) {
+		slog.WarnContext(ctx, "acquisition.relabel_year_dropped", logging.KeyTrackID, track.ID.String(), "year", label.Year)
+		label.Year = 0
+	}
 	oldMBID, oldTitle := "", track.Title
 	if track.CatalogMBID != nil {
 		oldMBID = *track.CatalogMBID
 	}
-	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds); err != nil {
+	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds, now); err != nil {
 		return fmt.Errorf("relabel as recording: %w", err)
 	}
 	slog.InfoContext(ctx, "acquisition.track_relabelled",
@@ -229,14 +237,14 @@ func recordLengthCheck(ctx context.Context, track *library.Track, measured track
 	}
 }
 
-func settleAudio(track *library.Track, c download.Completion) error {
+func settleAudio(track *library.Track, c download.Completion, source ids.Source) error {
 	switch {
 	case c.ReplaceAudio:
-		if err := track.ReplaceAudio(c.AudioRef); err != nil {
+		if err := track.ReplaceAudio(c.AudioRef, source); err != nil {
 			return fmt.Errorf("replace audio: %w", err)
 		}
 	default:
-		if err := track.MarkReady(c.AudioRef); err != nil {
+		if err := track.MarkReady(c.AudioRef, source); err != nil {
 			return fmt.Errorf("mark ready: %w", err)
 		}
 	}

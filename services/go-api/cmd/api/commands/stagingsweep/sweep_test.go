@@ -3,6 +3,7 @@ package stagingsweep_test
 import (
 	"altune/go-api/cmd/api/commands/stagingsweep"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -73,7 +74,7 @@ func newSweepFixture(t *testing.T, mtime time.Time, refs ...string) (*config.Con
 
 func runSweepFixture(t *testing.T, cfg *config.Config, refs *fakeRefLister, execute bool, now time.Time) stagingsweep.Tally {
 	t.Helper()
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestSweepCountsADeleteTheStoreRefusesAsFailedAndKeepsTheObject(t *testing.T
 	const ref = "staging/a.mp3"
 	mtime := time.Now()
 	cfg, path := newSweepFixture(t, mtime, ref)
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}

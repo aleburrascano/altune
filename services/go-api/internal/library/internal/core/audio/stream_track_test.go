@@ -97,7 +97,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		{
 			name: "track not found",
 			setup: func(trRepo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) library.TrackId {
-				return library.NewTrackId()
+				return librarytest.NewTrackId()
 			},
 			wantErr:       library.ErrTrackNotFound,
 			wantScheduled: false,
@@ -106,7 +106,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			name: "repo GetByID error propagates",
 			setup: func(trRepo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) library.TrackId {
 				trRepo.ErrOnGetBy = errRepo
-				return library.NewTrackId()
+				return librarytest.NewTrackId()
 			},
 			wantErr:       errRepo,
 			wantScheduled: false,
@@ -251,7 +251,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		foreign := librarytest.SeedReadyTrack(t, repo, other, "Theirs", "Artist", "Album", "audio/theirs.opus")
 		svc := library.NewStreamTrackService(repo, store, sched, &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now)
 
-		for _, id := range []library.TrackId{library.NewTrackId(), foreign.ID} {
+		for _, id := range []library.TrackId{librarytest.NewTrackId(), foreign.ID} {
 			if err := svc.RecoverIfMissing(ctx, userId, id); !errors.Is(err, library.ErrTrackNotFound) {
 				t.Fatalf("error = %v, want ErrTrackNotFound", err)
 			}

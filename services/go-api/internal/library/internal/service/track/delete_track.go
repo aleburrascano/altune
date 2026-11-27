@@ -48,7 +48,7 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	}
 
 	slog.InfoContext(ctx, "track deleted from library",
-		logging.KeyTrackID, trackId.String(), logging.KeyUserID, userId.String())
+		logging.KeyTrackID, trackId.String())
 	s.events.Publish(ctx, userId, events.TrackDeleted{TrackID: trackId.String()})
 
 	if audioRef == nil {
@@ -80,7 +80,6 @@ func (s *DeleteTrackService) reportOrphanedAudio(ctx context.Context, userId ids
 	slog.ErrorContext(ctx, "orphaned audio file after track delete",
 		"event", "catalog.orphaned_audio",
 		logging.KeyTrackID, trackId.String(),
-		logging.KeyUserID, userId.String(),
 		"audio_ref", audioRef,
 		"queued_for_retry", queued,
 		logging.KeyError, cause,

@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"testing"
@@ -13,7 +14,7 @@ import (
 
 func newTestTrackForDB(t *testing.T, userId sharedids.UserId) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album", time.Now)
+	track, err := library.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album", time.Now, sharedids.Real)
 	if err != nil {
 		t.Fatalf("newTestTrackForDB: %v", err)
 	}
@@ -41,7 +42,7 @@ func unreachablePool(t *testing.T) *pgxpool.Pool {
 
 func newTestPlaylistForDB(t *testing.T, userId sharedids.UserId) *library.Playlist {
 	t.Helper()
-	pl, err := library.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now())
+	pl, err := library.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now(), sharedids.Real)
 	if err != nil {
 		t.Fatalf("newTestPlaylistForDB: %v", err)
 	}
@@ -52,7 +53,7 @@ func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userI
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track.ID, userId)
-	if _, _, err := library.NewPostgresTrackRepository(pool).Add(ctx, track); err != nil {
+	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(ctx, track); err != nil {
 		t.Fatalf("seedTrackForDB: %v", err)
 	}
 	return track.ID
@@ -71,7 +72,7 @@ func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, us
 	t.Helper()
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)
-	if err := library.NewPostgresPlaylistRepository(pool).Create(ctx, pl); err != nil {
+	if err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).Create(ctx, pl); err != nil {
 		t.Fatalf("seedPlaylistForDB: %v", err)
 	}
 	return pl.ID
@@ -79,8 +80,8 @@ func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, us
 
 func seedPlaylistWithTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId sharedids.UserId, n int) (*library.Playlist, []library.TrackId) {
 	t.Helper()
-	playlistRepo := library.NewPostgresPlaylistRepository(pool)
-	trackRepo := library.NewPostgresTrackRepository(pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics())
+	trackRepo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)
@@ -110,7 +111,7 @@ func seedBulkTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userI
 	t.Helper()
 	ids := make([]library.TrackId, n)
 	for i := range ids {
-		ids[i] = library.NewTrackId()
+		ids[i] = librarytest.NewTrackId()
 	}
 	insertBulkTracks(ctx, t, pool, userId, ids)
 	return ids

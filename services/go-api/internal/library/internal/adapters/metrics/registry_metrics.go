@@ -11,6 +11,8 @@ const (
 	StreamRecoveriesVar               = "catalog_audio_stream_recoveries_total"
 	OrphanedAudioReconcileFailuresVar = "catalog_orphaned_audio_reconcile_failures_total"
 	DBCallTimeoutsVar                 = "catalog_db_call_timeouts_total"
+	FSCallsRefusedVar                 = "catalog_fs_calls_refused_total"
+	FSCallsAbandonedVar               = "catalog_fs_calls_abandoned_total"
 )
 
 type RegistryAudioStoreMetrics struct {
@@ -51,12 +53,28 @@ func NewDBCallMetrics(reg *telemetry.Registry) RegistryDBCallMetrics {
 
 func (m RegistryDBCallMetrics) DBCallTimedOut() { m.dbCallTimeouts.Add(1) }
 
+type RegistryFSCallMetrics struct {
+	refused   *telemetry.Counter
+	abandoned *telemetry.Counter
+}
+
+var _ ports.FSCallMetrics = RegistryFSCallMetrics{}
+
+func NewFSCallMetrics(reg *telemetry.Registry) RegistryFSCallMetrics {
+	return RegistryFSCallMetrics{refused: reg.Counter(FSCallsRefusedVar), abandoned: reg.Counter(FSCallsAbandonedVar)}
+}
+
+func (m RegistryFSCallMetrics) FSCallRefused()   { m.refused.Add(1) }
+func (m RegistryFSCallMetrics) FSCallAbandoned() { m.abandoned.Add(1) }
+
 type Snapshot struct {
 	PresignFailures                int64 `json:"presign_failures_total"`
 	OrphanedDeletes                int64 `json:"orphaned_deletes_total"`
 	StreamRecoveries               int64 `json:"stream_recoveries_total"`
 	OrphanedAudioReconcileFailures int64 `json:"orphaned_audio_reconcile_failures_total"`
 	DBCallTimeouts                 int64 `json:"db_call_timeouts_total"`
+	FSCallsRefused                 int64 `json:"fs_calls_refused_total"`
+	FSCallsAbandoned               int64 `json:"fs_calls_abandoned_total"`
 }
 
 func ReadSnapshot(reg *telemetry.Registry) Snapshot {
@@ -66,5 +84,7 @@ func ReadSnapshot(reg *telemetry.Registry) Snapshot {
 		StreamRecoveries:               reg.Counter(StreamRecoveriesVar).Value(),
 		OrphanedAudioReconcileFailures: reg.Counter(OrphanedAudioReconcileFailuresVar).Value(),
 		DBCallTimeouts:                 reg.Counter(DBCallTimeoutsVar).Value(),
+		FSCallsRefused:                 reg.Counter(FSCallsRefusedVar).Value(),
+		FSCallsAbandoned:               reg.Counter(FSCallsAbandonedVar).Value(),
 	}
 }

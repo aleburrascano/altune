@@ -2,7 +2,10 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library"
+	"strings"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 func TestComputeDedupKey(t *testing.T) {
@@ -71,4 +74,48 @@ func TestTrackDedupKey_AnEmptyAlbumKeysAsTheTitleLikeANewTrack(t *testing.T) {
 	if got := library.TrackDedupKey("Song", "Artist", "  LP "); got != "song|artist|lp" {
 		t.Errorf("album LP: %q", got)
 	}
+}
+
+func asciiWord() *rapid.Generator[string] {
+	return rapid.StringMatching(`[A-Za-z0-9]{1,12}`)
+}
+
+func TestTrackDedupKey_AlwaysHasThreeParts(t *testing.T) {
+	t.Parallel()
+	rapid.Check(t, func(t *rapid.T) {
+		key := library.TrackDedupKey(rapid.String().Draw(t, "title"), rapid.String().Draw(t, "artist"), rapid.String().Draw(t, "album"))
+
+		if got := strings.Count(key, "|"); got != 2 {
+			t.Fatalf("key %q has %d separators, want 2", key, got)
+		}
+	})
+}
+
+func TestTrackDedupKey_IgnoresCaseAndSurroundingSpace(t *testing.T) {
+	t.Parallel()
+	rapid.Check(t, func(t *rapid.T) {
+		title, artist, album := asciiWord().Draw(t, "title"), asciiWord().Draw(t, "artist"), asciiWord().Draw(t, "album")
+
+		plain := library.TrackDedupKey(title, artist, album)
+		shouted := library.TrackDedupKey("  "+strings.ToUpper(title)+" ", strings.ToLower(artist), " "+strings.ToUpper(album))
+
+		if plain != shouted {
+			t.Fatalf("keys differ: %q vs %q", plain, shouted)
+		}
+	})
+}
+
+func TestTrackDedupKey_NormalizingTwiceChangesNothing(t *testing.T) {
+	t.Parallel()
+	rapid.Check(t, func(t *rapid.T) {
+		key := library.TrackDedupKey(rapid.String().Draw(t, "title"), rapid.String().Draw(t, "artist"), rapid.String().Draw(t, "album"))
+		parts := strings.Split(key, "|")
+		if parts[0] == "" || parts[1] == "" || parts[2] == "" {
+			t.Skip("an empty part is refilled from the title")
+		}
+
+		if again := library.TrackDedupKey(parts[0], parts[1], parts[2]); again != key {
+			t.Fatalf("key %q renormalised to %q", key, again)
+		}
+	})
 }

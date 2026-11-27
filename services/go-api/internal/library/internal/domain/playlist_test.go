@@ -2,8 +2,10 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/ids/idstest"
 	"errors"
 	"strings"
 	"testing"
@@ -101,7 +103,7 @@ func TestNewPlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pl, err := library.NewPlaylist(userId, tt.plName, testPlaylistCreatedAt)
+			pl, err := library.NewPlaylist(userId, tt.plName, testPlaylistCreatedAt, ids.Real)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -206,8 +208,8 @@ func TestPlaylist_AddTrack(t *testing.T) {
 		addedAAt := testPlaylistCreatedAt.Add(time.Minute)
 		addedBAt := addedAAt.Add(time.Minute)
 
-		trackA := library.NewTrackId()
-		trackB := library.NewTrackId()
+		trackA := librarytest.NewTrackId()
+		trackB := librarytest.NewTrackId()
 
 		if err := pl.AddTrack(trackA, addedAAt); err != nil {
 			t.Fatalf("AddTrack(A) unexpected error: %v", err)
@@ -236,15 +238,15 @@ func TestPlaylist_AddTrack(t *testing.T) {
 	t.Run("takes the last slot then refuses with ErrPlaylistFull", func(t *testing.T) {
 		pl := newTestPlaylist(t)
 		for range library.MaxPlaylistTracks - 1 {
-			if err := pl.AddTrack(library.NewTrackId(), testPlaylistCreatedAt); err != nil {
+			if err := pl.AddTrack(librarytest.NewTrackId(), testPlaylistCreatedAt); err != nil {
 				t.Fatalf("AddTrack below the cap: %v", err)
 			}
 		}
-		if err := pl.AddTrack(library.NewTrackId(), testPlaylistCreatedAt); err != nil {
+		if err := pl.AddTrack(librarytest.NewTrackId(), testPlaylistCreatedAt); err != nil {
 			t.Fatalf("AddTrack into the last slot: %v", err)
 		}
 
-		err := pl.AddTrack(library.NewTrackId(), testPlaylistCreatedAt)
+		err := pl.AddTrack(librarytest.NewTrackId(), testPlaylistCreatedAt)
 
 		if !errors.Is(err, library.ErrPlaylistFull) {
 			t.Fatalf("AddTrack past the cap: err = %v, want ErrPlaylistFull", err)
@@ -256,7 +258,7 @@ func TestPlaylist_AddTrack(t *testing.T) {
 
 	t.Run("duplicate track returns error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := library.NewTrackId()
+		trackA := librarytest.NewTrackId()
 
 		if err := pl.AddTrack(trackA, testPlaylistCreatedAt); err != nil {
 			t.Fatalf("first AddTrack unexpected error: %v", err)
@@ -276,9 +278,9 @@ func TestPlaylist_RemoveTrack(t *testing.T) {
 	t.Parallel()
 	t.Run("removes and reorders positions", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := library.NewTrackId()
-		trackB := library.NewTrackId()
-		trackC := library.NewTrackId()
+		trackA := librarytest.NewTrackId()
+		trackB := librarytest.NewTrackId()
+		trackC := librarytest.NewTrackId()
 
 		for _, id := range []library.TrackId{trackA, trackB, trackC} {
 			if err := pl.AddTrack(id, testPlaylistCreatedAt); err != nil {
@@ -309,7 +311,7 @@ func TestPlaylist_RemoveTrack(t *testing.T) {
 
 	t.Run("absent track returns false", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		absent := library.NewTrackId()
+		absent := librarytest.NewTrackId()
 
 		removed := pl.RemoveTrack(absent, testPlaylistCreatedAt)
 		if removed {
@@ -322,9 +324,9 @@ func TestPlaylist_Reorder(t *testing.T) {
 	t.Parallel()
 	t.Run("valid reorder", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := library.NewTrackId()
-		trackB := library.NewTrackId()
-		trackC := library.NewTrackId()
+		trackA := librarytest.NewTrackId()
+		trackB := librarytest.NewTrackId()
+		trackC := librarytest.NewTrackId()
 
 		for _, id := range []library.TrackId{trackA, trackB, trackC} {
 			if err := pl.AddTrack(id, testPlaylistCreatedAt); err != nil {
@@ -358,12 +360,12 @@ func TestPlaylist_Reorder(t *testing.T) {
 
 	t.Run("length mismatch returns error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := library.NewTrackId()
+		trackA := librarytest.NewTrackId()
 		if err := pl.AddTrack(trackA, testPlaylistCreatedAt); err != nil {
 			t.Fatalf("AddTrack setup failed: %v", err)
 		}
 
-		err := pl.Reorder([]library.TrackId{trackA, library.NewTrackId()}, testPlaylistCreatedAt)
+		err := pl.Reorder([]library.TrackId{trackA, librarytest.NewTrackId()}, testPlaylistCreatedAt)
 		if err == nil {
 			t.Fatal("expected error for length mismatch, got nil")
 		}
@@ -374,12 +376,12 @@ func TestPlaylist_Reorder(t *testing.T) {
 
 	t.Run("unknown track returns error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := library.NewTrackId()
+		trackA := librarytest.NewTrackId()
 		if err := pl.AddTrack(trackA, testPlaylistCreatedAt); err != nil {
 			t.Fatalf("AddTrack setup failed: %v", err)
 		}
 
-		err := pl.Reorder([]library.TrackId{library.NewTrackId()}, testPlaylistCreatedAt)
+		err := pl.Reorder([]library.TrackId{librarytest.NewTrackId()}, testPlaylistCreatedAt)
 		if err == nil {
 			t.Fatal("expected error for unknown track, got nil")
 		}
@@ -390,8 +392,8 @@ func TestPlaylist_Reorder(t *testing.T) {
 
 	t.Run("duplicate track returns validation error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := library.NewTrackId()
-		trackB := library.NewTrackId()
+		trackA := librarytest.NewTrackId()
+		trackB := librarytest.NewTrackId()
 		for _, id := range []library.TrackId{trackA, trackB} {
 			if err := pl.AddTrack(id, testPlaylistCreatedAt); err != nil {
 				t.Fatalf("AddTrack setup failed: %v", err)
@@ -413,7 +415,7 @@ func TestPlaylist_StampsInjectedTimeAsUTC(t *testing.T) {
 	t.Parallel()
 	local := time.Date(2026, time.March, 4, 5, 6, 7, 0, time.FixedZone("UTC+2", 2*60*60))
 
-	pl, err := library.NewPlaylist(ids.NewUserId(uuid.New()), "Zoned", local)
+	pl, err := library.NewPlaylist(ids.NewUserId(uuid.New()), "Zoned", local, ids.Real)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
@@ -433,7 +435,7 @@ var testPlaylistCreatedAt = time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UT
 func newTestPlaylist(t *testing.T) *library.Playlist {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	pl, err := library.NewPlaylist(userId, "Test Playlist", testPlaylistCreatedAt)
+	pl, err := library.NewPlaylist(userId, "Test Playlist", testPlaylistCreatedAt, ids.Real)
 	if err != nil {
 		t.Fatalf("newTestPlaylist: unexpected error: %v", err)
 	}
@@ -450,5 +452,20 @@ func TestCatalogDomainErrorCodes(t *testing.T) {
 	}
 	if invalid.Error() != "x" {
 		t.Errorf("ValidationError detail: got %q, want %q", invalid.Error(), "x")
+	}
+}
+
+func TestNewPlaylist_RefusesANilIDSourceAndMintsFromTheGivenOne(t *testing.T) {
+	user := ids.NewUserId(uuid.New())
+
+	if pl, err := library.NewPlaylist(user, "Mix", time.Now(), nil); !errors.Is(err, library.ErrIDSourceRequired) || pl != nil {
+		t.Fatalf("NewPlaylist(nil id source) = (%v, %v), want ErrIDSourceRequired and no playlist", pl, err)
+	}
+	pl, err := library.NewPlaylist(user, "Mix", time.Now(), idstest.Sequence())
+	if err != nil {
+		t.Fatalf("NewPlaylist: %v", err)
+	}
+	if pl.ID.String() != "00000000-0000-0000-0000-000000000001" {
+		t.Errorf("playlist id = %s, want the injected source's first draw", pl.ID)
 	}
 }

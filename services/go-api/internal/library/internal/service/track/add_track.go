@@ -13,11 +13,7 @@ import (
 	"time"
 )
 
-const minPlausibleYear = 1860
-
-const maxTrackNumber = 2147483647
-
-const MaxFeaturedArtistsPerTrack = 100
+const MaxFeaturedArtistsPerTrack = domain.MaxFeaturedArtistsPerTrack
 
 type AddTrackInput struct {
 	Title           string
@@ -48,14 +44,16 @@ type AddTrackService struct {
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 	now       func() time.Time
+	source    ids.Source
 }
 
 var (
 	ErrCollaboratorRequired = errors.New("track: a required collaborator is missing")
 	ErrClockRequired        = errors.New("track: the service requires a clock")
+	ErrIDSourceRequired     = errors.New("track: the service requires an id source")
 )
 
-func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) (*AddTrackService, error) {
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) (*AddTrackService, error) {
 	switch {
 	case trackRepo == nil:
 		return nil, fmt.Errorf("NewAddTrackService: the track repository: %w", ErrCollaboratorRequired)
@@ -65,12 +63,14 @@ func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publis
 		return nil, fmt.Errorf("NewAddTrackService: the acquisition scheduler: %w", ErrCollaboratorRequired)
 	case now == nil:
 		return nil, fmt.Errorf("NewAddTrackService: %w", ErrClockRequired)
+	case source == nil:
+		return nil, fmt.Errorf("NewAddTrackService: %w", ErrIDSourceRequired)
 	}
-	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now}, nil
+	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now, source: source}, nil
 }
 
-func MustNewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) *AddTrackService {
-	s, err := NewAddTrackService(trackRepo, publisher, scheduler, now)
+func MustNewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) *AddTrackService {
+	s, err := NewAddTrackService(trackRepo, publisher, scheduler, now, source)
 	if err != nil {
 		panic(err)
 	}
@@ -81,7 +81,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	if err := validateAddTrackInput(input, s.now()); err != nil {
 		return nil, err
 	}
-	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album, s.now)
+	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album, s.now, s.source)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if errors.Is(err, domain.ErrLibraryFull) {
-		slog.WarnContext(ctx, "catalog.library_full", logging.KeyUserID, userId.String(), "cap", domain.MaxTracksPerUser)
+		slog.WarnContext(ctx, "catalog.library_full", "cap", domain.MaxTracksPerUser)
 		return nil, err
 	}
 	if err != nil {
@@ -123,7 +123,6 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	}
 	slog.InfoContext(ctx, "track added to library",
 		logging.KeyTrackID, track.ID.String(),
-		logging.KeyUserID, userId.String(),
 	)
 	dto := TrackToDTO(track)
 	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
@@ -174,11 +173,8 @@ func whenGiven[T any](value *T, apply func(T) error) error {
 }
 
 func validateAddTrackNumbers(input AddTrackInput, now time.Time) error {
-	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
-		return domain.NewValidationError("track_number must be positive")
-	}
-	if input.TrackNumber != nil && *input.TrackNumber > maxTrackNumber {
-		return domain.NewValidationError("track_number exceeds maximum (int4)")
+	if err := whenGiven(input.TrackNumber, domain.ValidateTrackNumber); err != nil {
+		return err
 	}
 	if err := whenGiven(input.DurationSeconds, func(seconds float64) error {
 		_, err := domain.TrackLengthOf(seconds)
@@ -186,7 +182,7 @@ func validateAddTrackNumbers(input AddTrackInput, now time.Time) error {
 	}); err != nil {
 		return err
 	}
-	if input.Year != nil && !plausibleYear(*input.Year, now) {
+	if input.Year != nil && !domain.PlausibleYear(*input.Year, now) {
 		return domain.NewValidationError("year is implausible")
 	}
 	return nil
@@ -199,9 +195,6 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if err := validateAddTrackText(input); err != nil {
 		return err
 	}
-	if len(input.FeaturedArtists) > MaxFeaturedArtistsPerTrack {
-		return domain.NewValidationError("featured_artists exceeds maximum count")
-	}
 	if err := domain.ValidateFeaturedArtists(input.FeaturedArtists); err != nil {
 		return err
 	}
@@ -211,10 +204,7 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if err := whenGiven(input.SourceURL, domain.ValidateSourceURL); err != nil {
 		return err
 	}
-	if err := validateIdempotencyKey(input.IdempotencyKey); err != nil {
-		return err
-	}
-	return nil
+	return whenGiven(input.IdempotencyKey, domain.ValidateIdempotencyKey)
 }
 
 func validateCatalogIdentity(input AddTrackInput) error {
@@ -226,24 +216,6 @@ func validateCatalogIdentity(input AddTrackInput) error {
 	}
 	_, err := domain.NormalizeCatalogSources(input.CatalogSources)
 	return err
-}
-
-const maxIdempotencyKeyLength = 200
-
-func validateIdempotencyKey(key *string) error {
-	if key == nil {
-		return nil
-	}
-	if *key == "" {
-		return domain.NewValidationError("idempotency_key must not be empty")
-	}
-	if err := domain.ValidateText(*key, "idempotency_key"); err != nil {
-		return err
-	}
-	if len(*key) > maxIdempotencyKeyLength {
-		return domain.NewValidationError("idempotency_key exceeds maximum length")
-	}
-	return nil
 }
 
 func validateAddTrackText(input AddTrackInput) error {
@@ -262,8 +234,4 @@ func validateAddTrackText(input AddTrackInput) error {
 		}
 	}
 	return nil
-}
-
-func plausibleYear(year int, now time.Time) bool {
-	return year >= minPlausibleYear && year <= now.UTC().Year()+1
 }

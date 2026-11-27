@@ -81,6 +81,7 @@ func (s *CleanUpUnusedAudioService) reconcileEach(ctx context.Context, orphans [
 }
 
 func (s *CleanUpUnusedAudioService) reconcile(ctx context.Context, orphan ports.OrphanedAudio, sweep *OrphanedAudioSweep) error {
+	ctx = logging.ContextWithSubjectUser(ctx, orphan.UserId.String())
 	usage, err := s.queue.AudioUsage(ctx, orphan.AudioRef, orphan.UserId)
 	if err != nil {
 		return err
@@ -116,7 +117,6 @@ func (s *CleanUpUnusedAudioService) deleteOrphan(ctx context.Context, orphan por
 func logDeleteFailure(ctx context.Context, orphan ports.OrphanedAudio, err error) {
 	slog.WarnContext(ctx, "catalog.orphaned_audio_delete_failed",
 		"audio_ref", orphan.AudioRef,
-		logging.KeyUserID, orphan.UserId.String(),
 		logging.KeyTrackID, orphan.TrackId.String(),
 		"attempts", orphan.Attempts,
 		logging.KeyError, err)

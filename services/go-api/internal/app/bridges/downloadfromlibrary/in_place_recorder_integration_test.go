@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
@@ -21,7 +22,7 @@ type readyTrackSpec struct {
 }
 
 func newInPlaceRecorder(pool *pgxpool.Pool) *downloadfromlibrary.InPlaceRecorder {
-	return downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool), download.NewPostgresUpgradeStore(pool))
+	return downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), download.NewPostgresUpgradeStore(pool))
 }
 
 func insertUpgradableTrack(t *testing.T, pool *pgxpool.Pool, spec readyTrackSpec) sharedids.TrackId {

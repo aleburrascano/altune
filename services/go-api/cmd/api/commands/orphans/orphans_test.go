@@ -3,6 +3,7 @@ package orphans_test
 import (
 	"altune/go-api/cmd/api/commands/orphans"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"os"
@@ -32,7 +33,7 @@ var _ library.TrackReadWriter = (*fakeTrackRepo)(nil)
 
 func readyFixture(t *testing.T, ref string) (library.ReadyAudioTrack, *fakeTrackRepo) {
 	t.Helper()
-	id := library.NewTrackId()
+	id := librarytest.NewTrackId()
 	userId := ids.NewUserId(uuid.New())
 	track := &library.Track{ID: id, UserId: userId, DownloadStatus: library.AcquisitionReady, AudioRef: &ref}
 	repo := &fakeTrackRepo{tracks: map[library.TrackId]*library.Track{id: track}}
@@ -52,7 +53,7 @@ func writeAudio(t *testing.T, dir, ref string) {
 
 func TestCheckWithNoTracksMakesNoRepoCalls(t *testing.T) {
 	repo := &fakeTrackRepo{}
-	store := library.NewFilesystemAudioStore(t.TempDir())
+	store := library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics())
 
 	orphaned := orphans.Check(context.Background(), nil, store)
 	fixed := orphans.Fix(context.Background(), orphaned, repo)
@@ -68,7 +69,7 @@ func TestCheckCountsNothingWhenTheFileExists(t *testing.T) {
 	writeAudio(t, dir, ref)
 	track, repo := readyFixture(t, ref)
 
-	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir))
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics()))
 	fixed := orphans.Fix(context.Background(), orphaned, repo)
 
 	if len(orphaned) != 0 || fixed != 0 || len(repo.updates) != 0 {
@@ -79,7 +80,7 @@ func TestCheckCountsNothingWhenTheFileExists(t *testing.T) {
 func TestCheckReportsMissingFileAndTouchesNoRepo(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(t.TempDir()))
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()))
 
 	if len(orphaned) != 1 || orphaned[0].Id != track.Id {
 		t.Fatalf("orphaned = %+v, want exactly the missing track", orphaned)
@@ -123,7 +124,7 @@ func TestCheckTreatsASiblingUsersFileAsMissing(t *testing.T) {
 	writeAudio(t, dir, uuid.NewString()+"/song.mp3")
 	track, repo := readyFixture(t, ref)
 
-	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir))
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir, librarytest.DiscardFSCallMetrics()))
 	fixed := orphans.Fix(context.Background(), orphaned, repo)
 
 	if len(orphaned) != 1 || fixed != 1 {

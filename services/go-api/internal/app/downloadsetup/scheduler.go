@@ -25,6 +25,7 @@ type Deps struct {
 	Config       *config.Config
 	Transport    http.RoundTripper
 	Pool         *pgxpool.Pool
+	DBMetrics    library.DBCallMetrics
 	Events       *monitoring.EventTap
 	Recording    downloadfromsearch.RecordingWiring
 	Ledger       download.TrackLedgerPort
@@ -64,7 +65,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Tagger:        download.NewFFmpegTagger(binpath.Resolve("ffmpeg", d.Config.FFmpegLocation), download.NewId3Tagger()),
 			Rejections:    download.NewPostgresRejectionStore(d.Pool),
 			StoredAudio:   storedAudio,
-			Orphans:       downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool)),
+			Orphans:       downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool, d.DBMetrics)),
 			Skips:         skips,
 			Events:        d.Events,
 			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
@@ -123,7 +124,7 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 	}
 	if d.Pool != nil {
 		wiring.Queue = download.QueueOf(download.MustNewPostgresJobQueue(d.Pool, d.Ledger))
-		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc)
+		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.DBMetrics, d.Ledger, acquireSvc)
 		wiring.Notifier = download.MustNewPostgresJobNotifier(d.Pool, clock.Sleep)
 		wiring.Outcomes = download.NewPostgresOutcomeStore(d.Pool)
 	}

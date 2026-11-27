@@ -15,7 +15,7 @@ func TestSetTrackNumberService(t *testing.T) {
 
 	t.Run("rejects a non-positive number", func(t *testing.T) {
 		svc := library.NewSetTrackNumberService(library.NewInMemoryTrackRepo())
-		if _, err := svc.Execute(context.Background(), userId, library.NewTrackId(), 0); err == nil {
+		if _, err := svc.Execute(context.Background(), userId, librarytest.NewTrackId(), 0); err == nil {
 			t.Fatal("expected an error for a zero track number")
 		}
 	})
@@ -23,7 +23,7 @@ func TestSetTrackNumberService(t *testing.T) {
 	t.Run("rejects an out-of-range number", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		svc := library.NewSetTrackNumberService(repo)
-		_, err := svc.Execute(context.Background(), userId, library.NewTrackId(), 3000000000)
+		_, err := svc.Execute(context.Background(), userId, librarytest.NewTrackId(), 3000000000)
 		if err == nil {
 			t.Fatal("expected a validation error for an out-of-range track number")
 		}
@@ -38,7 +38,7 @@ func TestSetTrackNumberService(t *testing.T) {
 		svc := library.NewSetTrackNumberService(repo)
 		foreign := librarytest.SeedTrack(t, repo, librarytest.OtherUserId(), "Theirs", "Artist", "Album")
 
-		for _, id := range []library.TrackId{library.NewTrackId(), foreign.ID} {
+		for _, id := range []library.TrackId{librarytest.NewTrackId(), foreign.ID} {
 			updated, err := svc.Execute(context.Background(), userId, id, 4)
 			if !errors.Is(err, library.ErrTrackNotFound) || updated {
 				t.Fatalf("Execute = (%v, %v), want (false, ErrTrackNotFound)", updated, err)
@@ -55,7 +55,7 @@ func TestSetTrackNumberService(t *testing.T) {
 		errLookup := errors.New("db down")
 		repo.ErrOnGetBy = errLookup
 
-		if _, err := svc.Execute(context.Background(), userId, library.NewTrackId(), 4); !errors.Is(err, errLookup) {
+		if _, err := svc.Execute(context.Background(), userId, librarytest.NewTrackId(), 4); !errors.Is(err, errLookup) {
 			t.Fatalf("error = %v, want wrapping %v", err, errLookup)
 		}
 	})

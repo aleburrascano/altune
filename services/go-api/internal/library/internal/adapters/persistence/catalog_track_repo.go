@@ -27,10 +27,10 @@ type PostgresCatalogTrackRepository struct {
 	*PostgresFeaturedArtistRepository
 }
 
-func NewPostgresCatalogTrackRepository(pool *pgxpool.Pool) *PostgresCatalogTrackRepository {
+func NewPostgresCatalogTrackRepository(pool *pgxpool.Pool, metrics ports.DBCallMetrics) *PostgresCatalogTrackRepository {
 	return &PostgresCatalogTrackRepository{
-		PostgresTrackRepository:          NewPostgresTrackRepository(pool),
-		PostgresLibraryLensRepository:    NewPostgresLibraryLensRepository(pool),
-		PostgresFeaturedArtistRepository: NewPostgresFeaturedArtistRepository(pool),
+		PostgresTrackRepository:          NewPostgresTrackRepository(pool, metrics),
+		PostgresLibraryLensRepository:    NewPostgresLibraryLensRepository(pool, metrics),
+		PostgresFeaturedArtistRepository: NewPostgresFeaturedArtistRepository(pool, metrics),
 	}
 }

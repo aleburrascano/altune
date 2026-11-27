@@ -26,15 +26,17 @@ var (
 )
 
 type PostgresPlaylistRepository struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	metrics ports.DBCallMetrics
 }
 
-func NewPostgresPlaylistRepository(pool *pgxpool.Pool) *PostgresPlaylistRepository {
-	return &PostgresPlaylistRepository{pool: pool}
+func NewPostgresPlaylistRepository(pool *pgxpool.Pool, metrics ports.DBCallMetrics) *PostgresPlaylistRepository {
+	requireDBCallMetrics("NewPostgresPlaylistRepository", metrics)
+	return &PostgresPlaylistRepository{pool: pool, metrics: metrics}
 }
 
 func (r *PostgresPlaylistRepository) Create(ctx context.Context, playlist *domain.Playlist) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	_, err := r.pool.Exec(ctx,
@@ -45,7 +47,7 @@ func (r *PostgresPlaylistRepository) Create(ctx context.Context, playlist *domai
 }
 
 func (r *PostgresPlaylistRepository) ListForUser(ctx context.Context, userId sharedids.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
@@ -109,7 +111,7 @@ func (r playlistSummaryRow) withSummary() domain.PlaylistWithSummary {
 }
 
 func (r *PostgresPlaylistRepository) CountForUser(ctx context.Context, userId sharedids.UserId, atMost int) (int, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	var held int
@@ -124,7 +126,7 @@ func (r *PostgresPlaylistRepository) CountForUser(ctx context.Context, userId sh
 }
 
 func (r *PostgresPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId sharedids.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	row := r.pool.QueryRow(ctx,
@@ -161,7 +163,7 @@ func (r *PostgresPlaylistRepository) GetByID(ctx context.Context, id domain.Play
 const maxPlaylistTracks = domain.MaxPlaylistTracks
 
 func (r *PostgresPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId sharedids.UserId) (*domain.Playlist, []*domain.Track, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	playlist, _, err := r.GetByID(ctx, id, userId)
@@ -198,7 +200,7 @@ func (r *PostgresPlaylistRepository) GetWithTracks(ctx context.Context, id domai
 }
 
 func (r *PostgresPlaylistRepository) Delete(ctx context.Context, id domain.PlaylistId, userId sharedids.UserId) (bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	tag, err := r.pool.Exec(ctx,
@@ -212,7 +214,7 @@ func (r *PostgresPlaylistRepository) Delete(ctx context.Context, id domain.Playl
 }
 
 func (r *PostgresPlaylistRepository) Update(ctx context.Context, playlist *domain.Playlist) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	tag, err := r.pool.Exec(ctx,
@@ -257,7 +259,7 @@ func lockOwnedPlaylist(ctx context.Context, tx pgx.Tx, playlistId domain.Playlis
 }
 
 func (r *PostgresPlaylistRepository) Exists(ctx context.Context, playlistId domain.PlaylistId, userId sharedids.UserId) (bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	var exists bool
@@ -269,7 +271,7 @@ func (r *PostgresPlaylistRepository) Exists(ctx context.Context, playlistId doma
 }
 
 func (r *PostgresPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId domain.PlaylistId, userId sharedids.UserId) ([]domain.TrackId, bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
@@ -298,7 +300,7 @@ func (r *PostgresPlaylistRepository) GetTrackOrder(ctx context.Context, playlist
 }
 
 func (r *PostgresPlaylistRepository) AddTrack(ctx context.Context, userId sharedids.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	err := r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
@@ -370,7 +372,7 @@ func (r *PostgresPlaylistRepository) AddTracks(ctx context.Context, userId share
 		return nil, nil
 	}
 
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	var added []domain.TrackId
@@ -396,7 +398,7 @@ func (r *PostgresPlaylistRepository) AddTracks(ctx context.Context, userId share
 }
 
 func (r *PostgresPlaylistRepository) RemoveTrack(ctx context.Context, userId sharedids.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	removed := false
@@ -429,7 +431,7 @@ func (r *PostgresPlaylistRepository) RemoveTrack(ctx context.Context, userId sha
 }
 
 func (r *PostgresPlaylistRepository) RemoveTracks(ctx context.Context, userId sharedids.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	var removed []domain.TrackId
@@ -493,7 +495,7 @@ func (r *PostgresPlaylistRepository) ReorderTracks(ctx context.Context, userId s
 		positions[i] = t.Position
 	}
 
-	ctx, cancel := withDBTimeout(ctx)
+	ctx, cancel := withDBTimeout(ctx, r.metrics)
 	defer cancel()
 
 	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {

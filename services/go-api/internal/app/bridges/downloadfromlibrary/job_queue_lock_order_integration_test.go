@@ -3,6 +3,7 @@ package downloadfromlibrary_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -17,7 +18,7 @@ func TestPostgresJobQueue_QueueWritesRacingACatalogWriteThatChangesAMirroredColu
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
-	repo := library.NewPostgresTrackRepository(pool)
+	repo := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 
 	ops := []struct {
