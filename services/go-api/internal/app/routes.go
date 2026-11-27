@@ -24,6 +24,7 @@ func (a *application) mountRoutes(
 	cat catalogWiring,
 	queueHandler *playback.QueueHandler,
 	discoveryH *search.DiscoveryHandler,
+	clientEventRoutes http.Handler,
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
@@ -51,7 +52,7 @@ func (a *application) mountRoutes(
 				r.Mount("/playlists", cat.playlistHandler.Routes())
 				r.Mount("/playback", queueHandler.Routes())
 				r.Mount("/discovery", discoveryH.Routes())
-				r.Mount("/telemetry", discoveryH.TelemetryRoutes())
+				r.Mount("/telemetry", clientEventRoutes)
 			})
 		},
 		LongLived: func(r chi.Router) {

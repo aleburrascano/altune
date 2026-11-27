@@ -48,6 +48,7 @@ func (a *application) discoveryDeletedIdentityErasers() []search.DeletedUserData
 		search.NewPostgresSearchHistoryRepository(a.pool),
 		search.NewPostgresFavoritesRepository(a.pool),
 		search.NewPostgresEventStore(a.pool, clock.Now),
+		a.clientEvents,
 	}
 }
 
