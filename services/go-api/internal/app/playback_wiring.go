@@ -17,7 +17,7 @@ type playbackWiring struct {
 }
 
 func (a *application) wirePlayback(ctx context.Context, trackRepo *library.PostgresTrackRepository) (playbackWiring, error) {
-	metrics := playback.NewExpvarPlaybackMetrics()
+	metrics := playback.NewPlaybackMetrics(a.metrics)
 	queueStateRepo := playback.NewPostgresQueueStateRepository(a.pool, metrics, clock.Now)
 	queueSvc, err := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.PlaybackNowPlayingLookupTimeout)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/jsoncontract"
+	"altune/go-api/internal/shared/telemetry"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestFeatureMetrics_NamesEveryFeaturesSnapshot(t *testing.T) {
-	got := livemetrics.FeatureMetrics(requestmetrics.NewRegistry())
+	got := livemetrics.FeatureMetrics(telemetry.NewRegistry(), requestmetrics.NewRegistry())
 
 	for _, key := range []string{"auth", "catalog", "playback", "providers", "latency"} {
 		if got[key] == nil {
@@ -32,7 +33,7 @@ func TestContract_MetricsLiveMatchesFixture(t *testing.T) {
 	latency := requestmetrics.NewRegistry()
 	latency.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.FeatureMetrics(latency) }}).Register(r)
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.FeatureMetrics(telemetry.NewRegistry(), latency) }}).Register(r)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))

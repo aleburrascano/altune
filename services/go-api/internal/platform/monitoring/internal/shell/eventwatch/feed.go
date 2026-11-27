@@ -67,5 +67,5 @@ func (f *WatchedEvents) Subscribe() (<-chan TapEvent, func(), error) {
 }
 
 func (f *WatchedEvents) Dropped() uint64 {
-	return f.broadcaster.dropped.Load()
+	return f.broadcaster.droppedCount()
 }

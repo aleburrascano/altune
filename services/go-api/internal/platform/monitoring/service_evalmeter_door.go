@@ -9,10 +9,11 @@ type (
 	EvalMeterRunner      = evalmeter.Runner
 )
 
+const EvalMeterInterval = evalmeter.DefaultInterval
+
 var (
-	NewEvalMeter                   = evalmeter.New
-	ErrEvalMeterClockRequired      = evalmeter.ErrClockRequired
-	ErrEvalMeterTickerRequired     = evalmeter.ErrTickerRequired
-	ErrEvalMeterRunnerRequired     = evalmeter.ErrRunnerRequired
-	ErrEvalMeterLeadershipRequired = evalmeter.ErrLeadershipRequired
+	NewEvalMeter               = evalmeter.New
+	ErrEvalMeterClockRequired  = evalmeter.ErrClockRequired
+	ErrEvalMeterRunnerRequired = evalmeter.ErrRunnerRequired
+	ErrEvalMeterPausedRequired = evalmeter.ErrPausedRequired
 )

@@ -544,6 +544,50 @@ func (r *togglingReader) AdminAcquisition(ctx context.Context) (goapi.Acquisitio
 	return r.fakeReader.AdminAcquisition(ctx)
 }
 
+func TestAcquisitionSLOCountsCompletionsBetweenPolls(t *testing.T) {
+	reader := &steppingAcqReader{
+		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
+		acqs: []goapi.AcquisitionStatus{
+			{Succeeded: 500, Failed: 500},
+			{Succeeded: 585, Failed: 515},
+		},
+	}
+	b := newBucket(reader)
+
+	collectN(t, b, 1)
+	if got := snapData(t, b.Snapshot()).SLOs; len(got) != 1 || got[0].Measured {
+		t.Fatalf("SLOs after the baseline poll = %+v, want one unmeasured", got)
+	}
+
+	collectN(t, b, 1)
+	got := snapData(t, b.Snapshot()).SLOs
+	if len(got) != 1 {
+		t.Fatalf("SLOs = %+v, want exactly one", got)
+	}
+	slo := got[0]
+	if slo.Journey != "get a song" || slo.Good != 85 || slo.Total != 100 || slo.Met {
+		t.Fatalf("SLO = %+v, want 85 of the 100 new completions and a miss of the 90%% target", slo)
+	}
+}
+
+func TestAcquisitionSLOTreatsACounterResetAsFreshCounts(t *testing.T) {
+	reader := &steppingAcqReader{
+		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
+		acqs: []goapi.AcquisitionStatus{
+			{Succeeded: 900, Failed: 100},
+			{Succeeded: 10, Failed: 0},
+		},
+	}
+	b := newBucket(reader)
+	collectN(t, b, 2)
+
+	slo := snapData(t, b.Snapshot()).SLOs[0]
+
+	if slo.Good != 10 || slo.Total != 10 || !slo.Met {
+		t.Fatalf("SLO = %+v, want the 10 completions since the restart, all good", slo)
+	}
+}
+
 type steppingAcqReader struct {
 	fakeReader
 	acqs []goapi.AcquisitionStatus

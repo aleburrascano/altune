@@ -1,14 +1,13 @@
 package registry
 
 import (
+	"altune/go-api/internal/shared/telemetry"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-var bucketUpperBoundsMs = [...]int64{1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000}
-
-const numBuckets = len(bucketUpperBoundsMs) + 1
+var bucketUpperBoundsMs = []int64{1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000}
 
 const (
 	unmatchedRoute = "unmatched"
@@ -24,28 +23,19 @@ const (
 )
 
 type routeHist struct {
-	buckets     [numBuckets]uint64
+	latency     *telemetry.Histogram
 	statusClass [numStatusClasses]uint64
-	sumMs       uint64
-	count       uint64
+}
+
+func newRouteHist() *routeHist {
+	return &routeHist{latency: telemetry.NewHistogram(bucketUpperBoundsMs)}
 }
 
 func (h *routeHist) observe(ms int64, status int) {
-	atomic.AddUint64(&h.buckets[bucketIndex(ms)], 1)
-	atomic.AddUint64(&h.sumMs, uint64(ms))
-	atomic.AddUint64(&h.count, 1)
+	h.latency.Observe(ms)
 	if i := statusClassIndex(status); i >= 0 {
 		atomic.AddUint64(&h.statusClass[i], 1)
 	}
-}
-
-func bucketIndex(ms int64) int {
-	for i, bound := range bucketUpperBoundsMs {
-		if ms <= bound {
-			return i
-		}
-	}
-	return numBuckets - 1
 }
 
 func statusClassIndex(status int) int {
@@ -68,8 +58,8 @@ type Registry struct {
 
 func New() *Registry {
 	reg := &Registry{}
-	reg.routes.Store(unmatchedRoute, &routeHist{})
-	reg.routes.Store(overflowRoute, &routeHist{})
+	reg.routes.Store(unmatchedRoute, newRouteHist())
+	reg.routes.Store(overflowRoute, newRouteHist())
 	return reg
 }
 
@@ -91,7 +81,7 @@ func (reg *Registry) hist(route string) *routeHist {
 	if reg.n.Load() >= maxRoutes {
 		return reg.mustLoad(overflowRoute)
 	}
-	h, loaded := reg.routes.LoadOrStore(route, &routeHist{})
+	h, loaded := reg.routes.LoadOrStore(route, newRouteHist())
 	if !loaded {
 		reg.n.Add(1)
 	}

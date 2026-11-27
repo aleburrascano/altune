@@ -101,8 +101,8 @@ func newAudioRig(now func() time.Time) *audioRig {
 	store := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
 	r := chi.NewRouter()
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), now).Routes(r)
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, now, library.NoopAudioStoreMetrics()), now).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), now).Routes(r)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, now, &librarytest.Metrics{}), now).Routes(r)
 	return &audioRig{router: r, store: store, repo: repo}
 }
 

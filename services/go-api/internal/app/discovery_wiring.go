@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"net/http"
@@ -18,13 +19,18 @@ type EvalHandles struct {
 	Pool      *pgxpool.Pool
 	Transport http.RoundTripper
 	Tracker   *background.Tracker
+	Metrics   *telemetry.Registry
 }
 
 func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*search.Discovery, error) {
 	if h.Transport == nil {
 		return nil, errors.New("eval discovery: EvalHandles.Transport is required, so provider calls never fall back to an unguarded transport")
 	}
-	deps := searchsettings.Deps(ctx, cfg, h.Transport)
+	metrics := h.Metrics
+	if metrics == nil {
+		metrics = telemetry.NewRegistry()
+	}
+	deps := searchsettings.Deps(ctx, cfg, h.Transport, metrics)
 	deps.Background = &background.Tracker{}
 	deps.Activity = search.NoActivityFeed{}
 	deps.ClientEvents = search.NoClientEvents{}
@@ -34,7 +40,7 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 }
 
 func (a *application) discoveryDeps(ctx context.Context, transport http.RoundTripper) search.Deps {
-	deps := searchsettings.Deps(ctx, a.cfg, transport)
+	deps := searchsettings.Deps(ctx, a.cfg, transport, a.metrics)
 	deps.Background = a.jobs.Background()
 	deps.Tracker = a.background
 	deps.Pool = a.pool

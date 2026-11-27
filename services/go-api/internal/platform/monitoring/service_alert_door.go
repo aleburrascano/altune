@@ -9,7 +9,3 @@ var NewAlertMonitor = alert.NewMonitor
 var ErrInvalidInterval = alert.ErrInvalidInterval
 
 var ErrAlertClockRequired = alert.ErrClockRequired
-
-var ErrAlertTickerRequired = alert.ErrTickerRequired
-
-var ErrAlertLeadershipRequired = alert.ErrLeadershipRequired

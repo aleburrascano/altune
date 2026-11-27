@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"fmt"
 
@@ -31,7 +32,7 @@ func (a *application) wireObserve(ctx context.Context, r *chi.Mux, verifier auth
 		Discography: monitoringfromsearch.NewDiscographyQualityReader(search.NewPostgresEventStore(a.pool, clock.Now)),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps))
+	mountObserve(r, verifier, a.metrics, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps))
 	return nil
 }
 
@@ -43,22 +44,22 @@ func (a *application) startObserveSources(ctx context.Context, tap *monitoring.E
 		return err
 	}
 	a.evalMeter = meter
-	a.jobs.WhenLeader(jobs.EvalMeter, a.evalMeter.Start)
+	a.jobs.Ticker(jobs.EvalMeter, monitoring.EvalMeterInterval, meter.Pass)
 	return nil
 }
 
 func newEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitoring.EvalMeter, error) {
-	meter, err := monitoring.NewEvalMeter(0, clock.Now, clock.NewTicker, run, runner.LeaderContextFor(jobs.EvalMeter))
+	meter, err := monitoring.NewEvalMeter(clock.Now, run, runner.Control(jobs.EvalMeter).Disabled)
 	if err != nil {
 		return nil, fmt.Errorf("eval meter: %w", err)
 	}
 	return meter, nil
 }
 
-func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *monitoring.Handler) {
+func mountObserve(r chi.Router, verifier auth.TokenVerifier, metrics *telemetry.Registry, principalID string, h *monitoring.Handler) {
 	r.Route("/observe", func(or chi.Router) {
 		or.Use(router.V1ResponseHeaders)
-		or.Use(authMiddleware(verifier))
+		or.Use(authMiddleware(verifier, metrics))
 		or.Use(monitoring.Gate(principalID))
 		h.Register(or)
 	})
@@ -82,6 +83,7 @@ func (a *application) liveMetrics() monitoring.LiveMetrics {
 		EventFeed:    a.eventFeed,
 		AlertMonitor: a.alertMonitor,
 		Background:   a.background,
+		Metrics:      a.metrics,
 	})
 }
 

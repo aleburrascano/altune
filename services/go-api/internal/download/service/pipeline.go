@@ -226,9 +226,9 @@ func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[
 
 	announceStage(ctx, run, s)
 
-	start := run.now()
-	out, execErr := s.Execute(ctx, run.ac, prev)
-	timeStage(ctx, string(s.Name()), start, run.now)
+	stageCtx, stageDone := startStage(ctx, run.now, string(s.Name()))
+	out, execErr := s.Execute(stageCtx, run.ac, prev)
+	stageDone(execErr)
 	if execErr != nil {
 		slog.ErrorContext(ctx, "pipeline step failed",
 			"step", s.Name(), logging.KeyTrackID, run.ac.Track.ID, logging.KeyError, redact.LogError(execErr))

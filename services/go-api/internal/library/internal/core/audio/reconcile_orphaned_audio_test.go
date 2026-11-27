@@ -336,7 +336,7 @@ func TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts(t *testing.T) {
 	f := newOrphanFixture()
 	f.orphan(t, orphanRef)
 	f.orphan(t, unanswerableRef)
-	f.sweep = library.NewReconcileOrphanedAudioService(usageUnanswerableFor{f.queue, unanswerableRef}, f.store, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
+	f.sweep = library.NewReconcileOrphanedAudioService(usageUnanswerableFor{f.queue, unanswerableRef}, f.store, &librarytest.Metrics{}, library.AlwaysEnabled)
 
 	if _, err := f.sweep.Execute(context.Background()); err == nil {
 		t.Fatal("sweep err = nil, want the usage-check failure surfaced")
@@ -354,7 +354,7 @@ func TestNewReconcileOrphanedAudioService_RefusesAMissingCollaborator(t *testing
 	store := library.NewInMemoryAudioStore()
 	for name, build := range map[string]func(){
 		"no metrics":      func() { library.NewReconcileOrphanedAudioService(queue, store, nil, library.AlwaysEnabled) },
-		"no sweep switch": func() { library.NewReconcileOrphanedAudioService(queue, store, library.NoopAudioStoreMetrics(), nil) },
+		"no sweep switch": func() { library.NewReconcileOrphanedAudioService(queue, store, &librarytest.Metrics{}, nil) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {

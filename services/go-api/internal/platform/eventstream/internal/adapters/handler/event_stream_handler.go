@@ -140,9 +140,6 @@ func (h *EventStreamHandler) serveLive(
 }
 
 func (h *EventStreamHandler) acquireSlot(w http.ResponseWriter, r *http.Request, userId ids.UserId) bool {
-	if h.limiter == nil {
-		return true
-	}
 	err := h.limiter.Acquire(userId.String())
 	if err == nil {
 		return true
@@ -167,9 +164,7 @@ func disconnectLogEvent(ctx context.Context) string {
 }
 
 func (h *EventStreamHandler) releaseSlot(userId ids.UserId) {
-	if h.limiter != nil {
-		h.limiter.Release(userId.String())
-	}
+	h.limiter.Release(userId.String())
 }
 
 func (h *EventStreamHandler) stream(ctx context.Context, conn *sseConn, ch <-chan events.Event, replayed replayOutcome) {

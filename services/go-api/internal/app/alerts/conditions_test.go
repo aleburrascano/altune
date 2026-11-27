@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/alerts"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
@@ -57,6 +58,7 @@ func sources() alerts.Sources {
 		Coverage:              &fakeCoverageEvents{},
 		YouTubeSignedOutSince: signedIn,
 		Jobs:                  &jobs.Runner{},
+		Requests:              func() requestmetrics.Snapshot { return requestmetrics.Snapshot{} },
 	}
 }
 
@@ -105,7 +107,7 @@ func evalTick(ctx context.Context, conds ...monitoring.Condition) map[string]*mo
 func TestConditions_WatchDependenciesCoverageCookiesAndEveryAlertableJob(t *testing.T) {
 	conditions := mustConditions(sources())
 
-	want := []string{"dependency_down", "coverage_zero_result", "coverage_query_failing", "youtube_cookies_signed_out"}
+	want := []string{"api_5xx_ratio", "dependency_down", "coverage_zero_result", "coverage_query_failing", "youtube_cookies_signed_out"}
 	for _, name := range jobs.Alertable() {
 		want = append(want, "job_failing:"+string(name))
 	}
@@ -126,6 +128,17 @@ func TestConditions_RefuseAMissingClockAtConstruction(t *testing.T) {
 
 	if !errors.Is(err, alerts.ErrClockRequired) || conditions != nil {
 		t.Fatalf("Conditions = (%v, %v), want no conditions and ErrClockRequired", conditions, err)
+	}
+}
+
+func TestConditions_RefuseAMissingRequestSnapshotAtConstruction(t *testing.T) {
+	s := sources()
+	s.Requests = nil
+
+	conditions, err := alerts.Conditions(s)
+
+	if !errors.Is(err, alerts.ErrRequestsRequired) || conditions != nil {
+		t.Fatalf("Conditions = (%v, %v), want no conditions and ErrRequestsRequired", conditions, err)
 	}
 }
 

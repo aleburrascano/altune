@@ -66,7 +66,7 @@ func TestContainLogsOnceAtErrorWithItsAttributesAndTheValue(t *testing.T) {
 	panicguard.Contain(context.Background(), "source pump panicked", func() { panic("boom") }, "bucket", "usage")
 
 	out := logs.String()
-	for _, want := range []string{"level=ERROR", "source pump panicked", "bucket=usage", "recover=boom"} {
+	for _, want := range []string{"level=ERROR", "source pump panicked", "bucket=usage", "panic=boom"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("log %q lacks %q", out, want)
 		}
@@ -74,7 +74,7 @@ func TestContainLogsOnceAtErrorWithItsAttributesAndTheValue(t *testing.T) {
 	if n := strings.Count(out, "\n"); n != 1 {
 		t.Errorf("logged %d lines, want 1", n)
 	}
-	if strings.Index(out, "bucket=usage") > strings.Index(out, "recover=boom") {
+	if strings.Index(out, "bucket=usage") > strings.Index(out, "panic=boom") {
 		t.Errorf("log %q puts recover before the attributes it was given", out)
 	}
 }
@@ -147,7 +147,7 @@ func TestOnceContainLogsAPanicAndStillReturnsToTheCaller(t *testing.T) {
 	if err := once.Wait(); err != nil {
 		t.Fatalf("Wait = %v, want nil because Contain already logged the panic", err)
 	}
-	if out := logs.String(); !strings.Contains(out, "pump panicked") || !strings.Contains(out, "recover=boom") {
+	if out := logs.String(); !strings.Contains(out, "pump panicked") || !strings.Contains(out, "panic=boom") {
 		t.Fatalf("log %q lacks the contained panic", out)
 	}
 }

@@ -7,5 +7,5 @@ type ProviderMetricsSnapshot = providermetrics.Snapshot
 var (
 	NewCountingTransport        = providermetrics.NewCountingTransport
 	ReadProviderMetricsSnapshot = providermetrics.ReadSnapshot
-	RecordRetry                 = providermetrics.RecordRetry
+	ProviderRetryRecorder       = providermetrics.RetryRecorder
 )

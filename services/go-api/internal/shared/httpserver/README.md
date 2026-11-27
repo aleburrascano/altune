@@ -1,4 +1,4 @@
-`httputil` owns how HTTP requests are limited, logged, recovered and answered with errors.
+`httpserver` owns how HTTP requests are limited, logged, recovered and answered with errors.
 
 ## One error writer
 
@@ -25,6 +25,10 @@ A handler never picks a status. The boundary reads `err`'s chain and takes the f
 A handler adds context by wrapping the error (`fmt.Errorf("...: %w", err)`), not by logging it. Separately, `RequestLogger` logs `request.complete` at Info for every request, including failed ones.
 
 Write every error through `HandleServiceError`; the strict lint (`forbidigo`) bans `http.Error`.
+
+## One measurement of each request
+
+`ObserveRequests(now, observers...)` is the one middleware that measures a request: it reads the clock once at the start and once at the end, wraps the writer once, and hands every `Observer` the same `Outcome` (method, path, route template, status, bytes, duration, user). An observer may change the request on the way in (the span observer puts the span in its context) and returns a finisher, or nil to decline. Finishers run in reverse order, each guarded so a panic in one is logged and the rest still run. The span (`telemetry.RequestSpan`), the latency histogram (`requestmetrics.Observer`) and the `request.complete` log line (`LogRequest`) are three observers of it, so they share one route template. `RequestLogger(now)` is `ObserveRequests` with only the log observer.
 
 ## One place for request input
 

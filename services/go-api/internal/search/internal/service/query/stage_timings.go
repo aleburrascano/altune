@@ -1,6 +1,10 @@
 package query
 
-import "time"
+import (
+	"altune/go-api/internal/shared/telemetry"
+	"context"
+	"time"
+)
 
 type stageTimings struct {
 	fanOut    time.Duration
@@ -10,9 +14,9 @@ type stageTimings struct {
 	related   time.Duration
 }
 
-func (s *Service) timeStage(into *time.Duration) func() {
-	start := s.now()
-	return func() { *into = s.now().Sub(start) }
+func (s *Service) timeStage(ctx context.Context, name string, into *time.Duration) (context.Context, func()) {
+	stageCtx, stage := telemetry.StartStage(ctx, s.now, "search."+name)
+	return stageCtx, func() { *into = stage.End(nil) }
 }
 
 func (t stageTimings) logAttrs(total time.Duration) []any {

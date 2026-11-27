@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -127,7 +128,7 @@ type stageMod func(*service.StagePorts)
 
 func noStages(mods ...stageMod) service.StagePorts {
 	stages := service.StagePorts{
-		Prober:        ports.NoopAudioProber(),
+		Prober:        downloadtest.SilentAudioProber(),
 		Tagger:        ports.NoopAudioTagger(),
 		Rejections:    ports.NoopRejectionStore(),
 		StoredAudio:   ports.NoopStoredAudioReader(),

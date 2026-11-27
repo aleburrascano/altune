@@ -127,8 +127,10 @@ func (s *DownloadStep) identifyPreview(
 	if err != nil {
 		return ports.RecordingMatch{}, err
 	}
-	defer timeStage(ctx, "download.identify", s.now(), s.now)
-	return s.identifier.Identify(ctx, previewPath, candidate.Duration)
+	identifyCtx, identifyDone := startStage(ctx, s.now, "download.identify")
+	match, err := s.identifier.Identify(identifyCtx, previewPath, candidate.Duration)
+	identifyDone(err)
+	return match, err
 }
 
 func (s *DownloadStep) fetchPreview(
@@ -137,16 +139,18 @@ func (s *DownloadStep) fetchPreview(
 	candidate ports.AudioCandidate,
 	previewDir string,
 ) (string, error) {
-	queued := s.now()
+	_, queued := startStage(ctx, s.now, "download.queue")
 	if err := s.limiter.Acquire(ctx); err != nil {
+		queued(err)
 		return "", err
 	}
 	defer s.limiter.Release()
-	timeStage(ctx, "download.queue", queued, s.now)
+	queued(nil)
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	defer timeStage(ctx, "download.preview", s.now(), s.now)
+	fetchCtx, previewDone := startStage(fetchCtx, s.now, "download.preview")
 	path, err := previewer.FetchPreview(fetchCtx, candidate, previewDir, previewSeconds)
+	previewDone(err)
 	if err != nil {
 		return "", candidateTimedOut(ctx, fetchCtx, candidate, err)
 	}
@@ -164,9 +168,9 @@ func (s *DownloadStep) identify(
 		return nil
 	}
 
-	identifyStart := s.now()
-	match, err := s.identifier.Identify(ctx, filePath, 0)
-	timeStage(ctx, "download.identify", identifyStart, s.now)
+	identifyCtx, identifyDone := startStage(ctx, s.now, "download.identify")
+	match, err := s.identifier.Identify(identifyCtx, filePath, 0)
+	identifyDone(err)
 	if err != nil {
 		s.noteIdentifyFailure(ctx, ac, candidate, err, "acquisition.identify_failed", ports.SkipIdentifyFailed)
 		return nil

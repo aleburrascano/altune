@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
@@ -16,6 +17,23 @@ import (
 func captureLeaderLoopLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
 	return logging.CaptureRing(t, "info")
+}
+
+type alwaysLeader struct{}
+
+func (alwaysLeader) Start(context.Context)      {}
+func (alwaysLeader) Await(context.Context) bool { return true }
+func (alwaysLeader) Shutdown(context.Context)   {}
+
+func (alwaysLeader) LeaderContext(parent context.Context) (context.Context, context.CancelFunc, bool) {
+	ctx, cancel := context.WithCancel(parent)
+	return ctx, cancel, true
+}
+
+func leadAlways(ctx context.Context, t *testing.T, r *jobs.Runner) {
+	t.Helper()
+	r.Lead(ctx, alwaysLeader{})
+	t.Cleanup(r.Wait)
 }
 
 func awaitPass(t *testing.T, passed <-chan struct{}) {
@@ -41,7 +59,7 @@ func recordNamed(t *testing.T, ring *logging.RingBuffer, msg string) logging.Cap
 func TestAlertMonitor_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 	ring := captureLeaderLoopLogs(t)
 	passed := make(chan struct{}, 1)
-	var runner jobs.Runner
+	runner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	condition := monitoring.Condition{Key: "probe", Eval: func(ctx context.Context) *monitoring.Alert {
 		slog.InfoContext(ctx, "alert pass line")
 		select {
@@ -50,14 +68,15 @@ func TestAlertMonitor_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 		}
 		return nil
 	}}
-	monitor, err := app.NewAlertMonitor(&runner, monitoring.NopNotifier{}, 5*time.Millisecond, []monitoring.Condition{condition})
+	monitor, err := app.NewAlertMonitor(monitoring.NopNotifier{}, 5*time.Millisecond, []monitoring.Condition{condition})
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	monitor.Start(ctx)
+	runner.Ticker(jobs.AlertMonitor, 5*time.Millisecond, monitor.Pass)
+	leadAlways(ctx, t, &runner)
 	awaitPass(t, passed)
 
 	rec := recordNamed(t, ring, "alert pass line")
