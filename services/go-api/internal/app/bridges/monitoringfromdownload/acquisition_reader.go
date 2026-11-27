@@ -7,7 +7,7 @@ import (
 )
 
 type DownloadStatusReportSource interface {
-	Status(_ context.Context) download.Status
+	Status(context.Context) download.Status
 }
 
 type acquisitionReader struct {

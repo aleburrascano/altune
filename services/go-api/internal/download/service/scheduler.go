@@ -389,12 +389,13 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(ctx context.Context, job 
 
 	work := s.startClaimedJob(job)
 	jobErr := s.execClaimedJob(jobCtx, run, work)
-	s.completeClaimedJob(jobCtx, job.TrackID, jobEnd{err: jobErr, shutdown: ctx.Err() != nil})
+	end := jobEnd{err: jobErr, shutdown: ctx.Err() != nil}
+	s.completeClaimedJob(jobCtx, job.TrackID, end)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
 	finishCtx, cancelFinish := background.DetachCancelable(jobCtx)
 	defer cancelFinish()
-	s.finishJob(finishCtx, job, jobEnd{err: jobErr, shutdown: ctx.Err() != nil})
+	s.finishJob(finishCtx, job, end)
 }
 
 func (s *BackgroundAcquisitionScheduler) releaseWithin(ctx context.Context, job ports.Job, delay time.Duration) error {

@@ -43,5 +43,5 @@ type DownloadStatusReport struct {
 }
 
 type AcquisitionReader interface {
-	Status(_ context.Context) DownloadStatusReport
+	Status(context.Context) DownloadStatusReport
 }
