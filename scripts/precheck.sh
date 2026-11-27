@@ -61,6 +61,7 @@ else
   changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
   deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
 fi
+client_codes_file=../../client/src/shared/failure/core/apiErrorCodes.generated.ts
 touches() { grep -qE "$1" <<<"$changed"$'\n'"$deleted"; }
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
@@ -364,6 +365,9 @@ if touches '^services/go-api/'; then
         if touches "^$m/.*\.go\$"; then
           check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports)" $m go run ./scripts/lintdoors --exports .
         fi
+        if touches "^$m/internal/shared/apierror/|^$m/scripts/genclientcodes/|^client/src/shared/failure/core/apiErrorCodes\.generated\.ts\$"; then
+          check "client error codes match the go-api catalog (genclientcodes --check)" $m go run ./scripts/genclientcodes --check "$client_codes_file"
+        fi
         if touches "^$m/go\.(mod|sum)\$"; then
           check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
         fi
@@ -411,6 +415,7 @@ if touches '^services/go-api/'; then
       check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
       need go-arch-lint "go-api architecture" && check "go-api architecture: every module imports only what its role may (go-arch-lint, whole tree)" $m go-arch-lint check
       check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports, whole tree)" $m go run ./scripts/lintdoors --exports .
+      check "client error codes match the go-api catalog (genclientcodes --check, whole tree)" $m go run ./scripts/genclientcodes --check "$client_codes_file"
       mapfile -t pkgs < <(go_pkgs $m)
       if [ $whole_module = 1 ]; then test_pkgs=(./...); else test_pkgs=("${affected[@]}"); fi
       [ ${#pkgs[@]} -gt 0 ] && [ ${#test_pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages and their importers)" $m "${heavy[@]}" "${db_env[@]}" go test -race -shuffle=on -count=1 "${test_pkgs[@]}"

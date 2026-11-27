@@ -1,7 +1,7 @@
 import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 
-import { describeError, isRetryable } from '@shared/failure';
+import { correlationIdOf, describeError, isRetryable } from '@shared/failure';
 import {
   type TrackId,
   type CreateTrackRequest,
@@ -142,6 +142,7 @@ function warnSaveFailed(port: DetailPort, error: Error, body: CreateTrackRequest
     artist: body.artist,
     error: error.message,
     retryable: isRetryable(error),
+    corr_id: correlationIdOf(error),
   });
 }
 

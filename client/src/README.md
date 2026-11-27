@@ -19,6 +19,8 @@ Tests sit in a `__tests__/` folder. A test reaches its own module only through t
 
 Work that must finish by a deadline goes through `withDeadline(work, ms, { onExpire })` from `@shared/timing`, never `Promise.race`. It owns the timer, clears it when the work settles, and hands a failure that comes after the deadline to `onLate`, so it is not lost.
 
+What a failure means and what the user reads about it live in `@shared/failure`: `failureKindOf(error)` names the kind and `describeError(error, action?)` words it. Code never compares an HTTP status to a bare number (`status >= 500`, `500 <= status`, `case 404:`, a `*_STATUSES` set): it asks for the kind, or uses a named constant from `@shared/failure` (`HTTP_*`). `client/eslint.config.js` fails the bare forms. `apiErrorCodes.generated.ts` is written by `cd services/go-api && go run ./scripts/genclientcodes ../../client/src/shared/failure/core/apiErrorCodes.generated.ts` from the server's catalog; never edit it by hand.
+
 | Rule | Checked by |
 |---|---|
 | Module imports and doors | fallow, `client/fallow/modules.json` |

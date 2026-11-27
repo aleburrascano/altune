@@ -9,9 +9,13 @@ function retryDelayMs(failureCount: number, random: number): number {
   return equalJitterMs(RETRY_BACKOFF_BASE_MS, RETRY_BACKOFF_CAP_MS, exponent, random);
 }
 
-function serverAskedDelayMs(error: unknown): number | undefined {
+const SERVER_ASKED_FLOOR_MS = 1_000;
+const SERVER_ASKED_SPREAD = 0.25;
+
+function serverAskedDelayMs(error: unknown, random: number): number | undefined {
   if (!(error instanceof ApiError) || error.retryAfterMs === undefined) return undefined;
-  return Math.min(error.retryAfterMs, RETRY_BACKOFF_CAP_MS);
+  const asked = Math.min(Math.max(error.retryAfterMs, SERVER_ASKED_FLOOR_MS), RETRY_BACKOFF_CAP_MS);
+  return asked + Math.floor(random * asked * SERVER_ASKED_SPREAD);
 }
 
 export interface RetryClock {
@@ -22,7 +26,7 @@ export function createTransientRetryOptions({ random }: RetryClock) {
   return {
     retry: (failureCount: number, error: unknown) => isRetryable(error) && failureCount < 5,
     retryDelay: (failureCount: number, error: unknown) =>
-      serverAskedDelayMs(error) ?? retryDelayMs(failureCount, random()),
+      serverAskedDelayMs(error, random()) ?? retryDelayMs(failureCount, random()),
   };
 }
 

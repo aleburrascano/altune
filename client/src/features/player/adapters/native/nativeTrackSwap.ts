@@ -12,7 +12,7 @@ import {
 } from '@features/player/adapters/native/nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from '@features/player/adapters/native/nativeTrack';
 import { reportLoadFailure } from '@features/player/core/playbackErrorStore';
-import { recordPresignOutcome } from '@features/player/core/playbackHealth';
+import { recordPresignFailed, recordPresignOk } from '@features/player/core/playbackHealth';
 import { warnPlayback } from '@features/player/core/playbackError';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
@@ -34,11 +34,11 @@ export function forgetSwap(trackId: TrackId): void {
 async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
   try {
     const [resolved] = await playbackPort().fetchAudioUrls([trackId]);
-    recordPresignOutcome(true);
+    recordPresignOk();
     return resolved?.url ?? null;
   } catch (err) {
     warnPlayback('presign failed', { trackIds: [trackId] }, err);
-    recordPresignOutcome(false);
+    recordPresignFailed();
     return null;
   }
 }

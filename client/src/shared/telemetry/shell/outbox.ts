@@ -1,4 +1,12 @@
-import { ApiError, NetworkError } from '@shared/failure';
+import {
+  ApiError,
+  HTTP_CLIENT_ERROR_STATUS,
+  HTTP_REQUEST_TIMEOUT,
+  HTTP_SERVER_ERROR_STATUS,
+  HTTP_TOO_MANY_REQUESTS,
+  HTTP_UNAUTHORIZED,
+  NetworkError,
+} from '@shared/failure';
 import { clampedExponent, equalJitterMs } from '@shared/timing';
 
 import type { DiscoveryEvent } from '@shared/telemetry/core/discoveryEvent';
@@ -22,9 +30,11 @@ const MAX_DIAGNOSTIC_ENTRIES = 20;
 const FLUSH_BACKOFF_BASE_MS = 2_000;
 const FLUSH_BACKOFF_CAP_MS = 300_000;
 
-const RETRYABLE_CLIENT_STATUSES: ReadonlySet<number> = new Set([401, 408, 429]);
-const FIRST_CLIENT_ERROR_STATUS = 400;
-const FIRST_SERVER_ERROR_STATUS = 500;
+const RETRYABLE_CLIENT_STATUSES: ReadonlySet<number> = new Set([
+  HTTP_UNAUTHORIZED,
+  HTTP_REQUEST_TIMEOUT,
+  HTTP_TOO_MANY_REQUESTS,
+]);
 
 type OutboxDeps = {
   clock: TelemetryClock;
@@ -45,7 +55,7 @@ function flushBackoffMs(failedPasses: number, random: number): number {
 function isPermanentlyRejected(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
   const clientError =
-    error.status >= FIRST_CLIENT_ERROR_STATUS && error.status < FIRST_SERVER_ERROR_STATUS;
+    error.status >= HTTP_CLIENT_ERROR_STATUS && error.status < HTTP_SERVER_ERROR_STATUS;
   return clientError && !RETRYABLE_CLIENT_STATUSES.has(error.status);
 }
 
