@@ -57,6 +57,20 @@ func TestContextWithSubjectUser_KeepsTheRouteAndReplacesTheRequestUser(t *testin
 	}
 }
 
+func TestContextWithSubjectUser_AnEmptyUserKeepsTheRequestUser(t *testing.T) {
+	logger, _, out := setupLogger(t, "info", false)
+	request := logging.ContextWithRequestFields(context.Background(), func() logging.RequestFields {
+		return logging.RequestFields{UserID: "caller"}
+	})
+	ctx := logging.ContextWithSubjectUser(request, "")
+
+	logger.InfoContext(ctx, "no subject")
+
+	if line := out(); !strings.Contains(line, `"user_id":"caller"`) {
+		t.Errorf("line lost the request user: %s", line)
+	}
+}
+
 func TestContextWithSubjectUser_AnExplicitKeyStillWins(t *testing.T) {
 	logger, _, out := setupLogger(t, "info", false)
 	ctx := logging.ContextWithSubjectUser(context.Background(), "subject")

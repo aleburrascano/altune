@@ -23,7 +23,9 @@ func ContextWithSubjectUser(ctx context.Context, userID string) context.Context 
 		if previous != nil {
 			fields = previous()
 		}
-		fields.UserID = userID
+		if userID != "" {
+			fields.UserID = userID
+		}
 		return fields
 	})
 }
