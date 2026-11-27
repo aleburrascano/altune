@@ -143,7 +143,7 @@ func (r *PostgresQueueStateRepository) UpdatePosition(ctx context.Context, posit
 
 	var applied, matched bool
 	err := r.runOp(ctx, "update_position", position.UserId, func(opCtx context.Context) error {
-		return r.pool.QueryRow(opCtx,
+		err := r.pool.QueryRow(opCtx,
 			`WITH handled AS (
 		   SELECT statement_timestamp() - $4::bigint * interval '1 microsecond' AS at
 		 ), q AS (
@@ -168,6 +168,10 @@ func (r *PostgresQueueStateRepository) UpdatePosition(ctx context.Context, posit
 			handlingAge{stampedAt: position.UpdatedAt, now: r.now},
 			position.CurrentTrackId,
 		).Scan(&applied, &matched)
+		if err != nil {
+			return fmt.Errorf("update queue position: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
@@ -203,12 +207,16 @@ func (r *PostgresQueueStateRepository) GetForUser(
 ) (*domain.QueueState, error) {
 	var row scannedRow
 	err := r.runOp(ctx, "get_for_user", userId, func(opCtx context.Context) error {
-		return r.pool.QueryRow(opCtx,
+		err := r.pool.QueryRow(opCtx,
 			`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
 		 WHERE user_id = $1 AND erased_at IS NULL`,
 			userId.UUID(),
 		).Scan(&row.trackIds, &row.currentIdx, &row.positionMs, &row.shuffled, &row.repeatMode, &row.sourceId, &row.naturalOrder, &row.updatedAt)
+		if err != nil {
+			return fmt.Errorf("read queue state: %w", err)
+		}
+		return nil
 	})
 
 	if errors.Is(err, pgx.ErrNoRows) {

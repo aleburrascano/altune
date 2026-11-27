@@ -63,7 +63,7 @@ linters:
         - altune/go-api/internal/*/internal/core/ports
       ignore-sig-regexps:
         - '\(context\.Context\)\.Err\(\)'
-        - '\.Context\(\)\.Err\(\)'
+        - '\(io\.Reader\)\.Read\('
     importas:
       no-unaliased: false
       no-extra-aliases: false
