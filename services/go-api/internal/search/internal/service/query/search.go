@@ -1,10 +1,10 @@
 package query
 
 import (
-	"altune/go-api/internal/search/internal/core/favorites"
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/favorites"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/search/internal/service/vocabulary"

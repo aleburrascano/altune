@@ -124,12 +124,16 @@ func mergeSlotsReportingOutage(
 	errs []error,
 ) (FindResult, error) {
 	candidates, outage, err := ports.CollectCandidatesReportingOutage(
-		ctx,
 		len(sources),
 		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
 		func(i int, candidates []ports.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.source_find_results",
 				"source", sources[i].Name(), "candidates", len(candidates))
+			for _, c := range candidates {
+				if !c.HasSourceKey() {
+					slog.WarnContext(ctx, "acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
+				}
+			}
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.source_find_failed",

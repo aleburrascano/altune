@@ -2,7 +2,7 @@ package musicbrainzmatch_test
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
+	"altune/go-api/internal/download/service/musicbrainzmatch"
 	"context"
 	"slices"
 	"testing"

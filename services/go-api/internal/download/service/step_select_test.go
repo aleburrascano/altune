@@ -6,8 +6,12 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/logging"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -120,6 +124,53 @@ func TestSelectStep_OutageDoesNotLeakIntoTheNextRun(t *testing.T) {
 
 	if acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("err = %v, want a permanent failure on the next run", err)
+	}
+}
+
+func TestSelectStep_LogsOneEvaluationPerScoredCandidate(t *testing.T) {
+	buf := logging.CaptureJSON(t, slog.LevelInfo)
+	scored := ports.AudioCandidate{
+		Source: "youtube", Title: "Song", Channel: "Artist - Topic", Duration: 200, ViewCount: 50,
+		URL: "https://youtube.com/watch?v=scored11111", Categories: []string{"Music"},
+	}
+	drm := ports.AudioCandidate{Title: "Song", URL: "sc:drm", Unplayable: ports.UnplayableDRM}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Song", Artist: "Artist", CatalogDuration: 200}}
+	searched, err := service.NewSearchStep(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{scored, drm}}).Execute(context.Background(), ac, service.PipelineStart{})
+	if err != nil {
+		t.Fatalf("search Execute() = %v", err)
+	}
+	buf.Reset()
+
+	_, err = service.NewSelectStep().Execute(context.Background(), ac, searched)
+	if err != nil {
+		t.Fatalf("Execute() = %v, want the scored candidate selected", err)
+	}
+
+	var records []map[string]any
+	for line := range strings.Lines(buf.String()) {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("unparseable log line %q: %v", line, err)
+		}
+		if record["msg"] == "candidate_evaluated" {
+			records = append(records, record)
+		}
+	}
+	if len(records) != 1 {
+		t.Fatalf("logged %d candidate_evaluated records, want 1 (the DRM candidate is refused before scoring)", len(records))
+	}
+	want := map[string]any{
+		"track_id": "t1", "source": "youtube",
+		"candidate_title": "Song", "candidate_channel": "Artist - Topic",
+		"candidate_duration": float64(200), "candidate_views": float64(50),
+		"identity_score": float64(60), "metadata_rank": float64(1),
+		"qualifier_distance": float64(0), "is_topic": true,
+		"artist_match": true, "feature_match": true, "explicit": false, "track_artist": "Artist",
+	}
+	for k, v := range want {
+		if records[0][k] != v {
+			t.Errorf("%s = %v, want %v", k, records[0][k], v)
+		}
 	}
 }
 

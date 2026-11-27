@@ -1,8 +1,8 @@
 package download
 
 import (
-	recordingresolver "altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
+	recordingresolver "altune/go-api/internal/download/service/musicbrainzmatch"
 )
 
 type RecordingResolverPorts = recordingresolver.Ports

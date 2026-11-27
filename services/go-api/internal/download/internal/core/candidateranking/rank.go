@@ -2,8 +2,8 @@ package candidateranking
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
-	"context"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -30,27 +30,55 @@ type Refusal struct {
 	Reason    string
 }
 
-func Rank(ctx context.Context, track Track, candidates []ports.AudioCandidate) (ranked []ports.AudioCandidate, refused []Refusal) {
+type Evaluation struct {
+	Candidate         ports.AudioCandidate
+	IdentityScore     float64
+	MetadataRank      float64
+	QualifierDistance int
+	IsTopic           bool
+	ArtistMatch       bool
+	FeatureMatch      bool
+}
+
+const (
+	identityScoreScale = 10
+	metadataRankScale  = 1000
+)
+
+func evaluationOf(e entry) Evaluation {
+	return Evaluation{
+		Candidate:         e.candidate,
+		IdentityScore:     math.Round(e.ident*identityScoreScale) / identityScoreScale,
+		MetadataRank:      math.Round(e.meta*metadataRankScale) / metadataRankScale,
+		QualifierDistance: e.qualDistance,
+		IsTopic:           e.uploader == ChannelTopic,
+		ArtistMatch:       e.artistMatch,
+		FeatureMatch:      e.featMatch,
+	}
+}
+
+func Rank(track Track, candidates []ports.AudioCandidate) (ranked []ports.AudioCandidate, refused []Refusal, evaluated []Evaluation) {
 	maxViews := maxViewCount(candidates)
 	var b buckets
 	for _, c := range candidates {
-		if refusal, kept := b.place(ctx, track, c, maxViews); !kept {
+		if refusal, kept := b.place(track, c, maxViews); !kept {
 			refused = append(refused, refusal)
 		}
 	}
-	return b.ranked(), refused
+	return b.ranked(), refused, b.evaluated
 }
 
 type buckets struct {
 	resolved, topic, other []entry
+	evaluated              []Evaluation
 }
 
-func (b *buckets) place(ctx context.Context, track Track, c ports.AudioCandidate, maxViews int64) (Refusal, bool) {
+func (b *buckets) place(track Track, c ports.AudioCandidate, maxViews int64) (Refusal, bool) {
 	if c.Unplayable != "" {
 		return Refusal{Candidate: c, Stage: unplayableStage(c.Unplayable), Reason: "soundcloud " + c.Unplayable}, false
 	}
 	e := score(track, c, maxViews)
-	logEvaluated(ctx, track, e)
+	b.evaluated = append(b.evaluated, evaluationOf(e))
 	if carriesUnrequestedRerecording(track.Title, c.Title) {
 		return qualifierRefusal(c, []string{"re-recorded"}), false
 	}

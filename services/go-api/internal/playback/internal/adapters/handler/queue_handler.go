@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/playback/internal/core/domain"
 	"altune/go-api/internal/playback/internal/core/ports"
-	"altune/go-api/internal/playback/internal/core/queue"
+	"altune/go-api/internal/playback/internal/service/queue"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"

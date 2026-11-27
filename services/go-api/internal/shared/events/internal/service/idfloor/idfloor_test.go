@@ -1,7 +1,7 @@
 package idfloor_test
 
 import (
-	"altune/go-api/internal/shared/events/internal/core/idfloor"
+	"altune/go-api/internal/shared/events/internal/service/idfloor"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"

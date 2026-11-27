@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/search/internal/service/useractivity"
 	apierror "altune/go-api/internal/shared/apierror"

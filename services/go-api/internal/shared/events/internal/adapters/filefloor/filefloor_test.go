@@ -2,7 +2,7 @@ package filefloor_test
 
 import (
 	"altune/go-api/internal/shared/events/internal/adapters/filefloor"
-	"altune/go-api/internal/shared/events/internal/core/idfloor"
+	"altune/go-api/internal/shared/events/internal/service/idfloor"
 	"errors"
 	"os"
 	"path/filepath"

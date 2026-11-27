@@ -3,7 +3,7 @@ package events
 import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events/internal/adapters/filefloor"
-	"altune/go-api/internal/shared/events/internal/core/idfloor"
+	"altune/go-api/internal/shared/events/internal/service/idfloor"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
