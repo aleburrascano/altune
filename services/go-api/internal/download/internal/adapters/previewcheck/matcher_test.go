@@ -119,7 +119,7 @@ func TestMatcher_SaysWhyItCouldNotCompare(t *testing.T) {
 	}
 }
 
-func TestMatcher_AThrottledDeezerIsAnError(t *testing.T) {
+func TestMatcher_AThrottledDeezerIsAnErrorAtOnce(t *testing.T) {
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
@@ -131,8 +131,8 @@ func TestMatcher_AThrottledDeezerIsAnError(t *testing.T) {
 
 	got, err := matcherFor(server, pathPrinter{}).MatchesPreview(ctx, "file.mp3", ports.PreviewTarget{ISRC: "USSM11607554"})
 
-	if !errors.Is(err, context.DeadlineExceeded) || got.Matched {
-		t.Errorf("MatchesPreview = %+v, %v; want the call to wait out the throttling until the caller's deadline ends it", got, err)
+	if !errors.Is(err, previewcheck.ErrDeezerThrottled) || got.Matched {
+		t.Errorf("MatchesPreview = %+v, %v; want ErrDeezerThrottled at once: the egress transport already retried the 429", got, err)
 	}
 	if n := hits.Load(); n != 1 {
 		t.Errorf("deezer asked %d times, want once: a throttled deezer is backed off from, not hammered", n)

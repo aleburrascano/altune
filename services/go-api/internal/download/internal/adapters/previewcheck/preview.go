@@ -201,7 +201,7 @@ func (d *Previews) track(ctx context.Context, path string) (deezerTrackBody, err
 }
 
 func (d *Previews) fingerprintPreview(ctx context.Context, previewURL string) ([]uint32, error) {
-	audio, err := d.get(ctx, previewURL, previewAudioCap, isThrottleStatus)
+	audio, err := d.get(ctx, previewURL, previewAudioCap, noQuotaBody)
 	if err != nil {
 		return nil, err
 	}
@@ -221,11 +221,11 @@ func (d *Previews) fingerprintPreview(ctx context.Context, previewURL string) ([
 	return r0, nil
 }
 
-func isThrottleStatus(status int, _ []byte) bool { return status == http.StatusTooManyRequests }
+func noQuotaBody(int, []byte) bool { return false }
 
-func isDeezerQuota(status int, body []byte) bool {
+func isDeezerQuota(_ int, body []byte) bool {
 	var parsed deezerTrackBody
-	return isThrottleStatus(status, body) || (json.Unmarshal(body, &parsed) == nil && parsed.Error != nil && parsed.Error.Code == deezerQuotaCode)
+	return json.Unmarshal(body, &parsed) == nil && parsed.Error != nil && parsed.Error.Code == deezerQuotaCode
 }
 
 func (d *Previews) get(ctx context.Context, target string, bodyCap int64, isThrottled func(int, []byte) bool) ([]byte, error) {
@@ -234,6 +234,9 @@ func (d *Previews) get(ctx context.Context, target string, bodyCap int64, isThro
 		switch {
 		case err != nil:
 			return nil, err
+		case status == http.StatusTooManyRequests:
+			d.pause.extendTo(d.now().Add(d.backoff.Ceiling(1)))
+			return nil, ErrDeezerThrottled
 		case isThrottled(status, body):
 			d.pause.extendTo(d.now().Add(d.backoff.Ceiling(attempt)))
 		case status != http.StatusOK:

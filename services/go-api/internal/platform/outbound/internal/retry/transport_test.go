@@ -160,7 +160,7 @@ func TestTransport_RetriesOn429And500(t *testing.T) {
 }
 
 func TestTransport_NoRetryOnClientErrors(t *testing.T) {
-	for _, clientError := range []int{404, 499} {
+	for _, clientError := range []int{401, 403, 404, 499} {
 		f := &fakeRT{steps: []fakeStep{{status: clientError}}}
 
 		status := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), getReq(t))
