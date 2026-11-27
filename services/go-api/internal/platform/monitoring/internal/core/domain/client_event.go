@@ -66,6 +66,8 @@ type ClientEvent struct {
 	Payload          map[string]any
 }
 
+const ClientEventRetention = 30 * 24 * time.Hour
+
 const (
 	MaxClientEventPayloadBytes = 8 << 10
 	MaxClientEventPayloadKeys  = 32

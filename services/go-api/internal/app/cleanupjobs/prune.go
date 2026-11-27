@@ -35,6 +35,20 @@ func PruneDiscoveryEvents(pruner DiscoveryEventPruner, clk clock.Func) func(cont
 	}
 }
 
+func PruneClientEvents(pruner RetentionPruner, clk clock.Func) func(context.Context) error {
+	return func(ctx context.Context) error {
+		pruned, err := pruner.Prune(ctx, clk.UTC())
+		if err != nil {
+			slog.WarnContext(ctx, "client event retention prune failed", logging.KeyError, err)
+			return fmt.Errorf("prune client events: %w", err)
+		}
+		if pruned > 0 {
+			slog.InfoContext(ctx, "client events pruned", "rows", pruned)
+		}
+		return nil
+	}
+}
+
 type RetentionPruner interface {
 	Prune(ctx context.Context, now time.Time) (int64, error)
 }

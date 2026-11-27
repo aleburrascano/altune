@@ -27,6 +27,10 @@ func (s *recordingStore) EraseRowsOfDeletedIdentities(context.Context) (int64, e
 	return 0, nil
 }
 
+func (s *recordingStore) Prune(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+
 func fixedNow() time.Time { return time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC) }
 
 func TestNewRecorder_RefusesAMissingCollaborator(t *testing.T) {

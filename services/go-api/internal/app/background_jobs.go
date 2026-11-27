@@ -55,8 +55,11 @@ func (a *application) discoveryDeletedIdentityErasers() []search.DeletedUserData
 const discographyPruneInterval = 24 * time.Hour
 
 func (a *application) startDiscographyPrune(ctx context.Context, pruner cleanupjobs.DiscoveryEventPruner) {
+	discoveryPrune := cleanupjobs.PruneDiscoveryEvents(pruner, clock.Now)
+	clientPrune := cleanupjobs.PruneClientEvents(a.clientEvents, clock.Now)
 	a.jobs.StartTicker(ctx, jobs.DiscographyEventPrune, discographyPruneInterval,
-		cleanupjobs.PruneDiscoveryEvents(pruner, clock.Now), "interval", discographyPruneInterval.String())
+		func(ctx context.Context) error { return errors.Join(discoveryPrune(ctx), clientPrune(ctx)) },
+		"interval", discographyPruneInterval.String())
 }
 
 const acquisitionPruneInterval = 24 * time.Hour
