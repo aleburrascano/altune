@@ -1,0 +1,57 @@
+{
+  "top_tracks": {
+    "provider_name": "deezer",
+    "status": "ok",
+    "items": [
+      {
+        "kind": "track",
+        "title": "Alright",
+        "subtitle": "Kendrick Lamar",
+        "image_url": "https://img.example/t1.jpg",
+        "confidence": "low",
+        "result_signature": "track|alright|kendrick lamar",
+        "favorite_key": "kendrick lamar|alright",
+        "sources": [
+          {
+            "provider": "deezer",
+            "external_id": "t1",
+            "url": "https://deezer.com/t1"
+          }
+        ],
+        "extras": {
+          "duration_seconds": 215,
+          "explicit": false
+        }
+      }
+    ],
+    "partial": false
+  },
+  "albums": {
+    "provider_name": "deezer",
+    "status": "ok",
+    "items": [
+      {
+        "kind": "album",
+        "title": "DAMN.",
+        "subtitle": "Kendrick Lamar",
+        "image_url": "https://img.example/a1.jpg",
+        "confidence": "low",
+        "result_signature": "album|damn|kendrick lamar",
+        "favorite_key": "kendrick lamar|damn",
+        "sources": [
+          {
+            "provider": "deezer",
+            "external_id": "a1",
+            "url": "https://deezer.com/a1"
+          }
+        ],
+        "extras": {
+          "duration_seconds": 215,
+          "explicit": false
+        }
+      }
+    ],
+    "partial": false
+  }
+}
+

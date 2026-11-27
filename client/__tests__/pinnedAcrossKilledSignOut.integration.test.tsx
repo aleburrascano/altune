@@ -107,7 +107,7 @@ describe('pinned downloads across a killed sign-out', () => {
 
       expect(second.pinned.usePinnedStore.getState().entries).toEqual({});
       expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
-      expect(second.pinned.pinnedByteTotal()).toBe(0);
+      expect(second.pinned.pinnedBytes()).toBe(0);
       expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
       expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({
         schemaVersion: 1,

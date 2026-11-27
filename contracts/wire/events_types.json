@@ -1,0 +1,18 @@
+[
+  "playlist_created",
+  "playlist_deleted",
+  "playlist_renamed",
+  "playlist_reordered",
+  "resync",
+  "track_acquisition_completed",
+  "track_acquisition_failed",
+  "track_acquisition_progress",
+  "track_acquisition_started",
+  "track_added_to_library",
+  "track_added_to_playlist",
+  "track_deleted",
+  "track_removed_from_playlist",
+  "track_replace_failed",
+  "tracks_added_to_playlist",
+  "tracks_removed_from_playlist"
+]

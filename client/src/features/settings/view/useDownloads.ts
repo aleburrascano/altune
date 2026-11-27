@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 
-import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline';
+import { pinnedBytes, usePinnedStore, type PinnedEntry } from '@shared/offline';
 import { downloadStats, type DownloadStats } from '@features/settings/core/downloadStatsModel';
 import type { RemoveDownloads } from '@features/settings/core/removeDownloads';
 
 function measureAfter(_entries: Record<string, PinnedEntry>): number {
-  return pinnedByteTotal();
+  return pinnedBytes();
 }
 
 export function useDownloadStats(): DownloadStats {

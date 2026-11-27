@@ -1,0 +1,23 @@
+{
+  "id": "a5d95c5a-0a90-488d-a76b-cf6d580f0665",
+  "title": "Song",
+  "artist": "Artist",
+  "album": "Album",
+  "duration_seconds": 215.5,
+  "added_at": "2026-11-27T00:30:28.973058372Z",
+  "acquisition_status": "pending",
+  "artwork_url": "https://example.com/art.jpg",
+  "year": 2020,
+  "genre": "Rock",
+  "track_number": 3,
+  "album_artist": "Artist",
+  "isrc": "USRC17607839",
+  "featured_artists": [
+    {
+      "name": "Guest",
+      "mbid": "5b11f4ce-a62d-471e-81fc-a69a8278c7da",
+      "deezer_id": 42
+    }
+  ]
+}
+

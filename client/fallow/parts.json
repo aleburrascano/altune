@@ -3,7 +3,7 @@
   "extends": ["../.fallowrc.json"],
   "boundaries": {
     "zones": [
-      { "name": "door", "patterns": ["src/features/*/index.ts", "src/shared/*/index.ts"] },
+      { "name": "door", "patterns": ["src/features/*/index.ts", "src/shared/*/index.ts"], "publicFiles": ["src/features/*/index.ts", "src/shared/*/index.ts"] },
       { "name": "core", "patterns": ["src/features/*/core/**", "src/shared/*/core/**"] },
       { "name": "ports", "patterns": ["src/features/*/ports/**", "src/shared/*/ports/**"] },
       { "name": "shell", "patterns": ["src/features/*/shell/**", "src/shared/*/shell/**"] },

@@ -3,9 +3,9 @@
   "extends": ["../.fallowrc.json"],
   "boundaries": {
     "zones": [
-      { "name": "featureDoors", "patterns": ["src/features/*/index.ts"] },
-      { "name": "sharedDoors", "patterns": ["src/shared/*/index.ts"] },
-      { "name": "mobileDoor", "patterns": ["src/mobile/index.ts"] },
+      { "name": "featureDoors", "patterns": ["src/features/*/index.ts"], "publicFiles": ["src/features/*/index.ts"] },
+      { "name": "sharedDoors", "patterns": ["src/shared/*/index.ts"], "publicFiles": ["src/shared/*/index.ts"] },
+      { "name": "mobileDoor", "patterns": ["src/mobile/index.ts"], "publicFiles": ["src/mobile/index.ts"] },
       { "name": "features", "patterns": ["src/features/**"], "autoDiscover": ["src/features"] },
       { "name": "shared", "patterns": ["src/shared/**"], "autoDiscover": ["src/shared"] },
       { "name": "mobile", "patterns": ["src/mobile/**"] },

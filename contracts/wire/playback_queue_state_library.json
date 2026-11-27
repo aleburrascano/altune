@@ -1,0 +1,27 @@
+{
+  "track_ids": [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002"
+  ],
+  "current_index": 1,
+  "position_ms": 42000,
+  "shuffled": true,
+  "repeat_mode": "off",
+  "source_id": "library",
+  "source": {
+    "kind": "library"
+  },
+  "natural_order": [
+    "00000000-0000-4000-8000-000000000002",
+    "00000000-0000-4000-8000-000000000001"
+  ],
+  "current_track": {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "title": "Paranoid Android",
+    "artist": "Radiohead",
+    "artwork_url": "https://cdn.example.com/art/ok-computer.jpg",
+    "duration_seconds": 233.5,
+    "acquisition_status": "ready"
+  }
+}
+

@@ -583,8 +583,8 @@ func TestAcquisitionSLOTreatsACounterResetAsFreshCounts(t *testing.T) {
 
 	slo := snapData(t, b.Snapshot()).SLOs[0]
 
-	if slo.Good != 10 || slo.Total != 10 || !slo.Met {
-		t.Fatalf("SLO = %+v, want the 10 completions since the restart, all good", slo)
+	if slo.Good != 10 || slo.Total != 10 || slo.Measured {
+		t.Fatalf("SLO = %+v, want the 10 completions since the restart tallied and still below the minimum count", slo)
 	}
 }
 

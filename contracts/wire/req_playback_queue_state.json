@@ -1,0 +1,19 @@
+{
+  "track_ids": [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002"
+  ],
+  "current_index": 1,
+  "position_ms": 42000,
+  "shuffled": true,
+  "repeat_mode": "all",
+  "source": {
+    "kind": "playlist",
+    "playlist_id": "5d1c3f0e-6f4e-4f55-9a4e-0d6a2c0c9b11",
+    "name": "Road trip"
+  },
+  "natural_order": [
+    "00000000-0000-4000-8000-000000000002",
+    "00000000-0000-4000-8000-000000000001"
+  ]
+}

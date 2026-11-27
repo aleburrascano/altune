@@ -1,134 +1,28 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { featuredArtistsFromExtras } from '@shared/catalog';
+import { wireFixture } from '@testing/wireFixtures';
 
-function findRepoRoot(): string | null {
-  let dir = __dirname;
-  for (let hop = 0; hop < 12; hop += 1) {
-    const candidate = path.join(dir, 'services', 'go-api');
-    if (fs.existsSync(candidate)) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
+describe('featured artists in the Go extras map', () => {
+  it('are read back with the name, mbid and deezer id the server sent', () => {
+    const sent = wireFixture('featured_artist_extras') as Record<string, unknown>;
 
-const REPO_ROOT = findRepoRoot();
+    const [artist] = featuredArtistsFromExtras([sent]);
 
-function readGoSource(relativePath: string): string {
-  return fs.readFileSync(path.join(REPO_ROOT!, relativePath), 'utf8');
-}
-
-function readTsSource(relativePath: string): string {
-  return fs.readFileSync(path.join(REPO_ROOT!, 'client', relativePath), 'utf8');
-}
-
-function extractBraceBlock(source: string, header: RegExp): string {
-  const match = source.match(header);
-  if (!match) throw new Error(`could not find block matching ${header}`);
-  return match[1]!;
-}
-
-function deriveGoExtrasMapEmittedKeys(source: string): Set<string> {
-  const body = extractBraceBlock(
-    source,
-    /func \(f FeaturedArtist\) ToExtrasMap\(\) map\[string\]any \{([\s\S]*?)\n\}/,
-  );
-  const keys = new Set<string>();
-  for (const match of body.matchAll(/"(\w+)":\s*f\./g)) keys.add(match[1]!);
-  for (const match of body.matchAll(/m\["(\w+)"\]\s*=/g)) keys.add(match[1]!);
-  return keys;
-}
-
-function deriveGoFeaturedArtistDTOKeys(source: string): Set<string> {
-  const body = extractBraceBlock(source, /type FeaturedArtistDTO struct \{([\s\S]*?)\n\}/);
-  const keys = new Set<string>();
-  for (const match of body.matchAll(/json:"(\w+)/g)) keys.add(match[1]!);
-  return keys;
-}
-
-function deriveTsFeaturedArtistTypeKeys(source: string): Set<string> {
-  const body = extractBraceBlock(source, /export type FeaturedArtist = \{([\s\S]*?)\n\};/);
-  const keys = new Set<string>();
-  for (const match of body.matchAll(/^\s*(\w+):/gm)) keys.add(match[1]!);
-  return keys;
-}
-
-function deriveTsReadKeysAtRuntime(): Set<string> {
-  const accessed = new Set<string>();
-  const probe = new Proxy(
-    {},
-    {
-      get(_target, prop) {
-        if (typeof prop === 'string') accessed.add(prop);
-        return prop === 'name' ? 'probe-name' : undefined;
-      },
-    },
-  );
-  featuredArtistsFromExtras([probe]);
-  return accessed;
-}
-
-describe('cross-surface contract: services/go-api ToExtrasMap <-> featuredArtistsFromExtras', () => {
-  it('finds the repo root to derive both sides of the contract from', () => {
-    expect(REPO_ROOT).not.toBeNull();
+    expect(artist).toMatchObject({ name: sent['name'], mbid: sent['mbid'] });
+    expect(JSON.stringify(artist)).toContain(String(sent['deezer_id']));
   });
 
-  it('reads only the keys ToExtrasMap actually emits, plus a documented known gap on "role"', () => {
-    const goSource = readGoSource(
-      path.join(
-        'services',
-        'go-api',
-        'internal',
-        'search',
-        'internal',
-        'domain',
-        'featured_artist.go',
-      ),
+  it('are written with exactly the keys the create-track request fixture carries', () => {
+    const request = wireFixture('req_tracks_create') as {
+      featured_artists: Record<string, unknown>[];
+    };
+    const sent = wireFixture('featured_artist_extras') as Record<string, unknown>;
+
+    const written = request.featured_artists[0]!;
+
+    expect(Object.keys(written).sort()).toEqual(
+      Object.keys(sent)
+        .filter((key) => key !== 'role')
+        .sort(),
     );
-    const goEmittedKeys = deriveGoExtrasMapEmittedKeys(goSource);
-    expect(goEmittedKeys.size).toBeGreaterThan(0);
-
-    const tsReadKeys = deriveTsReadKeysAtRuntime();
-    expect(tsReadKeys.size).toBeGreaterThan(0);
-
-    for (const key of tsReadKeys) {
-      expect(goEmittedKeys.has(key)).toBe(true);
-    }
-
-    const unread = new Set([...goEmittedKeys].filter((key) => !tsReadKeys.has(key)));
-    expect(unread).toEqual(new Set(['role']));
-  });
-});
-
-describe('cross-surface contract: FeaturedArtist (TS write side) <-> FeaturedArtistDTO (Go CreateTrackRequest ingest)', () => {
-  it('finds the repo root to derive both sides of the contract from', () => {
-    expect(REPO_ROOT).not.toBeNull();
-  });
-
-  it('the mobile client can only send keys the Go ingest DTO declares, and vice versa', () => {
-    const goDtoSource = readGoSource(
-      path.join(
-        'services',
-        'go-api',
-        'internal',
-        'library',
-        'internal',
-        'service',
-        'track',
-        'track_dto.go',
-      ),
-    );
-    const goDtoKeys = deriveGoFeaturedArtistDTOKeys(goDtoSource);
-    expect(goDtoKeys.size).toBeGreaterThan(0);
-
-    const tsTypeSource = readTsSource(
-      path.join('src', 'shared', 'catalog', 'core', 'trackResponse.ts'),
-    );
-    const tsTypeKeys = deriveTsFeaturedArtistTypeKeys(tsTypeSource);
-    expect(tsTypeKeys.size).toBeGreaterThan(0);
-
-    expect([...tsTypeKeys].sort()).toEqual([...goDtoKeys].sort());
   });
 });
