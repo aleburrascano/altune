@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"sync/atomic"
@@ -18,4 +19,14 @@ func (f *FakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.Resul
 		return "", nil, false
 	}
 	return f.Mbid, f.Xref, true
+}
+
+func (f *FakeIdentityStore) LookupByProviderIDs(ctx context.Context, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	hits := map[ports.IdentityRef]ports.IdentityHit{}
+	for _, ref := range refs {
+		if mbid, xref, ok := f.LookupByProviderID(ctx, ref.Kind, ref.Provider, ref.ExternalID); ok {
+			hits[ref] = ports.IdentityHit{MBID: mbid, Xref: xref}
+		}
+	}
+	return hits
 }

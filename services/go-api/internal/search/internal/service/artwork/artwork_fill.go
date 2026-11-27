@@ -31,7 +31,7 @@ var ErrCollaboratorRequired = errors.New("artwork filler needs every collaborato
 type ArtworkFiller struct {
 	resolver      ports.TaggingArtworkLookup
 	cache         ports.ArtworkCache
-	identityStore identityLookup
+	identityStore ports.IdentityStore
 	mbidIndex     ports.MBIDIndex
 	bg            *background.Tracker
 	live          liveStage
@@ -59,10 +59,6 @@ type NoFill struct{}
 
 func (NoFill) Fill(_ context.Context, results []domain.SearchResult) []domain.SearchResult {
 	return results
-}
-
-type identityLookup interface {
-	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[domain.ProviderKey]string, ok bool)
 }
 
 func NewArtworkFiller(
@@ -162,16 +158,12 @@ func forEachBounded(ctx context.Context, n int, titleOf func(i int) string, work
 }
 
 func (a *ArtworkFiller) withPrefetchedIdentities(ctx context.Context, results []domain.SearchResult) *ArtworkFiller {
-	batch, ok := a.identityStore.(ports.BatchIdentityLookup)
-	if !ok {
-		return a
-	}
 	refs := durableIdentityRefs(results)
 	if len(refs) == 0 {
 		return a
 	}
 	scoped := *a
-	scoped.identityStore = prefetchedIdentities(batch.LookupByProviderIDs(ctx, refs))
+	scoped.identityStore = prefetchedIdentities(a.identityStore.LookupByProviderIDs(ctx, refs))
 	return &scoped
 }
 
@@ -200,6 +192,16 @@ type prefetchedIdentities map[ports.IdentityRef]ports.IdentityHit
 func (p prefetchedIdentities) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	hit, ok := p[ports.IdentityRef{Kind: kind, Provider: provider, ExternalID: externalID}]
 	return hit.MBID, maps.Clone(hit.Xref), ok
+}
+
+func (p prefetchedIdentities) LookupByProviderIDs(_ context.Context, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	hits := map[ports.IdentityRef]ports.IdentityHit{}
+	for _, ref := range refs {
+		if hit, ok := p[ref]; ok {
+			hits[ref] = hit
+		}
+	}
+	return hits
 }
 
 type liveArtworkJob struct {

@@ -28,6 +28,8 @@ func (r *ArtworkLookup) Resolve(_ context.Context, _ domain.ResultKind, _, _, _ 
 	return r.URL, r.Err
 }
 
+func (r *ArtworkLookup) ArtworkSource() domain.ProviderKey { return "" }
+
 func (r *ArtworkLookup) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
 	atomic.AddInt32(&r.calls, 1)
 	return r.URL, "", r.Err

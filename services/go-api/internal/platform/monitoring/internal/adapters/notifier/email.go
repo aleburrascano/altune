@@ -43,6 +43,8 @@ type resendError struct {
 	Message string `json:"message"`
 }
 
+func (n *EmailNotifier) Silent() bool { return false }
+
 func (n *EmailNotifier) Notify(ctx context.Context, a domain.Alert) error {
 	req, err := n.buildRequest(ctx, a)
 	if err != nil {

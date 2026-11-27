@@ -16,9 +16,6 @@ func IsUnverifiedArtworkMiss(url string, err error) bool {
 
 type ArtworkLookup interface {
 	Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error)
-}
-
-type SourcedArtworkLookup interface {
 	ArtworkSource() domain.ProviderKey
 }
 
@@ -42,6 +39,7 @@ func (id ArtworkIdentity) HasLinks() bool {
 
 type IdentityArtworkLookup interface {
 	ResolveByIdentity(ctx context.Context, kind domain.ResultKind, id ArtworkIdentity) (string, error)
+	ArtworkSource() domain.ProviderKey
 }
 
 type ArtworkConfidence int

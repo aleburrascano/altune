@@ -39,6 +39,8 @@ func (f *fakeElection) Start(context.Context) {}
 
 func (f *fakeElection) Await(context.Context) bool { return true }
 
+func (f *fakeElection) Counters() leader.Counters { return leader.Counters{} }
+
 func (f *fakeElection) LeaderContext(parent context.Context) (context.Context, context.CancelFunc, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

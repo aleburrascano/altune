@@ -70,7 +70,7 @@ func newArtistService(t *providerTable, s connections.Stores, breaker *providerg
 	if err != nil {
 		return nil, fmt.Errorf("build the discography telemetry: %w", err)
 	}
-	r0, err := artistpage.NewGetArtistContentService(t.artistProviders(), identity, anchoring, telemetry, breaker)
+	r0, err := artistpage.NewGetArtistContentService(t.artistProviders(), t.albumProviders(), identity, anchoring, telemetry, breaker)
 	if err != nil {
 		return r0, fmt.Errorf("new get artist content service: %w", err)
 	}

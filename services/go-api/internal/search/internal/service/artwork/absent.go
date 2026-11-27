@@ -41,3 +41,7 @@ type NoIdentities struct{}
 func (NoIdentities) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
 	return "", nil, false
 }
+
+func (NoIdentities) LookupByProviderIDs(context.Context, []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	return nil
+}

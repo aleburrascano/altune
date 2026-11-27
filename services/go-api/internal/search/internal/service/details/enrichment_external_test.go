@@ -81,7 +81,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 	}))
 	defer srv.Close()
 	caa := coverartarchive.NewCoverArtArchiveResolver(serverClient(srv.URL, false))
-	chain := artworkfallback.NewChainedArtworkLookup(caa, coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
+	chain := artworkfallback.NewChainedArtworkLookup(caa).WithIdentityLookups(coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
 	enrichment := domain.EmptyEnrichment()
 	enrichment.MBID, enrichment.Genres, enrichment.Year = "mbid-1", []string{"hip hop"}, 2017
 	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), details.NoMBIDIndex{})
@@ -104,7 +104,8 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 		_, _ = w.Write([]byte(`{"id": 38, "images": [{"type": "primary", "uri": "https://img/real-cover.jpg"}]}`))
 	}))
 	defer srv.Close()
-	chain := artworkfallback.NewChainedArtworkLookup(discogs.NewDiscogsAdapter(serverClient(srv.URL, true), "test-token", "altune-test/1.0"))
+	discogsLookup := discogs.NewDiscogsAdapter(serverClient(srv.URL, true), "test-token", "altune-test/1.0")
+	chain := artworkfallback.NewChainedArtworkLookup(discogsLookup).WithIdentityLookups(discogsLookup)
 	enrichment := domain.EmptyEnrichment()
 	enrichment.MBID = "mbid-artist-1"
 	enrichment.ExternalIDs = map[domain.ProviderKey]string{"discogs": "38"}

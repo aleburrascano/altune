@@ -21,6 +21,7 @@ type Election interface {
 	Await(context.Context) bool
 	LeaderContext(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
 	Shutdown(context.Context)
+	Counters() leader.Counters
 }
 
 func NewElection(locks leader.LockStore) (*leader.Election, error) {
@@ -113,10 +114,10 @@ func (r *Runner) Election() Election {
 }
 
 func (r *Runner) LeaderCounters() leader.Counters {
-	if e, ok := r.election.(interface{ Counters() leader.Counters }); ok {
-		return e.Counters()
+	if r.election == nil {
+		return leader.Counters{}
 	}
-	return leader.Counters{}
+	return r.election.Counters()
 }
 
 func (r *Runner) LeaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {

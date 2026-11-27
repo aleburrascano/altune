@@ -180,6 +180,14 @@ func (s stubIdentityStore) LookupByProviderID(context.Context, search.ResultKind
 	return "mbid-artist", s.xref, true
 }
 
+func (s stubIdentityStore) LookupByProviderIDs(_ context.Context, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	hits := map[ports.IdentityRef]ports.IdentityHit{}
+	for _, ref := range refs {
+		hits[ref] = ports.IdentityHit{MBID: "mbid-artist", Xref: s.xref}
+	}
+	return hits
+}
+
 type partialContentProvider struct {
 	provider search.ProviderName
 	down     bool

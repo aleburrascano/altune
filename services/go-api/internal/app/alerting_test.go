@@ -3,6 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
@@ -24,6 +25,8 @@ type alwaysLeader struct{}
 func (alwaysLeader) Start(context.Context)      {}
 func (alwaysLeader) Await(context.Context) bool { return true }
 func (alwaysLeader) Shutdown(context.Context)   {}
+
+func (alwaysLeader) Counters() leader.Counters { return leader.Counters{} }
 
 func (alwaysLeader) LeaderContext(parent context.Context) (context.Context, context.CancelFunc, bool) {
 	ctx, cancel := context.WithCancel(parent)

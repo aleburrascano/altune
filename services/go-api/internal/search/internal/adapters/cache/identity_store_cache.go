@@ -51,6 +51,10 @@ func (s *RedisIdentityStore) LookupByProviderID(
 	return mbid, xref, true
 }
 
+func (s *RedisIdentityStore) LookupByProviderIDs(ctx context.Context, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	return s.inner.LookupByProviderIDs(ctx, refs)
+}
+
 func (s *RedisIdentityStore) backfill(ctx context.Context, key string, entry identityEntry) {
 	if s.disabled() {
 		return

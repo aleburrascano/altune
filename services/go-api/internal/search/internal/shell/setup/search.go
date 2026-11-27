@@ -61,7 +61,8 @@ func newRankingOnlySearchService(ctx context.Context, w wiring) (*query.Service,
 
 func (w wiring) namedSearchService(ctx context.Context, message string, p *searchPlan, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
 	w.deps.Logger.InfoContext(ctx, message, "options", strings.Join(p.chosen, ","))
-	svc, err := query.NewService(w.deps.Tracker, w.table.searchProviders(), breaker, p.collaborators, p.options...)
+	options := append([]query.Option{query.WithProviderTimeouts(w.table.searchTimeouts())}, p.options...)
+	svc, err := query.NewService(w.deps.Tracker, w.table.searchProviders(), breaker, p.collaborators, options...)
 	if err != nil {
 		return nil, fmt.Errorf("build %s: %w", message, err)
 	}

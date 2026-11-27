@@ -108,7 +108,7 @@ func (s *GetArtistContentService) tracklistSource(album domain.SearchResult) (do
 		if source.ExternalID == "" {
 			continue
 		}
-		if lister, ok := s.providers[source.Provider].(ports.AlbumContentProvider); ok {
+		if lister, ok := s.tracklists[source.Provider]; ok {
 			return source, lister, true
 		}
 	}

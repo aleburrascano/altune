@@ -24,7 +24,7 @@ func NewSpotifyArtworkLookup(client *http.Client) *SpotifyArtworkLookup {
 var (
 	_ ports.ArtworkLookup         = (*SpotifyArtworkLookup)(nil)
 	_ ports.IdentityArtworkLookup = (*SpotifyArtworkLookup)(nil)
-	_ ports.SourcedArtworkLookup  = (*SpotifyArtworkLookup)(nil)
+	_ ports.ArtworkLookup         = (*SpotifyArtworkLookup)(nil)
 )
 
 func (*SpotifyArtworkLookup) ArtworkSource() domain.ProviderKey { return domain.ProviderKeySpotify }

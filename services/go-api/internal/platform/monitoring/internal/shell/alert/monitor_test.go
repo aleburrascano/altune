@@ -26,6 +26,8 @@ type stubNotifier struct {
 	err      error
 }
 
+func (s *stubNotifier) Silent() bool { return false }
+
 func (s *stubNotifier) Notify(_ context.Context, a monitoring.Alert) error {
 	s.calls++
 	s.messages = append(s.messages, a.Message)
@@ -36,6 +38,8 @@ type flakyNotifier struct {
 	calls     int
 	failCalls int
 }
+
+func (f *flakyNotifier) Silent() bool { return false }
 
 func (f *flakyNotifier) Notify(context.Context, monitoring.Alert) error {
 	f.calls++
@@ -419,6 +423,8 @@ type pageLog struct {
 	pages    []monitoring.Alert
 	failures int
 }
+
+func (l *pageLog) Silent() bool { return false }
 
 func (l *pageLog) Notify(_ context.Context, a monitoring.Alert) error {
 	l.pages = append(l.pages, a)
