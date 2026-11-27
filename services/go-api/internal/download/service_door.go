@@ -32,7 +32,6 @@ var (
 	WithProvenMaxBitErrorRate             = service.WithProvenMaxBitErrorRate
 	WithSchedulerPaused                   = service.WithSchedulerPaused
 	WithSupersededAudioGrace              = service.WithSupersededAudioGrace
-	WithVerificationStatus                = service.WithVerificationStatus
 )
 
 type SchedulerPorts = service.SchedulerPorts

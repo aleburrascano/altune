@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -74,7 +75,7 @@ type BackgroundAcquisitionScheduler struct {
 	rejected      atomic.Uint64
 
 	verification        ports.Verification
-	verificationGiven   bool
+	unit                random.Unit
 	skipCount           func() uint64
 	fingerprintVerified func() bool
 	log                 *jobLog
@@ -141,6 +142,8 @@ type SchedulerPorts struct {
 	FingerprintVerified func() bool
 	Timer               clock.TimerFunc
 	Ticker              clock.TickerFunc
+	Unit                random.Unit
+	Verification        ports.Verification
 }
 
 func (p SchedulerPorts) validate(owner string) error {
@@ -154,6 +157,7 @@ func (p SchedulerPorts) validate(owner string) error {
 		missingPort(owner, "FingerprintVerified", p.FingerprintVerified),
 		missingPort(owner, "Timer", p.Timer),
 		missingPort(owner, "Ticker", p.Ticker),
+		missingPort(owner, "Unit", p.Unit),
 	)
 }
 
@@ -189,6 +193,8 @@ func NewBackgroundAcquisitionScheduler(
 		events:              wiring.Events,
 		timer:               wiring.Timer,
 		ticker:              wiring.Ticker,
+		unit:                wiring.Unit,
+		verification:        wiring.Verification,
 		notifier:            wiring.Notifier,
 		outcomes:            wiring.Outcomes,
 		skipCount:           wiring.VerifySkips,
@@ -201,9 +207,7 @@ func NewBackgroundAcquisitionScheduler(
 	for _, opt := range opts {
 		opt(s)
 	}
-	if s.verificationGiven {
-		logVerification(ctx, s.verification)
-	}
+	logVerification(ctx, s.verification)
 	s.queue = wiring.Queue(s.wake, s.now)
 	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
@@ -564,7 +568,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(ctx context.Context, job port
 		return
 	}
 	if errors.Is(jobErr, ErrAcquisitionRetryable) {
-		s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, retryBackoff(job.Run)))
+		s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, retryBackoff(job.Run, s.unit)))
 		return
 	}
 	s.logQueueOutcome(ctx, "settle", job.TrackID, s.settleWithin(ctx, job))
@@ -576,7 +580,7 @@ func (s *BackgroundAcquisitionScheduler) releasePanickedJob(ctx context.Context,
 		s.logQueueOutcome(ctx, "settle", job.TrackID, s.settleWithin(ctx, job))
 		return
 	}
-	s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, retryBackoff(job.Run)))
+	s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, retryBackoff(job.Run, s.unit)))
 }
 
 func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(ctx context.Context, job ports.Job) {

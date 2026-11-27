@@ -118,6 +118,8 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 		FingerprintVerified: lookups.Verified,
 		Timer:               clock.NewTimer,
 		Ticker:              clock.NewTicker,
+		Unit:                random.Real,
+		Verification:        d.Verification,
 	}
 	if d.Pool != nil {
 		wiring.Queue = download.QueueOf(download.MustNewPostgresJobQueue(d.Pool, d.Ledger))
@@ -131,7 +133,6 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 func schedulerOptions(d Deps) []func(*download.BackgroundAcquisitionScheduler) {
 	return []func(*download.BackgroundAcquisitionScheduler){
 		download.WithSchedulerPaused(d.Config.AcquisitionPaused),
-		download.WithVerificationStatus(d.Verification),
 		download.WithDrainBudget(time.Duration(d.Config.AcquisitionDrainBudgetSeconds) * time.Second),
 	}
 }
