@@ -3,7 +3,6 @@ package replacement
 import (
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -31,7 +30,7 @@ type Attempt struct {
 }
 
 type Replacer interface {
-	ReplaceGated(ctx context.Context, job jobrun.Job, track *ports.TrackSnapshot, gate ReplacementGate) (Attempt, error)
+	ReplaceGated(ctx context.Context, job ports.AcquisitionJob, track *ports.TrackSnapshot, gate ReplacementGate) (Attempt, error)
 }
 
 type Runner struct {
@@ -93,7 +92,7 @@ func outcomeOf(attempt Attempt, err error) outcome {
 
 func (o outcome) countsAsTry() bool { return o == keptCurrent || o == noBetterSource }
 
-func (r *Runner) ExecuteUpgrade(ctx context.Context, job jobrun.Job) error {
+func (r *Runner) ExecuteUpgrade(ctx context.Context, job ports.AcquisitionJob) error {
 	track, err := r.ledger.Get(ctx, job.TrackID, job.UserID)
 	if errors.Is(err, ports.ErrTrackNotFound) {
 		slog.WarnContext(ctx, "acquisition.upgrade_track_not_found", logging.KeyTrackID, job.TrackID.String())

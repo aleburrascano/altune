@@ -4,7 +4,6 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
@@ -25,11 +24,11 @@ type outcomeReporter struct {
 	events events.Publisher
 }
 
-type retryPolicy func(job jobrun.Job, err error) bool
+type retryPolicy func(job ports.AcquisitionJob, err error) bool
 
-func neverRetry(jobrun.Job, error) bool { return false }
+func neverRetry(ports.AcquisitionJob, error) bool { return false }
 
-func WillRetry(job jobrun.Job, err error) bool {
+func WillRetry(job ports.AcquisitionJob, err error) bool {
 	return job.Attempt > 0 && job.Attempt < MaxAcquisitionAttempts && isTransientFailure(err)
 }
 
@@ -51,7 +50,7 @@ func (o outcomeReporter) settleReplace(ctx context.Context, err error, retry ret
 	})
 }
 
-func (o outcomeReporter) settle(ctx context.Context, job jobrun.Job, err error, retry retryPolicy, reportTerminal func(error) error) error {
+func (o outcomeReporter) settle(ctx context.Context, job ports.AcquisitionJob, err error, retry retryPolicy, reportTerminal func(error) error) error {
 	timedOut := ownBudgetSpent(ctx)
 	if errors.Is(err, acqdomain.ErrLeaseLost) || (!timedOut && job.CancelledByScheduler(ctx)) {
 		return o.reportSchedulerCancelledWithoutMarkingFailed(ctx, job.UserID, job.TrackID, err)
@@ -95,7 +94,7 @@ func (o outcomeReporter) reportRetryableFailure(ctx context.Context, userId ids.
 	return fmt.Errorf("%w: %w", ErrAcquisitionRetryable, err)
 }
 
-func (o outcomeReporter) reportAcquireFailure(ctx context.Context, job jobrun.Job, err error, ac *AcquisitionContext) error {
+func (o outcomeReporter) reportAcquireFailure(ctx context.Context, job ports.AcquisitionJob, err error, ac *AcquisitionContext) error {
 	userId, trackId := job.UserID, job.TrackID
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		logging.KeyTrackID, trackId.String(),
@@ -160,7 +159,7 @@ func (o outcomeReporter) failTrack(ctx context.Context, claim ports.ClaimNumber,
 	return nil
 }
 
-func (o outcomeReporter) refuseQueued(ctx context.Context, job jobrun.Job) {
+func (o outcomeReporter) refuseQueued(ctx context.Context, job ports.AcquisitionJob) {
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
 	if !o.markFailed(settleCtx, job.Claim, job.TrackID, job.UserID, string(downloadfailure.FailureAcquisitionRefused)) {

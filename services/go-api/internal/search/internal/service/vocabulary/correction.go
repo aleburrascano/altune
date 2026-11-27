@@ -170,4 +170,3 @@ func logCandidate(ctx context.Context, queryNorm string, c domain.SpellingHintsE
 		"score", c.MatchScore,
 	)
 }
-

@@ -15,7 +15,7 @@ type Storage interface {
 	persist(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time)
 	list(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error)
 	lookup(ctx context.Context, s *Service, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error)
-	warm(s *Service, artists []ArtistToRefresh)
+	warm(ctx context.Context, s *Service, artists []ArtistToRefresh)
 	due(ctx context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error)
 	search(ctx context.Context, query string) ([]ports.UnreleasedHit, error)
 }
@@ -62,7 +62,7 @@ func (c cachedStorage) lookup(ctx context.Context, s *Service, provider domain.P
 	return s.awaitJob(ctx, j)
 }
 
-func (cachedStorage) warm(*Service, []ArtistToRefresh) {}
+func (cachedStorage) warm(context.Context, *Service, []ArtistToRefresh) {}
 
 func (cachedStorage) due(context.Context, time.Time, int) ([]ports.UnreleasedDueArtist, error) {
 	return nil, nil
@@ -119,11 +119,11 @@ func (st storedStorage) storedSongsOrNotBuilt(ctx context.Context, key ports.Unr
 	return songs, version, built
 }
 
-func (st storedStorage) warm(s *Service, artists []ArtistToRefresh) {
+func (st storedStorage) warm(ctx context.Context, s *Service, artists []ArtistToRefresh) {
 	if len(artists) == 0 {
 		return
 	}
-	s.jobs.Track(func() { s.runWarm(st.store, artists) })
+	s.jobs.Track(func() { s.runWarm(ctx, st.store, artists) })
 }
 
 func (st storedStorage) due(ctx context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error) {

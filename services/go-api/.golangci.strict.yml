@@ -43,6 +43,7 @@ linters:
     - depguard
     - importas
     - contextcheck
+    - containedctx
     - mnd
 
   settings:
@@ -51,10 +52,6 @@ linters:
       ignored-numbers: ["0", "1", "2", "10", "100", "1000"]
       ignored-functions:
         - '^os\.(WriteFile|MkdirAll|Mkdir|OpenFile|Exit)$'
-        - '^make$'
-        - '^strings\.(Repeat|SplitN)$'
-        - '^time\.Unix$'
-        - '^math\.(Pow|Round|Max)$'
       ignored-files:
         - '(^|/)[a-z]*test/'
     importas:

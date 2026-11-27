@@ -10,7 +10,6 @@ import (
 var errCircuitOpen = errors.New("provider circuit open")
 
 type BreakerCall struct {
-	ctx      context.Context
 	cb       *CircuitBreaker
 	provider domain.ProviderName
 	adm      Admission
@@ -21,7 +20,7 @@ func AdmitProviderCall(ctx context.Context, cb *CircuitBreaker, provider domain.
 	if !ok {
 		return BreakerCall{}, false
 	}
-	return BreakerCall{ctx: ctx, cb: cb, provider: provider, adm: adm}, true
+	return BreakerCall{cb: cb, provider: provider, adm: adm}, true
 }
 
 func (c BreakerCall) settle(callerCtx context.Context, err error) {
@@ -39,11 +38,11 @@ func (c BreakerCall) Release() {
 	c.cb.ReleaseProbe(c.provider, c.adm)
 }
 
-func (c BreakerCall) failPanicked(settled *bool) {
+func (c BreakerCall) failPanicked(ctx context.Context, settled *bool) {
 	if *settled {
 		return
 	}
-	c.cb.RecordFailure(c.ctx, c.provider, c.adm)
+	c.cb.RecordFailure(ctx, c.provider, c.adm)
 }
 
 func GuardedFetch[T any](
@@ -67,7 +66,7 @@ func RunAdmitted[T any](
 	call func() (T, error),
 ) (T, error) {
 	settled := false
-	defer c.failPanicked(&settled)
+	defer c.failPanicked(callerCtx, &settled)
 	res, err := call()
 	settled = true
 	c.settle(callerCtx, outcome(err))

@@ -16,7 +16,7 @@ func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 	var jobs background.Tracker
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
-	svc.Warm([]unreleased.ArtistToRefresh{
+	svc.Warm(t.Context(), []unreleased.ArtistToRefresh{
 		{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"},
 		{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"},
 		{Provider: search.ProviderDeezer, ExternalID: "5", Name: "  "},
@@ -34,7 +34,7 @@ func TestService_Warm_StoreErrorIsOnlyLogged(t *testing.T) {
 	var jobs background.Tracker
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
-	svc.Warm([]unreleased.ArtistToRefresh{{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
+	svc.Warm(t.Context(), []unreleased.ArtistToRefresh{{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
 	jobs.Wait()
 
 	if got := store.Calls(); len(got) != 1 {

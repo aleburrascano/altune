@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/clock"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,7 @@ type stubAcquisitionReader struct {
 	status func(call int) monitoring.DownloadStatusReport
 }
 
-func (s *stubAcquisitionReader) Status() monitoring.DownloadStatusReport {
+func (s *stubAcquisitionReader) Status(_ context.Context) monitoring.DownloadStatusReport {
 	s.calls++
 	return s.status(s.calls)
 }

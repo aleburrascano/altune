@@ -4,18 +4,16 @@ import (
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/ids"
-	"context"
 	"testing"
 	"time"
 )
 
 type orphanedAudioSuite struct {
-	ctx      context.Context
 	newQueue func(t *testing.T) (ports.OrphanedAudioQueue, func(track *domain.Track))
 }
 
 func OrphanedAudioQueueContract(t *testing.T, newQueue func(t *testing.T) (ports.OrphanedAudioQueue, func(track *domain.Track))) {
-	suite := &orphanedAudioSuite{ctx: context.Background(), newQueue: newQueue}
+	suite := &orphanedAudioSuite{newQueue: newQueue}
 
 	t.Run("a recorded ref is listed with its owner, track and a timestamp", suite.recordedRefIsListedWithDetails)
 	t.Run("a ref recorded with a future not-before is listed only once it passes", suite.futureNotBeforeIsListedOnlyOncePassed)
@@ -36,7 +34,7 @@ func (c *orphanedAudioSuite) refFor(userId ids.UserId) string {
 func (c *orphanedAudioSuite) record(t *testing.T, q ports.OrphanedAudioQueue, userId ids.UserId, ref string) ports.OrphanedAudio {
 	t.Helper()
 	orphan := ports.OrphanedAudio{AudioRef: ref, UserId: userId, TrackId: randomIDs.NewTrackId()}
-	if err := q.RecordOrphanedAudio(c.ctx, orphan); err != nil {
+	if err := q.RecordOrphanedAudio(t.Context(), orphan); err != nil {
 		t.Fatalf("RecordOrphanedAudio: %v", err)
 	}
 	return orphan
@@ -44,7 +42,7 @@ func (c *orphanedAudioSuite) record(t *testing.T, q ports.OrphanedAudioQueue, us
 
 func (c *orphanedAudioSuite) listed(t *testing.T, q ports.OrphanedAudioQueue, ref string) (ports.OrphanedAudio, int) {
 	t.Helper()
-	all, err := q.ListOrphanedAudio(c.ctx, 10_000)
+	all, err := q.ListOrphanedAudio(t.Context(), 10_000)
 	if err != nil {
 		t.Fatalf("ListOrphanedAudio: %v", err)
 	}
@@ -61,7 +59,7 @@ func (c *orphanedAudioSuite) listed(t *testing.T, q ports.OrphanedAudioQueue, re
 
 func (c *orphanedAudioSuite) usage(t *testing.T, q ports.OrphanedAudioQueue, ref string, owner ids.UserId) ports.AudioUsage {
 	t.Helper()
-	got, err := q.AudioUsage(c.ctx, ref, owner)
+	got, err := q.AudioUsage(t.Context(), ref, owner)
 	if err != nil {
 		t.Fatalf("AudioUsage: %v", err)
 	}
@@ -99,7 +97,7 @@ func (c *orphanedAudioSuite) futureNotBeforeIsListedOnlyOncePassed(t *testing.T)
 	held, due := c.refFor(userId), c.refFor(userId)
 	for ref, notBefore := range map[string]time.Time{held: time.Now().Add(time.Hour), due: time.Now().Add(-time.Minute)} {
 		orphan := ports.OrphanedAudio{AudioRef: ref, UserId: userId, TrackId: randomIDs.NewTrackId(), NotBefore: notBefore}
-		if err := q.RecordOrphanedAudio(c.ctx, orphan); err != nil {
+		if err := q.RecordOrphanedAudio(t.Context(), orphan); err != nil {
 			t.Fatalf("RecordOrphanedAudio: %v", err)
 		}
 	}
@@ -132,7 +130,7 @@ func (c *orphanedAudioSuite) listHonoursLimit(t *testing.T) {
 	for range 3 {
 		c.record(t, q, userId, c.refFor(userId))
 	}
-	got, err := q.ListOrphanedAudio(c.ctx, 2)
+	got, err := q.ListOrphanedAudio(t.Context(), 2)
 	if err != nil {
 		t.Fatalf("ListOrphanedAudio: %v", err)
 	}
@@ -146,7 +144,7 @@ func (c *orphanedAudioSuite) resolveRemovesRef(t *testing.T) {
 	userId := randomIDs.NewUserId()
 	ref := c.refFor(userId)
 	c.record(t, q, userId, ref)
-	if err := q.ResolveOrphanedAudio(c.ctx, ref); err != nil {
+	if err := q.ResolveOrphanedAudio(t.Context(), ref); err != nil {
 		t.Fatalf("ResolveOrphanedAudio: %v", err)
 	}
 	if _, count := c.listed(t, q, ref); count != 0 {
@@ -160,7 +158,7 @@ func (c *orphanedAudioSuite) markingAttemptRaisesAttempts(t *testing.T) {
 	ref := c.refFor(userId)
 	c.record(t, q, userId, ref)
 	for want := 1; want <= 2; want++ {
-		if err := q.MarkOrphanedAudioAttempt(c.ctx, ref, "storage down"); err != nil {
+		if err := q.MarkOrphanedAudioAttempt(t.Context(), ref, "storage down"); err != nil {
 			t.Fatalf("MarkOrphanedAudioAttempt: %v", err)
 		}
 		if got, _ := c.listed(t, q, ref); got.Attempts != want {
@@ -174,7 +172,7 @@ func (c *orphanedAudioSuite) recordingAgainResetsAttempts(t *testing.T) {
 	userId := randomIDs.NewUserId()
 	ref := c.refFor(userId)
 	c.record(t, q, userId, ref)
-	if err := q.MarkOrphanedAudioAttempt(c.ctx, ref, "storage down"); err != nil {
+	if err := q.MarkOrphanedAudioAttempt(t.Context(), ref, "storage down"); err != nil {
 		t.Fatal(err)
 	}
 	c.record(t, q, userId, ref)
@@ -186,7 +184,7 @@ func (c *orphanedAudioSuite) recordingAgainResetsAttempts(t *testing.T) {
 func (c *orphanedAudioSuite) markingUnknownRefListsNothing(t *testing.T) {
 	q, _ := c.newQueue(t)
 	ref := c.refFor(randomIDs.NewUserId())
-	if err := q.MarkOrphanedAudioAttempt(c.ctx, ref, "x"); err != nil {
+	if err := q.MarkOrphanedAudioAttempt(t.Context(), ref, "x"); err != nil {
 		t.Fatalf("MarkOrphanedAudioAttempt: %v", err)
 	}
 	if _, count := c.listed(t, q, ref); count != 0 {
@@ -200,10 +198,10 @@ func (c *orphanedAudioSuite) listPutsAttemptedRefsLast(t *testing.T) {
 	stuck, fresh := c.refFor(userId), c.refFor(userId)
 	c.record(t, q, userId, stuck)
 	c.record(t, q, userId, fresh)
-	if err := q.MarkOrphanedAudioAttempt(c.ctx, stuck, "storage down"); err != nil {
+	if err := q.MarkOrphanedAudioAttempt(t.Context(), stuck, "storage down"); err != nil {
 		t.Fatal(err)
 	}
-	all, err := q.ListOrphanedAudio(c.ctx, 10_000)
+	all, err := q.ListOrphanedAudio(t.Context(), 10_000)
 	if err != nil {
 		t.Fatal(err)
 	}

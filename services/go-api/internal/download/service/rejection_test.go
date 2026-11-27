@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
@@ -116,7 +115,7 @@ func TestExecuteReplace_SeedsExclusionsFromMemoryAndTheCurrentSource(t *testing.
 	svc := service.MustNewAcquireTrackAudioService(track.ledger, service.NewSourceRegistry(source), track.store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: track.userID, TrackID: track.trackID})
+	_ = svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID})
 
 	if !source.tried("https://www.youtube.com/watch?v=freshAAAAAA") {
 		t.Fatalf("the replace never reached an unexcluded candidate; tried %v", source.fetches())
@@ -132,7 +131,7 @@ func TestExecuteReplace_SeedsExclusionsFromMemoryAndTheCurrentSource(t *testing.
 func TestExecuteReplace_RemembersTheReplacedSourceBesideTheEarlierRejectedOnes(t *testing.T) {
 	track := readyTrackRejecting(t, "https://www.youtube.com/watch?v=currentAAAA", "youtube:previousAAA")
 
-	if err := track.service().ExecuteReplace(context.Background(), jobrun.Job{UserID: track.userID, TrackID: track.trackID}); err != nil {
+	if err := track.service().ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -202,7 +201,7 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	}}}
 
 	_ = acquireService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}).
-		Execute(context.Background(), jobrun.Job{UserID: song.UserId, TrackID: song.ID})
+		Execute(context.Background(), ports.AcquisitionJob{UserID: song.UserId, TrackID: song.ID})
 
 	if code := persistedCode(t, ledger, song.ID); code != downloadfailure.FailureNoMatchFound {
 		t.Fatalf("failure code = %q, want %q", code, downloadfailure.FailureNoMatchFound)
@@ -226,7 +225,7 @@ func TestExecute_AttemptCapReportsUntriedCandidatesApart(t *testing.T) {
 	}
 
 	_ = acquireService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}).
-		Execute(context.Background(), jobrun.Job{UserID: song.UserId, TrackID: song.ID})
+		Execute(context.Background(), ports.AcquisitionJob{UserID: song.UserId, TrackID: song.ID})
 
 	if got := len(source.fetches()); got != attemptCap {
 		t.Fatalf("download attempts = %d, want the cap %d", got, attemptCap)
@@ -251,7 +250,7 @@ func TestExecute_AnUnmeasuredLengthSkipCountsInTheSummaryButOnlyTheProbedRejecti
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}},
 		scratchfiles.New(), resolving(resolvedTo(mbid), noVerification()), noStages(rejectingInto(remembered), probedBy(lengthProber(30))))
 
-	_ = svc.Execute(context.Background(), jobrun.Job{UserID: song.UserId, TrackID: song.ID})
+	_ = svc.Execute(context.Background(), ports.AcquisitionJob{UserID: song.UserId, TrackID: song.ID})
 
 	if source.tried(short) {
 		t.Fatalf("download attempts = %v, the search-length candidate must never be downloaded", source.fetches())

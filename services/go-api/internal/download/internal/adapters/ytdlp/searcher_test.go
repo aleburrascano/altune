@@ -499,13 +499,16 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 	}
 }
 
-type panickingContext struct{ context.Context }
+type panickingContext struct{}
 
 func (panickingContext) Deadline() (time.Time, bool) { panic("deadline exploded") }
+func (panickingContext) Done() <-chan struct{}       { return nil }
+func (panickingContext) Err() error                  { return nil }
+func (panickingContext) Value(any) any               { return nil }
 
 func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAnEmptyAnswer(t *testing.T) {
 	candidates, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).
-		SearchQueries(panickingContext{context.Background()}, []string{"Blinding Lights"})
+		SearchQueries(panickingContext{}, []string{"Blinding Lights"})
 
 	if err == nil {
 		t.Fatalf("SearchQueries = %d candidates, nil; want an error so the track is not reported as having no match", len(candidates))
@@ -515,7 +518,7 @@ func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAn
 func TestYtDlpAudioSearcher_MarkUnplayable_APanicInsideAnInspectionLeavesTheCandidatePlayable(t *testing.T) {
 	candidates := []download.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
 
-	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(panickingContext{context.Background()}, candidates)
+	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(panickingContext{}, candidates)
 
 	if got := candidates[0].Unplayable; got != "" {
 		t.Errorf("Unplayable = %q, want it left empty", got)

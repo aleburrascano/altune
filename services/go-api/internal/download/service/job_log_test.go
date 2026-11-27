@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -17,15 +16,15 @@ const acquireTakes = 2 * time.Second
 
 type slowAcquirer struct{}
 
-func (slowAcquirer) Execute(ctx context.Context, job jobrun.Job) error {
+func (slowAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
 	return clock.Sleep(ctx, acquireTakes)
 }
 
-func (slowAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
+func (slowAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
 	return nil
 }
 
-func (slowAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
+func (slowAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
 
 func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -41,7 +40,7 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 
 		time.Sleep(3 * time.Second)
 
-		active := scheduler.Status().ActiveJobs
+		active := scheduler.Status(t.Context()).ActiveJobs
 		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != ports.JobRunning {
 			t.Fatalf("ActiveJobs = %+v, want the running job of %s", active, track)
 		}
@@ -63,7 +62,7 @@ func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 		time.Sleep(acquireTakes)
 		synctest.Wait()
 
-		status := scheduler.Status()
+		status := scheduler.Status(t.Context())
 		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != ports.JobSucceeded {
 			t.Fatalf("Recent = %+v, want the succeeded job of %s", status.Recent, track)
 		}

@@ -16,7 +16,6 @@ import (
 )
 
 type sseConn struct {
-	ctx          context.Context
 	rc           *http.ResponseController
 	w            http.ResponseWriter
 	userId       ids.UserId
@@ -39,10 +38,10 @@ func (c *sseConn) writeFrame(frame string) error {
 	return nil
 }
 
-func (c *sseConn) writeEvent(evt events.Event) error {
+func (c *sseConn) writeEvent(ctx context.Context, evt events.Event) error {
 	body, err := json.Marshal(evt.Payload)
 	if err != nil {
-		slog.WarnContext(c.ctx, "sse.marshal_failed", "event_type", evt.Type, logging.KeyError, err)
+		slog.WarnContext(ctx, "sse.marshal_failed", "event_type", evt.Type, logging.KeyError, err)
 		return c.writeResync()
 	}
 	return c.writeFrame(fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, body))

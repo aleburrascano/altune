@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
 	"altune/go-api/internal/shared/telemetry"
-	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -17,7 +16,6 @@ import (
 
 func depsWithProviderTimeout(timeout time.Duration) connections.Deps {
 	return connections.Deps{
-		Lifecycle:       context.Background(),
 		Background:      &background.Tracker{},
 		Tracker:         &background.Tracker{},
 		Logger:          slog.Default(),

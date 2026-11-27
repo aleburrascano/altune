@@ -18,7 +18,9 @@ type fakeAcquisitionReader struct {
 	status monitoring.DownloadStatusReport
 }
 
-func (f fakeAcquisitionReader) Status() monitoring.DownloadStatusReport { return f.status }
+func (f fakeAcquisitionReader) Status(_ context.Context) monitoring.DownloadStatusReport {
+	return f.status
+}
 
 type fakeDiscographyReader struct {
 	gotSince    time.Time

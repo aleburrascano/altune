@@ -20,7 +20,7 @@ const (
 
 func Deps(ctx context.Context, cfg *config.Config, transport http.RoundTripper, metrics *telemetry.Registry) search.Deps {
 	return search.Deps{
-		Lifecycle:       ctx,
+		Shutdown:        ctx.Done(),
 		Logger:          slog.Default(),
 		Transport:       transport,
 		ProviderTimeout: discoveryProviderTimeout,
