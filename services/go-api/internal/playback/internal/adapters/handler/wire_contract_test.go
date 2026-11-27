@@ -1,8 +1,10 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/playback"
-	"altune/go-api/internal/playback/internal/core/domain"
+	ports "altune/go-api/internal/playback/internal"
+	"altune/go-api/internal/playback/internal/adapters/handler"
+	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/playback/internal/service"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/jsoncontract"
 	"altune/go-api/internal/shared/requestuser"
@@ -24,10 +26,10 @@ const (
 
 type artworkNowPlaying struct{}
 
-func (artworkNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string) (*playback.NowPlayingTrack, error) {
+func (artworkNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string) (*ports.NowPlayingTrack, error) {
 	artwork := "https://cdn.example.com/art/ok-computer.jpg"
 	duration := 233.5
-	return &playback.NowPlayingTrack{
+	return &ports.NowPlayingTrack{
 		Id:                trackId,
 		Title:             "Paranoid Android",
 		Artist:            "Radiohead",
@@ -39,7 +41,7 @@ func (artworkNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string)
 
 func wireGet(t *testing.T, sourceId string, nowPlaying nowPlayingReader) []byte {
 	t.Helper()
-	repo := &recordingRepo{saved: &playback.QueueState{
+	repo := &recordingRepo{saved: &domain.QueueState{
 		TrackIds:     []string{wireTrackA, wireTrackB},
 		CurrentIdx:   1,
 		PositionMs:   42000,
@@ -47,7 +49,7 @@ func wireGet(t *testing.T, sourceId string, nowPlaying nowPlayingReader) []byte 
 		SourceId:     sourceId,
 		NaturalOrder: []string{wireTrackB, wireTrackA},
 	}}
-	h := playback.MustNewQueueHandler(playback.MustNewQueueService(repo, nowPlaying, time.Now), playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
+	h := handler.MustNewQueueHandler(service.MustNewQueueService(repo, nowPlaying, time.Now), handler.DefaultQueueSaveLimit(), time.Now, noopRateLimitMetrics{})
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
@@ -79,8 +81,8 @@ func TestWire_QueueStateResponses(t *testing.T) {
 
 type bareNowPlaying struct{}
 
-func (bareNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string) (*playback.NowPlayingTrack, error) {
-	return &playback.NowPlayingTrack{Id: trackId, Title: "Untitled", Artist: "Unknown", AcquisitionStatus: "pending"}, nil
+func (bareNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string) (*ports.NowPlayingTrack, error) {
+	return &ports.NowPlayingTrack{Id: trackId, Title: "Untitled", Artist: "Unknown", AcquisitionStatus: "pending"}, nil
 }
 
 func TestWire_QueueStateWithACurrentTrackWithoutArtworkOrDuration(t *testing.T) {

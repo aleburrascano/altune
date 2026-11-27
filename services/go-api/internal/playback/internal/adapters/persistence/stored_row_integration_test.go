@@ -1,7 +1,8 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/playback"
+	"altune/go-api/internal/playback/internal/adapters/persistence"
+	"altune/go-api/internal/playback/internal/domain"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -22,7 +23,7 @@ type storedQueueRow struct {
 	updatedAt    time.Time
 }
 
-func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, error) {
+func readStoredRow(t *testing.T, row storedQueueRow) (*domain.QueueState, error) {
 	t.Helper()
 	dbtest.RequireIntegration(t)
 	dbURL := dbtest.DatabaseURL(t)
@@ -44,13 +45,13 @@ func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, erro
 		user.UUID(), row.trackIds, row.currentIdx, row.shuffled, row.naturalOrder, row.updatedAt); err != nil {
 		t.Fatalf("store row: %v", err)
 	}
-	return playback.NewPostgresQueueStateRepository(pool, silentQueueStateMetrics{}, time.Now).GetForUser(ctx, user)
+	return persistence.NewPostgresQueueStateRepository(pool, silentQueueStateMetrics{}, time.Now).GetForUser(ctx, user)
 }
 
 func TestGetForUser_StoredRowWithCurrentIdxPastEndIsCorrupt(t *testing.T) {
 	_, err := readStoredRow(t, storedQueueRow{trackIds: []string{"a", "b"}, currentIdx: 9, updatedAt: time.Now()})
 
-	if !errors.Is(err, playback.ErrCorruptStoredState) {
+	if !errors.Is(err, domain.ErrCorruptStoredState) {
 		t.Fatalf("GetForUser = %v, want an out-of-range current_idx read as corrupt stored state", err)
 	}
 }

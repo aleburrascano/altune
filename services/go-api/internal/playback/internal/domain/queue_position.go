@@ -1,0 +1,54 @@
+package domain
+
+import (
+	"altune/go-api/internal/shared/ids"
+	"fmt"
+	"time"
+)
+
+type QueuePosition struct {
+	UserId         ids.UserId
+	CurrentIdx     int
+	CurrentTrackId string
+	PositionMs     int64
+	UpdatedAt      time.Time
+}
+
+type QueuePositionInput struct {
+	UserId         ids.UserId
+	CurrentIdx     int
+	CurrentTrackId string
+	PositionMs     int64
+}
+
+func NewQueuePosition(in QueuePositionInput, now time.Time) (*QueuePosition, error) {
+	p := &QueuePosition{
+		UserId:         in.UserId,
+		CurrentIdx:     in.CurrentIdx,
+		CurrentTrackId: in.CurrentTrackId,
+		PositionMs:     in.PositionMs,
+		UpdatedAt:      now,
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	trackId, err := canonicalTrackId("currentTrackId", p.CurrentTrackId)
+	if err != nil {
+		return nil, err
+	}
+	p.CurrentTrackId = trackId
+	return p, nil
+}
+
+func (p *QueuePosition) Validate() error {
+	if p.PositionMs < 0 {
+		return newValidationError(KindPositionMsNegative, fmt.Sprintf("positionMs must be non-negative, got %d", p.PositionMs))
+	}
+	if !indexInBounds(p.CurrentIdx, MaxQueueLength) {
+		return newValidationError(KindCurrentIdxOutOfRange, fmt.Sprintf("currentIdx %d out of range [0, %d)", p.CurrentIdx, MaxQueueLength))
+	}
+	if p.CurrentTrackId == "" {
+		return newValidationError(KindCurrentTrackIdMissing, "currentTrackId is required")
+	}
+	return stringStorable("currentTrackId", p.CurrentTrackId)
+}

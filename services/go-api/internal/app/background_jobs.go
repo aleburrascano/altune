@@ -35,10 +35,10 @@ func (a *application) startOrphanedAudioReconcile(ctx context.Context, queue lib
 
 const deletedIdentityErasureInterval = time.Hour
 
-func (a *application) startDeletedIdentityErasure(ctx context.Context, svc *playback.DeletedUserDataCleanup) {
+func (a *application) startDeletedIdentityErasure(ctx context.Context, module *playback.Module) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(ctx, jobs.DeletedUserDataErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
-		_, queueErr := svc.Execute(ctx)
+		_, queueErr := module.EraseDeletedUserData(ctx)
 		return errors.Join(queueErr, cleanupjobs.EraseDiscoveryRowsOfDeletedIdentities(ctx, discoveryErasers))
 	}, "interval", deletedIdentityErasureInterval.String())
 }
