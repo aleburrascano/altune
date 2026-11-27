@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -145,7 +146,7 @@ func (s *FavoritesLifter) Lift(
 	}
 	favorites, err := s.repo.ListForUser(ctx, userId)
 	if err != nil {
-		slog.WarnContext(ctx, "search.v2.favorites_load_failed", "error", err)
+		slog.WarnContext(ctx, "search.v2.favorites_load_failed", logging.KeyError, err)
 		return ranked
 	}
 	if len(favorites) == 0 {

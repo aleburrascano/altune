@@ -2,6 +2,7 @@ package soundcloud
 
 import (
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -93,7 +94,7 @@ func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.Pro
 	}
 	singles, err := a.fetchArtistStandaloneSingles(ctx, userID, inPlaylist)
 	if err != nil {
-		slog.WarnContext(ctx, "soundcloud.singles_skipped", "user_id", userID, "error", err)
+		slog.WarnContext(ctx, "soundcloud.singles_skipped", logging.KeyUserID, userID, logging.KeyError, err)
 		return albums, nil
 	}
 	return append(albums, singles...), nil

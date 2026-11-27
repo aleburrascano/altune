@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"path/filepath"
@@ -326,9 +327,7 @@ func (h *warnRecorder) named(msg string) []map[string]any {
 func captureWarnings(t *testing.T) *warnRecorder {
 	t.Helper()
 	rec := &warnRecorder{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(rec))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logging.UseHandler(t, rec)
 	return rec
 }
 

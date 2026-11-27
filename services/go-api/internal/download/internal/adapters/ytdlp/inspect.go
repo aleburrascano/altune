@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -130,7 +131,7 @@ func (s *YouTubeAudioSearcher) unplayableReason(ctx context.Context, c ports.Aud
 	result, err := s.inspectCached(ctx, c.URL)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.soundcloud_inspect_failed",
-			"url", c.URL, "error", redact.LogError(err))
+			"url", c.URL, logging.KeyError, redact.LogError(err))
 		return ""
 	}
 	return result.unplayableFor(c.Duration)

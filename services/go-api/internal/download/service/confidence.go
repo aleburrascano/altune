@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/isrcwriteback"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"math"
@@ -109,7 +110,7 @@ func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence, conf
 	ac.Evidence = evidence
 	ac.Confidence = confidence
 	slog.InfoContext(ctx, "acquisition.confidence",
-		"track_id", ac.Track.ID,
+		logging.KeyTrackID, ac.Track.ID,
 		"confidence", ac.Confidence,
 		"evidence", evidence,
 	)

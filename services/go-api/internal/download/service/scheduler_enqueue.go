@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -24,12 +25,12 @@ func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId id
 func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId ids.UserId, trackId ids.TrackId, kind ports.JobKind) error {
 	if s.closed.Load() {
 		s.rejected.Add(1)
-		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
+		slog.WarnContext(ctx, "schedule_after_shutdown", logging.KeyTrackID, trackId.String())
 		return acqdomain.ErrSchedulerShutdown
 	}
 	if s.paused.Load() {
 		s.rejected.Add(1)
-		slog.WarnContext(ctx, "acquisition.schedule_while_paused", "track_id", trackId.String())
+		slog.WarnContext(ctx, "acquisition.schedule_while_paused", logging.KeyTrackID, trackId.String())
 		return acqdomain.ErrAcquisitionPaused
 	}
 
@@ -60,7 +61,7 @@ func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trac
 	if s.closed.Load() {
 		s.pending.untrack(trackId.String())
 	}
-	slog.InfoContext(ctx, "acquisition.scheduling", "track_id", trackId.String(), "user_id", userId.String(), "kind", string(kind))
+	slog.InfoContext(ctx, "acquisition.scheduling", logging.KeyTrackID, trackId.String(), logging.KeyUserID, userId.String(), "kind", string(kind))
 	return nil
 }
 
@@ -68,7 +69,7 @@ func (s *BackgroundAcquisitionScheduler) enqueueFailed(ctx context.Context, trac
 	if errors.Is(err, acqdomain.ErrJobKindConflict) {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.job_in_flight",
-			"track_id", trackId.String(), "requested_kind", string(kind))
+			logging.KeyTrackID, trackId.String(), "requested_kind", string(kind))
 		return acqdomain.ErrTrackJobInFlight
 	}
 	return err

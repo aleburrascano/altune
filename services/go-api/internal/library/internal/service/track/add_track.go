@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -107,7 +108,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if errors.Is(err, domain.ErrLibraryFull) {
-		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", domain.MaxTracksPerUser)
+		slog.WarnContext(ctx, "catalog.library_full", logging.KeyUserID, userId.String(), "cap", domain.MaxTracksPerUser)
 		return nil, err
 	}
 	if err != nil {
@@ -121,8 +122,8 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 		return &AddTrackOutput{Track: track, Created: false}, nil
 	}
 	slog.InfoContext(ctx, "track added to library",
-		"track_id", track.ID.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, track.ID.String(),
+		logging.KeyUserID, userId.String(),
 	)
 	dto := TrackToDTO(track)
 	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
@@ -143,19 +144,19 @@ func ScheduleBounded(ctx context.Context, scheduler ports.AcquisitionScheduler, 
 }
 
 func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId ids.UserId, track *domain.Track, sourceURL string) {
-	slog.InfoContext(ctx, "acquisition.scheduled", "track_id", track.ID.String())
+	slog.InfoContext(ctx, "acquisition.scheduled", logging.KeyTrackID, track.ID.String())
 	schedErr := ScheduleBounded(ctx, s.scheduler, userId, track.ID, sourceURL)
 	if schedErr == nil {
 		return
 	}
 	slog.WarnContext(ctx, "acquisition.schedule_refused",
-		"track_id", track.ID.String(), "user_id", userId.String(), "error", schedErr)
+		logging.KeyTrackID, track.ID.String(), logging.KeyError, schedErr)
 	failed := *track
 	expectedVersion := failed.Version
 	_ = failed.MarkFailed(string(domain.FailureAcquisitionRefused))
 	if err := s.trackRepo.Update(ctx, &failed, expectedVersion); err != nil {
 		slog.ErrorContext(ctx, "acquisition.schedule_refused_persist_failed",
-			"track_id", track.ID.String(), "error", err)
+			logging.KeyTrackID, track.ID.String(), logging.KeyError, err)
 		return
 	}
 	*track = failed

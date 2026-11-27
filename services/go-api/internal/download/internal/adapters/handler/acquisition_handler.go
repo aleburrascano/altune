@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
@@ -58,7 +59,7 @@ func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, us
 		return nil, false
 	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), c.logMsg, "error", err, "track_id", trackId.String())
+		slog.ErrorContext(r.Context(), c.logMsg, logging.KeyError, err, logging.KeyTrackID, trackId.String())
 		httpserver.HandleServiceError(w, r, err)
 		return nil, false
 	}

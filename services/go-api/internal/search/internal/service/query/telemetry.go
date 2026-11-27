@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"time"
@@ -68,8 +69,8 @@ func (t *SearchTelemetry) append(ctx context.Context, event domain.InteractionEv
 	if err := t.eventStore.Append(ctx, event); err != nil {
 		slog.WarnContext(ctx, "search.v2.telemetry_emit_failed",
 			"search_id", event.SearchId,
-			"user_id", event.UserId.String(),
-			"error", err)
+			logging.KeyUserID, event.UserId.String(),
+			logging.KeyError, err)
 		return
 	}
 	t.activity.EmitActivity(domain.EventTypeSearchPerformed.String())

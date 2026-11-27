@@ -186,8 +186,11 @@ linters:
           - errcheck
           - gocritic
           - revive
-          - forbidigo
           - noctx
+      - path: _test\.go
+        linters:
+          - forbidigo
+        text: 'use of `(http\.|os\.|exec\.|slog\.(Debug|Info|Warn|Error)|recover|sync\.WaitGroup|context\.|time\.)'
       - path: internal/shared/httpserver/
         linters:
           - forbidigo

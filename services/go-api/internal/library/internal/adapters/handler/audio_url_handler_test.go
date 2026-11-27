@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -107,9 +106,7 @@ func (failingSigner) PresignGet(context.Context, string, time.Duration) (string,
 }
 
 func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")

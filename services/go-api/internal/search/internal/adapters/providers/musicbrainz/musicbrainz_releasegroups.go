@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -102,7 +103,7 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 		},
 		func(page int, err error) {
 			slog.WarnContext(ctx, "mb.release_groups_page_failed",
-				"provider", domain.ProviderMusicBrainz.String(), "mbid", mbid, "page", page, "error", redact.Secrets(err.Error()))
+				"provider", domain.ProviderMusicBrainz.String(), "mbid", mbid, "page", page, logging.KeyError, redact.Secrets(err.Error()))
 		})
 	if err != nil {
 		return all, err

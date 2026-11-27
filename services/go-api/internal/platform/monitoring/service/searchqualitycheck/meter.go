@@ -3,6 +3,7 @@ package searchqualitycheck
 import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -148,7 +149,7 @@ func logRunFailure(ctx context.Context, err error) {
 	if errors.As(err, &panicked) {
 		return
 	}
-	slog.ErrorContext(ctx, "observe.eval_run_failed", "error", err)
+	slog.ErrorContext(ctx, "observe.eval_run_failed", logging.KeyError, err)
 }
 
 type State string

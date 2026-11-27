@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"context"
 	"errors"
@@ -92,7 +93,7 @@ func copyThenRemoveAcrossFilesystems(ctx context.Context, sourcePath, destPath s
 		return fmt.Errorf("copy audio into place: %w", err)
 	}
 	if err := os.Remove(sourcePath); err != nil {
-		slog.WarnContext(ctx, "audio_temp_source_remove_failed", "path", sourcePath, "error", err)
+		slog.WarnContext(ctx, "audio_temp_source_remove_failed", logging.KeyPath, sourcePath, logging.KeyError, err)
 	}
 	return nil
 }
@@ -160,7 +161,7 @@ func closeLateAudio(ctx context.Context, late openedAudio) {
 		return
 	}
 	if err := late.file.Close(); err != nil {
-		slog.WarnContext(ctx, "audio_late_open_close_failed", "path", late.file.Name(), "error", err)
+		slog.WarnContext(ctx, "audio_late_open_close_failed", logging.KeyPath, late.file.Name(), logging.KeyError, err)
 	}
 }
 

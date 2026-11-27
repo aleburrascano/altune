@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/songfields"
 	"context"
 	"errors"
@@ -75,7 +76,7 @@ func (s *OwnershipEnrichmentService) stampOwnedItems(
 ) map[string]ports.OwnedTrack {
 	owned, err := s.ownership.OwnedByTitleArtist(ctx, userId)
 	if err != nil {
-		slog.WarnContext(ctx, "ownership.lookup_failed", "error", err)
+		slog.WarnContext(ctx, "ownership.lookup_failed", logging.KeyError, err)
 		return nil
 	}
 	for _, item := range items {
@@ -151,11 +152,11 @@ func (s *OwnershipEnrichmentService) fillPending(
 	for trackId, position := range pending {
 		if ctx.Err() != nil {
 			slog.WarnContext(ctx, "track_number.fill_abandoned",
-				"pending", len(pending), "error", ctx.Err())
+				"pending", len(pending), logging.KeyError, ctx.Err())
 			return
 		}
 		if err := s.trackNumbers.FillTrackNumber(ctx, userId, trackId, position); err != nil {
-			slog.WarnContext(ctx, "track_number.fill_failed", "track_id", trackId, "error", err)
+			slog.WarnContext(ctx, "track_number.fill_failed", logging.KeyTrackID, trackId, logging.KeyError, err)
 		}
 	}
 }

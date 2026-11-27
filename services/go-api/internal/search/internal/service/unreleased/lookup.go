@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -58,7 +59,7 @@ func (s *Service) runWarm(store ports.UnreleasedStore, artists []ArtistToRefresh
 		}
 		seen[key] = true
 		if err := store.Record(ctx, key, name, a.Known); err != nil {
-			slog.WarnContext(ctx, "unreleased.warm_record_failed", "error", err)
+			slog.WarnContext(ctx, "unreleased.warm_record_failed", logging.KeyError, err)
 		}
 	}
 }
@@ -111,6 +112,6 @@ func (s *Service) runJob(requestCtx context.Context, key string, j *job, run fun
 	j.err = errJobPanicked
 	j.songs, j.err = run(ctx)
 	if j.err != nil {
-		slog.WarnContext(ctx, "unreleased.job_failed", "key", key, "error", j.err)
+		slog.WarnContext(ctx, "unreleased.job_failed", "key", key, logging.KeyError, j.err)
 	}
 }

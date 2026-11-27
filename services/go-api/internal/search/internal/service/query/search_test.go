@@ -14,9 +14,9 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/random/randomtest"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -728,10 +728,7 @@ func TestService_SearchIdReplayedAgainstAnotherQueryServesThatQuery(t *testing.T
 
 func TestService_Execute_DoesNotLogQueryText(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	buf := logging.CaptureJSON(t, slog.LevelDebug)
 
 	const raw = "zqxj private diagnosis clinic"
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{

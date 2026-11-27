@@ -2,6 +2,7 @@ package audiofiles_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"io"
@@ -383,11 +384,9 @@ type recordedContextKey struct{}
 func recordSlog(t *testing.T) chan contextRecord {
 	t.Helper()
 	records := make(chan contextRecord, 4)
-	previous := slog.Default()
 	previousOutput, previousFlags := log.Writer(), log.Flags()
-	slog.SetDefault(slog.New(contextRecordingHandler{records: records}))
+	logging.UseHandler(t, contextRecordingHandler{records: records})
 	t.Cleanup(func() {
-		slog.SetDefault(previous)
 		log.SetOutput(previousOutput)
 		log.SetFlags(previousFlags)
 	})

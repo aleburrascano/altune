@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 )
 
@@ -17,9 +16,7 @@ func (panickingTagger) Tag(context.Context, string, ports.TrackTags) error {
 }
 
 func TestExecute_APanickingStepIsLoggedAndReportedAsThatStep(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 
 	_, err := acquireStaged(t, pendingBlindingLights(), freshAudioSource{}, noStages(taggedBy(panickingTagger{})))
 

@@ -60,7 +60,7 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId ids.UserId
 		return nil, domain.WrapRepoError(ctx, "create playlist", err)
 	}
 	slog.InfoContext(ctx, "playlist created",
-		"playlist_id", playlist.ID.String(), "user_id", userId.String())
+		"playlist_id", playlist.ID.String())
 	s.events.Publish(ctx, userId, events.PlaylistCreated{
 		PlaylistID: playlist.ID.String(),
 		Name:       name,
@@ -74,7 +74,7 @@ func (s *PlaylistLifecycleService) requirePlaylistSpace(ctx context.Context, use
 		return domain.WrapRepoError(ctx, "count playlists", err)
 	}
 	if held >= MaxPlaylistsPerUser {
-		slog.WarnContext(ctx, "catalog.too_many_playlists", "user_id", userId.String(), "cap", MaxPlaylistsPerUser)
+		slog.WarnContext(ctx, "catalog.too_many_playlists", "cap", MaxPlaylistsPerUser)
 		return ErrTooManyPlaylists
 	}
 	return nil
@@ -112,7 +112,7 @@ func (s *PlaylistLifecycleService) Delete(ctx context.Context, userId ids.UserId
 		return domain.ErrPlaylistNotFound
 	}
 	slog.InfoContext(ctx, "playlist deleted",
-		"playlist_id", playlistId.String(), "user_id", userId.String())
+		"playlist_id", playlistId.String())
 	s.events.Publish(ctx, userId, events.PlaylistDeleted{PlaylistID: playlistId.String()})
 	return nil
 }

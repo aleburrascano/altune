@@ -3,7 +3,7 @@ package nowplaying_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/ids"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -23,13 +23,9 @@ const (
 	testLookupTimeout          = 50 * time.Millisecond
 )
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
 func testUser() ids.UserId {

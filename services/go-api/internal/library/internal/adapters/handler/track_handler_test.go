@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -235,9 +234,7 @@ func TestHandleDeleteTrack(t *testing.T) {
 }
 
 func TestHandleDeleteTrack_LogsActor(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "To Delete", "Artist", "Album")
@@ -393,9 +390,7 @@ func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
 func strPtr(s string) *string { return &s }
 
 func TestHandleSetTrackNumber(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Dreams", "Fleetwood Mac", "Rumours")

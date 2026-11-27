@@ -2,6 +2,7 @@ package scratchfiles
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -45,7 +46,7 @@ func (*Workspace) SweepAbandoned(ctx context.Context, abandonedBefore time.Time)
 	root := os.TempDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.temp_sweep_unreadable", "dir", root, "error", redact.LogError(err))
+		slog.WarnContext(ctx, "acquisition.temp_sweep_unreadable", "dir", root, logging.KeyError, redact.LogError(err))
 		return 0
 	}
 	removed := 0
@@ -62,7 +63,7 @@ func (*Workspace) SweepAbandoned(ctx context.Context, abandonedBefore time.Time)
 
 func removeStale(ctx context.Context, path string) bool {
 	if err := os.RemoveAll(path); err != nil {
-		slog.WarnContext(ctx, "acquisition.stale_temp_removal_failed", "path", path, "error", redact.LogError(err))
+		slog.WarnContext(ctx, "acquisition.stale_temp_removal_failed", logging.KeyPath, path, logging.KeyError, redact.LogError(err))
 		return false
 	}
 	return true

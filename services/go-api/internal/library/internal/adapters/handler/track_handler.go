@@ -5,6 +5,7 @@ import (
 	trackservice "altune/go-api/internal/library/internal/service/track"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"fmt"
 	"log/slog"
@@ -103,7 +104,7 @@ func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Reque
 		event = "track.track_number_unchanged"
 	}
 	slog.InfoContext(r.Context(), event,
-		"track_id", trackId.String(),
+		logging.KeyTrackID, trackId.String(),
 		"track_number", req.TrackNumber,
 	)
 	w.WriteHeader(http.StatusNoContent)
@@ -229,16 +230,16 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	case result.Created:
 		status = http.StatusCreated
 		slog.InfoContext(r.Context(), "track.saved",
-			"track_id", result.Track.ID.String(),
+			logging.KeyTrackID, result.Track.ID.String(),
 			"title", result.Track.Title,
 			"artist", result.Track.Artist,
 			"album", result.Track.Album,
 		)
 	default:
 		slog.InfoContext(r.Context(), "track.dedup_hit",
-			"track_id", result.Track.ID.String(),
+			logging.KeyTrackID, result.Track.ID.String(),
 			"title", result.Track.Title,
-			"status", result.Track.DownloadStatus.String(),
+			logging.KeyStatus, result.Track.DownloadStatus.String(),
 		)
 	}
 
@@ -281,7 +282,7 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	slog.InfoContext(r.Context(), "track.delete",
-		"track_id", trackId.String(), "user_id", userId.String())
+		logging.KeyTrackID, trackId.String(), logging.KeyUserID, userId.String())
 
 	err := h.deleteTrack.Execute(r.Context(), userId, trackId)
 	if err != nil {

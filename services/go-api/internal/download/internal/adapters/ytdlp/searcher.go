@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -202,7 +203,7 @@ func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query str
 		},
 		func(ei int, err error) {
 			slog.WarnContext(ctx, "acquisition.engine_search_failed",
-				"spec", searchEngines[ei]+query, "error", redact.LogError(err))
+				"spec", searchEngines[ei]+query, logging.KeyError, redact.LogError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("all search engines failed: %w", firstErr)
@@ -225,7 +226,7 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 		},
 		func(qi int, err error) {
 			slog.WarnContext(ctx, "acquisition.search_query_failed",
-				"query", queries[qi], "error", redact.LogError(err))
+				"query", queries[qi], logging.KeyError, redact.LogError(err))
 		},
 		func(firstErr error) error { return firstErr },
 	)

@@ -57,7 +57,7 @@ func (a *SoundCloudAPIAdapter) searchTracksOrFallback(ctx context.Context, query
 		return tracks, err
 	}
 	slog.WarnContext(ctx, "soundcloud.apiv2_fallback",
-		logging.SearchTextAttr(query), "error", redact.Secrets(logging.ScrubSearchErr(err, query)))
+		logging.SearchTextAttr(query), logging.KeyError, redact.Secrets(logging.ScrubSearchErr(err, query)))
 	if ferr != nil {
 		return nil, err
 	}

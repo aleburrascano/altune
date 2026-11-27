@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/playback/internal/core/queue"
 	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
@@ -178,7 +179,7 @@ const statusClientClosedRequest = 499
 func writeQueueError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
 		slog.InfoContext(r.Context(), "playback.queue_state.client_cancelled",
-			"method", r.Method, "path", r.URL.Path, "error", err)
+			logging.KeyMethod, r.Method, logging.KeyPath, r.URL.Path, logging.KeyError, err)
 		w.WriteHeader(statusClientClosedRequest)
 		return
 	}

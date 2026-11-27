@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/tracklength"
 	"context"
@@ -215,7 +216,7 @@ func relabel(ctx context.Context, track *library.Track, given *download.TrackLab
 		return fmt.Errorf("relabel as recording: %w", err)
 	}
 	slog.InfoContext(ctx, "acquisition.track_relabelled",
-		"track_id", track.ID.String(),
+		logging.KeyTrackID, track.ID.String(),
 		"old_mbid", oldMBID, "new_mbid", *track.CatalogMBID,
 		"old_title", oldTitle, "new_title", track.Title)
 	return nil
@@ -224,7 +225,7 @@ func relabel(ctx context.Context, track *library.Track, given *download.TrackLab
 func recordLengthCheck(ctx context.Context, track *library.Track, measured tracklength.TrackLength) {
 	if track.RecordAudioLength(measured) && track.AudioLengthMismatch {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
-			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measured.Seconds())
+			logging.KeyTrackID, track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measured.Seconds())
 	}
 }
 
@@ -252,7 +253,7 @@ func recordMetadata(ctx context.Context, track *library.Track, c download.Comple
 	}
 	if err := track.SetAcquisitionConfidence(c.Confidence, c.Evidence); err != nil {
 		slog.WarnContext(ctx, "acquisition.confidence_rejected",
-			"track_id", track.ID.String(), "confidence", c.Confidence, "error", redact.LogError(err))
+			logging.KeyTrackID, track.ID.String(), "confidence", c.Confidence, logging.KeyError, redact.LogError(err))
 	}
 }
 

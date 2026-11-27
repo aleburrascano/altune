@@ -4,6 +4,7 @@ import (
 	domain "altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/query"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -75,7 +76,7 @@ func runChecks(ctx context.Context, svc searcher, user ids.UserId) (queries []Qu
 		res, err := evalQuery(ctx, svc, user, check.query, check.expect, kinds)
 		if err != nil {
 			errored++
-			slog.WarnContext(ctx, "eval.smoke.query_errored", "query", check.query, "error", err)
+			slog.WarnContext(ctx, "eval.smoke.query_errored", "query", check.query, logging.KeyError, err)
 			res = QueryResult{Query: check.query, Expect: check.expect, Position: -1}
 		} else if res.Passed {
 			passed++

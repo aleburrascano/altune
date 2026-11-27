@@ -3,6 +3,7 @@ package details
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -101,7 +102,7 @@ func (s *DetailsService) Execute(
 			mbid, err := s.enricher.ResolveMBID(ctx, kind, title, subtitle)
 			if err != nil {
 				slog.WarnContext(ctx, "enrichment.resolve_failed",
-					"kind", kind.String(), "title", title, "error", err)
+					"kind", kind.String(), "title", title, logging.KeyError, err)
 				return domain.EmptyEnrichment(), false, err
 			}
 			if mbid == "" {
@@ -129,14 +130,14 @@ func (s *DetailsService) lookup(
 	e, err := s.enricher.Lookup(ctx, kind, mbid)
 	if err != nil {
 		slog.WarnContext(ctx, "enrichment.lookup_failed",
-			"kind", kind.String(), "mbid", mbid, "error", err)
+			"kind", kind.String(), "mbid", mbid, logging.KeyError, err)
 		return domain.EmptyEnrichment(), degraded(err)
 	}
 
 	artworkErr := s.mergeArtwork(ctx, &e, kind, title, subtitle, mbid, origin)
 	if ports.IsUnverifiedArtworkMiss(e.ArtworkURL, artworkErr) {
 		slog.WarnContext(ctx, "enrichment.not_cached_degraded",
-			"kind", kind.String(), "mbid", mbid, "error", artworkErr)
+			"kind", kind.String(), "mbid", mbid, logging.KeyError, artworkErr)
 		return e, nil
 	}
 

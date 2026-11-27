@@ -3,8 +3,8 @@ package handler_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
-	"bytes"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -67,10 +67,7 @@ func TestGate_EmptyPrincipalAdmitsNobody(t *testing.T) {
 }
 
 func TestGate_DenialLogsActorPathAndCode(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := logging.CaptureJSON(t, slog.LevelInfo)
 	stranger := ids.NewUserId(uuid.New())
 
 	gatedAs(ids.NewUserId(uuid.New()).String(), &stranger)

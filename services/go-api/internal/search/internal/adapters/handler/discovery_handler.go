@@ -215,4 +215,3 @@ func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	r.Get("/lyrics", h.handleLyrics)
 }
-

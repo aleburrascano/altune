@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -423,9 +422,7 @@ func TestHandleSuggest(t *testing.T) {
 }
 
 func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 
 	const secret = "kendricksecretunreleasedcut"
 	router := buildSuggestRouter(t, &fakeVocabStore{err: context.DeadlineExceeded})
@@ -1360,9 +1357,7 @@ func seededHistoryRepo() *fakeSearchHistoryRepo {
 
 func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("info")
+	return logging.CaptureRing(t, "info")
 }
 
 func findRecord(ring *logging.RingBuffer, msg string) (logging.CapturedRecord, bool) {

@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
@@ -86,8 +87,8 @@ func (s *DownloadStep) noteIdentifyFailure(
 		return
 	}
 	slog.WarnContext(ctx, identifyFailureEvent(err, defaultEvent),
-		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-		"error", redact.LogError(err))
+		logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		logging.KeyError, redact.LogError(err))
 	s.recordSkip(gate)
 }
 
@@ -106,7 +107,7 @@ func logPreviewFingerprint(
 	elapsed time.Duration,
 ) {
 	slog.InfoContext(ctx, "acquisition.preview_fingerprint",
-		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"fetch_ms", elapsed.Milliseconds(), "verdict", string(verdict.Kind))
 }
 
@@ -236,7 +237,7 @@ const (
 
 func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate, verdict AudioVerdict, results []ports.AcoustIDResult) {
 	slog.InfoContext(ctx, "acquisition.audio_verdict",
-		"track_id", ac.Track.ID,
+		logging.KeyTrackID, ac.Track.ID,
 		"candidate_url", candidate.URL,
 		"verdict", string(verdict.Kind),
 		"judged", string(verdict.Judged.Kind),
@@ -311,11 +312,11 @@ func judgeUnknown(
 ) *downloadRejection {
 	if !match.Known() {
 		slog.InfoContext(ctx, "acquisition.identify_unknown",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
+			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
 		return nil
 	}
 	slog.InfoContext(ctx, "acquisition.identify_uncorroborated",
-		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
 	return nil
 }
@@ -330,7 +331,7 @@ func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downlo
 
 func currentFileRejection(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) *downloadRejection {
 	slog.InfoContext(ctx, "acquisition.candidate_is_current_file",
-		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"stored_acoustid", ac.Replace.StoredAcoustID)
 	return &downloadRejection{
 		stage:  rejectedcandidates.CurrentFile,
@@ -424,7 +425,7 @@ func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup port
 func cachedRecordingFacts(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, mbid string) (ports.RecordingFacts, bool) {
 	facts, found, err := cache.lookup(ctx, mbid, lookup.RecordingByMBID)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.version_lookup_failed", "mbid", mbid, "error", redact.LogError(err))
+		slog.WarnContext(ctx, "acquisition.version_lookup_failed", "mbid", mbid, logging.KeyError, redact.LogError(err))
 		return ports.RecordingFacts{}, false
 	}
 	return facts, found

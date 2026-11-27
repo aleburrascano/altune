@@ -3,6 +3,7 @@ package deezer
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -49,7 +50,7 @@ func (a *DeezerAdapter) fetchAllPages(ctx context.Context, pathFormat, externalI
 		},
 		func(page int, err error) {
 			slog.WarnContext(ctx, failedEvent,
-				"provider", domain.ProviderDeezer.String(), "id", externalID, "page", page, "error", redact.Secrets(err.Error()))
+				"provider", domain.ProviderDeezer.String(), "id", externalID, "page", page, logging.KeyError, redact.Secrets(err.Error()))
 		})
 }
 

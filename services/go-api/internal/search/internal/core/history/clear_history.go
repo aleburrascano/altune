@@ -50,7 +50,7 @@ func (s *ClearSearchHistoryService) Execute(ctx context.Context, userId ids.User
 func auditHistoryCleared(ctx context.Context, userId ids.UserId, at time.Time) {
 	slog.InfoContext(ctx, "discovery.search_history_cleared",
 		slog.String("action", ClearSearchHistoryAction),
-		slog.String("user_id", userId.String()),
+		slog.String(logging.KeyUserID, userId.String()),
 		logging.CorrelationAttr(ctx),
 		slog.Time("at", at.UTC()),
 	)

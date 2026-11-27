@@ -2,6 +2,7 @@ package musicbrainzmatch
 
 import (
 	"altune/go-api/internal/download/internal/core/tracklength"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/titlemarkers"
 	"context"
@@ -84,7 +85,7 @@ func (r *Resolver) resolvePinned(ctx context.Context, q acqports.RecordingQuery)
 	identity := r.pinnedIdentity(ctx, q.MBID)
 	searched, err := r.resolveFromSearch(ctx, q)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.pin_search_failed", "pinned_mbid", q.MBID, "error", err)
+		slog.WarnContext(ctx, "acquisition.pin_search_failed", "pinned_mbid", q.MBID, logging.KeyError, err)
 	}
 	if searched.MBID != "" && searched.MBID != q.MBID {
 		slog.InfoContext(ctx, "acquisition.identity_pin_disagrees",
@@ -114,7 +115,7 @@ func (r *Resolver) pinnedIdentity(ctx context.Context, pin string) acqports.Reco
 func (r *Resolver) pinnedFacts(ctx context.Context, pin string) (acqports.RecordingFacts, bool) {
 	facts, found, err := r.RecordingByMBID(ctx, pin)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.pinned_recording_lookup_failed", "pinned_mbid", pin, "error", err)
+		slog.WarnContext(ctx, "acquisition.pinned_recording_lookup_failed", "pinned_mbid", pin, logging.KeyError, err)
 		return acqports.RecordingFacts{}, false
 	}
 	if !found {
@@ -216,7 +217,7 @@ func (r *Resolver) isrcRecordings(ctx context.Context, isrc string) []acqports.I
 	}
 	recordings, err := r.isrc.RecordingsByISRC(ctx, isrc)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.isrc_lookup_failed", "isrc", isrc, "error", err)
+		slog.WarnContext(ctx, "acquisition.isrc_lookup_failed", "isrc", isrc, logging.KeyError, err)
 		return nil
 	}
 	return recordings
