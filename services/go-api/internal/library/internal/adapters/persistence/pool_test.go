@@ -619,6 +619,12 @@ func playlistRepoMethods(f repoFixture) []repoCall {
 		{"PostgresPlaylistRepository.Create", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).Create(ctx, pl)
 		}},
+		{"PostgresPlaylistRepository.CreateKeyed", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).CreateKeyed(ctx, pl, "key"))
+		}},
+		{"PostgresPlaylistRepository.GetByIdempotencyKey", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).GetByIdempotencyKey(ctx, u, "key"))
+		}},
 		{"PostgresPlaylistRepository.Delete", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf(repo(p).Delete(ctx, pl.ID, u))
 		}},

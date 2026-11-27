@@ -14,6 +14,7 @@ import (
 type PlaylistRepo struct {
 	Playlists map[string]*domain.Playlist
 	Tracks    *TrackRepo
+	Keys      map[string]string
 
 	ErrOnCreate        error
 	ErrOnCount         error
@@ -52,6 +53,28 @@ func (r *PlaylistRepo) Create(_ context.Context, playlist *domain.Playlist) erro
 	}
 	r.Playlists[playlist.ID.String()] = playlist
 	return nil
+}
+
+func (r *PlaylistRepo) CreateKeyed(ctx context.Context, playlist *domain.Playlist, idempotencyKey string) (*domain.Playlist, bool, error) {
+	if existing, found, err := r.GetByIdempotencyKey(ctx, playlist.UserId, idempotencyKey); err != nil || found {
+		return existing, false, err
+	}
+	if err := r.Create(ctx, playlist); err != nil {
+		return nil, false, err
+	}
+	if r.Keys == nil {
+		r.Keys = make(map[string]string)
+	}
+	r.Keys[playlist.UserId.String()+"/"+idempotencyKey] = playlist.ID.String()
+	return playlist, true, nil
+}
+
+func (r *PlaylistRepo) GetByIdempotencyKey(_ context.Context, userId sharedids.UserId, idempotencyKey string) (*domain.Playlist, bool, error) {
+	if r.ErrOnGetByID != nil {
+		return nil, false, r.ErrOnGetByID
+	}
+	existing, ok := r.Playlists[r.Keys[userId.String()+"/"+idempotencyKey]]
+	return existing, ok, nil
 }
 
 func (r *PlaylistRepo) ListForUser(_ context.Context, userId sharedids.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {

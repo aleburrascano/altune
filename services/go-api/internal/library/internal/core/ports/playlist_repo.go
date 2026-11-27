@@ -15,6 +15,8 @@ var ErrPlaylistChangedDuringReorder = domain.NewValidationError("playlist change
 
 type PlaylistLifecycleRepository interface {
 	Create(ctx context.Context, playlist *domain.Playlist) error
+	CreateKeyed(ctx context.Context, playlist *domain.Playlist, idempotencyKey string) (stored *domain.Playlist, created bool, err error)
+	GetByIdempotencyKey(ctx context.Context, userId ids.UserId, idempotencyKey string) (*domain.Playlist, bool, error)
 	ListForUser(ctx context.Context, userId ids.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error)
 	CountForUser(ctx context.Context, userId ids.UserId, atMost int) (int, error)
 	GetByID(ctx context.Context, id domain.PlaylistId, userId ids.UserId) (*domain.Playlist, domain.PlaylistSummary, error)
