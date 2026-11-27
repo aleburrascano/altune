@@ -2,6 +2,7 @@ package dbtest_test
 
 import (
 	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/polltest"
 	"fmt"
 	"runtime"
 	"sync"
@@ -31,8 +32,9 @@ func (r *cleanupRecorder) finish() {
 func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing.T) {
 	pool := dbtest.Pool(t)
 	holder := &cleanupRecorder{TB: t}
-	dbtest.ExclusiveAcquisitionQueue(holder, pool)
+	holderPID := dbtest.ExclusiveAcquisitionQueue(holder, pool)
 	releaseHolder := sync.OnceFunc(holder.finish)
+	alreadyBlocked := dbtest.BlockedBy(t, pool, holderPID)
 
 	waiter := &cleanupRecorder{TB: t}
 	acquired := make(chan struct{})
@@ -46,13 +48,17 @@ func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing
 		case <-acquired:
 			waiter.finish()
 		case <-time.After(10 * time.Second):
+			t.Error("the second test never released the acquisition queue request")
 		}
 	})
 
+	polltest.Until(t, 10*time.Second, "the second test to queue behind the holder", func() bool {
+		return dbtest.BlockedBy(t, pool, holderPID) > alreadyBlocked
+	})
 	select {
 	case <-acquired:
 		t.Fatal("a second test got the acquisition queue while the first still held it")
-	case <-time.After(300 * time.Millisecond):
+	default:
 	}
 
 	releaseHolder()

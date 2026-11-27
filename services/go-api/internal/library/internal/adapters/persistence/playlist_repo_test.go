@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	sharedids "altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"reflect"
@@ -716,10 +717,14 @@ func TestPostgresPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- playlistRepo.ReorderTracks(ctx, userId, pl.ID, reversed) }()
 
+	holderPID := int(holder.Conn().PgConn().PID())
+	polltest.Until(t, 10*time.Second, "ReorderTracks to queue behind the playlist lock", func() bool {
+		return dbtest.BlockedBy(t, pool, holderPID) >= 1
+	})
 	select {
 	case err := <-done:
 		t.Fatalf("ReorderTracks finished (err=%v) while the playlist lock was held; it must serialize behind it", err)
-	case <-time.After(500 * time.Millisecond):
+	default:
 	}
 
 	if err := holder.Commit(ctx); err != nil {

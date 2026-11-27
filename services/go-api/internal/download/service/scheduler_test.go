@@ -1704,6 +1704,7 @@ type fakeOutcomeRecorder struct {
 	deadlines chan time.Duration
 	err       error
 	delay     time.Duration
+	after     func(time.Duration) <-chan time.Time
 }
 
 func newFakeOutcomeRecorder() *fakeOutcomeRecorder {
@@ -1719,7 +1720,7 @@ func (r *fakeOutcomeRecorder) Record(ctx context.Context, o acqports.Acquisition
 	}
 	if r.delay > 0 {
 		select {
-		case <-time.After(r.delay):
+		case <-r.after(r.delay):
 		case <-ctx.Done():
 			r.calls <- o
 			return ctx.Err()
@@ -1743,10 +1744,11 @@ func awaitOutcome(t *testing.T, calls chan acqports.AcquisitionOutcome) acqports
 func assertExactlyOneOutcome(t *testing.T, calls chan acqports.AcquisitionOutcome) acqports.AcquisitionOutcome {
 	t.Helper()
 	first := awaitOutcome(t, calls)
+	synctest.Wait()
 	select {
 	case extra := <-calls:
 		t.Fatalf("recorder received a second Record call %+v, want exactly one", extra)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	return first
 }
@@ -1916,6 +1918,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		synctest.Test(t, func(t *testing.T) {
 			recorder := newFakeOutcomeRecorder()
 			recorder.delay = service.OutcomeRecordTimeout * 3
+			recorder.after = time.After
 			acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 			scheduler := newTestScheduler(acq, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -2184,6 +2187,7 @@ func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing
 	synctest.Test(t, func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		recorder.delay = 300 * time.Millisecond
+		recorder.after = time.After
 		svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 
@@ -2879,30 +2883,34 @@ func scheduledOutcome(t *testing.T, source acqports.AudioSource) acqports.Acquis
 }
 
 func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *testing.T) {
-	got := scheduledOutcome(t, freshAudioSource{})
+	synctest.Test(t, func(t *testing.T) {
+		got := scheduledOutcome(t, freshAudioSource{})
 
-	if got.Outcome != acqports.JobSucceeded || got.SourceHost != "www.youtube.com" {
-		t.Errorf("outcome = %q from host %q, want succeeded from www.youtube.com", got.Outcome, got.SourceHost)
-	}
-	if _, timed := got.StageMs["search"]; !timed || got.Stored.Codec != "mp3" || got.Stored.Bytes == 0 {
-		t.Errorf("outcome = %+v, want the job's stage times and stored file facts", got)
-	}
-	if got.Provenance == "" {
-		t.Error("outcome provenance is empty, want the acquisition's provenance")
-	}
+		if got.Outcome != acqports.JobSucceeded || got.SourceHost != "www.youtube.com" {
+			t.Errorf("outcome = %q from host %q, want succeeded from www.youtube.com", got.Outcome, got.SourceHost)
+		}
+		if _, timed := got.StageMs["search"]; !timed || got.Stored.Codec != "mp3" || got.Stored.Bytes == 0 {
+			t.Errorf("outcome = %+v, want the job's stage times and stored file facts", got)
+		}
+		if got.Provenance == "" {
+			t.Error("outcome provenance is empty, want the acquisition's provenance")
+		}
+	})
 }
 
 func TestBackgroundScheduler_AFailedOutcomeNamesNoSourceHost(t *testing.T) {
-	source := perURLSource{found: blindingLightsAt(failingRank1URL), broken: map[string]bool{failingRank1URL: true}}
+	synctest.Test(t, func(t *testing.T) {
+		source := perURLSource{found: blindingLightsAt(failingRank1URL), broken: map[string]bool{failingRank1URL: true}}
 
-	got := scheduledOutcome(t, source)
+		got := scheduledOutcome(t, source)
 
-	if got.Outcome != acqports.JobFailed {
-		t.Fatalf("outcome = %q, want failed", got.Outcome)
-	}
-	if got.SourceHost != "" {
-		t.Errorf("source host = %q, want empty: a failed job stored nothing", got.SourceHost)
-	}
+		if got.Outcome != acqports.JobFailed {
+			t.Fatalf("outcome = %q, want failed", got.Outcome)
+		}
+		if got.SourceHost != "" {
+			t.Errorf("source host = %q, want empty: a failed job stored nothing", got.SourceHost)
+		}
+	})
 }
 
 type orderedAcquirer struct {
@@ -3241,18 +3249,20 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 }
 
 func TestScheduler_OutcomeCarriesJobKindAndRun(t *testing.T) {
-	recorder := newFakeOutcomeRecorder()
-	job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: 2}
-	queue := newScriptedClaimQueue(job)
-	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now,
-		withTestQueue(queue), service.WithPollInterval(time.Millisecond), withTestOutcomes(recorder))
-	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+	synctest.Test(t, func(t *testing.T) {
+		recorder := newFakeOutcomeRecorder()
+		job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: 2}
+		queue := newScriptedClaimQueue(job)
+		scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now,
+			withTestQueue(queue), service.WithPollInterval(time.Millisecond), withTestOutcomes(recorder))
+		t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	got := assertExactlyOneOutcome(t, recorder.calls)
+		got := assertExactlyOneOutcome(t, recorder.calls)
 
-	if got.Kind != acqports.JobKindReplace || got.Run != 2 {
-		t.Errorf("outcome kind/run = %q/%d, want replace/2", got.Kind, got.Run)
-	}
+		if got.Kind != acqports.JobKindReplace || got.Run != 2 {
+			t.Errorf("outcome kind/run = %q/%d, want replace/2", got.Kind, got.Run)
+		}
+	})
 }
 
 func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *testing.T) {

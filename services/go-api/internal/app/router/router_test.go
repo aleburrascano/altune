@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -172,26 +173,6 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 
 func TestMountV1_TheRequestTimeoutBoundsTheBoundedGroupAndLeavesTheLongLivedOneAlone(t *testing.T) {
 	const budget = 100 * time.Millisecond
-	r := newRouter(router.Settings{})
-	blockUntilDone := func(w http.ResponseWriter, req *http.Request) {
-		select {
-		case <-req.Context().Done():
-			w.WriteHeader(http.StatusGatewayTimeout)
-		case <-time.After(3 * budget):
-			w.WriteHeader(http.StatusOK)
-		}
-	}
-	router.MountV1(r, budget, router.V1{
-		Bounded: func(r chi.Router) {
-			r.Get("/blocked", blockUntilDone)
-			r.Post("/tracks/{trackId}/audio/recover", blockUntilDone)
-		},
-		LongLived: func(r chi.Router) {
-			r.Get("/events", blockUntilDone)
-			r.Get("/tracks/{trackId}/audio", blockUntilDone)
-		},
-	})
-
 	cases := []struct {
 		method, path string
 		want         int
@@ -203,11 +184,33 @@ func TestMountV1_TheRequestTimeoutBoundsTheBoundedGroupAndLeavesTheLongLivedOneA
 	}
 	for _, tc := range cases {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
-			if rec.Code != tc.want {
-				t.Errorf("%s %s = %d, want %d", tc.method, tc.path, rec.Code, tc.want)
-			}
+			synctest.Test(t, func(t *testing.T) {
+				r := newRouter(router.Settings{})
+				blockUntilDone := func(w http.ResponseWriter, req *http.Request) {
+					select {
+					case <-req.Context().Done():
+						w.WriteHeader(http.StatusGatewayTimeout)
+					case <-time.After(3 * budget):
+						w.WriteHeader(http.StatusOK)
+					}
+				}
+				router.MountV1(r, budget, router.V1{
+					Bounded: func(r chi.Router) {
+						r.Get("/blocked", blockUntilDone)
+						r.Post("/tracks/{trackId}/audio/recover", blockUntilDone)
+					},
+					LongLived: func(r chi.Router) {
+						r.Get("/events", blockUntilDone)
+						r.Get("/tracks/{trackId}/audio", blockUntilDone)
+					},
+				})
+
+				rec := httptest.NewRecorder()
+				r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+				if rec.Code != tc.want {
+					t.Errorf("%s %s = %d, want %d", tc.method, tc.path, rec.Code, tc.want)
+				}
+			})
 		})
 	}
 }

@@ -248,14 +248,16 @@ func newRotatingFixture(t *testing.T) (*testJWTFixture, *rotatingJWKSServer) {
 	return f, jwks
 }
 
-func newCountingJWKSServer(t *testing.T, delay time.Duration, release <-chan struct{}) (*httptest.Server, *atomic.Int64) {
+func newCountingJWKSServer(t *testing.T, release <-chan struct{}) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
 	var hits atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		select {
-		case <-time.After(delay):
-		case <-release:
+		if release != nil {
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
 		}
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -459,19 +461,26 @@ func TestSupabaseJWTVerifier_EmptyKeySetDoesNotResetStaleness(t *testing.T) {
 }
 
 func TestSupabaseJWTVerifier_UnprimedConcurrentVerifyCoalescesFetches(t *testing.T) {
-	server, hits := newCountingJWKSServer(t, 200*time.Millisecond, nil)
+	release := make(chan struct{})
+	server, hits := newCountingJWKSServer(t, release)
 	verifier := newVerifier(t, server.URL, time.Now)
 	hits.Store(0)
 
 	const callers = 20
+	var started atomic.Int32
 	var wg sync.WaitGroup
 	errs := make(chan error, callers)
 	for range callers {
 		wg.Go(func() {
+			started.Add(1)
 			_, err := verifier.Verify(context.Background(), "any-token")
 			errs <- err
 		})
 	}
+	polltest.Until(t, 10*time.Second, "every caller to be in flight behind the first fetch", func() bool {
+		return hits.Load() >= 1 && started.Load() == callers
+	})
+	close(release)
 	wg.Wait()
 	close(errs)
 
@@ -486,7 +495,7 @@ func TestSupabaseJWTVerifier_UnprimedConcurrentVerifyCoalescesFetches(t *testing
 }
 
 func TestSupabaseJWTVerifier_UnprimedFailureBacksOffInsteadOfRetryingEveryRequest(t *testing.T) {
-	server, hits := newCountingJWKSServer(t, 0, nil)
+	server, hits := newCountingJWKSServer(t, nil)
 	verifier := newVerifier(t, server.URL, time.Now)
 	hits.Store(0)
 
@@ -502,7 +511,7 @@ func TestSupabaseJWTVerifier_UnprimedFailureBacksOffInsteadOfRetryingEveryReques
 
 func TestSupabaseJWTVerifier_CanceledCallerIsReleasedFromSharedFetch(t *testing.T) {
 	release := make(chan struct{})
-	server, hits := newCountingJWKSServer(t, time.Minute, release)
+	server, hits := newCountingJWKSServer(t, release)
 	t.Cleanup(func() { close(release) })
 	verifier := newVerifier(t, server.URL, time.Now, withJWKSFetchTimeout(2*time.Second))
 
@@ -753,7 +762,7 @@ func TestSupabaseJWTVerifier_VerifyReportsTokenExpiry(t *testing.T) {
 }
 
 func TestSupabaseJWTVerifier_CountsStartupAndForcedJWKSFetchFailures(t *testing.T) {
-	server, hits := newCountingJWKSServer(t, 0, nil)
+	server, hits := newCountingJWKSServer(t, nil)
 	metrics := &countingAuthMetrics{}
 	clock := &testClock{}
 	verifier := newVerifier(t, server.URL, clock.now, withJWKSMetrics(metrics))

@@ -1532,6 +1532,10 @@ func TestDownloadStep_WindowedKeepsBestRankedAcceptedEvenWhenLowerRankFinishesFi
 }
 
 func TestDownloadStep_SharedLimiterCapsInFlightFetchesAcrossExecutes(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) { sharedLimiterCapsInFlightFetches(t) })
+}
+
+func sharedLimiterCapsInFlightFetches(t *testing.T) {
 	gate := make(chan struct{})
 	fetcher := newGatedFetcher(map[string]chan struct{}{"a": gate, "b": gate})
 	limiter := service.MustLimitedTo(6)
@@ -1558,10 +1562,11 @@ func TestDownloadStep_SharedLimiterCapsInFlightFetchesAcrossExecutes(t *testing.
 	wg.Add(1)
 	go execute(newTestDownloadStep(fetcher, withTestLimit(limiter)), "seventh")
 
+	synctest.Wait()
 	select {
 	case <-fetcher.started:
 		t.Fatal("seventh fetch started while six were in flight")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(gate)
 	wg.Wait()

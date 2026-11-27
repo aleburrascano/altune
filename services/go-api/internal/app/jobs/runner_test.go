@@ -238,10 +238,11 @@ func waitAsync(r *jobs.Runner) <-chan struct{} {
 
 func assertStillWaiting(t *testing.T, waited <-chan struct{}, what string) {
 	t.Helper()
+	synctest.Wait()
 	select {
 	case <-waited:
 		t.Fatalf("Wait returned while %s", what)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 }
 
@@ -255,34 +256,38 @@ func assertWaitReturns(t *testing.T, waited <-chan struct{}) {
 }
 
 func TestWait_BlocksWhileAJobRunIsInFlight(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	ctx, cancel := context.WithCancel(context.Background())
-	started := make(chan struct{})
-	release := make(chan struct{})
-	var once sync.Once
-	r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Hour, func(context.Context) error {
-		once.Do(func() { close(started) })
-		<-release
-		return nil
-	})
-	<-started
-	cancel()
-	waited := waitAsync(&r)
+	synctest.Test(t, func(t *testing.T) {
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		ctx, cancel := context.WithCancel(context.Background())
+		started := make(chan struct{})
+		release := make(chan struct{})
+		var once sync.Once
+		r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Hour, func(context.Context) error {
+			once.Do(func() { close(started) })
+			<-release
+			return nil
+		})
+		<-started
+		cancel()
+		waited := waitAsync(&r)
 
-	assertStillWaiting(t, waited, "a job run was in flight")
-	close(release)
-	assertWaitReturns(t, waited)
+		assertStillWaiting(t, waited, "a job run was in flight")
+		close(release)
+		assertWaitReturns(t, waited)
+	})
 }
 
 func TestWait_BlocksWhileTheSharedBackgroundGroupIsRunning(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	release := make(chan struct{})
-	r.Background().Track(func() { <-release })
-	waited := waitAsync(&r)
+	synctest.Test(t, func(t *testing.T) {
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		release := make(chan struct{})
+		r.Background().Track(func() { <-release })
+		waited := waitAsync(&r)
 
-	assertStillWaiting(t, waited, "the shared background group was running")
-	close(release)
-	assertWaitReturns(t, waited)
+		assertStillWaiting(t, waited, "the shared background group was running")
+		close(release)
+		assertWaitReturns(t, waited)
+	})
 }
 
 func TestTicker_RecoversFromAPanickingJob(t *testing.T) {

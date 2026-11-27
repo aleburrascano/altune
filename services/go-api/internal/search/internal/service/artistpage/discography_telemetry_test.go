@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -77,6 +78,10 @@ func observeDiscography(t *testing.T, albums map[search.ProviderName][]search.Se
 }
 
 func TestNoDiscographyObserver_LeavesTheAlbumsAnswerUnchanged(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) { noDiscographyObserverLeavesTheAlbumsAnswerUnchanged(t) })
+}
+
+func noDiscographyObserverLeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 	albums := map[search.ProviderName][]search.SearchResult{
 		search.ProviderSpotify: {
 			catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded"),
@@ -108,10 +113,11 @@ func TestNoDiscographyObserver_LeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 	if got := fetch(silent); !slices.Equal(got, observed) {
 		t.Errorf("titles with NoDiscographyObserver = %v, want %v as with telemetry", got, observed)
 	}
+	synctest.Wait()
 	select {
 	case ev := <-store.events:
 		t.Errorf("event %+v recorded, want none beyond the telemetry service's own", ev)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 }
 

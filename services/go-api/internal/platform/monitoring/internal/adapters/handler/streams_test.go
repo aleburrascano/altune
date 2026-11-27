@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -387,10 +388,11 @@ func assertEndsWithin(t *testing.T, returned <-chan struct{}, limit time.Duratio
 
 func assertStillOpen(t *testing.T, returned <-chan struct{}, why string) {
 	t.Helper()
+	synctest.Wait()
 	select {
 	case <-returned:
 		t.Fatal(why)
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
 }
 
@@ -454,18 +456,20 @@ func TestStreams_EndAtTokenExpiry(t *testing.T) {
 }
 
 func TestStreams_EndWhenShutdownBeginsWhileIdle(t *testing.T) {
-	fx := newStreamFixture(t)
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
-			shutdown := make(chan struct{})
-			deps := fx.deps
-			deps.Shutdown = shutdown
-			returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, path, nil))
-			assertStillOpen(t, returned, "stream ended before shutdown began")
+			synctest.Test(t, func(t *testing.T) {
+				fx := newStreamFixture(t)
+				shutdown := make(chan struct{})
+				deps := fx.deps
+				deps.Shutdown = shutdown
+				returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, path, nil))
+				assertStillOpen(t, returned, "stream ended before shutdown began")
 
-			close(shutdown)
+				close(shutdown)
 
-			assertEndsWithin(t, returned, 2*time.Second, "idle stream held its handler open after shutdown began")
+				assertEndsWithin(t, returned, 2*time.Second, "idle stream held its handler open after shutdown began")
+			})
 		})
 	}
 }
@@ -487,16 +491,18 @@ func TestStreams_OpenedAfterShutdownEndPromptly(t *testing.T) {
 }
 
 func TestStreams_WithoutShutdownRunUntilTheRequestEnds(t *testing.T) {
-	fx := newStreamFixture(t)
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
-			ctx, endRequest := context.WithCancel(context.Background())
-			returned := serveStream(t, fx.deps, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
-			assertStillOpen(t, returned, "stream with no shutdown channel ended on its own")
+			synctest.Test(t, func(t *testing.T) {
+				fx := newStreamFixture(t)
+				ctx, endRequest := context.WithCancel(context.Background())
+				returned := serveStream(t, fx.deps, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
+				assertStillOpen(t, returned, "stream with no shutdown channel ended on its own")
 
-			endRequest()
+				endRequest()
 
-			assertEndsWithin(t, returned, 2*time.Second, "stream outlived its request")
+				assertEndsWithin(t, returned, 2*time.Second, "stream outlived its request")
+			})
 		})
 	}
 }
@@ -685,8 +691,18 @@ func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
 	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Named(events.EventType(marker)))
 
 	conn.awaitData(t, marker)
-	returned := serveStreamOn(t, boundedRouter(fx.deps, bounds), httptest.NewRequest(http.MethodGet, "/events/stream", nil))
-	assertStillOpen(t, returned, "a non-positive MaxLifetime ended the stream instead of keeping the default")
+}
+
+func TestStreams_ANonPositiveMaxLifetimeKeepsTheStreamOpen(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := newStreamFixture(t)
+		bounds := monitoring.StreamBounds{WriteIdle: -time.Second, Heartbeat: 0, MaxLifetime: -time.Second}
+		returned := serveStreamOn(t, boundedRouter(fx.deps, bounds), httptest.NewRequest(http.MethodGet, "/events/stream", nil))
+
+		time.Sleep(time.Second)
+
+		assertStillOpen(t, returned, "a non-positive MaxLifetime ended the stream instead of keeping the default")
+	})
 }
 
 func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
@@ -778,41 +794,45 @@ func stoppableEventsDeps(t *testing.T) (monitoring.Deps, *monitoring.EventTap, f
 }
 
 func TestStreamEvents_EndsWhenTheFeedStopsWhileIdle(t *testing.T) {
-	deps, _, stopFeed := stoppableEventsDeps(t)
-	returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
-	assertStillOpen(t, returned, "events stream ended before the feed stopped")
+	synctest.Test(t, func(t *testing.T) {
+		deps, _, stopFeed := stoppableEventsDeps(t)
+		returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
+		assertStillOpen(t, returned, "events stream ended before the feed stopped")
 
-	stopFeed()
+		stopFeed()
 
-	assertEndsWithin(t, returned, 2*time.Second, "events stream outlived its feed")
+		assertEndsWithin(t, returned, 2*time.Second, "events stream outlived its feed")
+	})
 }
 
 func TestStreamEvents_EndsWhenTheFeedStopsMidSend(t *testing.T) {
-	deps, tap, stopFeed := stoppableEventsDeps(t)
-	returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
-	assertStillOpen(t, returned, "events stream ended before the feed stopped")
-	publishing := make(chan struct{})
-	quit := make(chan struct{})
-	go func() {
-		defer close(publishing)
-		user := ids.NewUserId(uuid.New())
-		for {
-			select {
-			case <-quit:
-				return
-			default:
-				tap.Publish(context.Background(), user, eventstest.Named("mid-send"))
+	synctest.Test(t, func(t *testing.T) {
+		deps, tap, stopFeed := stoppableEventsDeps(t)
+		returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
+		assertStillOpen(t, returned, "events stream ended before the feed stopped")
+		publishing := make(chan struct{})
+		quit := make(chan struct{})
+		go func() {
+			defer close(publishing)
+			user := ids.NewUserId(uuid.New())
+			for {
+				select {
+				case <-quit:
+					return
+				default:
+					tap.Publish(context.Background(), user, eventstest.Named("mid-send"))
+				}
 			}
-		}
-	}()
-	t.Cleanup(func() {
-		close(quit)
-		<-publishing
+		}()
+		t.Cleanup(func() {
+			close(quit)
+			<-publishing
+		})
+
+		stopFeed()
+
+		assertEndsWithin(t, returned, 2*time.Second, "events stream kept running while events were still being published after its feed stopped")
 	})
-
-	stopFeed()
-
-	assertEndsWithin(t, returned, 2*time.Second, "events stream kept running while events were still being published after its feed stopped")
 }
 
 func TestStreamEvents_OpenedAfterTheFeedStoppedDoesNotHang(t *testing.T) {
@@ -825,16 +845,18 @@ func TestStreamEvents_OpenedAfterTheFeedStoppedDoesNotHang(t *testing.T) {
 }
 
 func TestStreamEvents_EveryOpenStreamEndsWhenTheFeedStops(t *testing.T) {
-	deps, _, stopFeed := stoppableEventsDeps(t)
-	streams := make([]<-chan struct{}, 0, eventFeedCeiling)
-	for i := 0; i < eventFeedCeiling; i++ {
-		streams = append(streams, serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil)))
-	}
-	assertStillOpen(t, streams[0], "events stream ended before the feed stopped")
+	synctest.Test(t, func(t *testing.T) {
+		deps, _, stopFeed := stoppableEventsDeps(t)
+		streams := make([]<-chan struct{}, 0, eventFeedCeiling)
+		for i := 0; i < eventFeedCeiling; i++ {
+			streams = append(streams, serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil)))
+		}
+		assertStillOpen(t, streams[0], "events stream ended before the feed stopped")
 
-	stopFeed()
+		stopFeed()
 
-	for _, returned := range streams {
-		assertEndsWithin(t, returned, 2*time.Second, "one of the open events streams outlived its feed")
-	}
+		for _, returned := range streams {
+			assertEndsWithin(t, returned, 2*time.Second, "one of the open events streams outlived its feed")
+		}
+	})
 }

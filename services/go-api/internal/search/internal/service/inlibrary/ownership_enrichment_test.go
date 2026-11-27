@@ -183,27 +183,31 @@ func TestEnrichAlbumTracks_StalledFillIsAbandonedAtItsTenSecondDeadline(t *testi
 }
 
 func TestEnrichAlbumTracks_TheSharedTrackerWaitsUntilTheFillFinishes(t *testing.T) {
-	bg := searchtest.NewTracker(t)
-	filler := stallingFiller()
-	svc := searchtest.NewOwnership(t, bg, fillableReader(), filler)
-	item := fillableItem()
-	svc.EnrichAlbumTracks(context.Background(), ids.UserId{}, []inlibrary.OwnableItem{item})
-	<-filler.entered
+	synctest.Test(t, func(t *testing.T) {
+		bg := searchtest.NewTracker(t)
+		filler := stallingFiller()
+		svc := searchtest.NewOwnership(t, bg, fillableReader(), filler)
+		item := fillableItem()
+		svc.EnrichAlbumTracks(context.Background(), ids.UserId{}, []inlibrary.OwnableItem{item})
+		<-filler.entered
 
-	drained := make(chan struct{})
-	go func() { bg.Wait(); close(drained) }()
+		drained := make(chan struct{})
+		go func() { bg.Wait(); close(drained) }()
 
-	select {
-	case <-drained:
-		t.Fatal("the tracker stopped waiting while the backfill was still writing")
-	case <-time.After(50 * time.Millisecond):
-	}
-	close(filler.release)
-	select {
-	case <-drained:
-	case <-time.After(2 * time.Second):
-		t.Fatal("the tracker never stopped waiting after the backfill finished")
-	}
+		synctest.Wait()
+		select {
+		case <-drained:
+			t.Fatal("the tracker stopped waiting while the backfill was still writing")
+		default:
+		}
+		close(filler.release)
+		synctest.Wait()
+		select {
+		case <-drained:
+		default:
+			t.Fatal("the tracker never stopped waiting after the backfill finished")
+		}
+	})
 }
 
 func TestEnrichAlbumTracks_AFillTheTrackerRefusesCompletesWithoutWriting(t *testing.T) {

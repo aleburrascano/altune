@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"strings"
 	"sync"
@@ -272,6 +273,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 
 type commitGate struct {
 	armed   atomic.Bool
+	backend atomic.Int32
 	reached chan struct{}
 	release chan struct{}
 	opened  sync.Once
@@ -283,8 +285,9 @@ func newCommitGate() *commitGate {
 	return g
 }
 
-func (g *commitGate) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+func (g *commitGate) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	if strings.EqualFold(strings.TrimSpace(data.SQL), "commit") && g.armed.CompareAndSwap(true, false) {
+		g.backend.Store(int32(conn.PgConn().PID()))
 		close(g.reached)
 		<-g.release
 	}
@@ -330,10 +333,14 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		})
 	}()
 
+	eraserPID := int(gate.backend.Load())
+	polltest.Until(t, 10*time.Second, "both racing writes to queue behind the open erase", func() bool {
+		return dbtest.BlockedBy(t, pool, eraserPID) >= 2
+	})
 	select {
 	case err := <-written:
 		t.Fatalf("a write finished while the erase was still open (err %v), want it held until the erase commits", err)
-	case <-time.After(300 * time.Millisecond):
+	default:
 	}
 	gate.open()
 	if err := <-erased; err != nil {
