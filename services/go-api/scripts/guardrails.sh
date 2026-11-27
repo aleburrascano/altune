@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-GOLANGCI_VERSION="v2.13.2"
-export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+here="$(cd "$(dirname "$0")" && pwd)"
+tools="${here}/../../../scripts/ci/go-tools.sh"
+tool_version() { sed -n "s/^$1=//p" "${tools}" 2>/dev/null | head -n 1; }
+GOLANGCI_VERSION="$(tool_version golangci_version)"
+GOVULNCHECK_VERSION="$(tool_version govulncheck_version)"
+if [ -z "${GOLANGCI_VERSION}" ] || [ -z "${GOVULNCHECK_VERSION}" ]; then
+  echo "guardrails: golangci_version and govulncheck_version are not set in ${tools}, so there is no pinned tool version to use"
+  exit 2
+fi
+if [ -z "${GOTOOLCHAIN:-}" ]; then
+  gomod_go="$(awk '/^go /{print $2; exit}' "${here}/../go.mod" 2>/dev/null)"
+  if [ -z "${gomod_go}" ]; then
+    echo "guardrails: ${here}/../go.mod has no go line, so there is no toolchain to scan with; set GOTOOLCHAIN or add the line"
+    exit 2
+  fi
+  GOTOOLCHAIN="go${gomod_go}"
+fi
+export GOTOOLCHAIN
 
 cd "$(dirname "$0")/.." || exit 1
 GOBIN="$(go env GOPATH)/bin"
@@ -53,7 +69,8 @@ do_fmt_all() {
 
 do_vuln() {
   echo "== govulncheck: reachable CVEs (blocking) =="
-  have govulncheck || go install golang.org/x/vuln/cmd/govulncheck@latest
+  [ "$(govulncheck -version 2>/dev/null | sed -n 's/^Scanner: govulncheck@//p')" = "${GOVULNCHECK_VERSION}" ] \
+    || go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
   govulncheck ./... || rc=1
 }
 

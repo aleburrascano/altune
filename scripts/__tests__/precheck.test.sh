@@ -591,6 +591,25 @@ expect_rc 1
 expect_out "FAIL  repo script self-tests"
 [ -f "$WORK/selftest.log" ] || fail "worktree-deps.test.sh should have run"
 
+CASE="a change under services/go-api/scripts runs every self-test in its __tests__"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/scripts/__tests__
+    printf 'exit 0\n' >scripts/worktree-deps.sh
+    git add -A
+    git commit -qm "base"
+    git update-ref refs/remotes/gitea/main HEAD
+    printf '#!/usr/bin/env bash\n' >services/go-api/scripts/guardrails.sh
+    printf 'echo ran >"%s/guardrail-selftest.log"; exit 1\n' "$WORK" >services/go-api/scripts/__tests__/guardrails.test.sh
+    git add -A
+    git commit -qm "guardrails change"
+)
+run_script
+expect_rc 1
+expect_out "FAIL  go-api guardrail script self-tests"
+[ -f "$WORK/guardrail-selftest.log" ] || fail "guardrails.test.sh should have run"
+
 CASE="a change to Stryker's client config runs the client mutation self-test"
 new_repo
 (
