@@ -62,7 +62,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
 				track := seedReady(t, repo, "Track", "audio/123.mp3")
 				store.Seed("audio/123.mp3", []byte("fake-audio-data"))
-				return track.ID.UUID().String()
+				return track.ID().UUID().String()
 			},
 			wantStatus:      http.StatusOK,
 			wantContentType: "audio/mpeg",
@@ -73,7 +73,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
 				track := seedReady(t, repo, "Track", "audio/456.m4a")
 				store.Seed("audio/456.m4a", []byte("fake-audio-data"))
-				return track.ID.UUID().String()
+				return track.ID().UUID().String()
 			},
 			wantStatus:      http.StatusOK,
 			wantContentType: "audio/mp4",
@@ -84,7 +84,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
 				track := seedReady(t, repo, "Track", "audio/789.opus")
 				store.Seed("audio/789.opus", []byte("fake-audio-data"))
-				return track.ID.UUID().String()
+				return track.ID().UUID().String()
 			},
 			wantStatus:      http.StatusOK,
 			wantContentType: "audio/opus",
@@ -108,7 +108,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			name: "pending track (not streamable) returns 404",
 			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
 				track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Pending", "Artist", "Album")
-				return track.ID.UUID().String()
+				return track.ID().UUID().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
@@ -116,7 +116,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			name: "ready track with missing audio file returns 404 and reconciles",
 			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
 				track := seedReady(t, repo, "Gone", "audio/gone.opus")
-				return track.ID.UUID().String()
+				return track.ID().UUID().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
@@ -150,14 +150,14 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 	track := seedReady(t, repo, "Gone", "audio/gone.opus")
 	router := streamOnlyRoute(repo, library.NewInMemoryAudioStore(), sched)
 
-	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream", nil)
+	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID().UUID().String()+"/stream", nil)
 
 	assertStatus(t, rec, http.StatusNotFound)
 	if len(sched.TrackIds) != 1 {
 		t.Fatalf("expected 1 scheduled reacquisition, got %d", len(sched.TrackIds))
 	}
-	if sched.TrackIds[0] != track.ID {
-		t.Errorf("scheduled track = %v, want %v", sched.TrackIds[0], track.ID)
+	if sched.TrackIds[0] != track.ID() {
+		t.Errorf("scheduled track = %v, want %v", sched.TrackIds[0], track.ID())
 	}
 }
 
@@ -178,9 +178,9 @@ func TestHandleRecover(t *testing.T) {
 		wantStatus int
 	}{
 		{"nonexistent track returns 404", uuid.New().String(), http.StatusNotFound},
-		{"foreign track returns 404", foreign.ID.UUID().String(), http.StatusNotFound},
-		{"owned non-streamable track is an accepted no-op", pending.ID.UUID().String(), http.StatusAccepted},
-		{"owned track with missing audio is accepted", gone.ID.UUID().String(), http.StatusAccepted},
+		{"foreign track returns 404", foreign.ID().UUID().String(), http.StatusNotFound},
+		{"owned non-streamable track is an accepted no-op", pending.ID().UUID().String(), http.StatusAccepted},
+		{"owned track with missing audio is accepted", gone.ID().UUID().String(), http.StatusAccepted},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -188,8 +188,8 @@ func TestHandleRecover(t *testing.T) {
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}
-	if len(sched.TrackIds) != 1 || sched.TrackIds[0] != gone.ID {
-		t.Fatalf("scheduled = %v, want only the owned missing-audio track %v", sched.TrackIds, gone.ID)
+	if len(sched.TrackIds) != 1 || sched.TrackIds[0] != gone.ID() {
+		t.Fatalf("scheduled = %v, want only the owned missing-audio track %v", sched.TrackIds, gone.ID())
 	}
 }
 
@@ -209,7 +209,7 @@ func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	repo, router := streamRoutesAt(store, clock.now)
 	track := seedReady(t, repo, "Track", "audio/present.opus")
 	store.Seed("audio/present.opus", []byte("fake-audio-data"))
-	path := "/tracks/" + track.ID.UUID().String() + "/audio/recover"
+	path := "/tracks/" + track.ID().UUID().String() + "/audio/recover"
 
 	for i := range streamBurst {
 		if rec := request(t, router, http.MethodPost, path, nil); rec.Code != http.StatusAccepted {
@@ -281,7 +281,7 @@ func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 	track := seedReady(t, repo, "Half", "audio/half.opus")
 	store.Seed("audio/half.opus", bytes.Repeat([]byte{0x5a}, 4*deliverable))
 
-	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
+	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID().UUID().String()+"/audio", nil)
 
 	if rec.Body.Len() != deliverable {
 		t.Fatalf("body = %d bytes, want the %d delivered before the read failed", rec.Body.Len(), deliverable)
@@ -307,7 +307,7 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 	track := seedReady(t, repo, "Whole", "audio/whole.opus")
 	store.Seed("audio/whole.opus", audio)
 
-	request(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
+	request(t, router, http.MethodGet, "/tracks/"+track.ID().UUID().String()+"/audio", nil)
 
 	served := findLogRecord(t, ring, "stream.served")
 	if served.Attrs["outcome"] != "ok" {
@@ -330,7 +330,7 @@ func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 	store.Seed("audio/skipped.opus", bytes.Repeat([]byte{0x5a}, 4096))
 
 	ctx, abort := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID().UUID().String()+"/audio", nil).WithContext(ctx)
 	abort()
 	sendAs(router, req, librarytest.UserId())
 
@@ -348,7 +348,7 @@ func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
 	repo, router := streamRoutes(store)
 	track := seedReady(t, repo, "Track", "audio/framed.opus")
 	store.Seed("audio/framed.opus", bytes.Repeat([]byte{0x5a}, 4096))
-	path := "/tracks/" + track.ID.UUID().String() + "/audio"
+	path := "/tracks/" + track.ID().UUID().String() + "/audio"
 
 	whole := request(t, router, http.MethodGet, path, nil)
 	rangeReq := httptest.NewRequest(http.MethodGet, path, nil)
@@ -394,7 +394,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), time.Now, opts...).Routes(r)
 	srv := slowclienttest.NewServer(t, r)
 
-	path := "/tracks/" + track.ID.UUID().String() + "/audio"
+	path := "/tracks/" + track.ID().UUID().String() + "/audio"
 	auth := http.Header{"Authorization": {"Bearer " + librarytest.UserId().String()}}
 	get := func() *http.Response {
 		conn, br := slowclienttest.Get(t, srv, path, auth)

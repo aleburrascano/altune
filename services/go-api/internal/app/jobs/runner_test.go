@@ -582,7 +582,7 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 	store.ErrOnStream = errors.New("not found")
 	sched := &librarytest.Scheduler{}
 	svc := library.NewStreamTrackService(repo, store, sched, &librarytest.Metrics{}, r.Switch(jobs.StreamRecovery), clock.Now)
-	track, err := library.NewTrack(user, "Track", "Artist", "Album", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: user, Title: "Track", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -593,16 +593,16 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 
 	r.SetEnabled(jobs.StreamRecovery, false)
 
-	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, library.ErrAudioTemporarilyUnavailable) {
+	if _, err := svc.Execute(ctx, user, track.ID()); !errors.Is(err, library.ErrAudioTemporarilyUnavailable) {
 		t.Fatalf("disabled recovery stream err = %v, want ErrAudioTemporarilyUnavailable", err)
 	}
-	if err := svc.RecoverIfMissing(ctx, user, track.ID); err != nil {
+	if err := svc.RecoverIfMissing(ctx, user, track.ID()); err != nil {
 		t.Fatalf("disabled RecoverIfMissing err = %v, want nil no-op", err)
 	}
 	if len(sched.TrackIds) != 0 {
 		t.Fatalf("disabled stream recovery scheduled %d re-acquisitions", len(sched.TrackIds))
 	}
-	if got, _ := repo.GetByID(ctx, track.ID, user); got == nil || got.DownloadStatus != library.AcquisitionReady {
+	if got, _ := repo.GetByID(ctx, track.ID(), user); got == nil || got.DownloadStatus() != library.AcquisitionReady {
 		t.Fatalf("disabled stream recovery changed the track: %+v", got)
 	}
 	if h := findHealth(t, &r, string(jobs.StreamRecovery)); h.Enabled || h.Skipped != 2 {
@@ -611,7 +611,7 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 
 	r.SetEnabled(jobs.StreamRecovery, true)
 
-	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, library.ErrAudioNotAvailable) {
+	if _, err := svc.Execute(ctx, user, track.ID()); !errors.Is(err, library.ErrAudioNotAvailable) {
 		t.Fatalf("re-enabled recovery stream err = %v, want ErrAudioNotAvailable", err)
 	}
 	if len(sched.TrackIds) != 1 {

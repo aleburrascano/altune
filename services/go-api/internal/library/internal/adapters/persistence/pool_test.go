@@ -165,11 +165,11 @@ func unansweredCalls(t *testing.T, metrics library.DBCallMetrics) []repoCall {
 			return err
 		}},
 		{"track.QueryRow/GetByID", func(ctx context.Context, pool *pgxpool.Pool) error {
-			_, err := library.NewPostgresTrackRepository(pool, metrics).GetByID(ctx, track.ID, userId)
+			_, err := library.NewPostgresTrackRepository(pool, metrics).GetByID(ctx, track.ID(), userId)
 			return err
 		}},
 		{"track.Exec/Update", func(ctx context.Context, pool *pgxpool.Pool) error {
-			return library.NewPostgresTrackRepository(pool, metrics).Update(ctx, track, track.Version)
+			return library.NewPostgresTrackRepository(pool, metrics).Update(ctx, track, track.Version())
 		}},
 		{"track.Begin/Add", func(ctx context.Context, pool *pgxpool.Pool) error {
 			_, _, err := library.NewPostgresTrackRepository(pool, metrics).Add(ctx, track)
@@ -179,10 +179,10 @@ func unansweredCalls(t *testing.T, metrics library.DBCallMetrics) []repoCall {
 			return library.NewPostgresPlaylistRepository(pool, metrics).Create(ctx, playlist)
 		}},
 		{"playlist.Begin/AddTrack", func(ctx context.Context, pool *pgxpool.Pool) error {
-			return library.NewPostgresPlaylistRepository(pool, metrics).AddTrack(ctx, userId, playlist.ID, track.ID)
+			return library.NewPostgresPlaylistRepository(pool, metrics).AddTrack(ctx, userId, playlist.ID, track.ID())
 		}},
 		{"featured.Begin/ReplaceFeaturedArtists", func(ctx context.Context, pool *pgxpool.Pool) error {
-			return library.NewPostgresCatalogTrackRepository(pool, metrics).ReplaceFeaturedArtists(ctx, track.ID, userId, nil)
+			return library.NewPostgresCatalogTrackRepository(pool, metrics).ReplaceFeaturedArtists(ctx, track.ID(), userId, nil)
 		}},
 		{"lens.Query/ListFilteredForUser", func(ctx context.Context, pool *pgxpool.Pool) error {
 			_, _, err := library.NewPostgresCatalogTrackRepository(pool, metrics).ListFilteredForUser(ctx, userId, library.LibraryQuery{Limit: 10})
@@ -525,7 +525,7 @@ func trackRepoMethods(f repoFixture) []repoCall {
 			return errOf3(repo(p).Add(ctx, tr))
 		}},
 		{"PostgresTrackRepository.AudioRefInUse", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).AudioRefInUse(ctx, "audio/ref", tr.ID))
+			return errOf(repo(p).AudioRefInUse(ctx, "audio/ref", tr.ID()))
 		}},
 		{"PostgresTrackRepository.AudioRefsUnderPrefix", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf(repo(p).AudioRefsUnderPrefix(ctx, "audio/"))
@@ -534,19 +534,19 @@ func trackRepoMethods(f repoFixture) []repoCall {
 			return errOf(repo(p).CountForUser(ctx, u, 10))
 		}},
 		{"PostgresTrackRepository.Delete", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf3(repo(p).Delete(ctx, tr.ID, u))
+			return errOf3(repo(p).Delete(ctx, tr.ID(), u))
 		}},
 		{"PostgresTrackRepository.GetByDedupKey", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).GetByDedupKey(ctx, u, tr.DedupKey))
+			return errOf(repo(p).GetByDedupKey(ctx, u, tr.DedupKey()))
 		}},
 		{"PostgresTrackRepository.GetByID", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).GetByID(ctx, tr.ID, u))
+			return errOf(repo(p).GetByID(ctx, tr.ID(), u))
 		}},
 		{"PostgresTrackRepository.GetByIdempotencyKey", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf(repo(p).GetByIdempotencyKey(ctx, u, "key"))
 		}},
 		{"PostgresTrackRepository.ListByIDs", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).ListByIDs(ctx, u, []library.TrackId{tr.ID}))
+			return errOf(repo(p).ListByIDs(ctx, u, []library.TrackId{tr.ID()}))
 		}},
 		{"PostgresTrackRepository.ListForUser", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf3(repo(p).ListForUser(ctx, u, 10, 0))
@@ -558,19 +558,19 @@ func trackRepoMethods(f repoFixture) []repoCall {
 			return errOf(repo(p).ListReadyAudioTracks(ctx))
 		}},
 		{"PostgresTrackRepository.RecordInPlaceVerdict", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).RecordInPlaceVerdict(ctx, tr.ID, "ref", library.InPlaceVerdict{}))
+			return errOf(repo(p).RecordInPlaceVerdict(ctx, tr.ID(), "ref", library.InPlaceVerdict{}))
 		}},
 		{"PostgresTrackRepository.UpdateFenced", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).UpdateFenced(ctx, tr, tr.Version, 1)
+			return repo(p).UpdateFenced(ctx, tr, tr.Version(), 1)
 		}},
 		{"PostgresTrackRepository.Requeue", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).Requeue(ctx, tr.ID)
+			return repo(p).Requeue(ctx, tr.ID())
 		}},
 		{"PostgresTrackRepository.SetTrackNumber", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).SetTrackNumber(ctx, tr.ID, u, 3))
+			return errOf(repo(p).SetTrackNumber(ctx, tr.ID(), u, 3))
 		}},
 		{"PostgresTrackRepository.Update", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).Update(ctx, tr, tr.Version)
+			return repo(p).Update(ctx, tr, tr.Version())
 		}},
 	}
 }
@@ -586,7 +586,7 @@ func catalogTrackRepoMethods(f repoFixture) []repoCall {
 			return errOf(repo(p).ListTracksFeaturing(ctx, u, library.FeaturedArtist{Name: "Guest"}))
 		}},
 		{"PostgresCatalogTrackRepository.ReplaceFeaturedArtists", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).ReplaceFeaturedArtists(ctx, tr.ID, u, nil)
+			return repo(p).ReplaceFeaturedArtists(ctx, tr.ID(), u, nil)
 		}},
 		{"PostgresCatalogTrackRepository.ListAlbumsForUser", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf(repo(p).ListAlbumsForUser(ctx, u, query))
@@ -602,13 +602,13 @@ func catalogTrackRepoMethods(f repoFixture) []repoCall {
 
 func playlistRepoMethods(f repoFixture) []repoCall {
 	u, pl, tr := f.userId, f.playlist, f.track
-	ids := []library.TrackId{tr.ID}
+	ids := []library.TrackId{tr.ID()}
 	repo := func(p *pgxpool.Pool) *library.PostgresPlaylistRepository {
 		return library.NewPostgresPlaylistRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	return []repoCall{
 		{"PostgresPlaylistRepository.AddTrack", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).AddTrack(ctx, u, pl.ID, tr.ID)
+			return repo(p).AddTrack(ctx, u, pl.ID, tr.ID())
 		}},
 		{"PostgresPlaylistRepository.AddTracks", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf(repo(p).AddTracks(ctx, u, pl.ID, ids))
@@ -644,13 +644,13 @@ func playlistRepoMethods(f repoFixture) []repoCall {
 			return errOf(repo(p).ListForUser(ctx, u, 10, 0))
 		}},
 		{"PostgresPlaylistRepository.RemoveTrack", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).RemoveTrack(ctx, u, pl.ID, tr.ID))
+			return errOf(repo(p).RemoveTrack(ctx, u, pl.ID, tr.ID()))
 		}},
 		{"PostgresPlaylistRepository.RemoveTracks", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf(repo(p).RemoveTracks(ctx, u, pl.ID, ids))
 		}},
 		{"PostgresPlaylistRepository.ReorderTracks", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).ReorderTracks(ctx, u, pl.ID, []library.PlaylistTrack{{TrackId: tr.ID}})
+			return repo(p).ReorderTracks(ctx, u, pl.ID, []library.PlaylistTrack{{TrackId: tr.ID()}})
 		}},
 		{"PostgresPlaylistRepository.Update", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).Update(ctx, pl)
@@ -674,7 +674,7 @@ func orphanedAudioRepoMethods(f repoFixture) []repoCall {
 			return repo(p).MarkOrphanedAudioAttempt(ctx, "audio/ref", "delete failed")
 		}},
 		{"PostgresOrphanedAudioRepository.RecordOrphanedAudio", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).RecordOrphanedAudio(ctx, library.OrphanedAudio{AudioRef: "audio/ref", UserId: u, TrackId: tr.ID})
+			return repo(p).RecordOrphanedAudio(ctx, library.OrphanedAudio{AudioRef: "audio/ref", UserId: u, TrackId: tr.ID()})
 		}},
 		{"PostgresOrphanedAudioRepository.ResolveOrphanedAudio", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).ResolveOrphanedAudio(ctx, "audio/ref")

@@ -14,7 +14,7 @@ import (
 
 func newTestTrackForDB(t *testing.T, userId sharedids.UserId) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album", time.Now, sharedids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: "Title-" + uuid.New().String()[:8], Artist: "Artist-" + uuid.New().String()[:8], Album: "Album"}, time.Now, sharedids.Real)
 	if err != nil {
 		t.Fatalf("newTestTrackForDB: %v", err)
 	}
@@ -52,11 +52,11 @@ func newTestPlaylistForDB(t *testing.T, userId sharedids.UserId) *library.Playli
 func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId sharedids.UserId) library.TrackId {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(ctx, track); err != nil {
 		t.Fatalf("seedTrackForDB: %v", err)
 	}
-	return track.ID
+	return track.ID()
 }
 
 func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id library.PlaylistId, userId sharedids.UserId) {
@@ -91,14 +91,14 @@ func seedPlaylistWithTracks(ctx context.Context, t *testing.T, pool *pgxpool.Poo
 	ids := make([]library.TrackId, n)
 	for i := range ids {
 		tr := newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, tr.ID, userId)
+		cleanupTrack(t, pool, tr.ID(), userId)
 		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
-		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, tr.ID); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, tr.ID()); err != nil {
 			t.Fatalf("AddTrack %d: %v", i, err)
 		}
-		ids[i] = tr.ID
+		ids[i] = tr.ID()
 	}
 	return pl, ids
 }

@@ -33,7 +33,7 @@ func addTrackAt(t *testing.T, pool *pgxpool.Pool, userId ids.UserId, audioRef st
 			t.Fatal(err)
 		}
 	}
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(context.Background(), track); err != nil {
 		t.Fatalf("Add: %v", err)
 	}

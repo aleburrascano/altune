@@ -264,12 +264,12 @@ func TestPostgresPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 	}
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := trackRepo.Add(ctx, track); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
 
-	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
+	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID()); err != nil {
 		t.Fatalf("AddTrack() error = %v", err)
 	}
 
@@ -283,8 +283,8 @@ func TestPostgresPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 	if len(gotTracks) != 1 {
 		t.Fatalf("len(tracks) = %d, want 1", len(gotTracks))
 	}
-	if gotTracks[0].ID.UUID() != track.ID.UUID() {
-		t.Errorf("track ID = %v, want %v", gotTracks[0].ID.UUID(), track.ID.UUID())
+	if gotTracks[0].ID().UUID() != track.ID().UUID() {
+		t.Errorf("track ID = %v, want %v", gotTracks[0].ID().UUID(), track.ID().UUID())
 	}
 	if len(gotPl.Tracks) != 1 {
 		t.Fatalf("len(playlist.Tracks) = %d, want 1", len(gotPl.Tracks))
@@ -293,7 +293,7 @@ func TestPostgresPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 		t.Errorf("track position = %d, want 0", gotPl.Tracks[0].Position)
 	}
 
-	removed, err := playlistRepo.RemoveTrack(ctx, userId, pl.ID, track.ID)
+	removed, err := playlistRepo.RemoveTrack(ctx, userId, pl.ID, track.ID())
 	if err != nil {
 		t.Fatalf("RemoveTrack() error = %v", err)
 	}
@@ -329,14 +329,14 @@ func TestPostgresPlaylistRepo_ReorderTracks(t *testing.T) {
 	trackIDs := make([]library.TrackId, 3)
 	for i := 0; i < 3; i++ {
 		track := newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, track.ID, userId)
+		cleanupTrack(t, pool, track.ID(), userId)
 		if _, _, err := trackRepo.Add(ctx, track); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
-		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID()); err != nil {
 			t.Fatalf("AddTrack %d: %v", i, err)
 		}
-		trackIDs[i] = track.ID
+		trackIDs[i] = track.ID()
 	}
 
 	reordered := []library.PlaylistTrack{
@@ -525,14 +525,14 @@ func TestPostgresPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) 
 	tracks := make([]*library.Track, 0, seeded)
 	for i := 0; i < seeded; i++ {
 		tr := newTestTrackForDB(t, victim)
-		cleanupTrack(t, pool, tr.ID, victim)
+		cleanupTrack(t, pool, tr.ID(), victim)
 		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
 		tracks = append(tracks, tr)
 	}
 	for _, tr := range tracks[:2] {
-		if err := playlistRepo.AddTrack(ctx, victim, pl.ID, tr.ID); err != nil {
+		if err := playlistRepo.AddTrack(ctx, victim, pl.ID, tr.ID()); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
 	}
@@ -553,24 +553,24 @@ func TestPostgresPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) 
 		call func() error
 	}{
 		{"AddTrack", func() error {
-			return playlistRepo.AddTrack(ctx, attacker, pl.ID, outsider.ID)
+			return playlistRepo.AddTrack(ctx, attacker, pl.ID, outsider.ID())
 		}},
 		{"AddTracks", func() error {
-			_, err := playlistRepo.AddTracks(ctx, attacker, pl.ID, []library.TrackId{outsider.ID})
+			_, err := playlistRepo.AddTracks(ctx, attacker, pl.ID, []library.TrackId{outsider.ID()})
 			return err
 		}},
 		{"RemoveTrack", func() error {
-			_, err := playlistRepo.RemoveTrack(ctx, attacker, pl.ID, tracks[0].ID)
+			_, err := playlistRepo.RemoveTrack(ctx, attacker, pl.ID, tracks[0].ID())
 			return err
 		}},
 		{"RemoveTracks", func() error {
-			_, err := playlistRepo.RemoveTracks(ctx, attacker, pl.ID, []library.TrackId{tracks[0].ID, tracks[1].ID})
+			_, err := playlistRepo.RemoveTracks(ctx, attacker, pl.ID, []library.TrackId{tracks[0].ID(), tracks[1].ID()})
 			return err
 		}},
 		{"ReorderTracks", func() error {
 			return playlistRepo.ReorderTracks(ctx, attacker, pl.ID, []library.PlaylistTrack{
-				{TrackId: tracks[1].ID, Position: 0},
-				{TrackId: tracks[0].ID, Position: 1},
+				{TrackId: tracks[1].ID(), Position: 0},
+				{TrackId: tracks[0].ID(), Position: 1},
 			})
 		}},
 	}
@@ -586,7 +586,7 @@ func TestPostgresPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) 
 	}
 
 	t.Run("missing playlist", func(t *testing.T) {
-		err := playlistRepo.AddTrack(ctx, victim, librarytest.NewPlaylistId(), outsider.ID)
+		err := playlistRepo.AddTrack(ctx, victim, librarytest.NewPlaylistId(), outsider.ID())
 		if !errors.Is(err, library.ErrPlaylistNotOwned) {
 			t.Fatalf("AddTrack to missing playlist: err = %v, want catalog.ErrPlaylistNotOwned", err)
 		}
@@ -607,11 +607,11 @@ func TestPostgresPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing
 	}
 
 	seed := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, seed.ID, userId)
+	cleanupTrack(t, pool, seed.ID(), userId)
 	if _, _, err := trackRepo.Add(ctx, seed); err != nil {
 		t.Fatalf("Add seed track: %v", err)
 	}
-	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, seed.ID); err != nil {
+	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, seed.ID()); err != nil {
 		t.Fatalf("AddTrack(seed): %v", err)
 	}
 
@@ -619,11 +619,11 @@ func TestPostgresPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing
 	trackIDs := make([]library.TrackId, concurrentAdds)
 	for i := range trackIDs {
 		tr := newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, tr.ID, userId)
+		cleanupTrack(t, pool, tr.ID(), userId)
 		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
-		trackIDs[i] = tr.ID
+		trackIDs[i] = tr.ID()
 	}
 
 	start := make(chan struct{})
@@ -956,11 +956,11 @@ func TestPostgresPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist(t *
 func addTrackToPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId sharedids.UserId, playlistId library.PlaylistId) {
 	t.Helper()
 	tr := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, tr.ID, userId)
+	cleanupTrack(t, pool, tr.ID(), userId)
 	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
-	if err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).AddTrack(ctx, userId, playlistId, tr.ID); err != nil {
+	if err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).AddTrack(ctx, userId, playlistId, tr.ID()); err != nil {
 		t.Fatalf("AddTrack: %v", err)
 	}
 }
@@ -1005,10 +1005,10 @@ func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user
 	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, tr.ID.UUID()); err != nil {
+	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, tr.ID().UUID()); err != nil {
 		t.Fatalf("delete track: %v", err)
 	}
-	return tr.ID
+	return tr.ID()
 }
 
 func TestPostgresPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
@@ -1173,11 +1173,11 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 	newTrack := func(t *testing.T) library.TrackId {
 		t.Helper()
 		tr := newTestTrackForDB(t, userId)
-		cleanupTrack(parent, pool, tr.ID, userId)
+		cleanupTrack(parent, pool, tr.ID(), userId)
 		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
 			t.Fatalf("Add track: %v", err)
 		}
-		return tr.ID
+		return tr.ID()
 	}
 	order := append([]library.TrackId(nil), ids...)
 
@@ -1295,7 +1295,7 @@ func TestPostgresPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) 
 
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 1)
 	tr := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, tr.ID, userId)
+	cleanupTrack(t, pool, tr.ID(), userId)
 	if _, _, err := library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
@@ -1309,7 +1309,7 @@ func TestPostgresPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) 
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			errs[i] = playlistRepo.AddTrack(ctx, userId, pl.ID, tr.ID)
+			errs[i] = playlistRepo.AddTrack(ctx, userId, pl.ID, tr.ID())
 		}(i)
 	}
 	close(start)
@@ -1327,7 +1327,7 @@ func TestPostgresPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) 
 	if wins != 1 {
 		t.Fatalf("%d callers added the track, want exactly 1", wins)
 	}
-	assertContiguousOrder(ctx, t, pool, pl.ID, []library.TrackId{ids[0], tr.ID})
+	assertContiguousOrder(ctx, t, pool, pl.ID, []library.TrackId{ids[0], tr.ID()})
 }
 
 func TestPostgresPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {

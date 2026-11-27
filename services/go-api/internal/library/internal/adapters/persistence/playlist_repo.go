@@ -249,7 +249,7 @@ func (r *PostgresPlaylistRepository) GetWithTracks(ctx context.Context, id domai
 	var playlistTracks []domain.PlaylistTrack
 	for i, track := range tracks {
 		playlistTracks = append(playlistTracks, domain.PlaylistTrack{
-			TrackId:  track.ID,
+			TrackId:  track.ID(),
 			Position: i,
 		})
 	}

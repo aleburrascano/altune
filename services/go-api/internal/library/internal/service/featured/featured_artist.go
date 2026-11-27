@@ -206,16 +206,16 @@ func (s *FillFeaturedArtistsService) backfillTrack(
 	if err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill resolve failed",
-			logging.KeyTrackID, t.ID.String(), logging.KeyError, err)
+			logging.KeyTrackID, t.ID().String(), logging.KeyError, err)
 		return nil
 	}
 	if len(feats) == 0 {
 		return nil
 	}
-	if err := s.persist(ctx, t.ID, userId, feats); err != nil {
+	if err := s.persist(ctx, t.ID(), userId, feats); err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill persist failed",
-			logging.KeyTrackID, t.ID.String(), logging.KeyError, err)
+			logging.KeyTrackID, t.ID().String(), logging.KeyError, err)
 		return nil
 	}
 	res.Updated++
@@ -231,7 +231,7 @@ func (s *FillFeaturedArtistsService) persist(ctx context.Context, id domain.Trac
 func (s *FillFeaturedArtistsService) resolve(ctx context.Context, t *domain.Track) ([]domain.FeaturedArtist, error) {
 	itemCtx, cancel := context.WithTimeout(ctx, s.itemTimeout)
 	defer cancel()
-	feats, err := s.resolver.Resolve(itemCtx, t.Artist, t.Title)
+	feats, err := s.resolver.Resolve(itemCtx, t.Artist(), t.Title())
 	if err != nil {
 		return nil, err
 	}

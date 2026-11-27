@@ -68,7 +68,7 @@ func (c *orphanedAudioSuite) usage(t *testing.T, q ports.OrphanedAudioQueue, ref
 
 func (c *orphanedAudioSuite) newTrack(t *testing.T, userId ids.UserId, audioRef string) *domain.Track {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Title-"+randomIDs.NewString()[:8], "Artist-"+randomIDs.NewString()[:8], "Album", time.Now, randomIDs)
+	track, err := domain.NewTrack(domain.NewTrackInput{UserId: userId, Title: "Title-" + randomIDs.NewString()[:8], Artist: "Artist-" + randomIDs.NewString()[:8], Album: "Album"}, time.Now, randomIDs)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}

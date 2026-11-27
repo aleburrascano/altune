@@ -28,10 +28,10 @@ func TestNowPlayingTracks_MapsTheUsersCatalogTrack(t *testing.T) {
 	var askedBy ids.UserId
 	source := playbackfromlibrary.NewNowPlayingTracks(catalogTracksFunc(func(trackId library.TrackId, userId ids.UserId) (*library.Track, error) {
 		askedFor, askedBy = trackId, userId
-		return &library.Track{
+		return librarytest.RestoreTrack(librarytest.TrackSnapshot{
 			ID: id, Title: "Track Y", Artist: "Artist", ArtworkURL: &artwork, DurationSeconds: &duration,
 			DownloadStatus: library.AcquisitionReady,
-		}, nil
+		}), nil
 	}))
 
 	got, err := source.NowPlayingTrack(context.Background(), user, id)
@@ -45,7 +45,10 @@ func TestNowPlayingTracks_MapsTheUsersCatalogTrack(t *testing.T) {
 		Id: id.String(), Title: "Track Y", Artist: "Artist", ArtworkURL: &artwork, DurationSeconds: &duration,
 		AcquisitionStatus: "ready",
 	}
-	if got == nil || *got != want {
+	if got == nil || got.Id != want.Id || got.Title != want.Title || got.Artist != want.Artist ||
+		got.AcquisitionStatus != want.AcquisitionStatus ||
+		got.ArtworkURL == nil || *got.ArtworkURL != artwork ||
+		got.DurationSeconds == nil || *got.DurationSeconds != duration {
 		t.Errorf("NowPlayingTrack = %+v, want %+v", got, want)
 	}
 }

@@ -90,8 +90,8 @@ func TestAddTrack_ReplayOfAKeyedSaveAtTheCapReturnsTheStoredTrack(t *testing.T) 
 	if err != nil {
 		t.Fatalf("replay at the cap: %v, want the stored track", err)
 	}
-	if replay.Created || replay.Track.ID != first.Track.ID {
-		t.Fatalf("replay = created %v id %s, want created false id %s", replay.Created, replay.Track.ID, first.Track.ID)
+	if replay.Created || replay.Track.ID() != first.Track.ID() {
+		t.Fatalf("replay = created %v id %s, want created false id %s", replay.Created, replay.Track.ID(), first.Track.ID())
 	}
 	if len(repo.Tracks) != smallLibraryCap {
 		t.Fatalf("stored tracks = %d, want %d", len(repo.Tracks), smallLibraryCap)
@@ -124,8 +124,8 @@ func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
 	if second.Created {
 		t.Fatalf("second Created = true, want false (same key must collapse)")
 	}
-	if second.Track.ID != first.Track.ID {
-		t.Fatalf("second track id = %s, want first %s", second.Track.ID, first.Track.ID)
+	if second.Track.ID() != first.Track.ID() {
+		t.Fatalf("second track id = %s, want first %s", second.Track.ID(), first.Track.ID())
 	}
 	if len(repo.Tracks) != 1 {
 		t.Fatalf("stored tracks = %d, want 1", len(repo.Tracks))
@@ -221,8 +221,8 @@ func TestAddTrackService_Execute(t *testing.T) {
 			if out.Track == nil {
 				t.Fatal("expected non-nil Track in output")
 			}
-			if out.Track.Title != tt.wantTitle {
-				t.Errorf("Track.Title = %q, want %q", out.Track.Title, tt.wantTitle)
+			if out.Track.Title() != tt.wantTitle {
+				t.Errorf("Track.Title = %q, want %q", out.Track.Title(), tt.wantTitle)
 			}
 		})
 	}
@@ -248,11 +248,11 @@ func TestTrackAddedPayload(t *testing.T) {
 		Title: "Midnight City", Artist: "M83", Album: "Hurry Up, We're Dreaming",
 	})
 
-	if p["id"] != track.ID.String() {
-		t.Errorf("id = %v, want %s", p["id"], track.ID.String())
+	if p["id"] != track.ID().String() {
+		t.Errorf("id = %v, want %s", p["id"], track.ID().String())
 	}
-	if p["track_id"] != track.ID.String() {
-		t.Errorf("track_id (legacy) = %v, want %s", p["track_id"], track.ID.String())
+	if p["track_id"] != track.ID().String() {
+		t.Errorf("track_id (legacy) = %v, want %s", p["track_id"], track.ID().String())
 	}
 	if p["title"] != "Midnight City" || p["artist"] != "M83" {
 		t.Errorf("title/artist = %v/%v", p["title"], p["artist"])
@@ -260,7 +260,7 @@ func TestTrackAddedPayload(t *testing.T) {
 	if album, ok := p["album"].(string); !ok || album != "Hurry Up, We're Dreaming" {
 		t.Errorf("album = %v, want the album string", p["album"])
 	}
-	if p["acquisition_status"] != track.DownloadStatus.String() {
+	if p["acquisition_status"] != track.DownloadStatus().String() {
 		t.Errorf("acquisition_status = %v", p["acquisition_status"])
 	}
 	if _, ok := p["audio_ref"]; ok {
@@ -319,14 +319,14 @@ func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 		t.Fatalf("schedule attempts = %d, want 1", len(sched.TrackIds))
 	}
 
-	stored, _ := repo.GetByID(ctx, out.Track.ID, out.Track.UserId)
-	if stored == nil || stored.DownloadStatus != library.AcquisitionFailed {
+	stored, _ := repo.GetByID(ctx, out.Track.ID(), out.Track.UserId())
+	if stored == nil || stored.DownloadStatus() != library.AcquisitionFailed {
 		t.Fatalf("stored track = %+v, want failed (not stranded pending)", stored)
 	}
-	if stored.FailureReason == nil || *stored.FailureReason != string(downloadfailure.FailureAcquisitionRefused) {
-		t.Errorf("failure reason = %v, want %q", stored.FailureReason, downloadfailure.FailureAcquisitionRefused)
+	if stored.FailureReason() == nil || *stored.FailureReason() != string(downloadfailure.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", stored.FailureReason(), downloadfailure.FailureAcquisitionRefused)
 	}
-	if stored.AcquisitionStartedAt != nil {
+	if stored.AcquisitionStartedAt() != nil {
 		t.Error("in-flight marker left set on a track whose job was never queued")
 	}
 	if got := pub.LastFields(events.TypeTrackAcquisitionFailed); got == nil || got["reason"] != string(downloadfailure.FailureAcquisitionRefused) {
@@ -346,8 +346,8 @@ func TestAddTrackService_RefusedScheduleUnpersistedStaysPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if out.Track.DownloadStatus != library.AcquisitionPending || out.Track.AcquisitionStartedAt == nil {
-		t.Errorf("returned track = %v (started_at %v), want pending as stored", out.Track.DownloadStatus, out.Track.AcquisitionStartedAt)
+	if out.Track.DownloadStatus() != library.AcquisitionPending || out.Track.AcquisitionStartedAt() == nil {
+		t.Errorf("returned track = %v (started_at %v), want pending as stored", out.Track.DownloadStatus(), out.Track.AcquisitionStartedAt())
 	}
 	if pub.Last(events.TypeTrackAcquisitionFailed) != nil {
 		t.Error("published track_acquisition_failed for a failure that was never persisted")
@@ -364,8 +364,8 @@ func TestAddTrackService_AcceptedScheduleLeavesTrackPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if out.Track.DownloadStatus != library.AcquisitionPending {
-		t.Errorf("status = %v, want pending while the queued job runs", out.Track.DownloadStatus)
+	if out.Track.DownloadStatus() != library.AcquisitionPending {
+		t.Errorf("status = %v, want pending while the queued job runs", out.Track.DownloadStatus())
 	}
 	if pub.Last(events.TypeTrackAcquisitionFailed) != nil {
 		t.Error("published track_acquisition_failed for an accepted schedule")
@@ -601,11 +601,11 @@ func TestAddTrackService_AcceptsValidFreeFormFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.Track.ArtworkURL == nil || *out.Track.ArtworkURL != artwork {
-		t.Errorf("ArtworkURL = %v, want %v", out.Track.ArtworkURL, artwork)
+	if out.Track.ArtworkURL() == nil || *out.Track.ArtworkURL() != artwork {
+		t.Errorf("ArtworkURL = %v, want %v", out.Track.ArtworkURL(), artwork)
 	}
-	if out.Track.ISRC == nil || *out.Track.ISRC != isrc {
-		t.Errorf("ISRC = %v, want %v", out.Track.ISRC, isrc)
+	if out.Track.ISRC() == nil || *out.Track.ISRC() != isrc {
+		t.Errorf("ISRC = %v, want %v", out.Track.ISRC(), isrc)
 	}
 }
 
@@ -625,14 +625,14 @@ func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.Track.DurationSeconds == nil || *out.Track.DurationSeconds != duration {
-		t.Errorf("DurationSeconds = %v, want %v", out.Track.DurationSeconds, duration)
+	if out.Track.DurationSeconds() == nil || *out.Track.DurationSeconds() != duration {
+		t.Errorf("DurationSeconds = %v, want %v", out.Track.DurationSeconds(), duration)
 	}
-	if out.Track.TrackNumber == nil || *out.Track.TrackNumber != trackNumber {
-		t.Errorf("TrackNumber = %v, want %v", out.Track.TrackNumber, trackNumber)
+	if out.Track.TrackNumber() == nil || *out.Track.TrackNumber() != trackNumber {
+		t.Errorf("TrackNumber = %v, want %v", out.Track.TrackNumber(), trackNumber)
 	}
-	if out.Track.Year == nil || *out.Track.Year != year {
-		t.Errorf("Year = %v, want %v", out.Track.Year, year)
+	if out.Track.Year() == nil || *out.Track.Year() != year {
+		t.Errorf("Year = %v, want %v", out.Track.Year(), year)
 	}
 }
 
@@ -660,11 +660,11 @@ func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if out.Track.DownloadStatus != library.AcquisitionFailed {
-		t.Errorf("status = %v, want failed after a timed-out schedule", out.Track.DownloadStatus)
+	if out.Track.DownloadStatus() != library.AcquisitionFailed {
+		t.Errorf("status = %v, want failed after a timed-out schedule", out.Track.DownloadStatus())
 	}
-	if out.Track.FailureReason == nil || *out.Track.FailureReason != string(downloadfailure.FailureAcquisitionRefused) {
-		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason, downloadfailure.FailureAcquisitionRefused)
+	if out.Track.FailureReason() == nil || *out.Track.FailureReason() != string(downloadfailure.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason(), downloadfailure.FailureAcquisitionRefused)
 	}
 }
 
@@ -680,11 +680,11 @@ func TestAddTrackService_RefusedScheduleWithFailedPersistLeavesTrackClaimable(t 
 		t.Fatalf("Execute: %v", err)
 	}
 
-	stored, err := repo.GetByID(ctx, out.Track.ID, out.Track.UserId)
+	stored, err := repo.GetByID(ctx, out.Track.ID(), out.Track.UserId())
 	if err != nil || stored == nil {
 		t.Fatalf("GetByID: track = %v, err = %v", stored, err)
 	}
-	if stored.DownloadStatus == library.AcquisitionPending && !repo.Claimable(stored.ID) {
+	if stored.DownloadStatus() == library.AcquisitionPending && !repo.Claimable(stored.ID()) {
 		t.Fatal("stored track is pending and unclaimable: nothing will ever acquire or fail it")
 	}
 }
@@ -699,11 +699,11 @@ func TestAddTrackService_Execute_KeepsTheClientDurationAsCatalogLength(t *testin
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if out.Track.CatalogDurationSeconds == nil || *out.Track.CatalogDurationSeconds != duration {
-		t.Errorf("CatalogDurationSeconds = %v, want %v", out.Track.CatalogDurationSeconds, duration)
+	if out.Track.CatalogDurationSeconds() == nil || *out.Track.CatalogDurationSeconds() != duration {
+		t.Errorf("CatalogDurationSeconds = %v, want %v", out.Track.CatalogDurationSeconds(), duration)
 	}
-	if out.Track.DurationSeconds == nil || *out.Track.DurationSeconds != duration {
-		t.Errorf("DurationSeconds = %v, want %v", out.Track.DurationSeconds, duration)
+	if out.Track.DurationSeconds() == nil || *out.Track.DurationSeconds() != duration {
+		t.Errorf("DurationSeconds = %v, want %v", out.Track.DurationSeconds(), duration)
 	}
 }
 
@@ -725,14 +725,14 @@ func TestAddTrackService_PinsTheCatalogIdentity(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 	got := out.Track
-	if got.CatalogMBID == nil || *got.CatalogMBID != "5b11f4ce-a62d-471e-81fc-a69a8278c7da" {
-		t.Errorf("CatalogMBID = %v, want the lowercased uuid", got.CatalogMBID)
+	if got.CatalogMBID() == nil || *got.CatalogMBID() != "5b11f4ce-a62d-471e-81fc-a69a8278c7da" {
+		t.Errorf("CatalogMBID = %v, want the lowercased uuid", got.CatalogMBID())
 	}
-	if got.CatalogExplicit == nil || *got.CatalogExplicit {
-		t.Errorf("CatalogExplicit = %v, want false", got.CatalogExplicit)
+	if got.CatalogExplicit() == nil || *got.CatalogExplicit() {
+		t.Errorf("CatalogExplicit = %v, want false", got.CatalogExplicit())
 	}
-	if len(got.CatalogSources) != 2 {
-		t.Errorf("CatalogSources = %+v, want 2 after dropping the duplicate", got.CatalogSources)
+	if len(got.CatalogSources()) != 2 {
+		t.Errorf("CatalogSources = %+v, want 2 after dropping the duplicate", got.CatalogSources())
 	}
 }
 
@@ -785,7 +785,7 @@ func TestAddTrackService_KeepsThePickedSoundCloudURLOnItsCatalogSource(t *testin
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	stored, err := repo.GetByID(context.Background(), out.Track.ID, userId)
+	stored, err := repo.GetByID(context.Background(), out.Track.ID(), userId)
 	if err != nil || stored == nil {
 		t.Fatalf("GetByID: %v, %v", stored, err)
 	}
@@ -793,8 +793,8 @@ func TestAddTrackService_KeepsThePickedSoundCloudURLOnItsCatalogSource(t *testin
 		{Provider: "deezer", ExternalID: "1"},
 		{Provider: "soundcloud", ExternalID: pick, URL: pick},
 	}
-	if !reflect.DeepEqual(stored.CatalogSources, want) {
-		t.Errorf("CatalogSources = %+v, want %+v", stored.CatalogSources, want)
+	if !reflect.DeepEqual(stored.CatalogSources(), want) {
+		t.Errorf("CatalogSources = %+v, want %+v", stored.CatalogSources(), want)
 	}
 }
 
@@ -812,11 +812,11 @@ func TestAddTrackService_FullCatalogSourcesWithPickedSoundCloudURLStillAdds(t *t
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	stored, err := repo.GetByID(context.Background(), out.Track.ID, userId)
+	stored, err := repo.GetByID(context.Background(), out.Track.ID(), userId)
 	if err != nil || stored == nil {
 		t.Fatalf("GetByID: %v, %v", stored, err)
 	}
-	if !reflect.DeepEqual(stored.CatalogSources, sources) {
-		t.Errorf("CatalogSources = %+v, want unchanged", stored.CatalogSources)
+	if !reflect.DeepEqual(stored.CatalogSources(), sources) {
+		t.Errorf("CatalogSources = %+v, want unchanged", stored.CatalogSources())
 	}
 }

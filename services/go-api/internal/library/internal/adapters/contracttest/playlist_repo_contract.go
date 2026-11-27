@@ -60,9 +60,9 @@ func contractMembers(t *testing.T, repo PlaylistRepositoryUnderTest, pl *domain.
 	}
 	ids := make([]domain.TrackId, len(tracks))
 	for i, tr := range tracks {
-		ids[i] = tr.ID
-		if got.Tracks[i].TrackId != tr.ID || got.Tracks[i].Position != i {
-			t.Errorf("playlist.Tracks[%d] = %v@%d, want %v@%d", i, got.Tracks[i].TrackId, got.Tracks[i].Position, tr.ID, i)
+		ids[i] = tr.ID()
+		if got.Tracks[i].TrackId != tr.ID() || got.Tracks[i].Position != i {
+			t.Errorf("playlist.Tracks[%d] = %v@%d, want %v@%d", i, got.Tracks[i].TrackId, got.Tracks[i].Position, tr.ID(), i)
 		}
 	}
 	return ids

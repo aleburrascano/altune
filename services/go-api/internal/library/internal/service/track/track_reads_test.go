@@ -28,7 +28,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 			name: "existing track is returned",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
 				track := librarytest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
-				return track.ID
+				return track.ID()
 			},
 			wantTitle: "Track",
 		},
@@ -44,7 +44,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
 				other := ids.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
 				track := librarytest.SeedTrack(t, repo, other, "Track", "Artist", "Album")
-				return track.ID
+				return track.ID()
 			},
 			wantErr: library.ErrTrackNotFound,
 		},
@@ -81,11 +81,11 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 			if track == nil {
 				t.Fatal("expected non-nil track")
 			}
-			if track.ID != trackId {
-				t.Errorf("track.ID = %v, want %v", track.ID, trackId)
+			if track.ID() != trackId {
+				t.Errorf("track.ID = %v, want %v", track.ID(), trackId)
 			}
-			if track.Title != tt.wantTitle {
-				t.Errorf("track.Title = %q, want %q", track.Title, tt.wantTitle)
+			if track.Title() != tt.wantTitle {
+				t.Errorf("track.Title = %q, want %q", track.Title(), tt.wantTitle)
 			}
 		})
 	}

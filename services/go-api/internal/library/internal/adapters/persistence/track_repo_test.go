@@ -56,7 +56,7 @@ func TestPostgresTrackRepo_AddAndGetByID(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 
 	_, created, err := repo.Add(ctx, track)
 	if err != nil {
@@ -66,7 +66,7 @@ func TestPostgresTrackRepo_AddAndGetByID(t *testing.T) {
 		t.Fatal("Add() created = false, want true")
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
@@ -74,26 +74,26 @@ func TestPostgresTrackRepo_AddAndGetByID(t *testing.T) {
 		t.Fatal("GetByID() returned nil, want track")
 	}
 
-	if got.ID.UUID() != track.ID.UUID() {
-		t.Errorf("ID = %v, want %v", got.ID.UUID(), track.ID.UUID())
+	if got.ID().UUID() != track.ID().UUID() {
+		t.Errorf("ID = %v, want %v", got.ID().UUID(), track.ID().UUID())
 	}
-	if got.UserId.UUID() != userId.UUID() {
-		t.Errorf("UserId = %v, want %v", got.UserId.UUID(), userId.UUID())
+	if got.UserId().UUID() != userId.UUID() {
+		t.Errorf("UserId = %v, want %v", got.UserId().UUID(), userId.UUID())
 	}
-	if got.Title != track.Title {
-		t.Errorf("Title = %q, want %q", got.Title, track.Title)
+	if got.Title() != track.Title() {
+		t.Errorf("Title = %q, want %q", got.Title(), track.Title())
 	}
-	if got.Artist != track.Artist {
-		t.Errorf("Artist = %q, want %q", got.Artist, track.Artist)
+	if got.Artist() != track.Artist() {
+		t.Errorf("Artist = %q, want %q", got.Artist(), track.Artist())
 	}
-	if got.Album != track.Album {
-		t.Errorf("Album = %q, want %q", got.Album, track.Album)
+	if got.Album() != track.Album() {
+		t.Errorf("Album = %q, want %q", got.Album(), track.Album())
 	}
-	if got.DownloadStatus != library.AcquisitionPending {
-		t.Errorf("AcquisitionStatus = %v, want pending", got.DownloadStatus)
+	if got.DownloadStatus() != library.AcquisitionPending {
+		t.Errorf("AcquisitionStatus = %v, want pending", got.DownloadStatus())
 	}
-	if got.DedupKey != track.DedupKey {
-		t.Errorf("DedupKey = %q, want %q", got.DedupKey, track.DedupKey)
+	if got.DedupKey() != track.DedupKey() {
+		t.Errorf("DedupKey = %q, want %q", got.DedupKey(), track.DedupKey())
 	}
 }
 
@@ -104,7 +104,7 @@ func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 
 	track1 := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track1.ID, userId)
+	cleanupTrack(t, pool, track1.ID(), userId)
 
 	_, created1, err := repo.Add(ctx, track1)
 	if err != nil {
@@ -114,11 +114,11 @@ func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
 		t.Fatal("first Add() created = false, want true")
 	}
 
-	track2, err := library.NewTrack(userId, track1.Title, track1.Artist, track1.Album, time.Now, ids.Real)
+	track2, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: track1.Title(), Artist: track1.Artist(), Album: track1.Album()}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack for dedup: %v", err)
 	}
-	cleanupTrack(t, pool, track2.ID, userId)
+	cleanupTrack(t, pool, track2.ID(), userId)
 
 	_, created2, err := repo.Add(ctx, track2)
 	if err != nil {
@@ -139,8 +139,8 @@ func TestPostgresTrackRepo_ListForUser(t *testing.T) {
 	tracks := make([]*library.Track, 3)
 	for i := 0; i < 3; i++ {
 		tracks[i] = newTestTrackForDB(t, userId)
-		tracks[i].AddedAt = time.Now().UTC().Add(time.Duration(i) * time.Second)
-		cleanupTrack(t, pool, tracks[i].ID, userId)
+		librarytest.AmendTrack(tracks[i], func(s *librarytest.TrackSnapshot) { s.AddedAt = time.Now().UTC().Add(time.Duration(i) * time.Second) })
+		cleanupTrack(t, pool, tracks[i].ID(), userId)
 		if _, _, err := repo.Add(ctx, tracks[i]); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
@@ -158,7 +158,7 @@ func TestPostgresTrackRepo_ListForUser(t *testing.T) {
 		t.Errorf("len(tracks) = %d, want 2", len(got))
 	}
 
-	if len(got) >= 2 && got[0].AddedAt.Before(got[1].AddedAt) {
+	if len(got) >= 2 && got[0].AddedAt().Before(got[1].AddedAt()) {
 		t.Error("tracks not in descending added_at order")
 	}
 
@@ -181,7 +181,7 @@ func TestPostgresTrackRepo_Update(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
@@ -191,22 +191,22 @@ func TestPostgresTrackRepo_Update(t *testing.T) {
 	if err := track.MarkReady(audioRef, ids.Real); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	if err := repo.Update(ctx, track, track.Version); err != nil {
+	if err := repo.Update(ctx, track, track.Version()); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil {
 		t.Fatalf("GetByID after update: %v", err)
 	}
 	if got == nil {
 		t.Fatal("GetByID after update returned nil")
 	}
-	if got.DownloadStatus != library.AcquisitionReady {
-		t.Errorf("AcquisitionStatus = %v, want ready", got.DownloadStatus)
+	if got.DownloadStatus() != library.AcquisitionReady {
+		t.Errorf("AcquisitionStatus = %v, want ready", got.DownloadStatus())
 	}
-	if got.AudioRef == nil || *got.AudioRef != audioRef {
-		t.Errorf("AudioRef = %v, want %q", got.AudioRef, audioRef)
+	if got.AudioRef() == nil || *got.AudioRef() != audioRef {
+		t.Errorf("AudioRef = %v, want %q", got.AudioRef(), audioRef)
 	}
 }
 
@@ -217,12 +217,12 @@ func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	loaded, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil {
 		t.Fatalf("GetByID (acquisition read) error = %v", err)
 	}
@@ -234,7 +234,7 @@ func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing
 	const editedAlbum = "Concurrently Re-albumed"
 	if _, err := pool.Exec(ctx,
 		`UPDATE tracks SET title=$3, album=$4 WHERE id=$1 AND user_id=$2`,
-		track.ID.UUID(), userId.UUID(), editedTitle, editedAlbum,
+		track.ID().UUID(), userId.UUID(), editedTitle, editedAlbum,
 	); err != nil {
 		t.Fatalf("concurrent metadata edit failed: %v", err)
 	}
@@ -243,25 +243,25 @@ func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing
 	if err := loaded.MarkReady(audioRef, ids.Real); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after update: got=%v err=%v", got, err)
 	}
-	if got.Title != editedTitle {
-		t.Errorf("Title = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Title, editedTitle)
+	if got.Title() != editedTitle {
+		t.Errorf("Title = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Title(), editedTitle)
 	}
-	if got.Album != editedAlbum {
-		t.Errorf("Album = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Album, editedAlbum)
+	if got.Album() != editedAlbum {
+		t.Errorf("Album = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Album(), editedAlbum)
 	}
-	if got.DownloadStatus != library.AcquisitionReady {
-		t.Errorf("AcquisitionStatus = %v, want ready", got.DownloadStatus)
+	if got.DownloadStatus() != library.AcquisitionReady {
+		t.Errorf("AcquisitionStatus = %v, want ready", got.DownloadStatus())
 	}
-	if got.AudioRef == nil || *got.AudioRef != audioRef {
-		t.Errorf("AudioRef = %v, want %q", got.AudioRef, audioRef)
+	if got.AudioRef() == nil || *got.AudioRef() != audioRef {
+		t.Errorf("AudioRef = %v, want %q", got.AudioRef(), audioRef)
 	}
 }
 
@@ -272,51 +272,51 @@ func TestPostgresTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	writerA, err := repo.GetByID(ctx, track.ID, userId)
+	writerA, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || writerA == nil {
 		t.Fatalf("GetByID (writer A) got=%v err=%v", writerA, err)
 	}
-	writerB, err := repo.GetByID(ctx, track.ID, userId)
+	writerB, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || writerB == nil {
 		t.Fatalf("GetByID (writer B) got=%v err=%v", writerB, err)
 	}
-	if writerA.Version != writerB.Version {
-		t.Fatalf("writers read different versions: A=%d B=%d", writerA.Version, writerB.Version)
+	if writerA.Version() != writerB.Version() {
+		t.Fatalf("writers read different versions: A=%d B=%d", writerA.Version(), writerB.Version())
 	}
 
 	refA := "s3://bucket/winner-" + uuid.New().String() + ".opus"
 	if err := writerA.MarkReady(refA, ids.Real); err != nil {
 		t.Fatalf("writer A MarkReady: %v", err)
 	}
-	if err := repo.Update(ctx, writerA, writerA.Version); err != nil {
+	if err := repo.Update(ctx, writerA, writerA.Version()); err != nil {
 		t.Fatalf("writer A Update() error = %v, want success", err)
 	}
-	if writerA.Version == writerB.Version {
-		t.Errorf("winning Update did not advance the row version (still %d)", writerA.Version)
+	if writerA.Version() == writerB.Version() {
+		t.Errorf("winning Update did not advance the row version (still %d)", writerA.Version())
 	}
 
 	if err := writerB.MarkFailed("stale settle from a racing writer"); err != nil {
 		t.Fatalf("writer B MarkFailed: %v", err)
 	}
-	err = repo.Update(ctx, writerB, writerB.Version)
+	err = repo.Update(ctx, writerB, writerB.Version())
 	if !errors.Is(err, library.ErrTrackVersionConflict) {
 		t.Fatalf("writer B Update() error = %v, want catalog.ErrTrackVersionConflict", err)
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after race: got=%v err=%v", got, err)
 	}
-	if got.DownloadStatus != library.AcquisitionReady {
-		t.Errorf("AcquisitionStatus = %v, want ready: writer B's stale settle clobbered the winner", got.DownloadStatus)
+	if got.DownloadStatus() != library.AcquisitionReady {
+		t.Errorf("AcquisitionStatus = %v, want ready: writer B's stale settle clobbered the winner", got.DownloadStatus())
 	}
-	if got.AudioRef == nil || *got.AudioRef != refA {
-		t.Errorf("AudioRef = %v, want %q: writer B's stale settle clobbered the winner", got.AudioRef, refA)
+	if got.AudioRef() == nil || *got.AudioRef() != refA {
+		t.Errorf("AudioRef = %v, want %q: writer B's stale settle clobbered the winner", got.AudioRef(), refA)
 	}
 }
 
@@ -327,24 +327,24 @@ func TestPostgresTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	loaded, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || loaded == nil {
 		t.Fatalf("GetByID got=%v err=%v", loaded, err)
 	}
 
-	if _, _, err := repo.Delete(ctx, track.ID, userId); err != nil {
+	if _, _, err := repo.Delete(ctx, track.ID(), userId); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
 	if err := loaded.MarkReady("s3://bucket/gone-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	err = repo.Update(ctx, loaded, loaded.Version)
+	err = repo.Update(ctx, loaded, loaded.Version())
 	if err == nil {
 		t.Fatal("Update() on a deleted row returned nil, want an error")
 	}
@@ -360,13 +360,13 @@ func TestPostgresTrackRepo_Delete(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	deleted, _, err := repo.Delete(ctx, track.ID, userId)
+	deleted, _, err := repo.Delete(ctx, track.ID(), userId)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
@@ -374,15 +374,15 @@ func TestPostgresTrackRepo_Delete(t *testing.T) {
 		t.Error("Delete() deleted = false, want true")
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByID(ctx, track.ID(), userId)
 	if !errors.Is(err, library.ErrTrackNotFound) {
 		t.Fatalf("GetByID after delete: err = %v, want ErrTrackNotFound", err)
 	}
 	if got != nil {
-		t.Errorf("GetByID after delete returned non-nil track: %v", got.ID)
+		t.Errorf("GetByID after delete returned non-nil track: %v", got.ID())
 	}
 
-	deleted2, _, err := repo.Delete(ctx, track.ID, userId)
+	deleted2, _, err := repo.Delete(ctx, track.ID(), userId)
 	if err != nil {
 		t.Fatalf("second Delete() error = %v", err)
 	}
@@ -401,7 +401,7 @@ func TestPostgresTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	userA := ids.NewUserId(uuid.New())
 
 	trackB := newTestTrackForDB(t, userB)
-	cleanupTrack(t, pool, trackB.ID, userB)
+	cleanupTrack(t, pool, trackB.ID(), userB)
 	if _, _, err := trackRepo.Add(ctx, trackB); err != nil {
 		t.Fatalf("Add track B: %v", err)
 	}
@@ -411,11 +411,11 @@ func TestPostgresTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	if err := playlistRepo.Create(ctx, plB); err != nil {
 		t.Fatalf("Create playlist B: %v", err)
 	}
-	if err := playlistRepo.AddTrack(ctx, userB, plB.ID, trackB.ID); err != nil {
+	if err := playlistRepo.AddTrack(ctx, userB, plB.ID, trackB.ID()); err != nil {
 		t.Fatalf("AddTrack B: %v", err)
 	}
 
-	deleted, _, err := trackRepo.Delete(ctx, trackB.ID, userA)
+	deleted, _, err := trackRepo.Delete(ctx, trackB.ID(), userA)
 	if err != nil {
 		t.Fatalf("Delete(trackB, userA) error = %v", err)
 	}
@@ -423,7 +423,7 @@ func TestPostgresTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 		t.Error("Delete(trackB, userA) deleted = true, want false (not owner)")
 	}
 
-	got, err := trackRepo.GetByID(ctx, trackB.ID, userB)
+	got, err := trackRepo.GetByID(ctx, trackB.ID(), userB)
 	if err != nil {
 		t.Fatalf("GetByID after cross-tenant delete: %v", err)
 	}
@@ -438,8 +438,8 @@ func TestPostgresTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	if len(gotTracks) != 1 {
 		t.Fatalf("B's playlist has %d tracks after A's delete, want 1", len(gotTracks))
 	}
-	if gotTracks[0].ID.UUID() != trackB.ID.UUID() {
-		t.Errorf("B's playlist track = %v, want %v", gotTracks[0].ID.UUID(), trackB.ID.UUID())
+	if gotTracks[0].ID().UUID() != trackB.ID().UUID() {
+		t.Errorf("B's playlist track = %v, want %v", gotTracks[0].ID().UUID(), trackB.ID().UUID())
 	}
 }
 
@@ -481,7 +481,7 @@ func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	trackB := newTestTrackForDB(t, userId)
 	trackC := newTestTrackForDB(t, userId)
 	for _, tr := range []*library.Track{trackA, trackB, trackC} {
-		cleanupTrack(t, pool, tr.ID, userId)
+		cleanupTrack(t, pool, tr.ID(), userId)
 		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
 			t.Fatalf("Add track: %v", err)
 		}
@@ -493,7 +493,7 @@ func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 		t.Fatalf("Create p1: %v", err)
 	}
 	for _, tr := range []*library.Track{trackA, trackB, trackC} {
-		if err := playlistRepo.AddTrack(ctx, userId, p1.ID, tr.ID); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, p1.ID, tr.ID()); err != nil {
 			t.Fatalf("AddTrack p1: %v", err)
 		}
 	}
@@ -504,12 +504,12 @@ func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 		t.Fatalf("Create p2: %v", err)
 	}
 	for _, tr := range []*library.Track{trackB, trackC} {
-		if err := playlistRepo.AddTrack(ctx, userId, p2.ID, tr.ID); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, p2.ID, tr.ID()); err != nil {
 			t.Fatalf("AddTrack p2: %v", err)
 		}
 	}
 
-	deleted, _, err := trackRepo.Delete(ctx, trackB.ID, userId)
+	deleted, _, err := trackRepo.Delete(ctx, trackB.ID(), userId)
 	if err != nil {
 		t.Fatalf("Delete(trackB) error = %v", err)
 	}
@@ -518,8 +518,8 @@ func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	}
 
 	p1Pos := rawPlaylistPositions(t, pool, p1.ID)
-	wantP1 := map[uuid.UUID]int{trackA.ID.UUID(): 0, trackC.ID.UUID(): 2}
-	if _, present := p1Pos[trackB.ID.UUID()]; present {
+	wantP1 := map[uuid.UUID]int{trackA.ID().UUID(): 0, trackC.ID().UUID(): 2}
+	if _, present := p1Pos[trackB.ID().UUID()]; present {
 		t.Error("trackB still present in p1 after delete")
 	}
 	for id, want := range wantP1 {
@@ -532,10 +532,10 @@ func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	}
 
 	p2Pos := rawPlaylistPositions(t, pool, p2.ID)
-	if _, present := p2Pos[trackB.ID.UUID()]; present {
+	if _, present := p2Pos[trackB.ID().UUID()]; present {
 		t.Error("trackB still present in p2 after delete")
 	}
-	if got, ok := p2Pos[trackC.ID.UUID()]; !ok || got != 1 {
+	if got, ok := p2Pos[trackC.ID().UUID()]; !ok || got != 1 {
 		t.Errorf("p2 position for trackC = %d (present=%v), want 1", got, ok)
 	}
 	if len(p2Pos) != 1 {
@@ -554,7 +554,7 @@ func TestPostgresTrackRepo_GetByID_NotFound(t *testing.T) {
 		t.Fatalf("GetByID() error = %v, want ErrTrackNotFound", err)
 	}
 	if got != nil {
-		t.Errorf("GetByID() for missing track returned non-nil: %v", got.ID)
+		t.Errorf("GetByID() for missing track returned non-nil: %v", got.ID())
 	}
 }
 
@@ -599,7 +599,7 @@ func TestPostgresTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
 func keyed(t *testing.T, userId ids.UserId, key string) *library.Track {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
-	track.IdempotencyKey = &key
+	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) { s.IdempotencyKey = &key })
 	return track
 }
 
@@ -614,7 +614,7 @@ func TestPostgresTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	tracks := make([]*library.Track, concurrent)
 	for i := range tracks {
 		tr := keyed(t, userId, key)
-		cleanupTrack(t, pool, tr.ID, userId)
+		cleanupTrack(t, pool, tr.ID(), userId)
 		tracks[i] = tr
 	}
 
@@ -645,15 +645,15 @@ func TestPostgresTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 		}
 		if createdFlags[i] {
 			createdCount++
-			winnerID = stored[i].ID
+			winnerID = stored[i].ID()
 		}
 	}
 	if createdCount != 1 {
 		t.Fatalf("created count = %d, want exactly 1 (the key must collapse concurrent creates)", createdCount)
 	}
 	for i := range stored {
-		if stored[i].ID != winnerID {
-			t.Fatalf("Add %d returned id %s, want the single winning row %s", i, stored[i].ID, winnerID)
+		if stored[i].ID() != winnerID {
+			t.Fatalf("Add %d returned id %s, want the single winning row %s", i, stored[i].ID(), winnerID)
 		}
 	}
 
@@ -671,7 +671,7 @@ func TestPostgresTrackRepo_ConcurrentAddsNeverPassTheLibraryCap(t *testing.T) {
 	tracks := make([]*library.Track, concurrent)
 	for i := range tracks {
 		tracks[i] = newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, tracks[i].ID, userId)
+		cleanupTrack(t, pool, tracks[i].ID(), userId)
 	}
 
 	start := make(chan struct{})
@@ -716,7 +716,7 @@ func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 	key := "idem-" + uuid.NewString()
 
 	first := keyed(t, userId, key)
-	cleanupTrack(t, pool, first.ID, userId)
+	cleanupTrack(t, pool, first.ID(), userId)
 	firstStored, created, err := repo.Add(ctx, first)
 	if err != nil {
 		t.Fatalf("first Add: %v", err)
@@ -726,7 +726,7 @@ func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 	}
 
 	retry := keyed(t, userId, key)
-	cleanupTrack(t, pool, retry.ID, userId)
+	cleanupTrack(t, pool, retry.ID(), userId)
 	retryStored, created, err := repo.Add(ctx, retry)
 	if err != nil {
 		t.Fatalf("retry Add: %v", err)
@@ -734,8 +734,8 @@ func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 	if created {
 		t.Fatalf("retry Add created = true, want false (the committed row must be returned)")
 	}
-	if retryStored == nil || retryStored.ID != firstStored.ID {
-		t.Fatalf("retry returned %v, want the first stored row %s", retryStored, firstStored.ID)
+	if retryStored == nil || retryStored.ID() != firstStored.ID() {
+		t.Fatalf("retry returned %v, want the first stored row %s", retryStored, firstStored.ID())
 	}
 
 	if got := countTracksForUser(ctx, t, pool, userId); got != 1 {
@@ -750,27 +750,27 @@ func TestPostgresTrackRepo_Update_RoundTripsAcquisitionConfidenceAndEvidence(t *
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	before, err := repo.GetByID(ctx, track.ID, userId)
+	before, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || before == nil {
 		t.Fatalf("GetByID before: %v %v", before, err)
 	}
-	if before.ConfidenceScore != nil || before.EvidenceJSON != nil {
-		t.Fatalf("fresh track carries confidence %v evidence %s", before.ConfidenceScore, before.EvidenceJSON)
+	if before.ConfidenceScore() != nil || before.EvidenceJSON() != nil {
+		t.Fatalf("fresh track carries confidence %v evidence %s", before.ConfidenceScore(), before.EvidenceJSON())
 	}
 
 	evidence := `{"verdict": "hard", "acoustid_score": 0.9, "source_title": "Song"}`
 	if err := track.SetAcquisitionConfidence(0.5, json.RawMessage(evidence)); err != nil {
 		t.Fatalf("SetAcquisitionConfidence: %v", err)
 	}
-	if err := repo.Update(ctx, track, track.Version); err != nil {
+	if err := repo.Update(ctx, track, track.Version()); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after: %v %v", got, err)
 	}
@@ -802,7 +802,7 @@ func TestPostgresTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T)
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -810,7 +810,7 @@ func TestPostgresTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T)
 	var claimable bool
 	if err := pool.QueryRow(ctx,
 		`SELECT available_at <= now() FROM acquisition_jobs WHERE track_id = $1`,
-		track.ID.UUID()).Scan(&claimable); err != nil {
+		track.ID().UUID()).Scan(&claimable); err != nil {
 		t.Fatalf("read job available_at: %v", err)
 	}
 	if !claimable {
@@ -969,7 +969,7 @@ func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.
 	if err != nil {
 		t.Fatalf("Add: %v", err)
 	}
-	cleanupTrack(t, pool, stored.ID, userId)
+	cleanupTrack(t, pool, stored.ID(), userId)
 
 	if err := stored.MarkReady("ref", ids.Real); err != nil {
 		t.Fatal(err)
@@ -985,24 +985,24 @@ func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.
 	if !stored.RecordAudioLength(audioLength) {
 		t.Fatal("RecordAudioLength = false, want the 137 s file checked against the 235 s catalog length")
 	}
-	if err := repo.Update(ctx, stored, stored.Version); err != nil {
+	if err := repo.Update(ctx, stored, stored.Version()); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, stored.ID, userId)
+	got, err := repo.GetByID(ctx, stored.ID(), userId)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
-	if got.CatalogDurationSeconds == nil || *got.CatalogDurationSeconds != 235 {
-		t.Errorf("catalog length = %v, want 235", got.CatalogDurationSeconds)
+	if got.CatalogDurationSeconds() == nil || *got.CatalogDurationSeconds() != 235 {
+		t.Errorf("catalog length = %v, want 235", got.CatalogDurationSeconds())
 	}
-	if got.DurationSeconds == nil || *got.DurationSeconds != 137 {
-		t.Errorf("file length = %v, want 137", got.DurationSeconds)
+	if got.DurationSeconds() == nil || *got.DurationSeconds() != 137 {
+		t.Errorf("file length = %v, want 137", got.DurationSeconds())
 	}
-	if got.ISRC == nil || *got.ISRC != "GBAYE0601498" {
-		t.Errorf("ISRC = %v, want GBAYE0601498", got.ISRC)
+	if got.ISRC() == nil || *got.ISRC() != "GBAYE0601498" {
+		t.Errorf("ISRC = %v, want GBAYE0601498", got.ISRC())
 	}
-	if !got.AudioLengthMismatch {
+	if !got.AudioLengthMismatch() {
 		t.Error("AudioLengthMismatch = false, want true")
 	}
 }
@@ -1014,7 +1014,7 @@ func TestPostgresTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 
 	pinned := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, pinned.ID, userId)
+	cleanupTrack(t, pool, pinned.ID(), userId)
 	mbid := "5b11f4ce-a62d-471e-81fc-a69a8278c7da"
 	explicit := true
 	sources := []library.CatalogSource{{Provider: "deezer", ExternalID: "42"}, {Provider: "soundcloud", ExternalID: "abc", URL: "https://soundcloud.com/artist/track"}}
@@ -1022,7 +1022,7 @@ func TestPostgresTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	bare := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, bare.ID, userId)
+	cleanupTrack(t, pool, bare.ID(), userId)
 
 	for _, track := range []*library.Track{pinned, bare} {
 		if _, created, err := repo.Add(ctx, track); err != nil || !created {
@@ -1030,27 +1030,27 @@ func TestPostgresTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 		}
 	}
 
-	got, err := repo.GetByID(ctx, pinned.ID, userId)
+	got, err := repo.GetByID(ctx, pinned.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID() = %v, %v", got, err)
 	}
-	if got.CatalogMBID == nil || *got.CatalogMBID != mbid {
-		t.Errorf("CatalogMBID = %v, want %q", got.CatalogMBID, mbid)
+	if got.CatalogMBID() == nil || *got.CatalogMBID() != mbid {
+		t.Errorf("CatalogMBID = %v, want %q", got.CatalogMBID(), mbid)
 	}
-	if got.CatalogExplicit == nil || !*got.CatalogExplicit {
-		t.Errorf("CatalogExplicit = %v, want true", got.CatalogExplicit)
+	if got.CatalogExplicit() == nil || !*got.CatalogExplicit() {
+		t.Errorf("CatalogExplicit = %v, want true", got.CatalogExplicit())
 	}
-	if len(got.CatalogSources) != 2 || got.CatalogSources[0] != sources[0] || got.CatalogSources[1] != sources[1] {
-		t.Errorf("CatalogSources = %+v, want %+v", got.CatalogSources, sources)
+	if len(got.CatalogSources()) != 2 || got.CatalogSources()[0] != sources[0] || got.CatalogSources()[1] != sources[1] {
+		t.Errorf("CatalogSources = %+v, want %+v", got.CatalogSources(), sources)
 	}
 
-	unpinned, err := repo.GetByID(ctx, bare.ID, userId)
+	unpinned, err := repo.GetByID(ctx, bare.ID(), userId)
 	if err != nil || unpinned == nil {
 		t.Fatalf("GetByID(bare) = %v, %v", unpinned, err)
 	}
-	if unpinned.CatalogMBID != nil || unpinned.CatalogExplicit != nil || len(unpinned.CatalogSources) != 0 {
+	if unpinned.CatalogMBID() != nil || unpinned.CatalogExplicit() != nil || len(unpinned.CatalogSources()) != 0 {
 		t.Errorf("a track added without identity must read back empty, got %+v %+v %+v",
-			unpinned.CatalogMBID, unpinned.CatalogExplicit, unpinned.CatalogSources)
+			unpinned.CatalogMBID(), unpinned.CatalogExplicit(), unpinned.CatalogSources())
 	}
 }
 
@@ -1061,31 +1061,33 @@ func TestPostgresTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testin
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`UPDATE acquisition_jobs SET attempts = 3 WHERE track_id = $1`, track.ID.UUID()); err != nil {
+		`UPDATE acquisition_jobs SET attempts = 3 WHERE track_id = $1`, track.ID().UUID()); err != nil {
 		t.Fatalf("simulate queue claims: %v", err)
 	}
 
-	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	loaded, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || loaded == nil {
 		t.Fatalf("GetByID = %v, %v", loaded, err)
 	}
-	if loaded.AcquisitionFence != 3 {
-		t.Fatalf("AcquisitionFence = %d, want 3", loaded.AcquisitionFence)
+	if loaded.AcquisitionFence() != 3 {
+		t.Fatalf("AcquisitionFence = %d, want 3", loaded.AcquisitionFence())
 	}
 
-	loaded.Title = "renamed " + uuid.New().String()
-	loaded.AcquisitionFence = 99
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	librarytest.AmendTrack(loaded, func(s *librarytest.TrackSnapshot) {
+		s.Title = "renamed " + uuid.New().String()
+		s.AcquisitionFence = 99
+	})
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	var stored int
 	if err := pool.QueryRow(ctx,
-		`SELECT attempts FROM acquisition_jobs WHERE track_id = $1`, track.ID.UUID()).Scan(&stored); err != nil {
+		`SELECT attempts FROM acquisition_jobs WHERE track_id = $1`, track.ID().UUID()).Scan(&stored); err != nil {
 		t.Fatalf("read acquisition_attempts: %v", err)
 	}
 	if stored != 3 {
@@ -1100,11 +1102,11 @@ func TestPostgresTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t 
 	userId := ids.NewUserId(uuid.New())
 
 	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
+	cleanupTrack(t, pool, track.ID(), userId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	loaded, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || loaded == nil {
 		t.Fatalf("GetByID: got=%v err=%v", loaded, err)
 	}
@@ -1116,41 +1118,41 @@ func TestPostgresTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t 
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByID(ctx, track.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after update: got=%v err=%v", got, err)
 	}
-	if got.Title != "It’s Only Love (classic version)" || got.Album != "It’s Only Love" {
-		t.Errorf("title/album = %q / %q", got.Title, got.Album)
+	if got.Title() != "It’s Only Love (classic version)" || got.Album() != "It’s Only Love" {
+		t.Errorf("title/album = %q / %q", got.Title(), got.Album())
 	}
-	if got.Year == nil || *got.Year != 2025 {
-		t.Errorf("Year = %v, want 2025", got.Year)
+	if got.Year() == nil || *got.Year() != 2025 {
+		t.Errorf("Year = %v, want 2025", got.Year())
 	}
-	if got.DedupKey != loaded.DedupKey {
-		t.Errorf("DedupKey = %q, want %q", got.DedupKey, loaded.DedupKey)
+	if got.DedupKey() != loaded.DedupKey() {
+		t.Errorf("DedupKey = %q, want %q", got.DedupKey(), loaded.DedupKey())
 	}
-	if got.CatalogMBID == nil || *got.CatalogMBID != mbid {
-		t.Errorf("CatalogMBID = %v, want %s", got.CatalogMBID, mbid)
+	if got.CatalogMBID() == nil || *got.CatalogMBID() != mbid {
+		t.Errorf("CatalogMBID = %v, want %s", got.CatalogMBID(), mbid)
 	}
-	if got.CatalogDurationSeconds == nil || *got.CatalogDurationSeconds != 194 {
-		t.Errorf("CatalogDurationSeconds = %v, want 194", got.CatalogDurationSeconds)
+	if got.CatalogDurationSeconds() == nil || *got.CatalogDurationSeconds() != 194 {
+		t.Errorf("CatalogDurationSeconds = %v, want 194", got.CatalogDurationSeconds())
 	}
-	if got.ISRC == nil || *got.ISRC != "IETLH2500023" {
-		t.Errorf("ISRC = %v, want IETLH2500023", got.ISRC)
+	if got.ISRC() == nil || *got.ISRC() != "IETLH2500023" {
+		t.Errorf("ISRC = %v, want IETLH2500023", got.ISRC())
 	}
 }
 
 func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *library.PostgresTrackRepository, pool *pgxpool.Pool, track *library.Track) *library.Track {
 	t.Helper()
-	cleanupTrack(t, pool, track.ID, track.UserId)
+	cleanupTrack(t, pool, track.ID(), track.UserId())
 	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	loaded, err := repo.GetByID(ctx, track.ID, track.UserId)
+	loaded, err := repo.GetByID(ctx, track.ID(), track.UserId())
 	if err != nil || loaded == nil {
 		t.Fatalf("GetByID: got=%v err=%v", loaded, err)
 	}
@@ -1163,12 +1165,12 @@ func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothi
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	existing, err := library.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love", time.Now, ids.Real)
+	existing, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: "It’s Only Love (classic version)", Artist: "Bryan Adams", Album: "It’s Only Love"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
 	addAndLoadForRelabel(ctx, t, repo, pool, existing)
-	studio, err := library.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless", time.Now, ids.Real)
+	studio, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: "It's Only Love", Artist: "Bryan Adams", Album: "Reckless"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1180,19 +1182,19 @@ func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothi
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version); err == nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err == nil {
 		t.Fatal("Update() = nil, want the dedup collision to fail the write")
 	}
 
-	got, err := repo.GetByID(ctx, studio.ID, userId)
+	got, err := repo.GetByID(ctx, studio.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after failed update: got=%v err=%v", got, err)
 	}
-	if got.Title != "It's Only Love" || got.Album != "Reckless" {
-		t.Errorf("title/album = %q / %q, want the studio labels kept", got.Title, got.Album)
+	if got.Title() != "It's Only Love" || got.Album() != "Reckless" {
+		t.Errorf("title/album = %q / %q, want the studio labels kept", got.Title(), got.Album())
 	}
-	if got.DownloadStatus == library.AcquisitionReady || got.AudioRef != nil {
-		t.Errorf("audio landed without its relabel: status=%v ref=%v", got.DownloadStatus, got.AudioRef)
+	if got.DownloadStatus() == library.AcquisitionReady || got.AudioRef() != nil {
+		t.Errorf("audio landed without its relabel: status=%v ref=%v", got.DownloadStatus(), got.AudioRef())
 	}
 }
 
@@ -1202,7 +1204,7 @@ func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now, ids.Real)
+	studio, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: "It's Only Love " + uuid.New().String()[:8], Artist: "Bryan Adams", Album: "Reckless"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1214,16 +1216,16 @@ func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version+1); !errors.Is(err, library.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version()+1); !errors.Is(err, library.ErrTrackVersionConflict) {
 		t.Fatalf("Update() at a stale version = %v, want ErrTrackVersionConflict", err)
 	}
 
-	got, err := repo.GetByID(ctx, studio.ID, userId)
+	got, err := repo.GetByID(ctx, studio.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID: got=%v err=%v", got, err)
 	}
-	if got.Title != studio.Title || got.Album != "Reckless" || got.CatalogMBID != nil || got.Year != nil {
-		t.Errorf("labels written by a refused CAS: title=%q album=%q mbid=%v year=%v", got.Title, got.Album, got.CatalogMBID, got.Year)
+	if got.Title() != studio.Title() || got.Album() != "Reckless" || got.CatalogMBID() != nil || got.Year() != nil {
+		t.Errorf("labels written by a refused CAS: title=%q album=%q mbid=%v year=%v", got.Title(), got.Album(), got.CatalogMBID(), got.Year())
 	}
 }
 
@@ -1233,7 +1235,7 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now, ids.Real)
+	studio, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: "It's Only Love " + uuid.New().String()[:8], Artist: "Bryan Adams", Album: "Reckless"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1241,10 +1243,10 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 	if err := loaded.RelabelAsRecording("7933a65c-2c66-4ec1-9880-e46b5d2f05de", "Studio", "Reckless", 1984, "USAM18490008", 195, clock.Now); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("first Update() error = %v", err)
 	}
-	labelled, err := repo.GetByID(ctx, studio.ID, userId)
+	labelled, err := repo.GetByID(ctx, studio.ID(), userId)
 	if err != nil || labelled == nil {
 		t.Fatalf("GetByID: got=%v err=%v", labelled, err)
 	}
@@ -1253,19 +1255,19 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 	if err := labelled.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", title, "", 0, "", 0, clock.Now); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, labelled, labelled.Version); err != nil {
+	if err := repo.Update(ctx, labelled, labelled.Version()); err != nil {
 		t.Fatalf("second Update() error = %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, studio.ID, userId)
+	got, err := repo.GetByID(ctx, studio.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID: got=%v err=%v", got, err)
 	}
-	if got.Title != title || got.Album != title {
-		t.Errorf("title/album = %q / %q, want %q for both", got.Title, got.Album, title)
+	if got.Title() != title || got.Album() != title {
+		t.Errorf("title/album = %q / %q, want %q for both", got.Title(), got.Album(), title)
 	}
-	if got.Year != nil || got.ISRC != nil || got.CatalogDurationSeconds != nil {
-		t.Errorf("year/isrc/length = %v/%v/%v, want all NULL after a relabel that knows none", got.Year, got.ISRC, got.CatalogDurationSeconds)
+	if got.Year() != nil || got.ISRC() != nil || got.CatalogDurationSeconds() != nil {
+		t.Errorf("year/isrc/length = %v/%v/%v, want all NULL after a relabel that knows none", got.Year(), got.ISRC(), got.CatalogDurationSeconds())
 	}
 }
 
@@ -1275,7 +1277,7 @@ func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNext
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now, ids.Real)
+	studio, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: "It's Only Love " + uuid.New().String()[:8], Artist: "Bryan Adams", Album: "Reckless"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1286,11 +1288,11 @@ func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNext
 	if err := loaded.MarkReady("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version()); err != nil {
 		t.Fatalf("relabel Update() error = %v", err)
 	}
 
-	reloaded, err := repo.GetByID(ctx, studio.ID, userId)
+	reloaded, err := repo.GetByID(ctx, studio.ID(), userId)
 	if err != nil || reloaded == nil {
 		t.Fatalf("GetByID: got=%v err=%v", reloaded, err)
 	}
@@ -1299,22 +1301,22 @@ func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNext
 	}
 	const editedTitle = "Owner Retitled"
 	if _, err := pool.Exec(ctx, `UPDATE tracks SET title=$3 WHERE id=$1 AND user_id=$2`,
-		studio.ID.UUID(), userId.UUID(), editedTitle); err != nil {
+		studio.ID().UUID(), userId.UUID(), editedTitle); err != nil {
 		t.Fatalf("concurrent metadata edit failed: %v", err)
 	}
 	if err := reloaded.ReplaceAudio("s3://bucket/test-"+uuid.New().String()+".opus", ids.Real); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, reloaded, reloaded.Version); err != nil {
+	if err := repo.Update(ctx, reloaded, reloaded.Version()); err != nil {
 		t.Fatalf("replace Update() error = %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, studio.ID, userId)
+	got, err := repo.GetByID(ctx, studio.ID(), userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID: got=%v err=%v", got, err)
 	}
-	if got.Title != editedTitle {
-		t.Errorf("Title = %q, want %q: a later non-relabel write clobbered a metadata edit", got.Title, editedTitle)
+	if got.Title() != editedTitle {
+		t.Errorf("Title = %q, want %q: a later non-relabel write clobbered a metadata edit", got.Title(), editedTitle)
 	}
 }
 

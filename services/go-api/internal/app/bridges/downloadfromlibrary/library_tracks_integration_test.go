@@ -20,19 +20,19 @@ import (
 
 func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours", time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: ids.NewUserId(uuid.New()), Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
 	_, err = pool.Exec(context.Background(),
 		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status)
 		 VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
-		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString())
+		track.ID().UUID(), track.UserId().UUID(), track.Title(), track.Artist(), track.Album(), uuid.NewString())
 	if err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID().UUID())
 	})
 	return track
 }
@@ -65,24 +65,24 @@ func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
 
-	old := reclaimTrack(t, pool, track.ID)
-	current := reclaimTrack(t, pool, track.ID)
+	old := reclaimTrack(t, pool, track.ID())
+	current := reclaimTrack(t, pool, track.ID())
 
-	if err := ledger.Complete(ctx, track.ID, track.UserId, old, download.Completion{AudioRef: "old-owner-ref"}); !errors.Is(err, download.ErrLeaseLost) {
+	if err := ledger.Complete(ctx, track.ID(), track.UserId(), old, download.Completion{AudioRef: "old-owner-ref"}); !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("old owner Complete = %v, want ErrLeaseLost", err)
 	}
-	if err := ledger.Fail(ctx, track.ID, track.UserId, old, "boom"); !errors.Is(err, download.ErrLeaseLost) {
+	if err := ledger.Fail(ctx, track.ID(), track.UserId(), old, "boom"); !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("old owner Fail = %v, want ErrLeaseLost", err)
 	}
-	status, audioRef, reason := rowState(t, pool, track.ID)
+	status, audioRef, reason := rowState(t, pool, track.ID())
 	if status != "pending" || audioRef != nil || reason != nil {
 		t.Fatalf("row = %s %v %v, want pending with no audio_ref and no failure_reason", status, audioRef, reason)
 	}
 
-	if err := ledger.Complete(ctx, track.ID, track.UserId, current, download.Completion{AudioRef: "new-owner-ref"}); err != nil {
+	if err := ledger.Complete(ctx, track.ID(), track.UserId(), current, download.Completion{AudioRef: "new-owner-ref"}); err != nil {
 		t.Fatalf("current owner Complete = %v, want nil", err)
 	}
-	status, audioRef, _ = rowState(t, pool, track.ID)
+	status, audioRef, _ = rowState(t, pool, track.ID())
 	if status != "ready" || audioRef == nil || *audioRef != "new-owner-ref" {
 		t.Errorf("row = %s %v, want ready on new-owner-ref", status, audioRef)
 	}
@@ -98,7 +98,7 @@ type claimDuringUpdateStore struct {
 func (s *claimDuringUpdateStore) UpdateFenced(ctx context.Context, track *library.Track, expectedVersion, fence int) error {
 	if !s.claimed {
 		s.claimed = true
-		reclaimTrack(s.t, s.pool, track.ID)
+		reclaimTrack(s.t, s.pool, track.ID())
 	}
 	return s.PostgresTrackRepository.UpdateFenced(ctx, track, expectedVersion, fence)
 }
@@ -106,15 +106,15 @@ func (s *claimDuringUpdateStore) UpdateFenced(ctx context.Context, track *librar
 func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) {
 	pool := dbtest.Pool(t)
 	track := insertUnqueuedTrack(t, pool)
-	held := reclaimTrack(t, pool, track.ID)
+	held := reclaimTrack(t, pool, track.ID())
 	store := &claimDuringUpdateStore{PostgresTrackRepository: library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), pool: pool, t: t}
 
-	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New(), ids.Real).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New(), ids.Real).Complete(context.Background(), track.ID(), track.UserId(), held, download.Completion{AudioRef: "old-owner-ref"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost from the fenced write", err)
 	}
-	status, audioRef, _ := rowState(t, pool, track.ID)
+	status, audioRef, _ := rowState(t, pool, track.ID())
 	if status != "pending" || audioRef != nil {
 		t.Errorf("row = %s %v, want pending with no audio_ref", status, audioRef)
 	}
@@ -133,23 +133,25 @@ var downloadStatusOf = map[download.TrackStatus]library.DownloadStatus{
 
 func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) {
 	t.Helper()
-	track, err := library.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album, time.Now, ids.Real)
+	track, err := library.NewTrack(library.NewTrackInput{UserId: snapshot.UserId, Title: snapshot.Title, Artist: snapshot.Artist, Album: snapshot.Album}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
-	track.ID = snapshot.ID
 	status, known := downloadStatusOf[snapshot.Status]
 	if !known {
 		t.Fatalf("no library status is mapped for download status %v", snapshot.Status)
 	}
-	track.DownloadStatus = status
-	track.AudioRef = snapshot.AudioRef
-	track.DurationSeconds = snapshot.StoredDurationSeconds
+	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) {
+		s.ID = snapshot.ID
+		s.DownloadStatus = status
+		s.AudioRef = snapshot.AudioRef
+		s.DurationSeconds = snapshot.StoredDurationSeconds
+	})
 	if _, created, err := l.store.Add(context.Background(), track); err != nil || !created {
 		t.Fatalf("Add = created %v, %v; want the track stored", created, err)
 	}
 	t.Cleanup(func() {
-		if _, _, err := l.store.Delete(context.Background(), track.ID, track.UserId); err != nil {
+		if _, _, err := l.store.Delete(context.Background(), track.ID(), track.UserId()); err != nil {
 			t.Errorf("cleanup Delete = %v", err)
 		}
 	})

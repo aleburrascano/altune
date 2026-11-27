@@ -3,8 +3,9 @@ package library
 import domain "altune/go-api/internal/library/internal/domain"
 
 type (
-	Track   = domain.Track
-	TrackId = domain.TrackId
+	Track         = domain.Track
+	TrackId       = domain.TrackId
+	NewTrackInput = domain.NewTrackInput
 )
 
 type (

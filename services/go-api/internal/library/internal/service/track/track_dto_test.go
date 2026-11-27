@@ -85,7 +85,7 @@ func TestTrackToDTO_DoesNotSerializeAudioRef(t *testing.T) {
 func TestTrackToDTO_EmptyAlbumIsNull(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	userId := librarytest.UserId()
-	stored := &library.Track{ID: librarytest.NewTrackId(), UserId: userId, Title: "Single", Artist: "Artist", Album: ""}
+	stored := librarytest.RestoreTrack(librarytest.TrackSnapshot{ID: librarytest.NewTrackId(), UserId: userId, Title: "Single", Artist: "Artist", Album: ""})
 	if _, _, err := repo.Add(context.Background(), stored); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestTrackToDTO_IDMarshalsAsCanonicalUUID(t *testing.T) {
 
 	body := listTracksBody(t, repo, userId)
 
-	want := `"id":"` + track.ID.UUID().String() + `"`
+	want := `"id":"` + track.ID().UUID().String() + `"`
 	if !strings.Contains(body, want) {
 		t.Errorf("TrackDTO JSON = %s, want it to contain %s", body, want)
 	}

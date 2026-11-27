@@ -267,7 +267,7 @@ func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (librar
 	t.Helper()
 	playlist := librarytest.SeedPlaylist(t, rig.playlists, user, "Seeded")
 	track := librarytest.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
-	return playlist.ID, track.ID
+	return playlist.ID, track.ID()
 }
 
 func postgresTrackRoutes(pool *pgxpool.Pool) chi.Router {

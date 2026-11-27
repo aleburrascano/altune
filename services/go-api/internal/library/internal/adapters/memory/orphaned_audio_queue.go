@@ -80,10 +80,10 @@ func (q *OrphanedAudioQueue) AudioUsage(_ context.Context, audioRef string, owne
 		if t == nil {
 			continue
 		}
-		if t.AudioRef != nil && *t.AudioRef == audioRef {
+		if t.AudioRef() != nil && *t.AudioRef() == audioRef {
 			return ports.AudioReferenced, nil
 		}
-		if t.UserId == owner && t.DownloadStatus == domain.AcquisitionPending {
+		if t.UserId() == owner && t.DownloadStatus() == domain.AcquisitionPending {
 			acquiring = true
 		}
 	}

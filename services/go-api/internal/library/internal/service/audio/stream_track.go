@@ -67,7 +67,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	}
 
 	storageStart := s.now()
-	reader, size, err := s.audioStore.Stream(ctx, *loaded.AudioRef)
+	reader, size, err := s.audioStore.Stream(ctx, *loaded.AudioRef())
 	if err != nil {
 		return nil, s.audioOpenFailure(ctx, userId, loaded, err)
 	}
@@ -82,7 +82,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 }
 
 func (s *StreamTrackService) audioOpenFailure(ctx context.Context, userId ids.UserId, loaded *domain.Track, openErr error) error {
-	trackId := loaded.ID
+	trackId := loaded.ID()
 	slog.WarnContext(ctx, "stream.audio_missing",
 		logging.KeyTrackID, trackId.String(), logging.KeyError, openErr)
 	if !s.recoveryEnabled() {
@@ -117,7 +117,7 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId ids.Us
 		return nil
 	}
 
-	exists, err := s.audioStore.Exists(ctx, *loaded.AudioRef)
+	exists, err := s.audioStore.Exists(ctx, *loaded.AudioRef())
 	if err != nil {
 		return fmt.Errorf("recover audio: exists check: %w", err)
 	}
@@ -128,7 +128,7 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId ids.Us
 }
 
 func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId ids.UserId, current *domain.Track) (confirmedMissing bool, err error) {
-	exists, err := s.audioStore.Exists(ctx, *current.AudioRef)
+	exists, err := s.audioStore.Exists(ctx, *current.AudioRef())
 	if err != nil {
 		return false, fmt.Errorf("audio existence check: %w", err)
 	}
@@ -142,17 +142,17 @@ func (s *StreamTrackService) markMissingAndReacquire(ctx context.Context, userId
 	if err := s.markAudioMissing(ctx, userId, current); err != nil {
 		return err
 	}
-	s.scheduleReacquire(ctx, userId, current.ID)
+	s.scheduleReacquire(ctx, userId, current.ID())
 	return nil
 }
 
 func (s *StreamTrackService) markAudioMissing(ctx context.Context, userId ids.UserId, current *domain.Track) error {
-	expectedVersion := current.Version
+	expectedVersion := current.Version()
 	if err := current.MarkFailed("audio file missing from storage"); err != nil {
 		return fmt.Errorf("mark failed: %w", err)
 	}
 	slog.WarnContext(ctx, "track marked failed: audio file missing",
-		logging.KeyTrackID, current.ID.String())
+		logging.KeyTrackID, current.ID().String())
 	if err := s.trackRepo.Update(ctx, current, expectedVersion); err != nil {
 		return fmt.Errorf("persist recovery: %w", err)
 	}
