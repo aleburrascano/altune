@@ -1,7 +1,7 @@
 package candidateranking_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"testing"
 )
@@ -27,7 +27,12 @@ func TestRank_ArtistMatchesAChannelByItsWholeName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.artist+"_"+tt.channel, func(t *testing.T) {
-			c := download.AudioCandidate{Title: "Song", Channel: tt.channel, Kind: ports.KindUpload}
+			c := downloadtest.Candidate(
+				"",
+				downloadtest.WithTitle("Song"),
+				downloadtest.WithChannel(tt.channel),
+				downloadtest.WithKind(ports.KindUpload),
+			)
 			if got := evaluation(t, song("Song", tt.artist, 0), c)["artist_match"]; got != tt.want {
 				t.Errorf("artist_match(%q, %q) = %v, want %v", tt.artist, tt.channel, got, tt.want)
 			}
@@ -46,11 +51,23 @@ func TestRank_ACreditedKindMatchesTheArtistByItsCredits(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			credited := download.AudioCandidate{Title: "Song", Channel: "Somewhere", Kind: tt.kind, Artists: []string{"Artist"}}
+			credited := downloadtest.Candidate(
+				"",
+				downloadtest.WithTitle("Song"),
+				downloadtest.WithChannel("Somewhere"),
+				downloadtest.WithKind(tt.kind),
+				downloadtest.WithArtists([]string{"Artist"}),
+			)
 			if got := evaluation(t, song("Song", "Artist", 0), credited)["artist_match"]; got != tt.want {
 				t.Errorf("artist_match = %v, want %v", got, tt.want)
 			}
-			uncredited := download.AudioCandidate{Title: "Song", Channel: "Artist", Kind: tt.kind, Artists: []string{"Someone Else"}}
+			uncredited := downloadtest.Candidate(
+				"",
+				downloadtest.WithTitle("Song"),
+				downloadtest.WithChannel("Artist"),
+				downloadtest.WithKind(tt.kind),
+				downloadtest.WithArtists([]string{"Someone Else"}),
+			)
 			if got := evaluation(t, song("Song", "Artist", 0), uncredited)["artist_match"]; got != false {
 				t.Errorf("artist_match for an uncredited %s on the artist's channel = %v, want false", tt.kind, got)
 			}
@@ -69,7 +86,7 @@ func TestRank_IsTopicFollowsTheUploaderClass(t *testing.T) {
 		{"", false},
 	}
 	for _, tt := range tests {
-		c := download.AudioCandidate{Title: "Song", Channel: tt.channel}
+		c := downloadtest.Candidate("", downloadtest.WithTitle("Song"), downloadtest.WithChannel(tt.channel))
 		if got := evaluation(t, song("Song", "Artist", 0), c)["is_topic"]; got != tt.want {
 			t.Errorf("is_topic for %q = %v, want %v", tt.channel, got, tt.want)
 		}

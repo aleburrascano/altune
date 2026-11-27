@@ -497,7 +497,7 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 }
 
 func twoResults() []search.SearchResult {
-	return []search.SearchResult{{Title: "First"}, {Title: "Second"}}
+	return []search.SearchResult{memory.NewResult(0, "First"), memory.NewResult(0, "Second")}
 }
 
 func TestSearchSettings_ExplorationUsesTheConfiguredRate(t *testing.T) {
@@ -1024,10 +1024,12 @@ func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {
 }
 
 func sourced(kind search.ResultKind, title, credit string, provider search.ProviderName, id string) search.SearchResult {
-	return search.SearchResult{
-		Kind: kind, Title: title, Subtitle: credit,
-		Sources: []search.ProviderLink{{Provider: provider, ExternalID: id}},
-	}
+	return memory.NewResult(
+		kind,
+		title,
+		memory.WithSubtitle(credit),
+		memory.WithSources([]search.ProviderLink{{Provider: provider, ExternalID: id}}),
+	)
 }
 
 func merged(groups ...[]search.SearchResult) []search.SearchResult {

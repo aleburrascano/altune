@@ -71,12 +71,12 @@ type freshAudioSource struct{}
 func (freshAudioSource) Name() acqdomain.SourceName { return "new-audio" }
 
 func (freshAudioSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{{
-		Title:      "Blinding Lights",
-		URL:        "https://www.youtube.com/watch?v=freshAAAAAA",
-		Channel:    "The Weeknd - Topic",
-		Categories: []string{"Music"},
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=freshAAAAAA",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+	)}, nil
 }
 
 func (freshAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {

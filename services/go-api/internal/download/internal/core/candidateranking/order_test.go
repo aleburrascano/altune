@@ -2,13 +2,20 @@ package candidateranking_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"slices"
 	"testing"
 )
 
 func topicUpload(title string, duration float64, url string) download.AudioCandidate {
-	return download.AudioCandidate{Title: title, Channel: "Artist - Topic", Duration: duration, URL: url, Categories: []string{"Music"}}
+	return downloadtest.Candidate(
+		url,
+		downloadtest.WithTitle(title),
+		downloadtest.WithChannel("Artist - Topic"),
+		downloadtest.WithDuration(duration),
+		downloadtest.WithCategories([]string{"Music"}),
+	)
 }
 
 func TestRank_AnEqualTieGoesToTheLengthClosestToTheExpectedOne(t *testing.T) {
@@ -61,8 +68,19 @@ func TestRank_AnOtherVersionGoesAfterACleanCandidateThatLacksTheFeature(t *testi
 
 func TestRank_AnOtherVersionGoesLastOffTopicToo(t *testing.T) {
 	track := song("Song", "Artist", 200)
-	clean := download.AudioCandidate{Title: "Song", Channel: "Uploader", Duration: 260, URL: "https://x.example/clean"}
-	edit := download.AudioCandidate{Title: "Artist - Song (Radio Edit)", Channel: "ArtistVEVO", Duration: 200, URL: "https://x.example/edit", Categories: []string{"Music"}}
+	clean := downloadtest.Candidate(
+		"https://x.example/clean",
+		downloadtest.WithTitle("Song"),
+		downloadtest.WithChannel("Uploader"),
+		downloadtest.WithDuration(260),
+	)
+	edit := downloadtest.Candidate(
+		"https://x.example/edit",
+		downloadtest.WithTitle("Artist - Song (Radio Edit)"),
+		downloadtest.WithChannel("ArtistVEVO"),
+		downloadtest.WithDuration(200),
+		downloadtest.WithCategories([]string{"Music"}),
+	)
 
 	ranked, _ := rank(track, edit, clean)
 
@@ -73,8 +91,21 @@ func TestRank_AnOtherVersionGoesLastOffTopicToo(t *testing.T) {
 
 func TestRank_OffTopicTheFeaturedCreditBreaksAnIdentityTie(t *testing.T) {
 	track := song("Song (feat. Guest)", "Artist", 200)
-	solo := download.AudioCandidate{Title: "Artist - Song (feat. Other)", Channel: "LabelVEVO", Duration: 200, URL: "https://x.example/a", Categories: []string{"Music"}, ViewCount: 9}
-	featured := download.AudioCandidate{Title: "Artist - Song (feat. Guest)", Channel: "Uploader", Duration: 260, URL: "https://x.example/b", ViewCount: 1}
+	solo := downloadtest.Candidate(
+		"https://x.example/a",
+		downloadtest.WithTitle("Artist - Song (feat. Other)"),
+		downloadtest.WithChannel("LabelVEVO"),
+		downloadtest.WithDuration(200),
+		downloadtest.WithCategories([]string{"Music"}),
+		downloadtest.WithViewCount(9),
+	)
+	featured := downloadtest.Candidate(
+		"https://x.example/b",
+		downloadtest.WithTitle("Artist - Song (feat. Guest)"),
+		downloadtest.WithChannel("Uploader"),
+		downloadtest.WithDuration(260),
+		downloadtest.WithViewCount(1),
+	)
 	records := evaluations(t, track, solo, featured)
 	if records[0]["identity_score"] != records[1]["identity_score"] {
 		t.Fatalf("identity scores %v and %v, want a tie so the feature decides", records[0]["identity_score"], records[1]["identity_score"])
@@ -101,8 +132,18 @@ func TestRank_OnTopicTheFeaturedCreditBeatsAShorterQualifierList(t *testing.T) {
 
 func TestRank_OnTopicTheCloserIdentityWinsAtEqualQualifiers(t *testing.T) {
 	track := song("Blinding Lights", "The Weeknd", 200)
-	loose := download.AudioCandidate{Title: "Blinding Lights Extra Words Here", Channel: "The Weeknd - Topic", Duration: 200, URL: "https://x.example/a"}
-	exact := download.AudioCandidate{Title: "The Weeknd - Blinding Lights", Channel: "The Weeknd - Topic", Duration: 260, URL: "https://x.example/b"}
+	loose := downloadtest.Candidate(
+		"https://x.example/a",
+		downloadtest.WithTitle("Blinding Lights Extra Words Here"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithDuration(200),
+	)
+	exact := downloadtest.Candidate(
+		"https://x.example/b",
+		downloadtest.WithTitle("The Weeknd - Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithDuration(260),
+	)
 
 	ranked, _ := rank(track, loose, exact)
 
@@ -113,8 +154,18 @@ func TestRank_OnTopicTheCloserIdentityWinsAtEqualQualifiers(t *testing.T) {
 
 func TestRank_OffTopicTheMetadataRankBreaksAnIdentityAndFeatureTie(t *testing.T) {
 	track := song("Song", "Someone Else", 200)
-	plain := download.AudioCandidate{Title: "Someone Else - Song", Channel: "Uploader", Duration: 200, URL: "https://x.example/a"}
-	label := download.AudioCandidate{Title: "Someone Else - Song", Channel: "LabelVEVO", Duration: 200, URL: "https://x.example/b"}
+	plain := downloadtest.Candidate(
+		"https://x.example/a",
+		downloadtest.WithTitle("Someone Else - Song"),
+		downloadtest.WithChannel("Uploader"),
+		downloadtest.WithDuration(200),
+	)
+	label := downloadtest.Candidate(
+		"https://x.example/b",
+		downloadtest.WithTitle("Someone Else - Song"),
+		downloadtest.WithChannel("LabelVEVO"),
+		downloadtest.WithDuration(200),
+	)
 
 	ranked, _ := rank(track, plain, label)
 
@@ -125,8 +176,18 @@ func TestRank_OffTopicTheMetadataRankBreaksAnIdentityAndFeatureTie(t *testing.T)
 
 func TestRank_OffTopicTheQualifierDistanceBreaksAMetadataTie(t *testing.T) {
 	track := song("Song", "Someone Else", 200)
-	video := download.AudioCandidate{Title: "Someone Else - Song (Video)", Channel: "Uploader", Duration: 200, URL: "https://x.example/a"}
-	plain := download.AudioCandidate{Title: "Someone Else - Song (Audio)", Channel: "Uploader", Duration: 200, URL: "https://x.example/b"}
+	video := downloadtest.Candidate(
+		"https://x.example/a",
+		downloadtest.WithTitle("Someone Else - Song (Video)"),
+		downloadtest.WithChannel("Uploader"),
+		downloadtest.WithDuration(200),
+	)
+	plain := downloadtest.Candidate(
+		"https://x.example/b",
+		downloadtest.WithTitle("Someone Else - Song (Audio)"),
+		downloadtest.WithChannel("Uploader"),
+		downloadtest.WithDuration(200),
+	)
 	records := evaluations(t, track, video, plain)
 	if records[0]["identity_score"] != records[1]["identity_score"] {
 		t.Fatalf("identity scores %v and %v, want a tie", records[0]["identity_score"], records[1]["identity_score"])
@@ -141,9 +202,20 @@ func TestRank_OffTopicTheQualifierDistanceBreaksAMetadataTie(t *testing.T) {
 
 func TestRank_ResolvedCandidatesGoFirstThenTopicThenOther(t *testing.T) {
 	track := song("Song", "Artist", 200)
-	other := download.AudioCandidate{Title: "Artist - Song", Channel: "Uploader", Duration: 200, URL: "https://x.example/a"}
+	other := downloadtest.Candidate(
+		"https://x.example/a",
+		downloadtest.WithTitle("Artist - Song"),
+		downloadtest.WithChannel("Uploader"),
+		downloadtest.WithDuration(200),
+	)
 	topic := topicUpload("Song", 200, "https://x.example/b")
-	art := download.AudioCandidate{Title: "Song", Duration: 200, URL: "https://x.example/c", Kind: ports.KindArtTrack, Artists: []string{"Artist"}}
+	art := downloadtest.Candidate(
+		"https://x.example/c",
+		downloadtest.WithTitle("Song"),
+		downloadtest.WithDuration(200),
+		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithArtists([]string{"Artist"}),
+	)
 
 	ranked, _ := rank(track, other, topic, art)
 

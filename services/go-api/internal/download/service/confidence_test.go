@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/core/audioquality"
@@ -42,7 +43,7 @@ func TestSourceKindOf(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := service.SourceKindOf(download.AudioCandidate{Kind: tc.kind, ObservedOMV: tc.omv}, tc.channel); got != tc.want {
+			if got := service.SourceKindOf(downloadtest.Candidate("", downloadtest.WithKind(tc.kind), downloadtest.WithObservedOMV(tc.omv)), tc.channel); got != tc.want {
 				t.Errorf("SourceKindOf = %q, want %q", got, tc.want)
 			}
 		})
@@ -294,9 +295,12 @@ func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 	track := pendingBlindingLights()
 	catalogLength := 236.0
 	track.Title, track.Artist, track.Album, track.CatalogDurationSeconds = "Drinking in L.A.", "Bran Van 3000", "Glee", &catalogLength
-	source := &offeringSource{found: []ports.AudioCandidate{{
-		Title: "Drinking in L.A.", URL: "https://www.youtube.com/watch?v=-_5yNLsZ5Pk", Channel: "Bran Van 3000 - Topic", Categories: []string{"Music"},
-	}}}
+	source := &offeringSource{found: []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=-_5yNLsZ5Pk",
+		downloadtest.WithTitle("Drinking in L.A."),
+		downloadtest.WithChannel("Bran Van 3000 - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+	)}}
 	var resolved ports.RecordingIdentity
 	stages := noStages()
 	stages.Observer = func(ac *service.AcquisitionContext) { resolved = ac.Identity }

@@ -2,6 +2,7 @@ package artistpage_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
 	"context"
@@ -39,11 +40,11 @@ func mbResultWithFeatured(feats ...search.FeaturedArtist) search.SearchResult {
 	for _, f := range feats {
 		extras = append(extras, f.ToExtrasMap())
 	}
-	return search.SearchResult{
-		Kind:   search.ResultKindTrack,
-		Title:  "Song",
-		Extras: map[string]any{"featured_artists": extras},
-	}
+	return memory.NewResult(
+		search.ResultKindTrack,
+		"Song",
+		memory.WithExtras(map[string]any{"featured_artists": extras}),
+	)
 }
 
 func resolveFeatured(t *testing.T, mb, dz []search.FeaturedArtist) []search.FeaturedArtist {

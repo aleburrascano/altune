@@ -247,9 +247,11 @@ func TestFailureReason_DownloadStepWrappingNoConfidentMatch(t *testing.T) {
 func firstTierOutage() *service.SourceRegistry {
 	blocked := &answeringSource{
 		name: "ytmsearch",
-		found: []ports.AudioCandidate{{
-			Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=artTrackAAA", Kind: ports.KindArtTrack,
-		}},
+		found: []ports.AudioCandidate{downloadtest.Candidate(
+			"https://music.youtube.com/watch?v=artTrackAAA",
+			downloadtest.WithTitle("Blinding Lights"),
+			downloadtest.WithKind(ports.KindArtTrack),
+		)},
 		fetchErr: &acqdomain.SourceUnavailableError{
 			Source: "ytmsearch",
 			Err:    errors.New("yt-dlp download: HTTP Error 429: Too Many Requests"),

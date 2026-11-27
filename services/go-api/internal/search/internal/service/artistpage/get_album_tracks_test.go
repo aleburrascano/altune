@@ -37,10 +37,11 @@ func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 	deezer := &memory.AlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
 			fetchedID = id
-			return []search.SearchResult{{
-				Kind: search.ResultKindTrack, Title: "Like Lil Mexico",
-				Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "cht"}},
-			}}, nil
+			return []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"Like Lil Mexico",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "cht"}}),
+			)}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []search.SearchResult{
@@ -82,9 +83,21 @@ func TestGetAlbumTracks_fallbackNoArtistMatchReturnsEmpty(t *testing.T) {
 
 func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 	sampleTracks := []search.SearchResult{
-		{Kind: search.ResultKindTrack, Title: "Track 1", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}},
-		{Kind: search.ResultKindTrack, Title: "Track 2", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t2"}}},
-		{Kind: search.ResultKindTrack, Title: "Track 3", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t3"}}},
+		memory.NewResult(
+			search.ResultKindTrack,
+			"Track 1",
+			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}),
+		),
+		memory.NewResult(
+			search.ResultKindTrack,
+			"Track 2",
+			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t2"}}),
+		),
+		memory.NewResult(
+			search.ResultKindTrack,
+			"Track 3",
+			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t3"}}),
+		),
 	}
 
 	tests := []struct {
@@ -284,10 +297,11 @@ func TestGetAlbumTracks_servedFallbackNamesTheProviderItStoodInFor(t *testing.T)
 	logs := memory.CaptureProductionLogs(t)
 	deezer := &memory.AlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{{
-				Kind: search.ResultKindTrack, Title: "Like Lil Mexico",
-				Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "cht"}},
-			}}, nil
+			return []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"Like Lil Mexico",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "cht"}}),
+			)}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []search.SearchResult{memory.AlbumSearchResult("Che", "111")}}
@@ -313,10 +327,11 @@ func TestGetAlbumTracks_servedFallbackNamesTheProviderItStoodInFor(t *testing.T)
 func TestGetAlbumTracks_primaryAnswerIsNotMarkedAsAFallback(t *testing.T) {
 	deezer := &memory.AlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{{
-				Kind: search.ResultKindTrack, Title: "T",
-				Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}},
-			}}, nil
+			return []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"T",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}}),
+			)}, nil
 		},
 	}
 	svc := albumTracksSvc(t, deezer, &fakeAlbumSearcher{})
@@ -347,12 +362,12 @@ func (fakeTrackFeatured) ResolveID(context.Context, search.ResultKind, string, s
 }
 
 func deezerTrackFeat(id, title string) search.SearchResult {
-	return search.SearchResult{
-		Kind:    search.ResultKindTrack,
-		Title:   title,
-		Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}},
-		Extras:  map[string]any{},
-	}
+	return memory.NewResult(
+		search.ResultKindTrack,
+		title,
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}}),
+		memory.WithExtras(map[string]any{}),
+	)
 }
 
 func featuredOf(track search.SearchResult) []search.FeaturedArtist {
@@ -565,10 +580,11 @@ func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
 	deezer := &memory.AlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
 			fetchedID = id
-			return []search.SearchResult{{
-				Kind: search.ResultKindTrack, Title: "T",
-				Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}},
-			}}, nil
+			return []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"T",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}}),
+			)}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []search.SearchResult{memory.AlbumSearchResult("Ché", "42")}}
@@ -607,14 +623,15 @@ func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 	deezer := &memory.AlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
 			fetchedID = id
-			return []search.SearchResult{{
-				Kind: search.ResultKindTrack, Title: "T",
-				Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}},
-			}}, nil
+			return []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"T",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}}),
+			)}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []search.SearchResult{
-		{Kind: search.ResultKindAlbum, Title: "Empty Clip", Subtitle: "Whoever"},
+		memory.NewResult(search.ResultKindAlbum, "Empty Clip", memory.WithSubtitle("Whoever")),
 		memory.AlbumSearchResult("Chase Fetti", "999"),
 	}}
 	svc := albumTracksSvc(t, deezer, searcher)
@@ -658,10 +675,11 @@ func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
 			if id == "111" {
 				return nil, nil
 			}
-			return []search.SearchResult{{
-				Kind: search.ResultKindTrack, Title: "T",
-				Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}},
-			}}, nil
+			return []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"T",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t"}}),
+			)}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []search.SearchResult{
@@ -725,10 +743,11 @@ func albumCandidate(title, artist, deezerID string) search.SearchResult {
 func singleTrackDeezer() *memory.AlbumContentProvider {
 	return &memory.AlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{{
-				Kind: search.ResultKindTrack, Title: "Like Lil Mexico",
-				Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "cht"}},
-			}}, nil
+			return []search.SearchResult{memory.NewResult(
+				search.ResultKindTrack,
+				"Like Lil Mexico",
+				memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "cht"}}),
+			)}, nil
 		},
 	}
 }
@@ -780,13 +799,13 @@ func (c countingTrackFeatured) LookupTrackFeatured(ctx context.Context, id strin
 }
 
 func spotifyTrackFeat(title string, featured ...string) search.SearchResult {
-	r := search.SearchResult{
-		Kind:     search.ResultKindTrack,
-		Title:    title,
-		Subtitle: "Drake",
-		Sources:  []search.ProviderLink{{Provider: search.ProviderSpotify, ExternalID: "sp-" + title}},
-		Extras:   map[string]any{},
-	}
+	r := memory.NewResult(
+		search.ResultKindTrack,
+		title,
+		memory.WithSubtitle("Drake"),
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderSpotify, ExternalID: "sp-" + title}}),
+		memory.WithExtras(map[string]any{}),
+	)
 	var feats []map[string]any
 	for _, name := range featured {
 		feats = append(feats, search.FeaturedArtist{Name: name, Role: "featured"}.ToExtrasMap())

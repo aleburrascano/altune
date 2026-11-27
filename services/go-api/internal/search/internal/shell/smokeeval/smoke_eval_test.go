@@ -2,6 +2,7 @@ package smokeeval_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
@@ -46,15 +47,15 @@ func positionFor(t *testing.T, query string, results []search.SearchResult) int 
 
 func TestRunSmokeEval_ReportsWhereEachCheckFoundItsExpectedResult(t *testing.T) {
 	check := listedChecks(t)[0]
-	other := search.SearchResult{Title: "Some Other Track", Subtitle: "Artist"}
+	other := memory.NewResult(0, "Some Other Track", memory.WithSubtitle("Artist"))
 	tests := []struct {
 		name    string
 		results []search.SearchResult
 		want    int
 	}{
-		{"hit at position 0 (case-insensitive)", []search.SearchResult{{Title: strings.ToUpper(check.Expect)}}, 0},
-		{"hit via subtitle", []search.SearchResult{{Title: "x", Subtitle: check.Expect}}, 0},
-		{"later match reports its position", []search.SearchResult{other, other, other, {Title: check.Expect}}, 3},
+		{"hit at position 0 (case-insensitive)", []search.SearchResult{memory.NewResult(0, strings.ToUpper(check.Expect))}, 0},
+		{"hit via subtitle", []search.SearchResult{memory.NewResult(0, "x", memory.WithSubtitle(check.Expect))}, 0},
+		{"later match reports its position", []search.SearchResult{other, other, other, memory.NewResult(0, check.Expect)}, 3},
 		{"miss", []search.SearchResult{other}, -1},
 	}
 	for _, tt := range tests {
@@ -155,7 +156,7 @@ func (s scriptedSearcher) Execute(
 		return nil, errors.New("transient upstream failure")
 	}
 	return &search.SearchOutput{
-		Results: []search.SearchResult{{Title: query.Raw}},
+		Results: []search.SearchResult{memory.NewResult(0, query.Raw)},
 	}, nil
 }
 

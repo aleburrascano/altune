@@ -1,19 +1,20 @@
 package albumgrouping_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/albumgrouping"
 	"altune/go-api/internal/search/internal/domain"
 	"testing"
 )
 
 func albumVariant(provider domain.ProviderName, id, title string, opts ...func(*domain.SearchResult)) domain.SearchResult {
-	r := domain.SearchResult{
-		Kind:     domain.ResultKindAlbum,
-		Title:    title,
-		Subtitle: "che",
-		Sources:  []domain.ProviderLink{{Provider: provider, ExternalID: id}},
-		Extras:   map[string]any{},
-	}
+	r := memory.NewResult(
+		domain.ResultKindAlbum,
+		title,
+		memory.WithSubtitle("che"),
+		memory.WithSources([]domain.ProviderLink{{Provider: provider, ExternalID: id}}),
+		memory.WithExtras(map[string]any{}),
+	)
 	for _, o := range opts {
 		o(&r)
 	}
@@ -408,7 +409,13 @@ func TestSourceKey_distinguishesIDPrefixes(t *testing.T) {
 }
 
 func mergedRelease(title string, recordType domain.RecordType, trackCount int) albumgrouping.MergedRelease {
-	return albumgrouping.MergedRelease{Result: domain.SearchResult{Title: title, TrackCount: trackCount, RecordType: recordType, Extras: map[string]any{}}}
+	return albumgrouping.MergedRelease{Result: memory.NewResult(
+		0,
+		title,
+		memory.WithTrackCount(trackCount),
+		memory.WithRecordType(recordType),
+		memory.WithExtras(map[string]any{}),
+	)}
 }
 
 func TestNormalizeRecordType(t *testing.T) {
@@ -464,9 +471,9 @@ func TestKeepRelease(t *testing.T) {
 
 func TestFilterKept_dropsOnlyTheNamesake(t *testing.T) {
 	releases := []albumgrouping.MergedRelease{
-		{Result: domain.SearchResult{Title: "Empty Clip"}, IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
-		{Result: domain.SearchResult{Title: "Wrong Che Single"}, Providers: map[domain.ProviderName]bool{domain.ProviderTheAudioDB: true}},
-		{Result: domain.SearchResult{Title: "REST IN BASS: ENCORE"}, IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
+		{Result: memory.NewResult(0, "Empty Clip"), IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
+		{Result: memory.NewResult(0, "Wrong Che Single"), Providers: map[domain.ProviderName]bool{domain.ProviderTheAudioDB: true}},
+		{Result: memory.NewResult(0, "REST IN BASS: ENCORE"), IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
 	}
 	kept := albumgrouping.FilterKept(releases)
 	if len(kept) != 2 {

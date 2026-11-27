@@ -2,6 +2,7 @@ package ytmsearch_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"context"
@@ -202,7 +203,7 @@ func TestSource_SearchErrorsAreReturned(t *testing.T) {
 func TestSource_FetchDownloadsTheCandidateURL(t *testing.T) {
 	downloader := &recordingDownloader{}
 	src := download.NewYtmSearchSource(&fakeSongSearch{}, downloader)
-	if _, err := src.Fetch(context.Background(), download.AudioCandidate{URL: "https://music.youtube.com/watch?v=LMDLNLM6Ji8"}, t.TempDir()); err != nil {
+	if _, err := src.Fetch(context.Background(), downloadtest.Candidate("https://music.youtube.com/watch?v=LMDLNLM6Ji8"), t.TempDir()); err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
 	if downloader.gotURL != "https://music.youtube.com/watch?v=LMDLNLM6Ji8" {

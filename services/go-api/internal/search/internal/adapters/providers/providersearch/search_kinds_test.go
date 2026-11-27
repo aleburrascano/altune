@@ -2,6 +2,7 @@ package providersearch_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/domain"
@@ -37,7 +38,7 @@ func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testin
 			if kind == search.ResultKindAlbum {
 				return nil, context.DeadlineExceeded
 			}
-			return []search.SearchResult{{Kind: kind, Title: "Humble"}}, nil
+			return []search.SearchResult{memory.NewResult(kind, "Humble")}, nil
 		})
 
 	if len(got) != 2 {

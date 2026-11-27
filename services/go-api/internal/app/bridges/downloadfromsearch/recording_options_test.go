@@ -44,10 +44,13 @@ func (p *countingProvider) Search(ctx context.Context, query string, kinds map[s
 func searchFinding(t *testing.T, p *countingProvider) *search.SearchService {
 	t.Helper()
 	p.Provider = search.ProviderDeezer
-	p.Results = []search.SearchResult{{
-		Kind: search.ResultKindTrack, Title: unfoundTitle, Subtitle: unfoundArtist,
-		ISRC: unfoundISRC, RecordingMBID: searchOnlyMBID,
-	}}
+	p.Results = []search.SearchResult{searchtest.NewResult(
+		search.ResultKindTrack,
+		unfoundTitle,
+		searchtest.WithSubtitle(unfoundArtist),
+		searchtest.WithISRCCode(unfoundISRC),
+		searchtest.WithRecordingMBID(searchOnlyMBID),
+	)}
 	return searchtest.NewSearchService(t, searchtest.NewTracker(t), []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 }
 

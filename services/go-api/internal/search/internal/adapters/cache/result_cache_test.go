@@ -2,6 +2,7 @@ package cache_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/cache"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"strings"
@@ -26,7 +27,7 @@ func TestRedisResultCaches_StoreUnderTheirV2KeyAndTTL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server, client := newRedis(t)
-			tt.make(client).Set(context.Background(), "humble|track", []domain.SearchResult{{Title: "Humble"}})
+			tt.make(client).Set(context.Background(), "humble|track", []domain.SearchResult{memory.NewResult(0, "Humble")})
 
 			assertStored(t, server, tt.key, tt.ttl)
 			if n := len(storedKeys(server)); n != 1 {
@@ -43,23 +44,20 @@ func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {
 	key := "qa-results|key"
 
 	original := []domain.SearchResult{
-		{
-			Kind:          domain.ResultKindTrack,
-			Title:         "Cached Track",
-			Subtitle:      "Cached Artist",
-			ImageURL:      "https://img/1.jpg",
-			RecordingMBID: "mbid-1",
-			Xref:          map[domain.ProviderKey]string{"deezer": "42"},
-			Sources: []domain.ProviderLink{
+		memory.NewResult(
+			domain.ResultKindTrack,
+			"Cached Track",
+			memory.WithSubtitle("Cached Artist"),
+			memory.WithImageURL("https://img/1.jpg"),
+			memory.WithRecordingMBID("mbid-1"),
+			memory.WithXref(map[domain.ProviderKey]string{"deezer": "42"}),
+			memory.WithSources([]domain.ProviderLink{
 				{Provider: domain.ProviderDeezer, ExternalID: "42", URL: "https://deezer/42"},
-			},
-			Album:    "Cached Album",
-			Duration: 200,
-		},
-		{
-			Kind:  domain.ResultKindArtist,
-			Title: "Cached Artist",
-		},
+			}),
+			memory.WithAlbum("Cached Album"),
+			memory.WithDuration(200),
+		),
+		memory.NewResult(domain.ResultKindArtist, "Cached Artist"),
 	}
 	c.Set(ctx, key, original)
 
@@ -105,10 +103,12 @@ func TestRedisResultCache_TypedFieldsRoundTrip(t *testing.T) {
 	_, client := newRedis(t)
 	c := cache.NewRedisResultCache(client)
 	ctx := context.Background()
-	in := []domain.SearchResult{{
-		Kind: domain.ResultKindAlbum, Title: "Blue", RecordType: "ep",
-		ResolutionTier: domain.StampResolutionTier(domain.EntityResolutionNone),
-	}}
+	in := []domain.SearchResult{memory.NewResult(
+		domain.ResultKindAlbum,
+		"Blue",
+		memory.WithRecordType("ep"),
+		memory.WithResolutionTier(domain.StampResolutionTier(domain.EntityResolutionNone)),
+	)}
 
 	c.Set(ctx, "blue", in)
 	out, hit := c.Get(ctx, "blue")
@@ -124,7 +124,7 @@ func TestRedisResultCache_TypedFieldsRoundTrip(t *testing.T) {
 func TestRedisResultCache_RecordTypeIsStoredAsItsBareString(t *testing.T) {
 	server, client := newRedis(t)
 	cache.NewRedisResultCache(client).Set(context.Background(), "humble|track",
-		[]domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "Blue", RecordType: "ep"}})
+		[]domain.SearchResult{memory.NewResult(domain.ResultKindAlbum, "Blue", memory.WithRecordType("ep"))})
 
 	raw, err := server.Get("discovery:results:v2:" + humbleTrackHash)
 	if err != nil {
@@ -153,7 +153,7 @@ func TestRedisResultCache_KeyIsolationAndMiss(t *testing.T) {
 	c := cache.NewRedisResultCache(client)
 	ctx := context.Background()
 
-	c.Set(ctx, "qa-results-a", []domain.SearchResult{{Title: "A"}})
+	c.Set(ctx, "qa-results-a", []domain.SearchResult{memory.NewResult(0, "A")})
 
 	if _, hit := c.Get(ctx, "qa-results-b"); hit {
 		t.Error("a different composite key must miss, got hit")
@@ -180,7 +180,7 @@ func TestRedisResultCache_NilClient_NoOps(t *testing.T) {
 	if got, hit := c.Get(ctx, "key"); hit || got != nil {
 		t.Errorf("nil-client Get = (%v,%v), want clean miss", got, hit)
 	}
-	c.Set(ctx, "key", []domain.SearchResult{{Title: "x"}})
+	c.Set(ctx, "key", []domain.SearchResult{memory.NewResult(0, "x")})
 	if _, hit := c.Get(ctx, "key"); hit {
 		t.Error("nil-client Set cached something, want no-op")
 	}
@@ -191,7 +191,7 @@ func TestRedisProviderResultCache_PerProviderAnswersShareOneTTL(t *testing.T) {
 	c := cache.NewRedisProviderResultCache(client, 10*time.Minute)
 	ctx := context.Background()
 
-	c.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "Humble"}})
+	c.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{memory.NewResult(domain.ResultKindTrack, "Humble")})
 	c.Set(ctx, domain.ProviderMusicBrainz, "humble", nil)
 
 	got, hit := c.Get(ctx, domain.ProviderDeezer, "humble")
@@ -218,7 +218,7 @@ func TestRedisProviderResultCache_NilClient_NoOps(t *testing.T) {
 	c := cache.NewRedisProviderResultCache(nil, time.Minute)
 	ctx := context.Background()
 
-	c.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{{Title: "Humble"}})
+	c.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{memory.NewResult(0, "Humble")})
 	if got, hit := c.Get(ctx, domain.ProviderDeezer, "humble"); hit || got != nil {
 		t.Errorf("nil-client Get = (%v,%v), want clean miss", got, hit)
 	}
@@ -228,7 +228,7 @@ func TestRedisProviderResultCache_UnreachableRedisIsAMiss(t *testing.T) {
 	c := cache.NewRedisProviderResultCache(unreachableRedisClient(t), time.Minute)
 	ctx := context.Background()
 
-	c.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{{Title: "Humble"}})
+	c.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{memory.NewResult(0, "Humble")})
 	if _, hit := c.Get(ctx, domain.ProviderDeezer, "humble"); hit {
 		t.Fatal("an unreachable Redis must read as a miss, never as an empty answer")
 	}

@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/service"
@@ -3017,7 +3018,7 @@ type committingUpgrader struct {
 func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, job acqports.AcquisitionJob) error {
 	u.startedOne.Do(func() { close(u.started) })
 	<-u.proceed
-	_, err := u.step.Execute(ctx, &service.AcquisitionContext{Job: job, AudioRef: "upgraded.mp3"}, service.AfterStore{Kept: acqports.AudioCandidate{URL: "https://www.youtube.com/watch?v=upgradedAAA"}})
+	_, err := u.step.Execute(ctx, &service.AcquisitionContext{Job: job, AudioRef: "upgraded.mp3"}, service.AfterStore{Kept: downloadtest.Candidate("https://www.youtube.com/watch?v=upgradedAAA")})
 	u.commitErr <- err
 	return err
 }

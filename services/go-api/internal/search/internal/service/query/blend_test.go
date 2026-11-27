@@ -1,6 +1,7 @@
 package query_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/query"
 	"fmt"
@@ -8,7 +9,7 @@ import (
 )
 
 func result(kind domain.ResultKind, title string) domain.SearchResult {
-	return domain.SearchResult{Kind: kind, Title: title, Signature: title}
+	return memory.NewResult(kind, title, memory.WithSignature(title))
 }
 
 func TestBuildBlendedSlate_EmptyResults(t *testing.T) {

@@ -232,7 +232,7 @@ func TestSourceRegistry_FetchRoutesToOwningSource(t *testing.T) {
 	b := &stubSource{name: "b", fetchPath: "/tmp/b.mp3"}
 	reg := service.NewSourceRegistry(a, b)
 
-	fetched, err := reg.Fetch(context.Background(), ports.AudioCandidate{URL: "u2", Source: "b"}, "/out")
+	fetched, err := reg.Fetch(context.Background(), downloadtest.Candidate("u2", downloadtest.WithSource("b")), "/out")
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestSourceRegistry_FetchRoutesToOwningSource(t *testing.T) {
 func TestSourceRegistry_FetchUnknownSource(t *testing.T) {
 	reg := service.NewSourceRegistry(&stubSource{name: "a"})
 
-	_, err := reg.Fetch(context.Background(), ports.AudioCandidate{URL: "u1", Source: "ghost"}, "/out")
+	_, err := reg.Fetch(context.Background(), downloadtest.Candidate("u1", downloadtest.WithSource("ghost")), "/out")
 	if err == nil {
 		t.Fatal("expected an error routing to an unknown source")
 	}
@@ -283,7 +283,7 @@ func TestSourceRegistry_PreviewFetcherForRoutesToTheCandidatesSource(t *testing.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fetcher, ok := reg.PreviewFetcherFor(ports.AudioCandidate{URL: "u1", Source: tt.source})
+			fetcher, ok := reg.PreviewFetcherFor(downloadtest.Candidate("u1", downloadtest.WithSource(tt.source)))
 			if ok != tt.want {
 				t.Fatalf("PreviewFetcherFor(%q) ok = %v, want %v", tt.source, ok, tt.want)
 			}
@@ -409,7 +409,7 @@ func TestSourceRegistry_FetchReachesFallbackSources(t *testing.T) {
 	fallback := &stubSource{name: "ytdlp", fetchPath: "/tmp/a.m4a"}
 	reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{&stubSource{name: "ytmsearch"}}, []ports.AudioSource{fallback})
 
-	if _, err := reg.Fetch(context.Background(), ports.AudioCandidate{Source: "ytdlp", URL: "u1"}, t.TempDir()); err != nil {
+	if _, err := reg.Fetch(context.Background(), downloadtest.Candidate("u1", downloadtest.WithSource("ytdlp")), t.TempDir()); err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
 	if len(fallback.fetched) != 1 {
@@ -478,7 +478,7 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 
 func TestFindReportingOutage_LogsEachCandidateDroppedForNoSourceKey(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelWarn)
-	keyless := ports.AudioCandidate{URL: "https://www.youtube.com/", Source: "stub"}
+	keyless := downloadtest.Candidate("https://www.youtube.com/", downloadtest.WithSource("stub"))
 	reg := service.NewSourceRegistry(&stubSource{name: "stub", found: []ports.AudioCandidate{downloadtest.Candidate("u1"), keyless}})
 
 	res, err := reg.FindReportingOutage(context.Background(), ports.FindRequest{})

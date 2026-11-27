@@ -443,7 +443,7 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now), querypkg.WithExploration(1.0))
-	one := []search.SearchResult{{Title: "solo"}}
+	one := []search.SearchResult{memory.NewResult(0, "solo")}
 	if _, explored := svc.MaybeExplore(one); explored {
 		t.Error("a single result cannot be reordered — must not count as explored")
 	}
@@ -454,7 +454,7 @@ func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 
 func TestMaybeExplore_ShufflesByTheGivenDrawsAndStaysPutWhenTheDrawMissesTheRate(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	three := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
+	three := []search.SearchResult{memory.NewResult(0, "a"), memory.NewResult(0, "b"), memory.NewResult(0, "c")}
 	titles := func(rs []search.SearchResult) string {
 		var out string
 		for _, r := range rs {
@@ -814,7 +814,7 @@ func runExecuteAs(
 func TestMaybeExplore_DisabledIsInert(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now))
-	in := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
+	in := []search.SearchResult{memory.NewResult(0, "a"), memory.NewResult(0, "b"), memory.NewResult(0, "c")}
 	out, explored := svc.MaybeExplore(in)
 	if explored {
 		t.Error("exploration must be off when rate is 0")
@@ -880,7 +880,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 func TestMaybeExplore_AlwaysExploresClonesAndKeepsMembers(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now), querypkg.WithExploration(1.0))
-	in := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
+	in := []search.SearchResult{memory.NewResult(0, "a"), memory.NewResult(0, "b"), memory.NewResult(0, "c")}
 	out, explored := svc.MaybeExplore(in)
 
 	if !explored {

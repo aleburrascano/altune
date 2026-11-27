@@ -40,11 +40,11 @@ func coreStepsOver(sources *service.SourceRegistry, store *objectStore, workspac
 }
 
 func TestSelect_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
-		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
-		URL:     "yt:cooking",
-		Channel: "CookingChannel",
-	}}}
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(
+		"yt:cooking",
+		downloadtest.WithTitle("Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense"),
+		downloadtest.WithChannel("CookingChannel"),
+	)}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Must Be the Moon", Artist: "!!!", CatalogDuration: 253}}
 
 	err := runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
@@ -107,22 +107,38 @@ func TestBuildAudioRef(t *testing.T) {
 
 func TestSelect_PrefersTheTopicUploadOverCoversAndUnrelatedVideos(t *testing.T) {
 	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
-		{
-			Title: "The Weeknd - Blinding Lights (Official Video)", Channel: "TheWeekndVEVO",
-			Duration: 203, Categories: []string{"Music"}, ViewCount: 3_000_000_000, URL: "yt:official",
-		},
-		{
-			Title: "Blinding Lights", Channel: "The Weeknd - Topic",
-			Duration: 200, Categories: []string{"Music"}, ViewCount: 50_000_000, URL: "yt:topic",
-		},
-		{
-			Title: "Blinding Lights (Piano Cover)", Channel: "Piano Tutorials",
-			Duration: 195, Categories: []string{"Music"}, ViewCount: 5_000_000, URL: "yt:cover",
-		},
-		{
-			Title: "Random Podcast Episode", Channel: "PodcastGuy",
-			Duration: 3600, Categories: []string{"Education"}, ViewCount: 100_000, URL: "yt:podcast",
-		},
+		downloadtest.Candidate(
+			"yt:official",
+			downloadtest.WithTitle("The Weeknd - Blinding Lights (Official Video)"),
+			downloadtest.WithChannel("TheWeekndVEVO"),
+			downloadtest.WithDuration(203),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithViewCount(3_000_000_000),
+		),
+		downloadtest.Candidate(
+			"yt:topic",
+			downloadtest.WithTitle("Blinding Lights"),
+			downloadtest.WithChannel("The Weeknd - Topic"),
+			downloadtest.WithDuration(200),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithViewCount(50_000_000),
+		),
+		downloadtest.Candidate(
+			"yt:cover",
+			downloadtest.WithTitle("Blinding Lights (Piano Cover)"),
+			downloadtest.WithChannel("Piano Tutorials"),
+			downloadtest.WithDuration(195),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithViewCount(5_000_000),
+		),
+		downloadtest.Candidate(
+			"yt:podcast",
+			downloadtest.WithTitle("Random Podcast Episode"),
+			downloadtest.WithChannel("PodcastGuy"),
+			downloadtest.WithDuration(3600),
+			downloadtest.WithCategories([]string{"Education"}),
+			downloadtest.WithViewCount(100_000),
+		),
 	}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{
 		Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200, ISRC: "USUM71922973",
@@ -194,10 +210,15 @@ type tierSource struct {
 func (s tierSource) Name() acqdomain.SourceName { return s.name }
 
 func (s tierSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{{
-		Title: "Blinding Lights", URL: s.url, Channel: "The Weeknd - Topic", Artists: []string{"The Weeknd"},
-		Duration: 200, Categories: []string{"Music"}, Kind: ports.KindArtTrack,
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		s.url,
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithArtists([]string{"The Weeknd"}),
+		downloadtest.WithDuration(200),
+		downloadtest.WithCategories([]string{"Music"}),
+		downloadtest.WithKind(ports.KindArtTrack),
+	)}, nil
 }
 
 func (s tierSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
@@ -472,9 +493,14 @@ const (
 )
 
 func finesseOn(url, album string) ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "Finesse", URL: url, Duration: 191, Artists: []string{"Bruno Mars"}, Album: album, Kind: ports.KindArtTrack,
-	}
+	return downloadtest.Candidate(
+		url,
+		downloadtest.WithTitle("Finesse"),
+		downloadtest.WithDuration(191),
+		downloadtest.WithArtists([]string{"Bruno Mars"}),
+		downloadtest.WithAlbum(album),
+		downloadtest.WithKind(ports.KindArtTrack),
+	)
 }
 
 func shadowedRun(t *testing.T, source finesseSource) (*service.AcquisitionContext, []logging.CapturedRecord, error) {
@@ -508,10 +534,13 @@ func TestRunPipeline_ShadowJudgesTheKeptCandidateOnce(t *testing.T) {
 
 func TestRunPipeline_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
 	source := finesseSource{
-		candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic"), {
-			Title: "Bruno Mars - Finesse (Official Audio)", URL: finesseUploadURL, Channel: "Bruno Mars - Topic",
-			Duration: 192, Categories: []string{"Music"},
-		}},
+		candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic"), downloadtest.Candidate(
+			finesseUploadURL,
+			downloadtest.WithTitle("Bruno Mars - Finesse (Official Audio)"),
+			downloadtest.WithChannel("Bruno Mars - Topic"),
+			downloadtest.WithDuration(192),
+			downloadtest.WithCategories([]string{"Music"}),
+		)},
 		broken: finesseAlbumURL,
 	}
 
@@ -559,7 +588,7 @@ func TestSearch_AReplaceExcludesAVideoUnderItsOtherURLSpelling(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{URL: tt.url}}}
+			source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(tt.url)}}
 			ac := &service.AcquisitionContext{Replace: service.ReplaceState{ExcludeKeys: []string{excluded}}}
 
 			_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
@@ -619,9 +648,9 @@ func TestAcquisitionContext_ASnapshotSharesNoSliceOrPointerWithTheOriginal(t *te
 	original := &service.AcquisitionContext{
 		Track:           service.TrackRef{CatalogSources: withSpareCapacity(ports.CatalogSource{ExternalID: "catalog"})},
 		Identity:        ports.RecordingIdentity{MBIDs: withSpareCapacity("mb-1", "mb-2"), Sources: withSpareCapacity(ports.ProviderRef{ExternalID: "ref"})},
-		Candidates:      withSpareCapacity(ports.AudioCandidate{URL: "https://example.test/a"}),
-		Ranked:          withSpareCapacity(ports.AudioCandidate{URL: "https://example.test/b"}),
-		Selected:        &ports.AudioCandidate{URL: "https://example.test/c"},
+		Candidates:      withSpareCapacity(downloadtest.Candidate("https://example.test/a")),
+		Ranked:          withSpareCapacity(downloadtest.Candidate("https://example.test/b")),
+		Selected:        downloadtest.CandidatePtr("https://example.test/c"),
 		Attempted:       withSpareCapacity(service.AttemptedCandidate{URL: "https://example.test/d", Window: 1}),
 		Evidence:        service.Evidence{Qualifiers: withSpareCapacity("live"), DurationDeltaSeconds: &delta},
 		Rejections:      withSpareCapacity(rejectedcandidates.Entry{URL: "https://example.test/e"}),
@@ -638,7 +667,7 @@ func TestAcquisitionContext_ASnapshotSharesNoSliceOrPointerWithTheOriginal(t *te
 	pass.Identity.Sources[0].ExternalID = "changed"
 	pass.Identity.Sources = append(pass.Identity.Sources, ports.ProviderRef{})
 	pass.Candidates[0].URL = "changed"
-	pass.Candidates = append(pass.Candidates, ports.AudioCandidate{URL: "extra"})
+	pass.Candidates = append(pass.Candidates, downloadtest.Candidate("extra"))
 	pass.Ranked[0].URL = "changed"
 	pass.Selected.URL = "changed"
 	pass.Attempted[0].Window = 99

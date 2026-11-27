@@ -2,6 +2,7 @@ package fakesources_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -29,7 +30,7 @@ var fixtureClip = []byte("one clip of fixture audio")
 func fetchedSize(t *testing.T, seconds float64) int {
 	t.Helper()
 	outDir := t.TempDir()
-	fetched, err := download.NewArtTrackSource(fixtureClip).Fetch(context.Background(), download.AudioCandidate{Duration: seconds}, outDir)
+	fetched, err := download.NewArtTrackSource(fixtureClip).Fetch(context.Background(), downloadtest.Candidate("", downloadtest.WithDuration(seconds)), outDir)
 	if err != nil {
 		t.Fatalf("Fetch(%v): %v", seconds, err)
 	}
@@ -65,7 +66,7 @@ func TestSource_FetchTilesTheClipToCoverTheDurationWithinBounds(t *testing.T) {
 
 func TestSource_FetchWritesDirectlyInOutDir(t *testing.T) {
 	outDir := t.TempDir()
-	fetched, err := download.NewArtTrackSource(fixtureClip).Fetch(context.Background(), download.AudioCandidate{Duration: 212}, outDir)
+	fetched, err := download.NewArtTrackSource(fixtureClip).Fetch(context.Background(), downloadtest.Candidate("", downloadtest.WithDuration(212)), outDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +89,7 @@ func TestSource_NoBinaryEmbedsAudio(t *testing.T) {
 
 func TestSource_FetchWritesTheClipItWasGiven(t *testing.T) {
 	for _, source := range []download.AudioSource{download.NewArtTrackSource(fixtureClip), download.NewUploadSource(fixtureClip)} {
-		fetched, err := source.Fetch(context.Background(), download.AudioCandidate{}, t.TempDir())
+		fetched, err := source.Fetch(context.Background(), downloadtest.Candidate(""), t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -106,7 +107,7 @@ func TestSource_FetchRefusesCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	outDir := t.TempDir()
-	if _, err := download.NewArtTrackSource(fixtureClip).Fetch(ctx, download.AudioCandidate{}, outDir); err == nil {
+	if _, err := download.NewArtTrackSource(fixtureClip).Fetch(ctx, downloadtest.Candidate(""), outDir); err == nil {
 		t.Fatal("fetch on a cancelled context must fail")
 	}
 	if entries, _ := os.ReadDir(outDir); len(entries) != 0 {

@@ -2,6 +2,7 @@ package savedlink_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/savedlink"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/logging"
@@ -47,10 +48,12 @@ func TestFind_EmitsThePickedSoundCloudUpload(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v; want the one picked upload", got, err)
 	}
-	want := download.AudioCandidate{
-		URL: pickedUpload, Title: "Murder On The Dancefloor", Artists: []string{"Sophie Ellis-Bextor"},
-		Kind: ports.KindCatalogPin,
-	}
+	want := downloadtest.Candidate(
+		pickedUpload,
+		downloadtest.WithTitle("Murder On The Dancefloor"),
+		downloadtest.WithArtists([]string{"Sophie Ellis-Bextor"}),
+		downloadtest.WithKind(ports.KindCatalogPin),
+	)
 	if got[0].URL != want.URL || got[0].Title != want.Title || !got[0].IsResolved() || got[0].Kind != want.Kind ||
 		len(got[0].Artists) != 1 || got[0].Artists[0] != want.Artists[0] {
 		t.Errorf("candidate = %+v, want %+v", got[0], want)
@@ -96,7 +99,7 @@ func TestFind_ASoundCloudPinWithoutAUsableURLIsSkippedAndLogged(t *testing.T) {
 func TestFetch_DownloadsThePickedURL(t *testing.T) {
 	fetcher := &recordingFetcher{}
 
-	fetched, err := newSource(t, fetcher, savedlink.NoPageReader()).Fetch(context.Background(), download.AudioCandidate{URL: pickedUpload}, "/tmp/out")
+	fetched, err := newSource(t, fetcher, savedlink.NoPageReader()).Fetch(context.Background(), downloadtest.Candidate(pickedUpload), "/tmp/out")
 
 	if err != nil || fetcher.gotURL != pickedUpload || fetched.Path != "/tmp/out/track.mp3" {
 		t.Errorf("Fetch = %+v, %v; downloaded %q", fetched, err, fetcher.gotURL)

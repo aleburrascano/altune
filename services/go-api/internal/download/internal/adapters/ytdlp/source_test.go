@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
@@ -327,7 +328,7 @@ func TestSource_Find_InspectsOnlySoundCloudURLsAndOncePerURL(t *testing.T) {
 func soundCloudTracks(from, to int) []download.AudioCandidate {
 	var tracks []download.AudioCandidate
 	for i := from; i <= to; i++ {
-		tracks = append(tracks, download.AudioCandidate{URL: fmt.Sprintf("https://soundcloud.com/a/track-%d", i), Duration: 240})
+		tracks = append(tracks, downloadtest.Candidate(fmt.Sprintf("https://soundcloud.com/a/track-%d", i), downloadtest.WithDuration(240)))
 	}
 	return tracks
 }

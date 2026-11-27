@@ -21,9 +21,24 @@ import (
 
 func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 	sampleTracks := []search.SearchResult{
-		{Kind: search.ResultKindTrack, Title: "Blinding Lights", Subtitle: "The Weeknd", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}},
-		{Kind: search.ResultKindTrack, Title: "Save Your Tears", Subtitle: "The Weeknd", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t2"}}},
-		{Kind: search.ResultKindTrack, Title: "Starboy", Subtitle: "The Weeknd", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t3"}}},
+		memory.NewResult(
+			search.ResultKindTrack,
+			"Blinding Lights",
+			memory.WithSubtitle("The Weeknd"),
+			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}),
+		),
+		memory.NewResult(
+			search.ResultKindTrack,
+			"Save Your Tears",
+			memory.WithSubtitle("The Weeknd"),
+			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t2"}}),
+		),
+		memory.NewResult(
+			search.ResultKindTrack,
+			"Starboy",
+			memory.WithSubtitle("The Weeknd"),
+			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t3"}}),
+		),
 	}
 
 	tests := []struct {
@@ -137,8 +152,16 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 				search.ProviderDeezer: &memory.ArtistContentProvider{
 					GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
 						return []search.SearchResult{
-							{Kind: search.ResultKindAlbum, Title: "After Hours", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}},
-							{Kind: search.ResultKindAlbum, Title: "Starboy", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}},
+							memory.NewResult(
+								search.ResultKindAlbum,
+								"After Hours",
+								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+							),
+							memory.NewResult(
+								search.ResultKindAlbum,
+								"Starboy",
+								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}),
+							),
 						}, nil
 					},
 				},
@@ -164,24 +187,24 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 				search.ProviderDeezer: &memory.ArtistContentProvider{
 					GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
 						return []search.SearchResult{
-							{
-								Kind:       search.ResultKindAlbum,
-								Title:      "After Hours",
-								Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}},
-								TrackCount: 14,
-							},
-							{
-								Kind:       search.ResultKindAlbum,
-								Title:      "After Hours (Deluxe)",
-								Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}},
-								TrackCount: 18,
-							},
-							{
-								Kind:       search.ResultKindAlbum,
-								Title:      "Starboy",
-								Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a3"}},
-								TrackCount: 18,
-							},
+							memory.NewResult(
+								search.ResultKindAlbum,
+								"After Hours",
+								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+								memory.WithTrackCount(14),
+							),
+							memory.NewResult(
+								search.ResultKindAlbum,
+								"After Hours (Deluxe)",
+								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}),
+								memory.WithTrackCount(18),
+							),
+							memory.NewResult(
+								search.ResultKindAlbum,
+								"Starboy",
+								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a3"}}),
+								memory.WithTrackCount(18),
+							),
 						}, nil
 					},
 				},
@@ -198,18 +221,18 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 				search.ProviderDeezer: &memory.ArtistContentProvider{
 					GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
 						return []search.SearchResult{
-							{
-								Kind:       search.ResultKindAlbum,
-								Title:      "Dawn FM",
-								Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}},
-								TrackCount: 10,
-							},
-							{
-								Kind:       search.ResultKindAlbum,
-								Title:      "Dawn FM (Alternate World)",
-								Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}},
-								TrackCount: 20,
-							},
+							memory.NewResult(
+								search.ResultKindAlbum,
+								"Dawn FM",
+								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+								memory.WithTrackCount(10),
+							),
+							memory.NewResult(
+								search.ResultKindAlbum,
+								"Dawn FM (Alternate World)",
+								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}),
+								memory.WithTrackCount(20),
+							),
 						}, nil
 					},
 				},
@@ -254,12 +277,12 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 
 func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 	album := func(title, releaseDate, extID string) search.SearchResult {
-		return search.SearchResult{
-			Kind:        search.ResultKindAlbum,
-			Title:       title,
-			Sources:     []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: extID}},
-			ReleaseDate: releaseDate,
-		}
+		return memory.NewResult(
+			search.ResultKindAlbum,
+			title,
+			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: extID}}),
+			memory.WithReleaseDate(releaseDate),
+		)
 	}
 
 	t.Run("sorts newest-first and normalizes year from release_date", func(t *testing.T) {

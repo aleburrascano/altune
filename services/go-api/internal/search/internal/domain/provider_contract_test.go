@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"testing"
 )
@@ -55,15 +56,17 @@ func TestValidISRC_ReturnsTheCanonicalFormOrEmpty(t *testing.T) {
 }
 
 func TestPutTypedExtras_ProjectsTheTypedFieldsOntoTheirWireKeys(t *testing.T) {
-	r := domain.SearchResult{
-		RecordType:    domain.RecordTypeEP,
-		ISRC:          "GBARL1600460",
-		UPC:           "724384960650",
-		Duration:      222,
-		TrackPosition: domain.TrackPosition{Disc: 2, Track: 4},
-		Explicit:      domain.BoolPtr(true),
-		ArtworkPath:   domain.ArtworkPathIdentity,
-	}
+	r := memory.NewResult(
+		0,
+		"",
+		memory.WithRecordType(domain.RecordTypeEP),
+		memory.WithISRCCode("GBARL1600460"),
+		memory.WithUPC("724384960650"),
+		memory.WithDuration(222),
+		memory.WithTrackPosition(domain.TrackPosition{Disc: 2, Track: 4}),
+		memory.WithExplicit(domain.BoolPtr(true)),
+		memory.WithArtworkPath(domain.ArtworkPathIdentity),
+	)
 
 	extras := map[string]any{}
 	domain.PutTypedExtras(extras, r)
@@ -100,7 +103,7 @@ func TestArtworkConfidenceRank_ReadsTheTypedPath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := domain.SearchResult{ImageURL: "https://img/x.jpg", ArtworkPath: tt.path}
+			r := memory.NewResult(0, "", memory.WithImageURL("https://img/x.jpg"), memory.WithArtworkPath(tt.path))
 			if tt.path == domain.ArtworkPathName {
 				r.ISRC = "GBARL1600460"
 			}

@@ -143,12 +143,12 @@ type topicSource struct {
 }
 
 func (s topicSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{{
-		Title:      s.title,
-		URL:        "https://www.youtube.com/watch?v=freshAAAAAA",
-		Channel:    s.artist + " - Topic",
-		Categories: []string{"Music"},
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=freshAAAAAA",
+		downloadtest.WithTitle(s.title),
+		downloadtest.WithChannel(s.artist+" - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+	)}, nil
 }
 
 func sourceFor(track inmemoryledger.LedgerTrack) *service.SourceRegistry {

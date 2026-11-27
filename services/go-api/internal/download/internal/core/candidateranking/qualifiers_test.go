@@ -1,7 +1,7 @@
 package candidateranking_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"testing"
 )
 
@@ -12,12 +12,12 @@ const (
 
 func qualifierDistance(t *testing.T, trackTitle, candidateTitle string) int {
 	t.Helper()
-	return int(number(t, evaluation(t, song(trackTitle, "Someone", 0), download.AudioCandidate{Title: candidateTitle}), "qualifier_distance"))
+	return int(number(t, evaluation(t, song(trackTitle, "Someone", 0), downloadtest.Candidate("", downloadtest.WithTitle(candidateTitle))), "qualifier_distance"))
 }
 
 func featureMatch(t *testing.T, trackTitle, candidateTitle string) any {
 	t.Helper()
-	return evaluation(t, song(trackTitle, "Someone", 0), download.AudioCandidate{Title: candidateTitle})["feature_match"]
+	return evaluation(t, song(trackTitle, "Someone", 0), downloadtest.Candidate("", downloadtest.WithTitle(candidateTitle)))["feature_match"]
 }
 
 func TestQualifierDistance_UnrequestedMarkersCost(t *testing.T) {

@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"go/ast"
 	"go/parser"
@@ -97,7 +98,14 @@ func TestSearchResult_SharedMBIDFieldStaysRemoved(t *testing.T) {
 }
 
 func TestSearchResult_IdentityMBIDIsTheKindsOwnTypedField(t *testing.T) {
-	typed := domain.SearchResult{RecordingMBID: "rec", ReleaseMBID: "rel", ReleaseGroupMBID: "rg", ArtistMBID: "art"}
+	typed := memory.NewResult(
+		0,
+		"",
+		memory.WithRecordingMBID("rec"),
+		memory.WithReleaseMBID("rel"),
+		memory.WithReleaseGroupMBID("rg"),
+		memory.WithArtistMBID("art"),
+	)
 	cases := []struct {
 		name         string
 		kind         domain.ResultKind
@@ -108,8 +116,8 @@ func TestSearchResult_IdentityMBIDIsTheKindsOwnTypedField(t *testing.T) {
 		{"track is its recording", domain.ResultKindTrack, typed, "rec", "rec"},
 		{"album is its release group, never its release", domain.ResultKindAlbum, typed, "rg", "rg"},
 		{"artist is its artist", domain.ResultKindArtist, typed, "art", "art"},
-		{"album with only a release has no identity but keeps the release for lookups", domain.ResultKindAlbum, domain.SearchResult{ReleaseMBID: "rel"}, "", "rel"},
-		{"track never borrows a release", domain.ResultKindTrack, domain.SearchResult{ReleaseMBID: "rel"}, "", ""},
+		{"album with only a release has no identity but keeps the release for lookups", domain.ResultKindAlbum, memory.NewResult(0, "", memory.WithReleaseMBID("rel")), "", "rel"},
+		{"track never borrows a release", domain.ResultKindTrack, memory.NewResult(0, "", memory.WithReleaseMBID("rel")), "", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

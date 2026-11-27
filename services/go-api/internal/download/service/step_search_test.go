@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -88,8 +89,22 @@ func TestSearchStep_CancelledMidSearch_ReportsCancellation(t *testing.T) {
 
 func TestSearchStep_Execute(t *testing.T) {
 	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
-		{Title: "Artist - Song Title", Duration: 200, URL: "https://youtube.com/watch?v=abcAAAAAAAA", Channel: "Artist - Topic", Categories: []string{"Music"}, ViewCount: 1_000_000},
-		{Title: "Artist - Song Title (Lyrics)", Duration: 201, URL: "https://youtube.com/watch?v=defAAAAAAAA", Channel: "LyricsChannel", Categories: []string{"Music"}, ViewCount: 500_000},
+		downloadtest.Candidate(
+			"https://youtube.com/watch?v=abcAAAAAAAA",
+			downloadtest.WithTitle("Artist - Song Title"),
+			downloadtest.WithDuration(200),
+			downloadtest.WithChannel("Artist - Topic"),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithViewCount(1_000_000),
+		),
+		downloadtest.Candidate(
+			"https://youtube.com/watch?v=defAAAAAAAA",
+			downloadtest.WithTitle("Artist - Song Title (Lyrics)"),
+			downloadtest.WithDuration(201),
+			downloadtest.WithChannel("LyricsChannel"),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithViewCount(500_000),
+		),
 	}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}}
 
@@ -135,7 +150,13 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 
 func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
 	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
-		{Title: "Artist - Song", Duration: 200, URL: "https://youtube.com/watch?v=sameSameSam", Channel: "ArtistVEVO", Categories: []string{"Music"}},
+		downloadtest.Candidate(
+			"https://youtube.com/watch?v=sameSameSam",
+			downloadtest.WithTitle("Artist - Song"),
+			downloadtest.WithDuration(200),
+			downloadtest.WithChannel("ArtistVEVO"),
+			downloadtest.WithCategories([]string{"Music"}),
+		),
 	}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song", Artist: "Artist", Album: "Album", ISRC: "US1234567890"}}
 
@@ -155,7 +176,7 @@ func TestSearchStep_Name(t *testing.T) {
 func searchWithAllExcluded(t *testing.T, down *searchSource) error {
 	t.Helper()
 	const url = "https://example.com/a"
-	healthy := &searchSource{name: "healthy", found: []ports.AudioCandidate{{URL: url}}}
+	healthy := &searchSource{name: "healthy", found: []ports.AudioCandidate{downloadtest.Candidate(url)}}
 	ac := &service.AcquisitionContext{Replace: service.ReplaceState{ExcludeKeys: []string{sourcekey.SourceKey(url)}}}
 	err := runPipeline(context.Background(), service.NewSourceRegistry(down, healthy), ac)
 	if failedStep(t, err).Step != "search" {
@@ -239,8 +260,8 @@ func TestSearchStep_TheRequestHintsTheResolvedISRCWhenTheTrackHasNone(t *testing
 }
 
 func TestSearchStep_AFallbackOnlyPassStaysAFallbackOnlyPass(t *testing.T) {
-	first := &searchSource{name: "first", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u1"}}}
-	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u2"}}}
+	first := &searchSource{name: "first", found: []ports.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithTitle("Blinding Lights"))}}
+	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{downloadtest.Candidate("u2", downloadtest.WithTitle("Blinding Lights"))}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}, Pass: service.PassFallbackOnly}
 
 	_ = runPipeline(context.Background(), service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback}), ac)
@@ -254,8 +275,12 @@ func TestSearchStep_AFallbackOnlyPassStaysAFallbackOnlyPass(t *testing.T) {
 }
 
 func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing.T) {
-	first := &searchSource{name: "first", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u1"}}}
-	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u2", Kind: ports.KindArtTrack}}}
+	first := &searchSource{name: "first", found: []ports.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithTitle("Blinding Lights"))}}
+	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{downloadtest.Candidate(
+		"u2",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithKind(ports.KindArtTrack),
+	)}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}}
 
 	err := runPipeline(context.Background(), service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback}), ac)

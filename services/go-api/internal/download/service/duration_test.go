@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/downloadprovenance"
@@ -55,7 +56,7 @@ func lengthOfSeconds(t *testing.T, seconds float64) tracklength.TrackLength {
 func TestStoredLength_PrefersTheProbedLengthOverTheSourcesReportedOne(t *testing.T) {
 	ac := &service.AcquisitionContext{
 		ProbedDuration: lengthOfSeconds(t, 232),
-		Selected:       &ports.AudioCandidate{Duration: 999},
+		Selected:       downloadtest.CandidatePtr("", downloadtest.WithDuration(999)),
 	}
 	if got := ac.StoredLength().Seconds(); got != 232 {
 		t.Errorf("StoredLength() = %v s, want the probed 232 rather than the source's metadata", got)
@@ -63,7 +64,7 @@ func TestStoredLength_PrefersTheProbedLengthOverTheSourcesReportedOne(t *testing
 }
 
 func TestStoredLength_FallsBackToTheChosenSourcesReportedLength(t *testing.T) {
-	ac := &service.AcquisitionContext{Selected: &ports.AudioCandidate{Duration: 240}}
+	ac := &service.AcquisitionContext{Selected: downloadtest.CandidatePtr("", downloadtest.WithDuration(240))}
 	if got := ac.StoredLength().Seconds(); got != 240 {
 		t.Errorf("StoredLength() = %v s, want the source's 240 when nothing was probed", got)
 	}
@@ -71,7 +72,7 @@ func TestStoredLength_FallsBackToTheChosenSourcesReportedLength(t *testing.T) {
 
 func TestStoredLength_IsUnknownWhenTheSourceReportsALengthNoRecordingCanHave(t *testing.T) {
 	for name, reported := range map[string]float64{"above seven days": 8 * 24 * 60 * 60, "negative": -1, "not a number": math.NaN()} {
-		ac := &service.AcquisitionContext{Selected: &ports.AudioCandidate{Duration: reported}}
+		ac := &service.AcquisitionContext{Selected: downloadtest.CandidatePtr("", downloadtest.WithDuration(reported))}
 		if got := ac.StoredLength(); got.Known() {
 			t.Errorf("%s: StoredLength() = %v s, want an unknown length", name, got.Seconds())
 		}

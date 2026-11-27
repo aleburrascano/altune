@@ -1,13 +1,14 @@
 package domain_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"testing"
 )
 
 func TestDedupAlbums(t *testing.T) {
 	album := func(title string, trackCount int) domain.SearchResult {
-		return domain.SearchResult{Kind: domain.ResultKindAlbum, Title: title, TrackCount: trackCount}
+		return memory.NewResult(domain.ResultKindAlbum, title, memory.WithTrackCount(trackCount))
 	}
 
 	t.Run("collapses normalized-title duplicates keeping higher track_count", func(t *testing.T) {
@@ -49,10 +50,10 @@ func TestAlbumReleaseSortKey(t *testing.T) {
 		in   domain.SearchResult
 		want string
 	}{
-		{"prefers release_date", domain.SearchResult{ReleaseDate: "2020-03-20", Year: 1999}, "2020-03-20"},
-		{"falls back to year", domain.SearchResult{Year: 2015}, "2015"},
-		{"empty when neither", domain.SearchResult{}, ""},
-		{"empty when year non-positive", domain.SearchResult{Year: 0}, ""},
+		{"prefers release_date", memory.NewResult(0, "", memory.WithReleaseDate("2020-03-20"), memory.WithYear(1999)), "2020-03-20"},
+		{"falls back to year", memory.NewResult(0, "", memory.WithYear(2015)), "2015"},
+		{"empty when neither", memory.NewResult(0, ""), ""},
+		{"empty when year non-positive", memory.NewResult(0, "", memory.WithYear(0)), ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -65,7 +66,7 @@ func TestAlbumReleaseSortKey(t *testing.T) {
 
 func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
 	album := func(title, releaseDate string, year int) domain.SearchResult {
-		return domain.SearchResult{Title: title, ReleaseDate: releaseDate, Year: year}
+		return memory.NewResult(0, title, memory.WithReleaseDate(releaseDate), memory.WithYear(year))
 	}
 
 	t.Run("sorts newest first, undated to the end", func(t *testing.T) {
@@ -98,7 +99,7 @@ func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
 
 func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
 	album := func(title, releaseDate string, year int) domain.SearchResult {
-		return domain.SearchResult{Title: title, ReleaseDate: releaseDate, Year: year}
+		return memory.NewResult(0, title, memory.WithReleaseDate(releaseDate), memory.WithYear(year))
 	}
 
 	t.Run("bare year is not forced older than a same-year full date", func(t *testing.T) {
@@ -146,10 +147,10 @@ func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
 
 func TestNormalizeAlbumYears(t *testing.T) {
 	in := []domain.SearchResult{
-		{Title: "fills from date", ReleaseDate: "2019-05-01"},
-		{Title: "keeps existing year", ReleaseDate: "2019-05-01", Year: 1999},
-		{Title: "short date untouched", ReleaseDate: "20"},
-		{Title: "no date untouched"},
+		memory.NewResult(0, "fills from date", memory.WithReleaseDate("2019-05-01")),
+		memory.NewResult(0, "keeps existing year", memory.WithReleaseDate("2019-05-01"), memory.WithYear(1999)),
+		memory.NewResult(0, "short date untouched", memory.WithReleaseDate("20")),
+		memory.NewResult(0, "no date untouched"),
 	}
 	domain.NormalizeAlbumYears(in)
 	want := []int{2019, 1999, 0, 0}
@@ -172,7 +173,7 @@ func TestNormalizeReleaseYear_TakesOnlyAPositiveNumericLeadingYear(t *testing.T)
 		{"abcd-01-01", 0},
 	}
 	for _, tc := range cases {
-		r := domain.SearchResult{ReleaseDate: tc.releaseDate}
+		r := memory.NewResult(0, "", memory.WithReleaseDate(tc.releaseDate))
 		domain.NormalizeReleaseYear(&r)
 		if r.Year != tc.want {
 			t.Errorf("NormalizeReleaseYear(ReleaseDate %q): expected year %d, got %d", tc.releaseDate, tc.want, r.Year)

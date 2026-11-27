@@ -310,11 +310,11 @@ func TestExecute_FailureReasonResolvesToSpecificMessage(t *testing.T) {
 		candidates []ports.AudioCandidate
 	}{
 		{"no candidates at all", nil},
-		{"every candidate rejected (reason carries a summary)", []ports.AudioCandidate{{
-			Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
-			URL:     "yt:cooking",
-			Channel: "CookingChannel",
-		}}},
+		{"every candidate rejected (reason carries a summary)", []ports.AudioCandidate{downloadtest.Candidate(
+			"yt:cooking",
+			downloadtest.WithTitle("Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense"),
+			downloadtest.WithChannel("CookingChannel"),
+		)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -495,12 +495,12 @@ type newAudioSource struct{}
 func (newAudioSource) Name() acqdomain.SourceName { return "new-audio" }
 
 func (newAudioSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{{
-		Title:      "Blinding Lights",
-		URL:        "https://www.youtube.com/watch?v=freshAAAAAA",
-		Channel:    "The Weeknd - Topic",
-		Categories: []string{"Music"},
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=freshAAAAAA",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+	)}, nil
 }
 
 func (newAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
@@ -825,7 +825,11 @@ const (
 )
 
 func namedCandidate(url string) ports.AudioCandidate {
-	return ports.AudioCandidate{Title: "Lil Tecca - Fell In Love", URL: url, Source: "fake"}
+	return downloadtest.Candidate(
+		url,
+		downloadtest.WithTitle("Lil Tecca - Fell In Love"),
+		downloadtest.WithSource("fake"),
+	)
 }
 
 func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeAudioSearcher, *inmemoryledger.Ledger, ids.TrackId) {
@@ -1004,7 +1008,11 @@ func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 	store.stored["u/a/b/c.mp3"] = true
 	var results []ports.AudioCandidate
 	for _, u := range []string{"https://youtube.com/watch?v=earlier0000", drmURL, otherURL} {
-		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
+		results = append(results, downloadtest.Candidate(
+			u,
+			downloadtest.WithTitle("The Weeknd - Blinding Lights"),
+			downloadtest.WithSource("fake"),
+		))
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	rejections := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
@@ -1093,13 +1101,13 @@ type unknownTopicSource struct{}
 func (unknownTopicSource) Name() acqdomain.SourceName { return "unknown-topic" }
 
 func (unknownTopicSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{{
-		Title:      "Blinding Lights",
-		URL:        "https://www.youtube.com/watch?v=topicAAAAAA",
-		Channel:    "The Weeknd - Topic",
-		Categories: []string{"Music"},
-		Duration:   200,
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=topicAAAAAA",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+		downloadtest.WithDuration(200),
+	)}, nil
 }
 
 func (unknownTopicSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
@@ -1184,11 +1192,11 @@ func (*brokenArtTrackSource) Name() acqdomain.SourceName { return "ytmsearch" }
 
 func (s *brokenArtTrackSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	s.finds++
-	return []ports.AudioCandidate{{
-		Title: "Blinding Lights",
-		URL:   "https://music.youtube.com/watch?v=artTrackAAA",
-		Kind:  ports.KindArtTrack,
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		"https://music.youtube.com/watch?v=artTrackAAA",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithKind(ports.KindArtTrack),
+	)}, nil
 }
 
 func (*brokenArtTrackSource) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
@@ -1477,8 +1485,22 @@ func sameLengthUploads() *uploadsByBytesSource {
 	return &uploadsByBytesSource{
 		uploads: map[string]string{sameLengthCurrentURL: "the current file again", sameLengthOtherURL: "another upload"},
 		found: []ports.AudioCandidate{
-			{Title: "Blinding Lights", URL: sameLengthCurrentURL, Channel: "The Weeknd - Topic", Categories: []string{"Music"}, Duration: 112, ViewCount: 9000000},
-			{Title: "Blinding Lights", URL: sameLengthOtherURL, Channel: "The Weeknd - Topic", Categories: []string{"Music"}, Duration: 112, ViewCount: 1000},
+			downloadtest.Candidate(
+				sameLengthCurrentURL,
+				downloadtest.WithTitle("Blinding Lights"),
+				downloadtest.WithChannel("The Weeknd - Topic"),
+				downloadtest.WithCategories([]string{"Music"}),
+				downloadtest.WithDuration(112),
+				downloadtest.WithViewCount(9000000),
+			),
+			downloadtest.Candidate(
+				sameLengthOtherURL,
+				downloadtest.WithTitle("Blinding Lights"),
+				downloadtest.WithChannel("The Weeknd - Topic"),
+				downloadtest.WithCategories([]string{"Music"}),
+				downloadtest.WithDuration(112),
+				downloadtest.WithViewCount(1000),
+			),
 		},
 	}
 }
@@ -1579,7 +1601,13 @@ func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAnd
 	healthy := &uploadsByBytesSource{
 		uploads: map[string]string{sameLengthCurrentURL: "the current file again"},
 		found: []ports.AudioCandidate{
-			{Title: "Blinding Lights", URL: sameLengthCurrentURL, Channel: "The Weeknd - Topic", Categories: []string{"Music"}, Duration: 112},
+			downloadtest.Candidate(
+				sameLengthCurrentURL,
+				downloadtest.WithTitle("Blinding Lights"),
+				downloadtest.WithChannel("The Weeknd - Topic"),
+				downloadtest.WithCategories([]string{"Music"}),
+				downloadtest.WithDuration(112),
+			),
 		},
 	}
 	rejections := &fakeRejectionStore{}
@@ -1641,8 +1669,21 @@ func prodOverTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserI
 
 func prodOverCandidates() []ports.AudioCandidate {
 	return []ports.AudioCandidate{
-		{Title: "Lucki Ecks -  Over", URL: prodOverRejectedUpload, Channel: "DatPiff", Duration: 138, Kind: ports.KindUpload, Source: "fake"},
-		{Title: "Over", URL: prodOverCurrentSource, Channel: "LUCKI", Duration: 136, Source: "fake"},
+		downloadtest.Candidate(
+			prodOverRejectedUpload,
+			downloadtest.WithTitle("Lucki Ecks -  Over"),
+			downloadtest.WithChannel("DatPiff"),
+			downloadtest.WithDuration(138),
+			downloadtest.WithKind(ports.KindUpload),
+			downloadtest.WithSource("fake"),
+		),
+		downloadtest.Candidate(
+			prodOverCurrentSource,
+			downloadtest.WithTitle("Over"),
+			downloadtest.WithChannel("LUCKI"),
+			downloadtest.WithDuration(136),
+			downloadtest.WithSource("fake"),
+		),
 	}
 }
 
@@ -1696,7 +1737,14 @@ func TestExecuteReplace_StillExcludesTheUsersRejectedSourcesAndTheCurrentOne(t *
 	})
 	store := newFakeAudioStore()
 	store.stored["lucki/watch-my-back/over.mp3"] = true
-	other := ports.AudioCandidate{Title: "Over [prod. Ugly Friend]", URL: "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A321193537", Channel: "LUCKI", Duration: 136, Kind: ports.KindUpload, Source: "fake"}
+	other := downloadtest.Candidate(
+		"https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A321193537",
+		downloadtest.WithTitle("Over [prod. Ugly Friend]"),
+		downloadtest.WithChannel("LUCKI"),
+		downloadtest.WithDuration(136),
+		downloadtest.WithKind(ports.KindUpload),
+		downloadtest.WithSource("fake"),
+	)
 	searcher := &fakeAudioSearcher{searchResults: append(prodOverCandidates(), other), downloadErr: errors.New("boom")}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
@@ -1739,7 +1787,14 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 			ledger.Seed(track)
 			var found []ports.AudioCandidate
 			for _, u := range rivals {
-				found = append(found, ports.AudioCandidate{Title: "Blinding Lights", URL: u, Channel: "The Weeknd", Artists: []string{"The Weeknd"}, Kind: ports.KindArtTrack, Source: "fake"})
+				found = append(found, downloadtest.Candidate(
+					u,
+					downloadtest.WithTitle("Blinding Lights"),
+					downloadtest.WithChannel("The Weeknd"),
+					downloadtest.WithArtists([]string{"The Weeknd"}),
+					downloadtest.WithKind(ports.KindArtTrack),
+					downloadtest.WithSource("fake"),
+				))
 			}
 			searcher := &fakeAudioSearcher{searchResults: found, downloadErr: errors.New("boom")}
 			registry := service.NewSourceRegistry(savedlink.MustNewSource(searcherDownloads{searcher}, savedlink.NoPageReader()), searcher)
@@ -1765,7 +1820,13 @@ func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", storedSource)
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
-	rival := ports.AudioCandidate{Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=aaaaaaaaaaa", Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}, Source: "fake"}
+	rival := downloadtest.Candidate(
+		"https://music.youtube.com/watch?v=aaaaaaaaaaa",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithArtists([]string{"The Weeknd"}),
+		downloadtest.WithSource("fake"),
+	)
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{rival}, downloadErr: errors.New("boom")}
 	registry := service.NewSourceRegistry(savedlink.MustNewSource(searcherDownloads{searcher}, savedlink.NoPageReader()), searcher)
 	svc := newTestAcquireService(ledger, registry, store)
@@ -1786,7 +1847,11 @@ func TestExecuteReplace_NeverFetchesTheCurrentSourceAgainEvenWhenItRanksFirst(t 
 	store.stored["u/a/b/c.mp3"] = true
 	var results []ports.AudioCandidate
 	for _, u := range []string{wrongURL, otherURL} {
-		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
+		results = append(results, downloadtest.Candidate(
+			u,
+			downloadtest.WithTitle("The Weeknd - Blinding Lights"),
+			downloadtest.WithSource("fake"),
+		))
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
@@ -1803,12 +1868,12 @@ type lowConfidenceSource struct{ unknownTopicSource }
 func (lowConfidenceSource) Name() acqdomain.SourceName { return "low-confidence" }
 
 func (lowConfidenceSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{{
-		Title:    "Blinding Lights",
-		URL:      "https://www.youtube.com/watch?v=reuploadAAA",
-		Channel:  "chill uploads",
-		Duration: 220,
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		"https://www.youtube.com/watch?v=reuploadAAA",
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("chill uploads"),
+		downloadtest.WithDuration(220),
+	)}, nil
 }
 
 func acquireLowConfidence(t *testing.T, opts ...any) (ledgerTrack, error) {
@@ -1958,7 +2023,11 @@ func TestExecuteReplace_RetriesAPriorRejectionJudgedOnAnotherLength(t *testing.T
 	store.stored["u/a/b/c.mp3"] = true
 	var results []ports.AudioCandidate
 	for _, u := range []string{drmURL, otherURL} {
-		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
+		results = append(results, downloadtest.Candidate(
+			u,
+			downloadtest.WithTitle("The Weeknd - Blinding Lights"),
+			downloadtest.WithSource("fake"),
+		))
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	rejections := &fakeRejectionStore{active: priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: runMBID})}
@@ -2255,14 +2324,14 @@ const lowBitrateStoredSource = "https://www.youtube.com/watch?v=currentAAAA"
 type audioOnlyOfTheStoredSource struct{ newAudioSource }
 
 func (audioOnlyOfTheStoredSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{{
-		Title:      "Blinding Lights",
-		URL:        lowBitrateStoredSource,
-		Channel:    "The Weeknd - Topic",
-		Categories: []string{"Music"},
-		Kind:       ports.KindArtTrack,
-		Duration:   200,
-	}}, nil
+	return []ports.AudioCandidate{downloadtest.Candidate(
+		lowBitrateStoredSource,
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithDuration(200),
+	)}, nil
 }
 
 func (s audioOnlyOfTheStoredSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
@@ -2442,15 +2511,39 @@ func (s *itsOnlyLoveSources) Find(_ context.Context, req ports.FindRequest) ([]p
 	s.requests = append(s.requests, req)
 	switch {
 	case req.Title == goldenRerecording().Title:
-		return []ports.AudioCandidate{{Title: req.Title, URL: classicVersionURL, Channel: "Bryan Adams - Topic", Categories: []string{"Music"}, Duration: 194}}, nil
+		return []ports.AudioCandidate{downloadtest.Candidate(
+			classicVersionURL,
+			downloadtest.WithTitle(req.Title),
+			downloadtest.WithChannel("Bryan Adams - Topic"),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithDuration(194),
+		)}, nil
 	case s.originalOutage:
 		return nil, &acqdomain.SourceUnavailableError{Source: "its-only-love", Err: errors.New("http error 503")}
 	case s.originalOnTopic:
-		return []ports.AudioCandidate{{Title: "It's Only Love", URL: recklessTopicURL, Channel: "Bryan Adams - Topic", Categories: []string{"Music"}, Duration: 195}}, nil
+		return []ports.AudioCandidate{downloadtest.Candidate(
+			recklessTopicURL,
+			downloadtest.WithTitle("It's Only Love"),
+			downloadtest.WithChannel("Bryan Adams - Topic"),
+			downloadtest.WithCategories([]string{"Music"}),
+			downloadtest.WithDuration(195),
+		)}, nil
 	default:
 		return []ports.AudioCandidate{
-			{Title: "It's Only Love", URL: recklessReuploadURL, Channel: "chill uploads", Duration: 215},
-			{Title: "It's Only Love", URL: recklessDRMURL, Channel: "Bryan Adams - Topic", Categories: []string{"Music"}, Duration: 195, Unplayable: ports.UnplayableDRM},
+			downloadtest.Candidate(
+				recklessReuploadURL,
+				downloadtest.WithTitle("It's Only Love"),
+				downloadtest.WithChannel("chill uploads"),
+				downloadtest.WithDuration(215),
+			),
+			downloadtest.Candidate(
+				recklessDRMURL,
+				downloadtest.WithTitle("It's Only Love"),
+				downloadtest.WithChannel("Bryan Adams - Topic"),
+				downloadtest.WithCategories([]string{"Music"}),
+				downloadtest.WithDuration(195),
+				downloadtest.WithUnplayable(ports.UnplayableDRM),
+			),
 		}, nil
 	}
 }
@@ -3020,7 +3113,7 @@ func (s *findStubSource) Fetch(_ context.Context, _ ports.AudioCandidate, _ stri
 }
 
 func titledCandidate(url string) ports.AudioCandidate {
-	return ports.AudioCandidate{Title: "Blinding Lights", URL: url}
+	return downloadtest.Candidate(url, downloadtest.WithTitle("Blinding Lights"))
 }
 
 func fetchedFrom(path string, err error) (ports.FetchedAudio, error) {

@@ -1,6 +1,7 @@
 package albumgrouping_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/albumgrouping"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/textnorm"
@@ -11,11 +12,11 @@ import (
 func verifyGroup(provider domain.ProviderName, titles ...string) albumgrouping.ReleaseGroup {
 	rs := make([]domain.SearchResult, len(titles))
 	for i, t := range titles {
-		rs[i] = domain.SearchResult{
-			Kind:    domain.ResultKindAlbum,
-			Title:   t,
-			Sources: []domain.ProviderLink{{Provider: provider, ExternalID: "x"}},
-		}
+		rs[i] = memory.NewResult(
+			domain.ResultKindAlbum,
+			t,
+			memory.WithSources([]domain.ProviderLink{{Provider: provider, ExternalID: "x"}}),
+		)
 	}
 	return albumgrouping.ReleaseGroup{Releases: rs, IDVerified: true}
 }

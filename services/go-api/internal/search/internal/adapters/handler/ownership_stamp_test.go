@@ -60,12 +60,14 @@ func goldenOwned() goldenOwnershipReader {
 }
 
 func goldenTrack(title, id string, extras map[string]any) search.SearchResult {
-	return search.SearchResult{
-		Kind: search.ResultKindTrack, Title: title, Subtitle: "Artist",
-		Confidence: domain.ConfidenceHigh,
-		Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}},
-		Extras:     extras,
-	}
+	return memory.NewResult(
+		search.ResultKindTrack,
+		title,
+		memory.WithSubtitle("Artist"),
+		memory.WithConfidence(domain.ConfidenceHigh),
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}}),
+		memory.WithExtras(extras),
+	)
 }
 
 func goldenPlaced(title, id string, track int) search.SearchResult {
@@ -75,11 +77,13 @@ func goldenPlaced(title, id string, track int) search.SearchResult {
 }
 
 func goldenAlbum(title, id string) search.SearchResult {
-	return search.SearchResult{
-		Kind: search.ResultKindAlbum, Title: title, Subtitle: "Artist",
-		Confidence: domain.ConfidenceHigh,
-		Sources:    []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}},
-	}
+	return memory.NewResult(
+		search.ResultKindAlbum,
+		title,
+		memory.WithSubtitle("Artist"),
+		memory.WithConfidence(domain.ConfidenceHigh),
+		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}}),
+	)
 }
 
 func goldenTracks() []search.SearchResult {

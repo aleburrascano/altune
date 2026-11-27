@@ -65,9 +65,12 @@ func (s *source) Find(context.Context, download.FindRequest) ([]download.AudioCa
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.finds++
-	return []download.AudioCandidate{{
-		Title: "Blinding Lights", URL: freshURL, Channel: "The Weeknd - Topic", Categories: []string{"Music"},
-	}}, nil
+	return []download.AudioCandidate{downloadtest.Candidate(
+		freshURL,
+		downloadtest.WithTitle("Blinding Lights"),
+		downloadtest.WithChannel("The Weeknd - Topic"),
+		downloadtest.WithCategories([]string{"Music"}),
+	)}, nil
 }
 
 func (s *source) Fetch(_ context.Context, _ download.AudioCandidate, outDir string) (download.FetchedAudio, error) {
