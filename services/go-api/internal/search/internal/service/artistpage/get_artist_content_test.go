@@ -889,6 +889,7 @@ func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 
 type artistContentArgs struct {
 	providers   map[search.ProviderName]ports.ArtistContentProvider
+	tracklists  map[search.ProviderName]ports.AlbumContentProvider
 	identity    artistpage.ArtistIdentity
 	anchoring   artistpage.Anchoring
 	discography artistpage.DiscographyObserver
@@ -898,6 +899,7 @@ type artistContentArgs struct {
 func completeArtistContentArgs() artistContentArgs {
 	return artistContentArgs{
 		providers:   map[search.ProviderName]ports.ArtistContentProvider{},
+		tracklists:  map[search.ProviderName]ports.AlbumContentProvider{},
 		identity:    artistpage.SeedPathIdentity{},
 		anchoring:   artistpage.NoAnchoring{},
 		discography: artistpage.NoDiscographyObserver{},
@@ -906,7 +908,7 @@ func completeArtistContentArgs() artistContentArgs {
 }
 
 func (a artistContentArgs) build() (*artistpage.GetArtistContentService, error) {
-	return artistpage.NewGetArtistContentService(a.providers, a.identity, a.anchoring, a.discography, a.breaker)
+	return artistpage.NewGetArtistContentService(a.providers, a.tracklists, a.identity, a.anchoring, a.discography, a.breaker)
 }
 
 func TestNewGetArtistContentService_RefusesEveryMissingCollaborator(t *testing.T) {
@@ -918,6 +920,7 @@ func TestNewGetArtistContentService_RefusesEveryMissingCollaborator(t *testing.T
 		named   string
 	}{
 		"providers":            {func(a *artistContentArgs) { a.providers = nil }, "providers"},
+		"tracklist providers":  {func(a *artistContentArgs) { a.tracklists = nil }, "tracklist providers"},
 		"identity":             {func(a *artistContentArgs) { a.identity = nil }, "artist identity"},
 		"anchoring":            {func(a *artistContentArgs) { a.anchoring = nil }, "anchoring strategy"},
 		"discography observer": {func(a *artistContentArgs) { a.discography = nil }, "discography observer"},
@@ -975,6 +978,7 @@ func TestNoAnchoring_LeavesTheAnswerAndTheBreakerUntouched(t *testing.T) {
 	before := breaker.Snapshot(domain.ProviderMusicBrainz)
 	svc, err := artistpage.NewGetArtistContentService(
 		map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer},
+		map[search.ProviderName]ports.AlbumContentProvider{},
 		identity, artistpage.NoAnchoring{}, artistpage.NoDiscographyObserver{}, breaker)
 	if err != nil {
 		t.Fatalf("NewGetArtistContentService: %v", err)

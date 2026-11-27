@@ -655,7 +655,7 @@ func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *
 
 	discogsAdapterOn500 := newTestDiscogsAdapter(srv)
 
-	chain := artworkfallback.NewChainedArtworkLookup(discogsAdapterOn500)
+	chain := artworkfallback.NewChainedArtworkLookup().WithIdentityLookups(discogsAdapterOn500)
 	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), search.ResultKindArtist, "Artist", "",
 		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 

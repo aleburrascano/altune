@@ -46,7 +46,10 @@ func (p *tracklistProvider) GetAlbumTracks(_ context.Context, _ search.ProviderN
 }
 
 func tracklistService(t testing.TB, failing map[string]bool) *artistpage.GetArtistContentService {
-	return searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: newTracklistProvider(failing)})
+	provider := newTracklistProvider(failing)
+	return searchtest.NewArtistContent(t,
+		map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: provider},
+		searchtest.ArtistTracklists(map[search.ProviderName]ports.AlbumContentProvider{search.ProviderDeezer: provider}))
 }
 
 func newTracklistProvider(failing map[string]bool) *tracklistProvider {
@@ -101,7 +104,9 @@ func (p *panickingTracklistProvider) GetAlbumTracks(ctx context.Context, provide
 
 func TestGetArtistContentService_CatalogTitles_PanickingTracklistIsPartialNotACrash(t *testing.T) {
 	provider := &panickingTracklistProvider{tracklistProvider: newTracklistProvider(nil), panicsOn: "a1"}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: provider})
+	svc := searchtest.NewArtistContent(t,
+		map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: provider},
+		searchtest.ArtistTracklists(map[search.ProviderName]ports.AlbumContentProvider{search.ProviderDeezer: provider}))
 
 	titles, err := svc.CatalogTitles(context.Background(), search.ProviderDeezer, "artist-1", nil)
 

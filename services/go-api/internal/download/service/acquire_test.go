@@ -3274,11 +3274,21 @@ func outageSource() findOnlySource {
 }
 
 func mustNewDownloadStep(fetcher fetcherPort, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *service.ConcurrencyLimit, opts ...func(*service.DownloadStep)) *service.DownloadStep {
-	step, err := service.NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, time.Now, opts...)
+	step, err := service.NewDownloadStep(previewingOrPlain(fetcher), workspace, identifier, lookup, prober, skips, limit, time.Now, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return step
+}
+
+func previewingOrPlain(fetcher fetcherPort) downloadtest.PreviewingFetcher {
+	if fetcher == nil {
+		return nil
+	}
+	if previewing, ok := fetcher.(downloadtest.PreviewingFetcher); ok {
+		return previewing
+	}
+	return downloadtest.PlainFetcher(fetcher)
 }
 
 func mustNewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*service.StoreStep)) *service.StoreStep {

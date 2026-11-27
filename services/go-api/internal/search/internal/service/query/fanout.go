@@ -184,8 +184,8 @@ func (s *Service) searchProvider(
 	kinds domain.ResultKindSet,
 ) (res []domain.SearchResult, status domain.ProviderSearchResponse) {
 	timeout := defaultProviderTimeout
-	if tp, ok := p.(ports.SearchTimeLimit); ok {
-		timeout = tp.SearchTimeout()
+	if own, ok := s.timeouts[p.Name()]; ok {
+		timeout = own
 	}
 	provCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

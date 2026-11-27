@@ -16,16 +16,21 @@ import (
 var ErrNoAudioSources = errors.New("no audio sources configured")
 
 type SourceRegistry struct {
-	sources  []ports.AudioSource
-	fallback []ports.AudioSource
+	sources   []ports.AudioSource
+	fallback  []ports.AudioSource
+	previewed map[acqdomain.SourceName]ports.PreviewFetcher
 }
 
 func NewSourceRegistry(sources ...ports.AudioSource) *SourceRegistry {
 	return &SourceRegistry{sources: liveSources(sources)}
 }
 
-func NewSourceRegistryWithFallback(first, fallback []ports.AudioSource) *SourceRegistry {
-	return &SourceRegistry{sources: liveSources(first), fallback: liveSources(fallback)}
+func NewSourceRegistryWithFallback(first, fallback []ports.AudioSource, previewing ...ports.PreviewingSource) *SourceRegistry {
+	previewed := make(map[acqdomain.SourceName]ports.PreviewFetcher, len(previewing))
+	for _, source := range previewing {
+		previewed[source.Name()] = source
+	}
+	return &SourceRegistry{sources: liveSources(first), fallback: liveSources(fallback), previewed: previewed}
 }
 
 func liveSources(sources []ports.AudioSource) []ports.AudioSource {
@@ -164,11 +169,6 @@ func (r *SourceRegistry) Fetch(ctx context.Context, candidate ports.AudioCandida
 }
 
 func (r *SourceRegistry) PreviewFetcherFor(candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
-	for _, s := range r.all() {
-		if s.Name() == candidate.Source {
-			fetcher, ok := s.(ports.PreviewFetcher)
-			return fetcher, ok
-		}
-	}
-	return nil, false
+	fetcher, ok := r.previewed[candidate.Source]
+	return fetcher, ok
 }

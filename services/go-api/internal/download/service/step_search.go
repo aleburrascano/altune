@@ -9,10 +9,6 @@ import (
 )
 
 type candidateFinder interface {
-	Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error)
-}
-
-type outageReportingFinder interface {
 	FindReportingOutage(ctx context.Context, req ports.FindRequest) (FindResult, error)
 }
 
@@ -53,18 +49,11 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ Pipe
 }
 
 func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) (FindResult, error) {
-	if reporter, ok := s.finder.(outageReportingFinder); ok {
-		r0, err := reporter.FindReportingOutage(ctx, req)
-		if err != nil {
-			return r0, fmt.Errorf("find candidates: %w", err)
-		}
-		return r0, nil
-	}
-	candidates, err := s.finder.Find(ctx, req)
+	found, err := s.finder.FindReportingOutage(ctx, req)
 	if err != nil {
-		return FindResult{Candidates: candidates}, fmt.Errorf("find candidates: %w", err)
+		return found, fmt.Errorf("find candidates: %w", err)
 	}
-	return FindResult{Candidates: candidates}, nil
+	return found, nil
 }
 
 func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []ports.AudioCandidate) (kept, skipped []ports.AudioCandidate) {

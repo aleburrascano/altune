@@ -78,16 +78,12 @@ func TestNewAudioStoreFromConfigForwardsAudioAgeListerForSweep(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default(), librarytest.DiscardFSCallMetrics())
+	backend, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default(), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
 
-	lister, ok := store.(library.AudioAgeLister)
-	if !ok {
-		t.Fatal("expected the staging-scoped store built with AudioKeyPrefix=staging/ to satisfy ports.AudioAgeLister")
-	}
-	objects, err := lister.ListWithAge(context.Background(), "staging/")
+	objects, err := backend.Ages.ListWithAge(context.Background(), "staging/")
 	if err != nil {
 		t.Fatalf("ListWithAge: %v", err)
 	}

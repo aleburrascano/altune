@@ -16,9 +16,14 @@ type artistContentParts struct {
 	events     ports.EventStore
 	tracker    *background.Tracker
 	breaker    *providerguard.CircuitBreaker
+	tracklists map[domain.ProviderName]ports.AlbumContentProvider
 }
 
 type ArtistContentPart func(*artistContentParts)
+
+func ArtistTracklists(tracklists map[domain.ProviderName]ports.AlbumContentProvider) ArtistContentPart {
+	return func(p *artistContentParts) { p.tracklists = tracklists }
+}
 
 func ArtistIdentities(store ports.IdentityStore) ArtistContentPart {
 	return func(p *artistContentParts) { p.identities = store }
@@ -38,7 +43,7 @@ func ArtistBreaker(breaker *providerguard.CircuitBreaker) ArtistContentPart {
 
 func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.ArtistContentProvider, parts ...ArtistContentPart) *artistpage.GetArtistContentService {
 	t.Helper()
-	p := artistContentParts{breaker: providerguard.NewCircuitBreaker(clock.Now)}
+	p := artistContentParts{breaker: providerguard.NewCircuitBreaker(clock.Now), tracklists: map[domain.ProviderName]ports.AlbumContentProvider{}}
 	for _, part := range parts {
 		part(&p)
 	}
@@ -66,7 +71,7 @@ func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.Arti
 		}
 		observer = telemetry
 	}
-	svc, err := artistpage.NewGetArtistContentService(providers, identity, anchoring, observer, p.breaker)
+	svc, err := artistpage.NewGetArtistContentService(providers, p.tracklists, identity, anchoring, observer, p.breaker)
 	if err != nil {
 		t.Fatalf("artistpage.NewGetArtistContentService: %v", err)
 	}

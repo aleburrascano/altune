@@ -35,11 +35,7 @@ func (s *BackgroundAcquisitionScheduler) Status(ctx context.Context) ports.Statu
 }
 
 func (s *BackgroundAcquisitionScheduler) pendingDepth(ctx context.Context) (int, time.Duration, bool) {
-	reader, ok := s.queue.(ports.QueueDepthReader)
-	if !ok {
-		return 0, 0, false
-	}
-	pending, oldestAge, err := reader.PendingDepth(ctx)
+	pending, oldestAge, err := s.queue.PendingDepth(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.pending_depth_failed", logging.KeyError, err)
 		return 0, 0, false

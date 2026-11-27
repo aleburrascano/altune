@@ -20,15 +20,14 @@ const maxPresignTTL = time.Hour
 
 func newObjectStore(t *testing.T, cfg *config.Config) library.AudioLinkSigner {
 	t.Helper()
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.New(slog.DiscardHandler), librarytest.DiscardFSCallMetrics())
+	backend, err := library.NewAudioStoreFromConfig(cfg, slog.New(slog.DiscardHandler), librarytest.DiscardFSCallMetrics())
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	signer, ok := store.(library.AudioLinkSigner)
-	if !ok {
-		t.Fatalf("object storage store %T does not sign URLs", store)
+	if !backend.Links.SignsLinks() {
+		t.Fatalf("object storage backend %T does not sign URLs", backend.Links)
 	}
-	return signer
+	return backend.Links
 }
 
 func newOfflineObjectStore(t *testing.T) library.AudioLinkSigner {

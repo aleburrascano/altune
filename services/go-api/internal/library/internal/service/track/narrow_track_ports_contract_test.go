@@ -97,7 +97,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 		stubCounter
 		stubUpdater
 	}{}, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real)
-	_ = library.MustNewAudioURLService(stubBatchGetter{}, store, time.Now, &librarytest.Metrics{})
+	_ = library.MustNewAudioURLService(stubBatchGetter{}, library.NoAudioLinks{}, time.Now, &librarytest.Metrics{})
 	_ = library.MustNewBackfillFeaturedService(stubLister{}, nil, nil, time.Now)
 	_ = library.NewStreamTrackService(struct {
 		stubGetter

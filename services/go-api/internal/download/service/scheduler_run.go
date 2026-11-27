@@ -31,12 +31,11 @@ type jobRunner struct {
 func (r *jobRunner) inFlight() int { return int(r.inflightCount.Load()) }
 
 func (r *jobRunner) leaseFence(job ports.Job) func(context.Context) error {
-	verifier, ok := r.queue.(ports.UpgradeJobQueue)
-	if !ok || job.Kind != ports.JobKindUpgrade {
+	if job.Kind != ports.JobKindUpgrade {
 		return nil
 	}
 	return func(ctx context.Context) error {
-		return verifier.VerifyLease(ctx, job.TrackID, job.ClaimNumber)
+		return r.queue.VerifyLease(ctx, job.TrackID, job.ClaimNumber)
 	}
 }
 

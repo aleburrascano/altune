@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 )
@@ -29,20 +28,16 @@ func runSweepStagingAudio(cfg *config.Config, mode RunMode) error {
 }
 
 func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, mode RunMode) error {
-	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NewFSCallMetrics(telemetry.NewRegistry()))
+	backend, err := library.NewAudioStoreFromConfig(cfg, slog.Default(), library.NewFSCallMetrics(telemetry.NewRegistry()))
 	if err != nil {
 		return fmt.Errorf("call failed: %w", err)
-	}
-	lister, ok := store.(library.AudioAgeLister)
-	if !ok {
-		return errors.New("the configured audio store cannot list object age")
 	}
 
 	var tally stagingsweep.Tally
 	if mode == Apply {
-		tally, err = stagingsweep.Sweep(ctx, store, lister, refs, clock.Now())
+		tally, err = stagingsweep.Sweep(ctx, backend, backend.Ages, refs, clock.Now())
 	} else {
-		tally, err = stagingsweep.Preview(ctx, lister, refs, clock.Now())
+		tally, err = stagingsweep.Preview(ctx, backend.Ages, refs, clock.Now())
 	}
 	if err != nil {
 		return fmt.Errorf("preview: %w", err)

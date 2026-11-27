@@ -39,11 +39,8 @@ func ClampPresignTTL(ttl time.Duration) time.Duration {
 }
 
 type AudioLinkSigner interface {
+	SignsLinks() bool
 	PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error)
-}
-
-type AudioLister interface {
-	List(ctx context.Context, prefix string) ([]string, error)
 }
 
 type ObjectAge struct {
@@ -53,4 +50,10 @@ type ObjectAge struct {
 
 type AudioAgeLister interface {
 	ListWithAge(ctx context.Context, prefix string) ([]ObjectAge, error)
+}
+
+type AudioBackend struct {
+	AudioStore
+	Links AudioLinkSigner
+	Ages  AudioAgeLister
 }

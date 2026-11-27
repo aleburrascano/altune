@@ -22,8 +22,9 @@ type IdentifierHealth interface {
 }
 
 type SourceOrder struct {
-	First    []ports.AudioSource
-	Fallback []ports.AudioSource
+	First      []ports.AudioSource
+	Fallback   []ports.AudioSource
+	Previewing []ports.PreviewingSource
 }
 
 func (t SourceOrder) All() []ports.AudioSource {

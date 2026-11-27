@@ -51,72 +51,10 @@ func (l scopedAgeLister) ListWithAge(ctx context.Context, prefix string) ([]port
 	return l.inner.ListWithAge(ctx, prefix)
 }
 
-type withSigner struct {
-	*scopedAudioStore
-	ports.AudioLinkSigner
-}
-
-type withLister struct {
-	*scopedAudioStore
-	ports.AudioLister
-}
-
-type withAgeLister struct {
-	*scopedAudioStore
-	ports.AudioAgeLister
-}
-
-type withSignerLister struct {
-	*scopedAudioStore
-	ports.AudioLinkSigner
-	ports.AudioLister
-}
-
-type withSignerAgeLister struct {
-	*scopedAudioStore
-	ports.AudioLinkSigner
-	ports.AudioAgeLister
-}
-
-type withListerAgeLister struct {
-	*scopedAudioStore
-	ports.AudioLister
-	ports.AudioAgeLister
-}
-
-type withSignerListerAgeLister struct {
-	*scopedAudioStore
-	ports.AudioLinkSigner
-	ports.AudioLister
-	ports.AudioAgeLister
-}
-
-func NewScopedAudioStore(store ports.AudioStore, prefix string) ports.AudioStore {
-	base := &scopedAudioStore{inner: store, prefix: prefix}
-	signer, hasSigner := store.(ports.AudioLinkSigner)
-	lister, hasLister := store.(ports.AudioLister)
-	innerAgeLister, hasAgeLister := store.(ports.AudioAgeLister)
-	var ageLister ports.AudioAgeLister
-	if hasAgeLister {
-		ageLister = scopedAgeLister{inner: innerAgeLister, prefix: prefix}
-	}
-
-	switch {
-	case hasSigner && hasLister && hasAgeLister:
-		return &withSignerListerAgeLister{scopedAudioStore: base, AudioLinkSigner: signer, AudioLister: lister, AudioAgeLister: ageLister}
-	case hasSigner && hasLister:
-		return &withSignerLister{scopedAudioStore: base, AudioLinkSigner: signer, AudioLister: lister}
-	case hasSigner && hasAgeLister:
-		return &withSignerAgeLister{scopedAudioStore: base, AudioLinkSigner: signer, AudioAgeLister: ageLister}
-	case hasLister && hasAgeLister:
-		return &withListerAgeLister{scopedAudioStore: base, AudioLister: lister, AudioAgeLister: ageLister}
-	case hasSigner:
-		return &withSigner{scopedAudioStore: base, AudioLinkSigner: signer}
-	case hasLister:
-		return &withLister{scopedAudioStore: base, AudioLister: lister}
-	case hasAgeLister:
-		return &withAgeLister{scopedAudioStore: base, AudioAgeLister: ageLister}
-	default:
-		return base
+func NewScopedAudioBackend(backend ports.AudioBackend, prefix string) ports.AudioBackend {
+	return ports.AudioBackend{
+		AudioStore: &scopedAudioStore{inner: backend.AudioStore, prefix: prefix},
+		Links:      backend.Links,
+		Ages:       scopedAgeLister{inner: backend.Ages, prefix: prefix},
 	}
 }

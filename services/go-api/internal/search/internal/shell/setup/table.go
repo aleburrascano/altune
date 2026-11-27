@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"slices"
+	"time"
 )
 
 type rowName string
@@ -63,12 +64,14 @@ type provider struct {
 	id              domain.ProviderName
 	offReason       string
 	search          ports.SearchProvider
+	searchTimeout   time.Duration
 	artist          ports.ArtistContentProvider
 	artistAnchor    ports.MusicBrainzDiscographyAnchor
 	album           ports.AlbumContentProvider
 	albumFallback   ports.SearchProvider
 	related         ports.RelatedTracksProvider
 	artwork         []ports.ArtworkLookup
+	artworkByID     []ports.IdentityArtworkLookup
 	charts          ports.ChartProvider
 	deezerDetails   ports.DeezerEnricher
 	enrichment      ports.DetailsProvider
@@ -137,7 +140,7 @@ func (p provider) catalogSlots() []jobSlot {
 		{jobAlbum, p.album != nil},
 		{jobAlbum, p.albumFallback != nil},
 		{jobRelated, p.related != nil},
-		{jobArtwork, len(p.artwork) > 0},
+		{jobArtwork, len(p.artwork)+len(p.artworkByID) > 0},
 		{jobCharts, p.charts != nil},
 	}
 }

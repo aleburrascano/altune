@@ -42,7 +42,7 @@ func (t *providerTable) addDeezer(c connections.Clients) {
 
 func (t *providerTable) addAppleMusic(c connections.Clients) {
 	adapter := applemusic.NewAppleMusicAdapter(c.ProviderCalls, clock.Now)
-	t.add(provider{name: rowAppleMusic, id: domain.ProviderAppleMusic, search: adapter, artist: adapter, album: adapter})
+	t.add(provider{name: rowAppleMusic, id: domain.ProviderAppleMusic, search: adapter, searchTimeout: adapter.SearchTimeout(), artist: adapter, album: adapter})
 }
 
 func (t *providerTable) addMusicBrainz(userAgent string, c connections.Clients) {
@@ -71,13 +71,14 @@ func (t *providerTable) addSoundCloud(c connections.Clients) error {
 		return fmt.Errorf("build the soundcloud search adapter: %w", err)
 	}
 	t.add(provider{
-		name:    rowSoundCloud,
-		id:      domain.ProviderSoundCloud,
-		search:  searcher,
-		artist:  adapter,
-		album:   adapter,
-		related: adapter,
-		artwork: []ports.ArtworkLookup{adapter},
+		name:          rowSoundCloud,
+		id:            domain.ProviderSoundCloud,
+		search:        searcher,
+		searchTimeout: searcher.SearchTimeout(),
+		artist:        adapter,
+		album:         adapter,
+		related:       adapter,
+		artwork:       []ports.ArtworkLookup{adapter},
 	})
 	return nil
 }
@@ -85,22 +86,25 @@ func (t *providerTable) addSoundCloud(c connections.Clients) error {
 func (t *providerTable) addYouTubeMusic(c connections.Clients) {
 	adapter := ytmusic.MustNewYouTubeMusicAdapter(c.Transport, clock.Sleep, random.Real)
 	t.add(provider{
-		name:    rowYouTube,
-		id:      domain.ProviderYouTube,
-		search:  adapter,
-		artwork: []ports.ArtworkLookup{ytmusic.MustNewYouTubeMusicArtworkLookup(c.Transport, clock.Sleep, random.Real)},
+		name:          rowYouTube,
+		id:            domain.ProviderYouTube,
+		search:        adapter,
+		searchTimeout: adapter.SearchTimeout(),
+		artwork:       []ports.ArtworkLookup{ytmusic.MustNewYouTubeMusicArtworkLookup(c.Transport, clock.Sleep, random.Real)},
 	})
 }
 
 func (t *providerTable) addSpotify(c connections.Clients) {
 	adapter := spotify.NewSpotifyAdapter(c.ProviderCalls, clock.Now)
+	artwork := spotify.NewSpotifyArtworkLookup(c.ProviderCalls)
 	t.add(provider{
-		name:    rowSpotify,
-		id:      domain.ProviderSpotify,
-		search:  adapter,
-		artist:  adapter,
-		album:   adapter,
-		artwork: []ports.ArtworkLookup{spotify.NewSpotifyArtworkLookup(c.ProviderCalls)},
+		name:          rowSpotify,
+		id:            domain.ProviderSpotify,
+		search:        adapter,
+		searchTimeout: adapter.SearchTimeout(),
+		artist:        adapter,
+		album:         adapter,
+		artworkByID:   []ports.IdentityArtworkLookup{artwork},
 	})
 }
 
@@ -117,7 +121,7 @@ func (t *providerTable) addITunes(c connections.Clients) {
 func (t *providerTable) addCoverArtArchive(c connections.Clients) {
 	byTitle := coverartarchive.NewCoverArtArchiveResolver(c.ProviderCalls)
 	byIdentity := coverartarchive.NewCoverArtArchiveIdentityResolver(byTitle)
-	t.add(provider{name: rowCoverArtArchive, artwork: []ports.ArtworkLookup{byTitle, byIdentity}})
+	t.add(provider{name: rowCoverArtArchive, artwork: []ports.ArtworkLookup{byTitle}, artworkByID: []ports.IdentityArtworkLookup{byIdentity}})
 }
 
 func (t *providerTable) addDiscogs(token, userAgent string, c connections.Clients) {
@@ -127,9 +131,9 @@ func (t *providerTable) addDiscogs(token, userAgent string, c connections.Client
 	}
 	adapter := discogs.NewDiscogsAdapter(c.ProviderCalls, token, userAgent)
 	t.add(provider{
-		name:    rowDiscogs,
-		id:      domain.ProviderDiscogs,
-		artwork: []ports.ArtworkLookup{adapter},
+		name:        rowDiscogs,
+		id:          domain.ProviderDiscogs,
+		artworkByID: []ports.IdentityArtworkLookup{adapter},
 	})
 }
 

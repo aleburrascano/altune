@@ -6,7 +6,7 @@ type (
 	InPlaceVerdict        = ports.InPlaceVerdict
 	AcquisitionScheduler  = ports.AcquisitionScheduler
 	AudioAgeLister        = ports.AudioAgeLister
-	AudioLister           = ports.AudioLister
+	AudioBackend          = ports.AudioBackend
 	AudioRefPrefixLister  = ports.AudioRefPrefixLister
 	DBCallMetrics         = ports.DBCallMetrics
 	AudioStore            = ports.AudioStore

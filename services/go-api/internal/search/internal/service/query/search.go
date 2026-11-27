@@ -29,6 +29,7 @@ type Service struct {
 	circuitBreaker *providerguard.CircuitBreaker
 	providerCache  ports.ProviderResultCache
 	awaitDeadline  deadlineTimer
+	timeouts       map[domain.ProviderName]time.Duration
 
 	artwork       ArtworkFill
 	ranking       *rank.RankingExperiments
@@ -129,6 +130,7 @@ type serviceConfig struct {
 	awaitDeadline deadlineTimer
 	deadline      time.Duration
 	ranking       rank.RankingConfig
+	timeouts      map[domain.ProviderName]time.Duration
 }
 
 type Option func(*serviceConfig) error
@@ -163,6 +165,18 @@ func WithSearchDeadline(d time.Duration) Option {
 			return fmt.Errorf("%w: search deadline must be positive, got %s", ErrInvalidOption, d)
 		}
 		c.deadline = d
+		return nil
+	}
+}
+
+func WithProviderTimeouts(timeouts map[domain.ProviderName]time.Duration) Option {
+	return func(c *serviceConfig) error {
+		for name, d := range timeouts {
+			if d <= 0 {
+				return fmt.Errorf("%w: provider %s timeout must be positive, got %s", ErrInvalidOption, name, d)
+			}
+		}
+		c.timeouts = timeouts
 		return nil
 	}
 }
@@ -217,6 +231,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 		circuitBreaker: circuitBreaker,
 		providerCache:  c.ProviderCache,
 		awaitDeadline:  cfg.awaitDeadline,
+		timeouts:       cfg.timeouts,
 		artwork:        c.Artwork,
 		ranking:        ranking,
 		favorites:      lifter,

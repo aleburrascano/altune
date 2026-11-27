@@ -56,6 +56,8 @@ func (n *WebhookNotifier) buildRequest(ctx context.Context, a domain.Alert) (*ht
 	return req, nil
 }
 
+func (n *WebhookNotifier) Silent() bool { return false }
+
 func (n *WebhookNotifier) Notify(ctx context.Context, a domain.Alert) error {
 	req, err := n.buildRequest(ctx, a)
 	if err != nil {

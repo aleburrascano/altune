@@ -450,6 +450,10 @@ if touches '^services/go-api/.*\.go$|^services/go-api/internal/library/README\.m
   check "go-api every reader of a library table is listed in the library README" . bash scripts/library-table-readers.sh
 fi
 
+if touches '^services/go-api/.*\.go$|^scripts/capability-probes\.sh$'; then
+  check "go-api no type assertion probes for an optional capability" . bash scripts/capability-probes.sh
+fi
+
 if touches '\.sh$'; then
   check "no pipefail script pipes into grep -q" . bash scripts/pipefail-grep-q.sh
 fi

@@ -27,9 +27,6 @@ const (
 
 type candidateFetcher interface {
 	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error)
-}
-
-type previewSource interface {
 	PreviewFetcherFor(candidate ports.AudioCandidate) (ports.PreviewFetcher, bool)
 }
 

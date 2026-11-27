@@ -272,14 +272,14 @@ type previewingSource struct {
 	*stubSource
 }
 
-func (previewingSource) FetchPreview(context.Context, ports.AudioCandidate, string, int) (string, error) {
+func (s previewingSource) FetchPreview(context.Context, ports.AudioCandidate, string, int) (string, error) {
 	return "/tmp/preview.mp3", nil
 }
 
 func TestSourceRegistry_PreviewFetcherForRoutesToTheCandidatesSource(t *testing.T) {
 	plain := &stubSource{name: "plain"}
 	previewing := previewingSource{&stubSource{name: "previewing"}}
-	reg := service.NewSourceRegistry(plain, previewing)
+	reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{plain, previewing}, nil, previewing)
 
 	tests := []struct {
 		name   string

@@ -16,7 +16,6 @@ import (
 var (
 	_ ports.AudioStore      = (*ObjectStorageAudioStore)(nil)
 	_ ports.AudioLinkSigner = (*ObjectStorageAudioStore)(nil)
-	_ ports.AudioLister     = (*ObjectStorageAudioStore)(nil)
 	_ ports.AudioAgeLister  = (*ObjectStorageAudioStore)(nil)
 )
 
@@ -89,22 +88,7 @@ func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (
 	return false, fmt.Errorf("stat object %s: %w", audioRef, err)
 }
 
-func (s *ObjectStorageAudioStore) List(ctx context.Context, prefix string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(ctx, storageOpTimeout)
-	defer cancel()
-
-	var refs []string
-	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
-		Prefix:    prefix,
-		Recursive: true,
-	}) {
-		if obj.Err != nil {
-			return nil, fmt.Errorf("list %q: %w", prefix, obj.Err)
-		}
-		refs = append(refs, obj.Key)
-	}
-	return refs, nil
-}
+func (s *ObjectStorageAudioStore) SignsLinks() bool { return true }
 
 func (s *ObjectStorageAudioStore) ListWithAge(ctx context.Context, prefix string) ([]ports.ObjectAge, error) {
 	ctx, cancel := context.WithTimeout(ctx, storageOpTimeout)

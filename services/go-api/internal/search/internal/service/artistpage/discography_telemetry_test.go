@@ -105,7 +105,7 @@ func noDiscographyObserverLeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 
 	observed := fetch(searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, searchtest.NewTracker(t))))
 	store.next(t)
-	silent, err := artistpage.NewGetArtistContentService(albumsFrom(albums), artistpage.SeedPathIdentity{}, artistpage.NoAnchoring{}, artistpage.NoDiscographyObserver{}, search.NewCircuitBreaker(clock.Now))
+	silent, err := artistpage.NewGetArtistContentService(albumsFrom(albums), map[search.ProviderName]ports.AlbumContentProvider{}, artistpage.SeedPathIdentity{}, artistpage.NoAnchoring{}, artistpage.NoDiscographyObserver{}, search.NewCircuitBreaker(clock.Now))
 	if err != nil {
 		t.Fatalf("NewGetArtistContentService: %v", err)
 	}

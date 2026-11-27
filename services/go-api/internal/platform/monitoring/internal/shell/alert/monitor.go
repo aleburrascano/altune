@@ -72,7 +72,7 @@ const (
 )
 
 func (m *Monitor) notifierKind() string {
-	if s, ok := m.notifier.(ports.SilentNotifier); ok && s.Silent() {
+	if m.notifier.Silent() {
 		return notifierKindNop
 	}
 	return notifierKindCustom

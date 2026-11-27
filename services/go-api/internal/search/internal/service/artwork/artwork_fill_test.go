@@ -162,6 +162,20 @@ func (s *countingIdentityStore) LookupByProviderID(_ context.Context, kind domai
 	return hit.MBID, hit.Xref, ok
 }
 
+func (s *countingIdentityStore) LookupByProviderIDs(ctx context.Context, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	return lookupEach(ctx, s, refs)
+}
+
+func lookupEach(ctx context.Context, store ports.IdentityStore, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	hits := map[ports.IdentityRef]ports.IdentityHit{}
+	for _, ref := range refs {
+		if mbid, xref, ok := store.LookupByProviderID(ctx, ref.Kind, ref.Provider, ref.ExternalID); ok {
+			hits[ref] = ports.IdentityHit{MBID: mbid, Xref: xref}
+		}
+	}
+	return hits
+}
+
 func knownIdentity(ref ports.IdentityRef) (ports.IdentityHit, bool) {
 	n, err := strconv.Atoi(ref.ExternalID)
 	if err != nil || n%2 != 0 {
@@ -278,6 +292,10 @@ type scriptedIdentityStore struct {
 func (s *scriptedIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	s.log.add("durable:" + provider.String() + "/" + externalID)
 	return s.mbid, s.xref, s.ok
+}
+
+func (s *scriptedIdentityStore) LookupByProviderIDs(ctx context.Context, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	return lookupEach(ctx, s, refs)
 }
 
 type scriptedMBIDIndex struct {

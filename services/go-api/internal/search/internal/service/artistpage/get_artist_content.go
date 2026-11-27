@@ -17,6 +17,7 @@ import (
 
 type GetArtistContentService struct {
 	providers   map[domain.ProviderName]ports.ArtistContentProvider
+	tracklists  map[domain.ProviderName]ports.AlbumContentProvider
 	identity    ArtistIdentity
 	anchoring   Anchoring
 	discography DiscographyObserver
@@ -25,6 +26,7 @@ type GetArtistContentService struct {
 
 func NewGetArtistContentService(
 	providers map[domain.ProviderName]ports.ArtistContentProvider,
+	tracklists map[domain.ProviderName]ports.AlbumContentProvider,
 	identity ArtistIdentity,
 	anchoring Anchoring,
 	discography DiscographyObserver,
@@ -32,6 +34,7 @@ func NewGetArtistContentService(
 ) (*GetArtistContentService, error) {
 	if err := requireCollaborators("the artist content service",
 		collaborator{"providers", providers == nil},
+		collaborator{"tracklist providers", tracklists == nil},
 		collaborator{"an artist identity", identity == nil},
 		collaborator{"an anchoring strategy", anchoring == nil},
 		collaborator{"a discography observer", discography == nil},
@@ -41,6 +44,7 @@ func NewGetArtistContentService(
 	}
 	return &GetArtistContentService{
 		providers:   providers,
+		tracklists:  tracklists,
 		identity:    identity,
 		anchoring:   anchoring,
 		discography: discography,

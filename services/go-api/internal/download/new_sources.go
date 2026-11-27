@@ -73,7 +73,9 @@ func sourcesFor(ctx context.Context, d SourceDeps, searcher *ytdlp.YouTubeAudioS
 	}
 	switch {
 	case cfg.YtDLPEnabled:
-		tiers.Fallback = append(tiers.Fallback, ytdlp.NewSource(searcher))
+		source := ytdlp.NewSource(searcher)
+		tiers.Fallback = append(tiers.Fallback, source)
+		tiers.Previewing = append(tiers.Previewing, source)
 	default:
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}

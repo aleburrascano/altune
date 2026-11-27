@@ -15,6 +15,7 @@ type MBIDIndex interface {
 
 type IdentityStore interface {
 	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[domain.ProviderKey]string, ok bool)
+	BatchIdentityLookup
 }
 
 type IdentityRef struct {

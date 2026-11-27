@@ -45,6 +45,8 @@ func (s *countingAudioStore) Stream(ctx context.Context, ref string) (library.Au
 	return s.InMemoryAudioStore.Stream(ctx, ref)
 }
 
+func (s *countingAudioStore) SignsLinks() bool { return true }
+
 func (s *countingAudioStore) PresignGet(_ context.Context, ref string, _ time.Duration) (string, error) {
 	s.mu.Lock()
 	s.presigns++

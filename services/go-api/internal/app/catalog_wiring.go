@@ -41,6 +41,7 @@ type catalogWiring struct {
 
 type audioSourcesStaging struct {
 	audioStore     library.AudioStore
+	audioLinks     library.AudioLinkSigner
 	trackRepo      *library.PostgresTrackRepository
 	ledger         download.TrackLedgerPort
 	scheduler      library.AcquisitionScheduler
@@ -99,10 +100,11 @@ func (a *application) wireAudioSources(
 	tap *monitoring.EventTap,
 	disc *search.Discovery,
 ) (audioSourcesStaging, error) {
-	audioStore, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
+	backend, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
 	if err != nil {
 		return audioSourcesStaging{}, fmt.Errorf("call failed: %w", err)
 	}
+	audioStore := backend.AudioStore
 	trackRepo := library.NewPostgresTrackRepository(a.pool, library.NewDBCallMetrics(a.metrics))
 	sources, tools, err := a.liveTiers(ctx, transport, audioStore)
 	if err != nil {
@@ -114,6 +116,7 @@ func (a *application) wireAudioSources(
 	}
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
+		audioLinks:     backend.Links,
 		trackRepo:      trackRepo,
 		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, download.NewPostgresUpgradeStore(a.pool), ids.Real),
 		scheduler:      library.NoopAcquisitionScheduler(),
@@ -193,7 +196,7 @@ func (a *application) wireCatalogServices(
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
 		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, audio.scheduler, audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
-		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, clock.Now, audioStoreMetrics),
+		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioLinks, clock.Now, audioStoreMetrics),
 	}, nil
 }
 

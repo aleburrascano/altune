@@ -104,7 +104,7 @@ func TestDownloadStep_Execute_NoSelected(t *testing.T) {
 func TestConstructors_RefuseAMissingTempWorkspace(t *testing.T) {
 	builders := map[string]func() error{
 		"NewDownloadStep": func() error {
-			_, err := service.NewDownloadStep(&fileWritingSearcher{}, nil, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
+			_, err := service.NewDownloadStep(previewingOrPlain(&fileWritingSearcher{}), nil, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"NewStoreStep": func() error {
@@ -154,7 +154,7 @@ func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.
 			return err
 		},
 		"clock": func() error {
-			_, err := service.NewDownloadStep(&fileWritingSearcher{}, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), nil)
+			_, err := service.NewDownloadStep(previewingOrPlain(&fileWritingSearcher{}), osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), nil)
 			return err
 		},
 		"audio store step audio store": func() error {
@@ -962,7 +962,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			run: func(ctx context.Context, t *testing.T) {
 				c := logTestCandidate()
 				other := ports.AudioCandidate{URL: "https://soundcloud.com/artist/other", Source: logTestSource}
-				step := service.NewSearchStep(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{c, other}})
+				step := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{c, other}}))
 				ac := &service.AcquisitionContext{
 					Track:   service.TrackRef{ID: logTestTrackID, Title: "Song", Artist: "Artist"},
 					Replace: service.ReplaceState{ExcludeKeys: []string{sourcekey.SourceKey(c.URL)}},
@@ -975,7 +975,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			msg:  "candidate_evaluated",
 			run: func(ctx context.Context, t *testing.T) {
 				ac := &service.AcquisitionContext{Track: service.TrackRef{ID: logTestTrackID, Title: "Song", Artist: "Artist"}}
-				searched, _ := service.NewSearchStep(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{logTestCandidate()}}).Execute(ctx, ac, service.PipelineStart{})
+				searched, _ := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{logTestCandidate()}})).Execute(ctx, ac, service.PipelineStart{})
 				_, _ = service.NewSelectStep().Execute(ctx, ac, searched)
 			},
 		},

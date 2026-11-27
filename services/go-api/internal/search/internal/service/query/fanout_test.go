@@ -24,7 +24,11 @@ type slowTimeoutProvider struct {
 	timeout time.Duration
 }
 
-func (p *slowTimeoutProvider) SearchTimeout() time.Duration { return p.timeout }
+func (p *slowTimeoutProvider) timeouts() query.Option {
+	return query.WithProviderTimeouts(map[domain.ProviderName]time.Duration{p.Provider: p.timeout})
+}
+
+var lateProviderTimeouts = query.WithProviderTimeouts(map[domain.ProviderName]time.Duration{search.ProviderSpotify: 5 * time.Second})
 
 func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 	bg := searchtest.NewTracker(t)
@@ -39,7 +43,7 @@ func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 		Provider: search.ProviderDeezer, Delay: 80 * time.Millisecond,
 		Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 	}
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow, normal}, search.NewCircuitBreaker(clock.Now))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow, normal}, search.NewCircuitBreaker(clock.Now), slow.timeouts())
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -61,7 +65,7 @@ func TestFanOut_TimeoutRecordsBreakerFailure(t *testing.T) {
 		timeout:      10 * time.Millisecond,
 	}
 	cb := search.NewCircuitBreaker(clock.Now)
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, cb)
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, cb, slow.timeouts())
 
 	inspect(t, svc, context.Background())
 
@@ -220,8 +224,6 @@ func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 
 type ignoresCtxProvider struct{ memory.FakeProvider }
 
-func (p *ignoresCtxProvider) SearchTimeout() time.Duration { return 5 * time.Millisecond }
-
 func (p *ignoresCtxProvider) Search(ctx context.Context, _ string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
 	<-ctx.Done()
 	return nil, errors.New("signal: killed")
@@ -230,7 +232,7 @@ func (p *ignoresCtxProvider) Search(ctx context.Context, _ string, _ map[search.
 func TestFanOut_BudgetCutOffUnclassifiedErrorStillCounts(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	cb := search.NewCircuitBreaker(clock.Now)
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&ignoresCtxProvider{memory.FakeProvider{Provider: domain.ProviderITunes}}}, cb)
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&ignoresCtxProvider{memory.FakeProvider{Provider: domain.ProviderITunes}}}, cb, query.WithProviderTimeouts(map[domain.ProviderName]time.Duration{domain.ProviderITunes: 5 * time.Millisecond}))
 
 	inspect(t, svc, context.Background())
 
@@ -298,8 +300,6 @@ func (p *lateProvider) Name() search.ProviderName { return p.name }
 
 func (p *lateProvider) SupportedKinds() map[search.ResultKind]bool { return search.AllKinds() }
 
-func (p *lateProvider) SearchTimeout() time.Duration { return 5 * time.Second }
-
 func (p *lateProvider) Search(ctx context.Context, _ string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
 	p.calls.Add(1)
 	p.started <- struct{}{}
@@ -326,7 +326,7 @@ func TestDeadline_AnswersWithoutTheSlowProvider(t *testing.T) {
 	fast := &memory.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
 	slates := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = slates }, query.WithSearchDeadline(20*time.Millisecond))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = slates }, query.WithSearchDeadline(20*time.Millisecond), lateProviderTimeouts)
 	t.Cleanup(func() { close(slow.release); bg.Wait() })
 
 	out := runSearch(t, svc, "humble")
@@ -350,7 +350,7 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 	fast := &memory.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
 	slates := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() }, query.WithSearchDeadline(20*time.Millisecond))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() }, query.WithSearchDeadline(20*time.Millisecond), lateProviderTimeouts)
 
 	runSearch(t, svc, "humble")
 	close(slow.release)
@@ -372,7 +372,7 @@ func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		bg := searchtest.NewTracker(t)
 		slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
-		svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Millisecond))
+		svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Millisecond), lateProviderTimeouts)
 		done := make(chan *search.SearchOutput, 1)
 		go func() { done <- runSearch(t, svc, "humble") }()
 		waitFor(t, slow.started, "the provider call to start")
@@ -400,7 +400,7 @@ func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	slow := newLateProvider(search.ProviderSpotify)
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Second))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Second), lateProviderTimeouts)
 	ctx, cancel := context.WithCancel(context.Background())
 	returned := make(chan struct{})
 	go func() {

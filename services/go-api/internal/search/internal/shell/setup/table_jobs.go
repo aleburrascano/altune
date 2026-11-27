@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/artworkfallback"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"time"
 )
 
 var artworkAskingOrder = []rowName{
@@ -19,6 +20,16 @@ func (t *providerTable) searchProviders() []ports.SearchProvider {
 		}
 	}
 	return searchers
+}
+
+func (t *providerTable) searchTimeouts() map[domain.ProviderName]time.Duration {
+	timeouts := map[domain.ProviderName]time.Duration{}
+	for _, p := range t.providers {
+		if p.search != nil && p.searchTimeout > 0 {
+			timeouts[p.search.Name()] = p.searchTimeout
+		}
+	}
+	return timeouts
 }
 
 func (t *providerTable) artistProviders() map[domain.ProviderName]ports.ArtistContentProvider {
@@ -63,8 +74,11 @@ func (t *providerTable) chartProviders() []ports.ChartProvider {
 
 func (t *providerTable) artworkChain() *artworkfallback.ChainedArtworkLookup {
 	var resolvers []ports.ArtworkLookup
+	var byIdentity []ports.IdentityArtworkLookup
 	for _, name := range artworkAskingOrder {
-		resolvers = append(resolvers, t.named(name).artwork...)
+		row := t.named(name)
+		resolvers = append(resolvers, row.artwork...)
+		byIdentity = append(byIdentity, row.artworkByID...)
 	}
-	return artworkfallback.NewChainedArtworkLookup(resolvers...)
+	return artworkfallback.NewChainedArtworkLookup(resolvers...).WithIdentityLookups(byIdentity...)
 }

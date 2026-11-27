@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
-	"time"
 )
 
 var ErrProviderRateLimitQueueTimeout = queuetimeout.Err
@@ -14,8 +13,6 @@ type SearchProvider interface {
 	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
 	SupportedKinds() map[domain.ResultKind]bool
 }
-
-type SearchTimeLimit interface{ SearchTimeout() time.Duration }
 
 type AlbumContentProvider interface {
 	GetAlbumTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)

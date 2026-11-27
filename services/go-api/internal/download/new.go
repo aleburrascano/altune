@@ -30,7 +30,7 @@ func New(ctx context.Context, d Deps) *service.BackgroundAcquisitionScheduler {
 	opts = append(opts, pipelineOptions(d)...)
 	acquireSvc := service.MustNewAcquireTrackAudioService(
 		d.Ledger,
-		service.NewSourceRegistryWithFallback(d.Sources.First, d.Sources.Fallback),
+		service.NewSourceRegistryWithFallback(d.Sources.First, d.Sources.Fallback, d.Sources.Previewing...),
 		d.AudioStore,
 		scratchfiles.New(),
 		service.VerificationPorts{

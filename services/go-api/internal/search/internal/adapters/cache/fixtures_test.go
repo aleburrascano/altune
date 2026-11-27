@@ -1,6 +1,7 @@
 package cache_test
 
 import (
+	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"slices"
@@ -73,6 +74,16 @@ func (f *recordingIdentityStore) LookupByProviderID(context.Context, domain.Resu
 	defer f.mu.Unlock()
 	f.lookupCalls++
 	return f.mbid, f.xref, f.found
+}
+
+func (f *recordingIdentityStore) LookupByProviderIDs(ctx context.Context, refs []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	hits := map[ports.IdentityRef]ports.IdentityHit{}
+	for _, ref := range refs {
+		if mbid, xref, ok := f.LookupByProviderID(ctx, ref.Kind, ref.Provider, ref.ExternalID); ok {
+			hits[ref] = ports.IdentityHit{MBID: mbid, Xref: xref}
+		}
+	}
+	return hits
 }
 
 func (f *recordingIdentityStore) calls() int {
