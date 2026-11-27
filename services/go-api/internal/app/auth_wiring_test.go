@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -204,16 +205,18 @@ func TestAuth_RejectionsAndAnUnreachableKeySetReachLiveMetrics(t *testing.T) {
 	}
 	unavailable := int64(1)
 	f.keysDown.Store(false)
-	for deadline := time.Now().Add(10 * time.Second); ; {
-		code, body := getFrom(t, h, fmt.Sprintf("203.0.113.%d:1234", unavailable), "/observe/metrics/live", operator)
-		if code == http.StatusOK {
-			break
+	var code int
+	var body []byte
+	polltest.Within(10*time.Second, func() bool {
+		code, body = getFrom(t, h, fmt.Sprintf("203.0.%d.%d:1234", unavailable/250, unavailable%250+1), "/observe/metrics/live", operator)
+		if code == http.StatusServiceUnavailable {
+			unavailable++
+			return false
 		}
-		if code != http.StatusServiceUnavailable || time.Now().After(deadline) {
-			t.Fatalf("the operator once the key set is back: status %d, want 200 within 10s; body %s", code, body)
-		}
-		unavailable++
-		time.Sleep(100 * time.Millisecond)
+		return true
+	})
+	if code != http.StatusOK {
+		t.Fatalf("the operator once the key set is back: status %d, want 200 within 10s; body %s", code, body)
 	}
 	if code, _ := getFrom(t, h, forgingClient, "/observe/metrics/live", signedToken(t, newRSAKey(t), f.operator)); code != http.StatusUnauthorized {
 		t.Fatalf("token signed by another key: status %d, want 401", code)

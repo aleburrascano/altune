@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/slowclienttest"
 	"bufio"
 	"bytes"
@@ -142,7 +143,7 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	}
 	body := bufio.NewReader(resp.Body)
 
-	time.Sleep(4 * routeWriteDeadline)
+	_ = clock.Sleep(t.Context(), 4*routeWriteDeadline)
 	bus.Publish(context.Background(), uid, eventstest.Fielded("late.event", map[string]any{"k": "v"}))
 	readUntil(t, body, func(l string) bool { return strings.HasPrefix(l, "event: late.event") })
 }
@@ -163,18 +164,15 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 	slowclienttest.Get(t, srv, "/v1/events", nil)
 
 	payload := map[string]any{"pad": strings.Repeat("x", 16<<10)}
-	giveUp := time.After(5 * time.Second)
-	for {
+	polltest.Until(t, 5*time.Second, "the SSE handler to give up on a stalled client (per-frame deadline applied)", func() bool {
 		select {
 		case <-done:
-			return
-		case <-giveUp:
-			t.Fatal("SSE handler still blocked on a stalled client after 5s: per-frame deadline not applied")
+			return true
 		default:
 			bus.Publish(context.Background(), uid, eventstest.Fielded("bulk", payload))
-			time.Sleep(5 * time.Millisecond)
+			return false
 		}
-	}
+	})
 }
 
 func TestRouter_RequestTimeoutReleasesBlockedV1HandlerButNotLongLivedRoutes(t *testing.T) {

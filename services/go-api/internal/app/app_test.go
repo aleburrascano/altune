@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/polltest"
 	"strings"
 	"testing"
 	"time"
@@ -57,12 +58,11 @@ func TestStartupSwitches_ADisabledRankingRefreshSkipsInsteadOfRunning(t *testing
 	cfg.DisabledJobs = []string{string(jobs.BehavioralRankingRefresh)}
 	assembly := assembleLogging(t, cfg).assembly
 
-	deadline := time.Now().Add(3 * time.Second)
-	h := jobHealth(t, assembly, jobs.BehavioralRankingRefresh)
-	for h.Skipped == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
+	var h background.JobHealth
+	polltest.Within(3*time.Second, func() bool {
 		h = jobHealth(t, assembly, jobs.BehavioralRankingRefresh)
-	}
+		return h.Skipped != 0
+	})
 
 	if h.Skipped == 0 || h.Failures != 0 || !h.LastSuccess.IsZero() {
 		t.Errorf("ranking refresh health = %+v, want a skipped pass and no run against the store", h)

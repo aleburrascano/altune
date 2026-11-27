@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"fmt"
@@ -90,14 +91,9 @@ func captureLogs(t *testing.T) *logging.Capture {
 
 func waitForAtLeast(t *testing.T, c *atomic.Int32, want int32) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if c.Load() >= want {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	if !polltest.Within(2*time.Second, func() bool { return c.Load() >= want }) {
+		t.Fatalf("counter never reached %d (got %d)", want, c.Load())
 	}
-	t.Fatalf("counter never reached %d (got %d)", want, c.Load())
 }
 
 func findHealth(t *testing.T, r *jobs.Runner, name string) background.JobHealth {
@@ -116,10 +112,10 @@ func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int
 	waitForAtLeast(t, passes, 3)
 
 	e.lose()
-	time.Sleep(30 * leaderLoopTick)
+	_ = clock.Sleep(t.Context(), 30*leaderLoopTick)
 	stopped := passes.Load()
 
-	time.Sleep(60 * leaderLoopTick)
+	_ = clock.Sleep(t.Context(), 60*leaderLoopTick)
 	if extra := passes.Load() - stopped; extra > 1 {
 		t.Fatalf("job made %d more passes after the term ended, want none", extra)
 	}
@@ -181,50 +177,54 @@ func TestSetEnabled_AnUnknownJobRegistersNothing(t *testing.T) {
 }
 
 func TestTicker_KillSwitchStopsAndResumesTheJob(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	var runs atomic.Int32
-	r.Ticker("sweep", time.Millisecond, func(context.Context) error {
-		runs.Add(1)
-		return nil
+	synctest.Test(t, func(t *testing.T) {
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		var runs atomic.Int32
+		r.Ticker("sweep", time.Millisecond, func(context.Context) error {
+			runs.Add(1)
+			return nil
+		})
+		lead(t, &r, leading())
+
+		waitForAtLeast(t, &runs, 3)
+
+		r.SetEnabled("sweep", false)
+		time.Sleep(30 * time.Millisecond)
+		baseline := runs.Load()
+		time.Sleep(60 * time.Millisecond)
+		if extra := runs.Load() - baseline; extra > 0 {
+			t.Fatalf("disabled job kept running: %d extra runs", extra)
+		}
+
+		r.SetEnabled("sweep", true)
+		waitForAtLeast(t, &runs, baseline+3)
 	})
-	lead(t, &r, leading())
-
-	waitForAtLeast(t, &runs, 3)
-
-	r.SetEnabled("sweep", false)
-	time.Sleep(30 * time.Millisecond)
-	baseline := runs.Load()
-	time.Sleep(60 * time.Millisecond)
-	if extra := runs.Load() - baseline; extra > 0 {
-		t.Fatalf("disabled job kept running: %d extra runs", extra)
-	}
-
-	r.SetEnabled("sweep", true)
-	waitForAtLeast(t, &runs, baseline+3)
 }
 
 func TestEveryInstance_RunsWithoutLeadershipAndHonoursItsKillSwitch(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, &fakeElection{})
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	synctest.Test(t, func(t *testing.T) {
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		lead(t, &r, &fakeElection{})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
 
-	var runs atomic.Int32
-	r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Millisecond, func(context.Context) error {
-		runs.Add(1)
-		return nil
+		var runs atomic.Int32
+		r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Millisecond, func(context.Context) error {
+			runs.Add(1)
+			return nil
+		})
+
+		waitForAtLeast(t, &runs, 3)
+		if _, ok := r.SetEnabled(jobs.BehavioralRankingRefresh, false); !ok {
+			t.Fatal("SetEnabled must find the behavioral ranking refresh job")
+		}
+		time.Sleep(30 * time.Millisecond)
+		baseline := runs.Load()
+		time.Sleep(30 * time.Millisecond)
+		if extra := runs.Load() - baseline; extra > 0 {
+			t.Fatalf("disabled job kept running: %d extra runs", extra)
+		}
 	})
-
-	waitForAtLeast(t, &runs, 3)
-	if _, ok := r.SetEnabled(jobs.BehavioralRankingRefresh, false); !ok {
-		t.Fatal("SetEnabled must find the behavioral ranking refresh job")
-	}
-	time.Sleep(30 * time.Millisecond)
-	baseline := runs.Load()
-	time.Sleep(30 * time.Millisecond)
-	if extra := runs.Load() - baseline; extra > 0 {
-		t.Fatalf("disabled job kept running: %d extra runs", extra)
-	}
 }
 
 func waitAsync(r *jobs.Runner) <-chan struct{} {
@@ -384,26 +384,28 @@ func TestLeaderContext_WithoutAnElectionEveryPassLeads(t *testing.T) {
 }
 
 func TestTicker_TheOldLeaderStopsAfterAHandoff(t *testing.T) {
-	oldE, newE := leading(), &fakeElection{}
-	oldRunner, newRunner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}, jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	var oldRuns, newRuns atomic.Int32
-	oldRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { oldRuns.Add(1); return nil })
-	newRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { newRuns.Add(1); return nil })
-	lead(t, &oldRunner, oldE)
+	synctest.Test(t, func(t *testing.T) {
+		oldE, newE := leading(), &fakeElection{}
+		oldRunner, newRunner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}, jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+		var oldRuns, newRuns atomic.Int32
+		oldRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { oldRuns.Add(1); return nil })
+		newRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { newRuns.Add(1); return nil })
+		lead(t, &oldRunner, oldE)
 
-	waitForAtLeast(t, &oldRuns, 3)
+		waitForAtLeast(t, &oldRuns, 3)
 
-	oldE.lose()
-	newE.win()
-	lead(t, &newRunner, newE)
+		oldE.lose()
+		newE.win()
+		lead(t, &newRunner, newE)
 
-	time.Sleep(30 * leaderLoopTick)
-	baseline := oldRuns.Load()
-	time.Sleep(60 * leaderLoopTick)
-	if extra := oldRuns.Load() - baseline; extra > 1 {
-		t.Fatalf("old leader kept running the job after handoff: %d extra runs", extra)
-	}
-	waitForAtLeast(t, &newRuns, 3)
+		time.Sleep(30 * leaderLoopTick)
+		baseline := oldRuns.Load()
+		time.Sleep(60 * leaderLoopTick)
+		if extra := oldRuns.Load() - baseline; extra > 1 {
+			t.Fatalf("old leader kept running the job after handoff: %d extra runs", extra)
+		}
+		waitForAtLeast(t, &newRuns, 3)
+	})
 }
 
 func TestTicker_AStaleLeadersWriteIsNotApplied(t *testing.T) {
@@ -491,42 +493,46 @@ func TestTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
 }
 
 func TestTicker_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
-	e := leading()
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+	synctest.Test(t, func(t *testing.T) {
+		e := leading()
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
-	var evaluations atomic.Int32
-	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, monitoring.Condition{
-		Key: "dependency_down",
-		Eval: func(context.Context) *monitoring.Alert {
-			evaluations.Add(1)
-			return nil
-		},
+		var evaluations atomic.Int32
+		monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, monitoring.Condition{
+			Key: "dependency_down",
+			Eval: func(context.Context) *monitoring.Alert {
+				evaluations.Add(1)
+				return nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewAlertMonitor: %v", err)
+		}
+		r.Ticker(jobs.AlertMonitor, leaderLoopTick, monitor.Pass)
+		lead(t, &r, e)
+
+		assertPassesFollowTheTerm(t, e, &evaluations)
 	})
-	if err != nil {
-		t.Fatalf("NewAlertMonitor: %v", err)
-	}
-	r.Ticker(jobs.AlertMonitor, leaderLoopTick, monitor.Pass)
-	lead(t, &r, e)
-
-	assertPassesFollowTheTerm(t, e, &evaluations)
 }
 
 func TestTicker_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
-	e := leading()
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
+	synctest.Test(t, func(t *testing.T) {
+		e := leading()
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
-	var runs atomic.Int32
-	meter, err := monitoring.NewEvalMeter(clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
-		runs.Add(1)
-		return monitoring.EvalMeterResult{}, nil
-	}, r.Control(jobs.EvalMeter).Disabled)
-	if err != nil {
-		t.Fatalf("NewEvalMeter: %v", err)
-	}
-	r.Ticker(jobs.EvalMeter, leaderLoopTick, meter.Pass)
-	lead(t, &r, e)
+		var runs atomic.Int32
+		meter, err := monitoring.NewEvalMeter(clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
+			runs.Add(1)
+			return monitoring.EvalMeterResult{}, nil
+		}, r.Control(jobs.EvalMeter).Disabled)
+		if err != nil {
+			t.Fatalf("NewEvalMeter: %v", err)
+		}
+		r.Ticker(jobs.EvalMeter, leaderLoopTick, meter.Pass)
+		lead(t, &r, e)
 
-	assertPassesFollowTheTerm(t, e, &runs)
+		assertPassesFollowTheTerm(t, e, &runs)
+	})
 }
 
 func TestTicker_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {

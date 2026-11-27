@@ -13,9 +13,11 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	_ "embed"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -128,17 +130,16 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 
 func awaitReady(t *testing.T, repo *library.PostgresTrackRepository, track *library.Track, userID ids.UserId) library.Track {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		got, err := repo.GetByID(context.Background(), track.ID, userID)
+	var got *library.Track
+	polltest.Within(10*time.Second, func() bool {
+		var err error
+		got, err = repo.GetByID(context.Background(), track.ID, userID)
 		if err != nil {
 			t.Fatalf("read track: %v", err)
 		}
-		if got.DownloadStatus == library.AcquisitionReady || time.Now().After(deadline) {
-			return *got
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return got.DownloadStatus == library.AcquisitionReady
+	})
+	return *got
 }
 
 func assertReadyWithAudio(t *testing.T, track library.Track, musicDir string) {
@@ -292,16 +293,9 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		t.Fatalf("schedule: %v", err)
 	}
 
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if countAcquisitionOutcomeRows(t, pool, track.ID.String()) == 1 {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no acquisition_outcomes row written for track %s within 5s (wiring must set SchedulerPorts.Outcomes to the Postgres store)", track.ID)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	polltest.Until(t, 5*time.Second, fmt.Sprintf("an acquisition_outcomes row for track %s (wiring must set SchedulerPorts.Outcomes to the Postgres store)", track.ID), func() bool {
+		return countAcquisitionOutcomeRows(t, pool, track.ID.String()) == 1
+	})
 }
 
 type sourceWithNothing struct{}
@@ -395,16 +389,12 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 
 	want := upgradeJobState{Kind: "acquire", Queued: false, Leased: false, Claims: 1, UpgradeTries: 1}
 	const settleWithin = 15 * time.Second
-	deadline := time.Now().Add(settleWithin)
-	for {
-		got := readUpgradeJobState(t, pool, trackID)
-		if got == want {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("upgrade job of track %s after %v = %+v, want %+v (claimed once through the upgrade lane, an attempt noted, the job settled off the queue)", trackID, settleWithin, got, want)
-		}
-		time.Sleep(20 * time.Millisecond)
+	var got upgradeJobState
+	if !polltest.Within(settleWithin, func() bool {
+		got = readUpgradeJobState(t, pool, trackID)
+		return got == want
+	}) {
+		t.Fatalf("upgrade job of track %s after %v = %+v, want %+v (claimed once through the upgrade lane, an attempt noted, the job settled off the queue)", trackID, settleWithin, got, want)
 	}
 }
 
