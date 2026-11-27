@@ -42,7 +42,7 @@ var ErrCollaboratorRequired = errors.New("ownership enrichment needs its backgro
 
 type AbsentTrackNumberFiller struct{}
 
-func (AbsentTrackNumberFiller) FillTrackNumber(context.Context, ids.UserId, string, int) error {
+func (AbsentTrackNumberFiller) FillTrackNumber(context.Context, ids.UserId, ids.TrackId, int) error {
 	return nil
 }
 
@@ -155,7 +155,12 @@ func (s *OwnershipEnrichmentService) fillPending(
 				"pending", len(pending), logging.KeyError, ctx.Err())
 			return
 		}
-		if err := s.trackNumbers.FillTrackNumber(ctx, userId, trackId, position); err != nil {
+		id, err := ids.ParseTrackId(trackId)
+		if err != nil {
+			slog.WarnContext(ctx, "track_number.fill_failed", logging.KeyTrackID, trackId, logging.KeyError, err)
+			continue
+		}
+		if err := s.trackNumbers.FillTrackNumber(ctx, userId, id, position); err != nil {
 			slog.WarnContext(ctx, "track_number.fill_failed", logging.KeyTrackID, trackId, logging.KeyError, err)
 		}
 	}

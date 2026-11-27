@@ -52,12 +52,8 @@ func NewTrackNumberFiller(setter TrackNumberSetter) search.TrackNumberFiller {
 	return trackNumberFiller{setter: setter}
 }
 
-func (f trackNumberFiller) FillTrackNumber(ctx context.Context, userId ids.UserId, trackId string, trackNumber int) error {
-	id, err := library.ParseTrackId(trackId)
-	if err != nil {
-		return fmt.Errorf("parse track id: %w", err)
-	}
-	if _, err := f.setter.Execute(ctx, userId, id, trackNumber); err != nil {
+func (f trackNumberFiller) FillTrackNumber(ctx context.Context, userId ids.UserId, trackId ids.TrackId, trackNumber int) error {
+	if _, err := f.setter.Execute(ctx, userId, trackId, trackNumber); err != nil {
 		return fmt.Errorf("fill track number: %w", err)
 	}
 	return nil

@@ -16,7 +16,7 @@ type OwnedTrack struct {
 }
 
 type TrackNumberFiller interface {
-	FillTrackNumber(ctx context.Context, userId ids.UserId, trackId string, trackNumber int) error
+	FillTrackNumber(ctx context.Context, userId ids.UserId, trackId ids.TrackId, trackNumber int) error
 }
 
 type OwnershipReader interface {
