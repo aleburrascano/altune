@@ -11,7 +11,6 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/logging"
 	"bytes"
 	"context"
 	"errors"
@@ -388,47 +387,6 @@ func TestLeaderContext_WithoutAnElectionEveryPassLeads(t *testing.T) {
 	release()
 }
 
-func TestLeaderContextFor_EachPassBindsTheJobAndAFreshRunID(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("info")
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	scope := r.LeaderContextFor(jobs.AlertMonitor)
-
-	for _, msg := range []string{"first pass", "second pass"} {
-		ctx, release, ok := scope(context.Background())
-		if !ok {
-			t.Fatal("a runner with no election refused the pass")
-		}
-		slog.InfoContext(ctx, msg)
-		release()
-	}
-
-	snap := ring.Snapshot()
-	if len(snap) != 2 {
-		t.Fatalf("captured %d records, want 2", len(snap))
-	}
-	for _, rec := range snap {
-		if rec.Attrs["job"] != string(jobs.AlertMonitor) || rec.Attrs["run_id"] == "" {
-			t.Errorf("record %q attrs job=%q run_id=%q, want the job name and a run_id", rec.Message, rec.Attrs["job"], rec.Attrs["run_id"])
-		}
-	}
-	if snap[0].Attrs["run_id"] == snap[1].Attrs["run_id"] {
-		t.Errorf("both passes logged run_id %q, want a fresh id per pass", snap[0].Attrs["run_id"])
-	}
-}
-
-func TestLeaderContextFor_APassWithoutTheTermIsRefused(t *testing.T) {
-	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	r.Lead(t.Context(), &fakeElection{})
-
-	ctx, release, ok := r.LeaderContextFor(jobs.EvalMeter)(context.Background())
-
-	if ok || ctx != nil || release != nil {
-		t.Fatalf("a follower was given a pass: ok=%v ctx=%v", ok, ctx)
-	}
-}
-
 func TestTicker_TheOldLeaderStopsAfterAHandoff(t *testing.T) {
 	oldE, newE := leading(), &fakeElection{}
 	oldRunner, newRunner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}, jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
@@ -536,15 +494,12 @@ func TestTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
 	})
 }
 
-func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
+func TestTicker_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	e := leading()
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, e)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	var evaluations atomic.Int32
-	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, clock.NewTicker, r.LeaderContext, monitoring.Condition{
+	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, monitoring.Condition{
 		Key: "dependency_down",
 		Eval: func(context.Context) *monitoring.Alert {
 			evaluations.Add(1)
@@ -554,50 +509,47 @@ func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)
 	}
-	monitor.Start(ctx)
+	r.Ticker(jobs.AlertMonitor, leaderLoopTick, monitor.Pass)
+	lead(t, &r, e)
 
 	assertPassesFollowTheTerm(t, e, &evaluations)
 }
 
-func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
+func TestTicker_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
 	e := leading()
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, e)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	var runs atomic.Int32
-	meter, err := monitoring.NewEvalMeter(leaderLoopTick, clock.Now, clock.NewTicker, func(context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
 		runs.Add(1)
 		return monitoring.EvalMeterResult{}, nil
-	}, r.LeaderContext)
+	}, r.Control(jobs.EvalMeter).Disabled)
 	if err != nil {
 		t.Fatalf("NewEvalMeter: %v", err)
 	}
-	meter.Start(ctx)
+	r.Ticker(jobs.EvalMeter, leaderLoopTick, meter.Pass)
+	lead(t, &r, e)
 
 	assertPassesFollowTheTerm(t, e, &runs)
 }
 
-func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
+func TestTicker_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 	e := leading()
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	lead(t, &r, e)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, clock.NewTicker, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(clock.Now, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)
 		return monitoring.EvalMeterResult{}, runCtx.Err()
-	}, r.LeaderContext)
+	}, r.Control(jobs.EvalMeter).Disabled)
 	if err != nil {
 		t.Fatalf("NewEvalMeter: %v", err)
 	}
-	meter.Start(ctx)
+	r.Ticker(jobs.EvalMeter, time.Hour, meter.Pass)
+	lead(t, &r, e)
 	<-started
 
 	e.lose()

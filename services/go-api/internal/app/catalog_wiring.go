@@ -159,8 +159,8 @@ func (a *application) wireCatalogServices(
 	catalogTrackRepo := library.NewPostgresCatalogTrackRepository(a.pool)
 	playlistRepo := library.NewPostgresPlaylistRepository(a.pool)
 	orphanedAudio := library.NewPostgresOrphanedAudioRepository(a.pool)
-	audioStoreMetrics := library.NewExpvarAudioStoreMetrics()
-	library.SetDBCallMetrics(library.NewExpvarDBCallMetrics())
+	audioStoreMetrics := library.NewAudioStoreMetrics(a.metrics)
+	library.SetDBCallMetrics(library.NewDBCallMetrics(a.metrics))
 
 	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, audio.scheduler, clock.Now)
 	if err != nil {

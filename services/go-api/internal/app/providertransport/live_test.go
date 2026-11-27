@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/providertransport"
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/telemetry"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,27 +12,20 @@ import (
 	"testing"
 )
 
-func TestLive_IsOneSharedTransport(t *testing.T) {
-	first, err := providertransport.Live()
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := providertransport.Live()
+func TestNew_BuildsTheLiveTransportCountingIntoTheGivenRegistry(t *testing.T) {
+	transport, err := providertransport.New(telemetry.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if first == nil {
-		t.Fatal("Live() = nil, want the live transport")
-	}
-	if first != second {
-		t.Error("Live() returned two transports; per-host rate limiters are no longer shared")
+	if transport == nil {
+		t.Fatal("New() = nil, want the live transport")
 	}
 }
 
-func providerCalls() int64 {
+func providerCalls(reg *telemetry.Registry) int64 {
 	var total int64
-	for _, o := range search.ReadProviderMetricsSnapshot() {
+	for _, o := range search.ReadProviderMetricsSnapshot(reg) {
 		total += o.OK + o.Quota + o.Error
 	}
 	return total
@@ -45,9 +39,10 @@ func TestLive_RefusesALoopbackUpstreamAndCountsTheCall(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	before := providerCalls()
+	reg := telemetry.NewRegistry()
+	before := providerCalls(reg)
 
-	transport, err := providertransport.Live()
+	transport, err := providertransport.New(reg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +58,7 @@ func TestLive_RefusesALoopbackUpstreamAndCountsTheCall(t *testing.T) {
 	if connections.Load() != 0 {
 		t.Errorf("upstream saw %d requests, want 0", connections.Load())
 	}
-	if counted := providerCalls() - before; counted != 1 {
+	if counted := providerCalls(reg) - before; counted != 1 {
 		t.Errorf("provider counters moved by %d over one refused call, want 1", counted)
 	}
 }

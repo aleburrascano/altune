@@ -3,11 +3,12 @@ package cache_test
 import (
 	"altune/go-api/internal/search/internal/adapters/cache"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/telemetry"
 	"bytes"
 	"context"
 	"errors"
-	"expvar"
 	"log/slog"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -59,7 +60,7 @@ func replyString(val string) scriptedRedis {
 }
 
 type signalProbe struct {
-	ops   *expvar.Map
+	ops   *telemetry.LabeledCounter
 	clock time.Time
 	logs  *bytes.Buffer
 }
@@ -69,16 +70,13 @@ func (p *signalProbe) signal() *cache.Signal {
 }
 
 func (p *signalProbe) counter(name string) string {
-	if v := p.ops.Get(name); v != nil {
-		return v.String()
-	}
-	return "0"
+	return strconv.FormatInt(p.ops.Values()[name], 10)
 }
 
 func newSignalProbe(t *testing.T) *signalProbe {
 	t.Helper()
 	probe := &signalProbe{
-		ops:   new(expvar.Map).Init(),
+		ops:   telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		clock: time.Unix(1_700_000_000, 0),
 		logs:  &bytes.Buffer{},
 	}

@@ -167,9 +167,7 @@ func TestRun_EveryOutcomeReportsItsStepsPlannedBudgetEvenWhenTheStepIsSkipped(t 
 	}, shutdown.Budgets{SchedulerSeconds: 20, BackgroundSeconds: 1, DetachedSeconds: 3}))
 
 	want := map[string]time.Duration{
-		shutdown.AlertMonitor:   2 * time.Second,
 		shutdown.EventFeed:      2 * time.Second,
-		shutdown.EvalMeter:      2 * time.Second,
 		shutdown.Scheduler:      20 * time.Second,
 		shutdown.Background:     1 * time.Second,
 		shutdown.LeaderElection: 3 * time.Second,
@@ -226,9 +224,7 @@ func TestRun_AStopWithinItsBudgetLogsNothing(t *testing.T) {
 
 func TestPlan_StopsComponentsInThePinnedOrder(t *testing.T) {
 	want := []string{
-		"alert monitor",
 		"event feed",
-		"eval meter",
 		"acquisition scheduler",
 		"background tasks",
 		"leader election",
@@ -256,16 +252,14 @@ func TestPlan_RunsEachComponentsOwnStop(t *testing.T) {
 	}
 
 	shutdown.Run(context.Background(), shutdown.Plan(shutdown.Components{
-		AlertMonitor:   stopper("alert monitor"),
 		EventFeed:      stopper("event feed"),
-		EvalMeter:      stopper("eval meter"),
 		Scheduler:      stopper("acquisition scheduler"),
 		Background:     stopper("background tasks"),
 		LeaderElection: stopper("leader election"),
 		DetachedTasks:  stopper("detached request tasks"),
 	}, shutdown.Budgets{}))
 
-	want := "alert monitor,event feed,eval meter,acquisition scheduler,background tasks,leader election,detached request tasks"
+	want := "event feed,acquisition scheduler,background tasks,leader election,detached request tasks"
 	if strings.Join(stopped, ",") != want {
 		t.Fatalf("stopped %v, want %s", stopped, want)
 	}
@@ -281,9 +275,7 @@ func timeouts(plan []shutdown.Step) map[string]time.Duration {
 
 func TestPlan_TimeoutsPinned(t *testing.T) {
 	want := map[string]time.Duration{
-		"alert monitor":          2 * time.Second,
 		"event feed":             2 * time.Second,
-		"eval meter":             2 * time.Second,
 		"acquisition scheduler":  35 * time.Second,
 		"background tasks":       15 * time.Second,
 		"leader election":        3 * time.Second,

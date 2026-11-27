@@ -5,6 +5,6 @@ import metrics "altune/go-api/internal/platform/auth/internal/adapters/metrics"
 type MetricsSnapshot = metrics.Snapshot
 
 var (
-	NewExpvarAuthMetrics = metrics.NewExpvarAuthMetrics
-	ReadSnapshot         = metrics.ReadSnapshot
+	NewAuthMetrics = metrics.NewAuthMetrics
+	ReadSnapshot   = metrics.ReadSnapshot
 )

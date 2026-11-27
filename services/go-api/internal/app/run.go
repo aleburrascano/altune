@@ -6,6 +6,8 @@ import (
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/database"
+	sharedRedis "altune/go-api/internal/shared/redis"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"fmt"
@@ -14,8 +16,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	sharedRedis "altune/go-api/internal/shared/redis"
 )
 
 func (a *application) Run(ctx context.Context) error {
@@ -30,11 +30,12 @@ func (a *application) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	transport, err := providertransport.Live()
+	metrics := telemetry.NewRegistry()
+	transport, err := providertransport.New(metrics)
 	if err != nil {
 		return err
 	}
-	assembly, err := assemble(ctx, a.cfg, handles{Pool: pool, Redis: redisClient, Transport: transport, Tracker: tracker, LogRing: a.logRing})
+	assembly, err := assemble(ctx, a.cfg, handles{Pool: pool, Redis: redisClient, Transport: transport, Tracker: tracker, LogRing: a.logRing, Metrics: metrics})
 	if err != nil {
 		return err
 	}

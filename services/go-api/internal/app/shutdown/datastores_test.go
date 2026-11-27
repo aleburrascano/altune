@@ -59,7 +59,7 @@ func TestCloseDatastores_ACleanShutdownClosesBothWithoutWarning(t *testing.T) {
 func TestCloseDatastores_UnfinishedComponentsAreNamedInAWarning(t *testing.T) {
 	logged := captureLogs(t, slog.LevelDebug)
 	outcomes := []shutdown.Outcome{
-		{Component: shutdown.AlertMonitor, Status: shutdown.Completed},
+		{Component: shutdown.EventFeed, Status: shutdown.Completed},
 		{Component: shutdown.Scheduler, Status: shutdown.TimedOut},
 		{Component: shutdown.LeaderElection, Status: shutdown.Skipped},
 	}

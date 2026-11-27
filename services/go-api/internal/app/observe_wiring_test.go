@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-chi/chi/v5"
@@ -232,7 +234,7 @@ func readObservedHealth(t *testing.T, handles app.Handles, wantCode int) observe
 func TestEvalMeter_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 	ring := captureLeaderLoopLogs(t)
 	passed := make(chan struct{}, 1)
-	var runner jobs.Runner
+	runner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	meter, err := app.NewEvalMeter(&runner, func(ctx context.Context) (monitoring.EvalMeterResult, error) {
 		slog.InfoContext(ctx, "eval pass line")
 		passed <- struct{}{}
@@ -244,7 +246,8 @@ func TestEvalMeter_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	meter.Start(ctx)
+	runner.Ticker(jobs.EvalMeter, 5*time.Millisecond, meter.Pass)
+	leadAlways(ctx, t, &runner)
 	awaitPass(t, passed)
 
 	rec := recordNamed(t, ring, "eval pass line")

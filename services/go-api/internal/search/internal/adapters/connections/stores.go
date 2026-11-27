@@ -6,8 +6,8 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/phonetics"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/telemetry"
 	"altune/go-api/internal/shared/textnorm"
-	"expvar"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,7 +17,7 @@ import (
 type Stores struct {
 	Pool          *pgxpool.Pool
 	Redis         *goredis.Client
-	CacheOps      *expvar.Map
+	CacheOps      *telemetry.LabeledCounter
 	Events        *persistence.PostgresEventStore
 	History       *persistence.PostgresSearchHistoryRepository
 	SpellingHints ports.SpellingHintsStore
@@ -54,7 +54,7 @@ func identityStore(d Deps) ports.IdentityStore {
 	return cache.NewRedisIdentityStore(persistence.NewPostgresIdentityStore(d.Pool), d.Redis, cacheOption(d.CacheOps))
 }
 
-func newVocabularyStore(redis *goredis.Client, cacheOps *expvar.Map) (ports.SpellingHintsStore, error) {
+func newVocabularyStore(redis *goredis.Client, cacheOps *telemetry.LabeledCounter) (ports.SpellingHintsStore, error) {
 	store, err := cache.NewVocabularyStore(
 		redis,
 		textnorm.NormalizeForMatch,
@@ -71,7 +71,7 @@ func (s Stores) CacheOption() cache.Option {
 	return cacheOption(s.CacheOps)
 }
 
-func cacheOption(cacheOps *expvar.Map) cache.Option {
+func cacheOption(cacheOps *telemetry.LabeledCounter) cache.Option {
 	return cache.WithSignal(cache.NewSignal(cacheOps, clock.Now))
 }
 

@@ -1,1 +1,1 @@
-`requestmetrics` owns how request latency is measured and reported: the composition root creates one `Registry`, `Middleware` records each request into it, and its `Snapshot` reports it.
+`requestmetrics` owns how request latency is measured and reported: the composition root creates one `Registry`, `Observer` records each request's route, duration and status into it as one of the observers of `httpserver.ObserveRequests`, and its `Snapshot` reports it.
