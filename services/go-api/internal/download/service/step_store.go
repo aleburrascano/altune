@@ -103,7 +103,7 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, tagged 
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
 		return AfterStore{}, withCancellation(ctx, fmt.Errorf("store audio: %w", err))
 	}
-	jobReporterFrom(ctx).stored(file)
+	ac.Job.Progress().Stored(file)
 
 	return AfterStore(tagged), nil
 }
@@ -128,7 +128,7 @@ func (s *StoreStep) storedFileAt(path string) ports.StoredFile {
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
-	if rollbackHandedOver(ctx) {
+	if ac.rollbackHandedOver {
 		recordOrphanedAudio(ctx, s.orphans, s.userID, s.ownTrackID, ac.AudioRef)
 		return nil
 	}

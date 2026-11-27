@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	length "altune/go-api/internal/download/internal/core/tracklength"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadfailure"
@@ -1713,7 +1714,7 @@ func (s findOnlySource) Fetch(context.Context, ports.AudioCandidate, string) (po
 	return fetchedFrom("", s.fetchErr)
 }
 
-func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (context.Context, error) {
+func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (jobrun.Job, error) {
 	t.Helper()
 	healthy := findOnlySource{
 		name:       "healthy",
@@ -1721,8 +1722,9 @@ func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (context.
 		fetchErr:   errors.New("exit 1"),
 	}
 	registry := service.NewSourceRegistry(down, healthy)
-	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: 1})
-	ac := &service.AcquisitionContext{}
+	ctx := context.Background()
+	job := jobrun.Job{Attempt: 1}
+	ac := &service.AcquisitionContext{Job: job}
 	if _, err := service.NewSearchStep(registry).Execute(ctx, ac, service.PipelineStart{}); err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -1731,15 +1733,15 @@ func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (context.
 	if err == nil {
 		t.Fatal("expected a download error")
 	}
-	return ctx, err
+	return job, err
 }
 
 func TestDownloadStep_SearchOutageWithAllSurvivorsRejected_IsRetryable(t *testing.T) {
 	down := findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
 
-	ctx, err := searchThenDownloadRejectingAll(t, down)
+	job, err := searchThenDownloadRejectingAll(t, down)
 
-	if !acqdomain.IsSourceUnavailable(err) || !service.WillRetry(ctx, err) {
+	if !acqdomain.IsSourceUnavailable(err) || !service.WillRetry(job, err) {
 		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
 	}
 }
@@ -1747,9 +1749,9 @@ func TestDownloadStep_SearchOutageWithAllSurvivorsRejected_IsRetryable(t *testin
 func TestDownloadStep_HealthySourcesAllRejected_StaysPermanent(t *testing.T) {
 	quiet := findOnlySource{name: "quiet"}
 
-	ctx, err := searchThenDownloadRejectingAll(t, quiet)
+	job, err := searchThenDownloadRejectingAll(t, quiet)
 
-	if acqdomain.IsSourceUnavailable(err) || service.WillRetry(ctx, err) {
+	if acqdomain.IsSourceUnavailable(err) || service.WillRetry(job, err) {
 		t.Fatalf("err = %v, want a permanent failure", err)
 	}
 }
@@ -2074,7 +2076,7 @@ func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != downloadfailure.FailureSourceUnavailable {
 		t.Fatalf("failure code = %s, want %s (err=%v)", code, downloadfailure.FailureSourceUnavailable, err)
 	}
-	if !service.WillRetry(service.ContextWithJobRun(ctx, service.JobRun{Attempt: 1}), err) {
+	if !service.WillRetry(jobrun.Job{Attempt: 1}, err) {
 		t.Fatalf("willRetry = false for %v", err)
 	}
 }

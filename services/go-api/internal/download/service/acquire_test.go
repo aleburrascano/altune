@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
@@ -78,7 +79,7 @@ func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetached
 		cancel()
 	}()
 
-	_ = svc.Execute(ctx, userId, track.ID)
+	_ = svc.Execute(ctx, jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	settled := committedTrack(t, ledger, track.ID)
 	if settled.Status != ports.TrackFailed {
@@ -114,7 +115,7 @@ func TestExecuteReplace_LogsCarryTheUserTheAcquisitionIsFor(t *testing.T) {
 	ledger, store, userId, trackId, _ := seedReadyTrackWith(t)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -134,7 +135,7 @@ func TestExecuteReplace_KeepsSupersededAudioATwinTrackStillServes(t *testing.T) 
 	twinId := seedTwinTrack(t, ledger, userId, originalRef)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -156,7 +157,7 @@ func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	trackId := ids.NewTrackId()
 
-	err := svc.Execute(context.Background(), userId, trackId)
+	err := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId})
 	if err != nil {
 		t.Fatalf("expected nil for track-not-found (silent no-op), got %v", err)
 	}
@@ -177,7 +178,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioExists(t *testing.T)
 	searcher := &fakeAudioSearcher{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	execErr := svc.Execute(context.Background(), userId, track.ID)
+	execErr := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if execErr != nil {
 		t.Fatalf("expected nil for already-ready track with existing audio, got %v", execErr)
@@ -203,7 +204,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioMissing(t *testing.T
 	searcher := &fakeAudioSearcher{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	updated := storedTrack(t, ledger, track)
 	if updated.Status == ports.TrackReady {
@@ -223,7 +224,7 @@ func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testi
 	searcher := &fakeAudioSearcher{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	updated := storedTrack(t, ledger, track)
 	if updated.FailureReason == "previous failure reason" {
@@ -247,7 +248,7 @@ func TestExecute_AlwaysSearches(t *testing.T) {
 	store := newFakeAudioStore()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if !searcher.searchCalled {
 		t.Error("expected the search pipeline to run")
@@ -272,7 +273,7 @@ func TestExecute_PublishesStartedEvent(t *testing.T) {
 		withServiceEvents(pub),
 	)
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	started, ok := pub.last[events.TypeTrackAcquisitionStarted]
 	if !ok {
@@ -294,10 +295,10 @@ func TestExecute_WithoutConfiguredEventsDoesNotPanic(t *testing.T) {
 			ledger.Seed(track)
 			svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), opts...)
 
-			if err := svc.Execute(context.Background(), userId, track.ID); err == nil {
+			if err := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID}); err == nil {
 				t.Fatalf("Execute with no candidates: want error, got nil")
 			}
-			if err := svc.ExecuteReplace(context.Background(), userId, track.ID); err == nil {
+			if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID}); err == nil {
 				t.Fatalf("ExecuteReplace with no candidates: want error, got nil")
 			}
 		})
@@ -325,7 +326,7 @@ func TestExecute_FailureReasonResolvesToSpecificMessage(t *testing.T) {
 			searcher := &fakeAudioSearcher{searchResults: tt.candidates}
 			svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
-			_ = svc.Execute(context.Background(), userId, track.ID)
+			_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 			updated := committedTrack(t, ledger, track.ID)
 			if updated.Status != ports.TrackFailed {
@@ -432,7 +433,7 @@ func TestExecute_WithoutResolverStillRuns(t *testing.T) {
 
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 }
 
 func TestExecute_AnExistsCheckErrorOnAReadyTrackPreservesItsAudioRef(t *testing.T) {
@@ -449,7 +450,7 @@ func TestExecute_AnExistsCheckErrorOnAReadyTrackPreservesItsAudioRef(t *testing.
 
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), store)
 
-	err := svc.Execute(context.Background(), userId, track.ID)
+	err := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if err == nil {
 		t.Fatal("expected Execute to return the exists-check error, got nil")
@@ -536,7 +537,7 @@ func TestExecuteReplace_FailedCommitKeepsTheOriginalAudioIntact(t *testing.T) {
 	ledger.FailWrites(errors.New("transient db error"))
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err == nil {
 		t.Fatal("expected the replace to fail when the track update cannot commit")
 	}
 
@@ -556,7 +557,7 @@ func TestExecuteReplace_CommittedSwapPointsAtTheNewAudioAndDropsTheOld(t *testin
 	ledger, store, userId, trackId, originalRef := seedReadyTrackWith(t)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -580,7 +581,7 @@ func TestExecuteReplace_OldAudioDeleteFailureDoesNotUndoTheSwap(t *testing.T) {
 	store.deleteErr = errors.New("object storage unavailable")
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the committed swap reported as success", err)
 	}
 
@@ -597,7 +598,7 @@ func TestExecute_FreshAcquisitionKeepsTheCanonicalRef(t *testing.T) {
 	store := &bytesAudioStore{objects: map[string]string{}}
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	if err := svc.Execute(context.Background(), userId, track.ID); err != nil {
+	if err := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -627,7 +628,7 @@ func TestExecuteReplace_ExcludesTheStoredSource(t *testing.T) {
 	searcher := &fakeAudioSearcher{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if !searcher.searchCalled {
 		t.Error("replace must run the search pipeline rather than skipping a ready track")
@@ -643,7 +644,7 @@ func TestExecuteReplace_FailureLeavesTheTrackReady(t *testing.T) {
 	store.stored["u/a/b/c.mp3"] = true
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, track.ID); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID}); err == nil {
 		t.Fatal("expected the replace to fail with no candidates")
 	}
 
@@ -669,7 +670,7 @@ func TestExecute_NonReplaceStillSkipsAReadyTrack(t *testing.T) {
 	searcher := &fakeAudioSearcher{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if searcher.searchCalled {
 		t.Error("ordinary acquire must still no-op on a ready track whose audio exists")
@@ -685,7 +686,7 @@ func TestExecuteReplace_LegacyTrackSkipsTopRankedInsteadOfExcluding(t *testing.T
 	store.stored["u/a/b/c.mp3"] = true
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), store)
 
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	updated := storedTrack(t, ledger, track)
 	if updated.Status != ports.TrackReady {
@@ -713,7 +714,7 @@ func TestExecute_CancelledMidSearch_PersistsCancellation(t *testing.T) {
 	source := &cancellingSource{fakeAudioSearcher: &fakeAudioSearcher{}, cancel: cancel}
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(source), newFakeAudioStore())
 
-	_ = svc.Execute(ctx, userId, track.ID)
+	_ = svc.Execute(ctx, jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if got := committedTrack(t, ledger, track.ID).FailureReason; got != string(downloadfailure.FailureAcquisitionCancelled) {
 		t.Errorf("persisted failure_reason = %q, want %q", got, downloadfailure.FailureAcquisitionCancelled)
@@ -741,7 +742,7 @@ func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 	track := seedTrackInRepo(t, ledger, userId, readyWith("u/a/b/good.opus"))
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	svc.RefuseQueued(context.Background(), userId, track.ID)
+	svc.RefuseQueued(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	got := storedTrack(t, ledger, track)
 	if got.Status != ports.TrackReady {
@@ -760,7 +761,7 @@ func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 	})
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	svc.RefuseQueued(context.Background(), userId, track.ID)
+	svc.RefuseQueued(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	got := storedTrack(t, ledger, track)
 	if got.FailureReason != string(downloadfailure.FailureAcquisitionInterrupted) {
@@ -774,7 +775,7 @@ func TestAcquire_FailureOnPendingTrackStillMarksFailed(t *testing.T) {
 	track := seedTrackInRepo(t, ledger, userId, nil)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	svc.RefuseQueued(context.Background(), userId, track.ID)
+	svc.RefuseQueued(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	got := storedTrack(t, ledger, track)
 	if got.Status != ports.TrackFailed {
@@ -838,7 +839,7 @@ func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeA
 		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
 	}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), withServiceRejections(store))
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 	return searcher, ledger, track.ID
 }
 
@@ -882,7 +883,7 @@ func TestExecute_ASearchLengthRejectionIsNotRemembered(t *testing.T) {
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		withServiceRejections(store), withServiceProber(&queueProber{durations: []float64{30}}))
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if slices.Contains(searcher.downloadURLs, short.URL) {
 		t.Fatalf("download attempts = %v, the search-length candidate must never be downloaded", searcher.downloadURLs)
@@ -913,7 +914,7 @@ func retryOnALength(t *testing.T, prior []ports.PriorRejection, urls ...string) 
 	store := &fakeRejectionStore{active: prior}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		withServiceRejections(store), withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 	return searcher, store
 }
 
@@ -973,7 +974,7 @@ func TestExecute_RecordsTheBasisWithEachLastingRejection(t *testing.T) {
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		withServiceRejections(store), withServiceProber(&queueProber{durations: []float64{30}}), withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	want := ports.RejectionBasis{ExpectedSeconds: recordedLength, ReferenceMBID: runMBID}
 	if len(store.recorded) != 1 || store.recorded[0].Basis != want {
@@ -1010,7 +1011,7 @@ func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 	rejections := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, withServiceRejections(rejections))
 
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
 		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, otherURL)
@@ -1029,9 +1030,8 @@ func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (l
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), withServiceEvents(pub))
-	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 
-	execErr := svc.Execute(ctx, userId, track.ID)
+	execErr := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID, Attempt: attempt, SchedulerOwned: true})
 
 	return storedTrack(t, ledger, track), pub, execErr
 }
@@ -1128,7 +1128,7 @@ func acquireUnknownTopicIn(t *testing.T, ctx context.Context, opts ...any) (ledg
 			withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
 			withServiceIdentifier(&stubIdentifier{}),
 		}, opts...)...)
-	err := svc.Execute(ctx, userId, track.ID)
+	err := svc.Execute(ctx, jobrun.Job{UserID: userId, TrackID: track.ID})
 	return storedTrack(t, ledger, track), err
 }
 
@@ -1163,7 +1163,7 @@ func TestExecuteReplace_AnM4AReplacesAnOldMP3AndDropsIt(t *testing.T) {
 	ledger, store, userId, trackId, originalRef := seedReadyTrackWith(t)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(m4aAudioSource{}), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -1202,7 +1202,7 @@ func TestExecuteReplace_AFailedFirstTierDownloadFallsBackToTheTextSearch(t *test
 	registry := service.NewSourceRegistry(first).WithFallback(newAudioSource{})
 	svc := newTestAcquireService(ledger, registry, store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the fallback candidate to succeed", err)
 	}
 	row := committedTrack(t, ledger, trackId)
@@ -1220,7 +1220,7 @@ func TestExecuteReplace_NoFallbackRetryWhenTheFallbackAlreadyRan(t *testing.T) {
 	first := &findStubSource{name: "ytmsearch"}
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(first).WithFallback(unresolvedBroken), store)
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err == nil {
 		t.Fatal("ExecuteReplace = nil, want the download failure")
 	}
 	if unresolvedBroken.finds != 1 {
@@ -1237,7 +1237,7 @@ func TestExecuteReplace_FailsCleanlyWhenNoFactIdentifiesTheCurrentFile(t *testin
 	source := &findStubSource{name: "ytmsearch", found: []ports.AudioCandidate{titledCandidate("https://www.youtube.com/watch?v=otherAAAAAA")}}
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(source), store)
 
-	err := svc.ExecuteReplace(context.Background(), userId, trackId)
+	err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId})
 
 	if !errors.Is(err, service.ErrReplaceFactMissing) {
 		t.Fatalf("ExecuteReplace = %v, want ErrReplaceFactMissing", err)
@@ -1276,7 +1276,7 @@ func TestExecuteReplace_TheStoredLengthIsNotTheTarget(t *testing.T) {
 	source := &lengthRecordingSource{}
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(source), store, withServiceResolver(resolver))
 
-	_ = svc.ExecuteReplace(context.Background(), userId, trackId)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId})
 
 	if len(resolver.queries) != 1 || resolver.queries[0].Duration != 0 {
 		t.Errorf("resolver queries = %+v, want one with no length: the stored 112 s is not a target", resolver.queries)
@@ -1360,7 +1360,7 @@ func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
 			svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store,
 				withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}))
 
-			if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+			if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 				t.Fatalf("ExecuteReplace: %v", err)
 			}
 
@@ -1384,7 +1384,7 @@ func TestExecuteReplace_AFailedStoredCopyIsLoggedAndTheReplaceStillRuns(t *testi
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store,
 		withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store, err: errors.New("object storage unavailable")}))
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the replace to carry on without the stored fingerprint", err)
 	}
 
@@ -1414,7 +1414,7 @@ func TestExecuteReplace_TheStoredCopyWorkspaceIsRemovedWhateverTheOutcome(t *tes
 				withServiceIdentifier(&contentRecordingIdentifier{}),
 				withServiceStoredAudio(storedBytesReader{store: store, err: copyErr}))
 
-			if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+			if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId}); err != nil {
 				t.Fatalf("ExecuteReplace: %v", err)
 			}
 
@@ -1494,7 +1494,7 @@ func replaceOfAnUnknownSource(t *testing.T, source *uploadsByBytesSource, identi
 		options = append(options, withServiceStoredAudio(readerFor(store)))
 	}
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(source), store, options...)
-	return store, svc.ExecuteReplace(context.Background(), userId, trackId)
+	return store, svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId})
 }
 
 func storesBytes(store *bytesAudioStore, want string) bool {
@@ -1592,7 +1592,7 @@ func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAnd
 		withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}),
 		withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}), withServiceRejections(rejections))
 
-	err := svc.ExecuteReplace(context.Background(), userId, trackId)
+	err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId})
 
 	if service.FailureCodeOf(err) != string(downloadfailure.FailureSourceUnavailable) {
 		t.Errorf("failure code = %q (%v), want source_unavailable: a source was down and the only candidate left was the current file", service.FailureCodeOf(err), err)
@@ -1617,7 +1617,7 @@ func TestExecuteReplace_TheCurrentFileIsFoundWithoutAResolvedRecording(t *testin
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(source), store,
 		withServiceResolver(&stubResolver{}), withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}))
 
-	err := svc.ExecuteReplace(context.Background(), userId, trackId)
+	err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId})
 	if err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the other upload stored", err)
 	}
@@ -1665,7 +1665,7 @@ func TestExecute_ExcludesTheUsersRejectedSources(t *testing.T) {
 			searcher := &fakeAudioSearcher{searchResults: prodOverCandidates(), downloadErr: errors.New("boom")}
 			svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
-			_ = svc.Execute(context.Background(), userId, track.ID)
+			_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 			if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != prodOverCurrentSource {
 				t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, prodOverCurrentSource)
@@ -1681,7 +1681,7 @@ func TestExecute_FailsRatherThanDownloadTheOnlyCandidateTheUserRejected(t *testi
 	searcher := &fakeAudioSearcher{searchResults: prodOverCandidates()[:1], downloadErr: errors.New("boom")}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if len(searcher.downloadURLs) != 0 {
 		t.Errorf("download attempts = %v, want none: the only candidate is the one the user rejected", searcher.downloadURLs)
@@ -1701,7 +1701,7 @@ func TestExecuteReplace_StillExcludesTheUsersRejectedSourcesAndTheCurrentOne(t *
 	searcher := &fakeAudioSearcher{searchResults: append(prodOverCandidates(), other), downloadErr: errors.New("boom")}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != other.URL {
 		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, other.URL)
@@ -1746,7 +1746,7 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 			registry := service.NewSourceRegistry(savedlink.MustNewSource(searcherDownloads{searcher}, savedlink.NoPageReader()), searcher)
 			svc := newTestAcquireService(ledger, registry, newFakeAudioStore())
 
-			_ = svc.Execute(context.Background(), userId, track.ID)
+			_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 			firstWindow := searcher.downloadURLs[:min(2, len(searcher.downloadURLs))]
 			if got := slices.Contains(firstWindow, storedSource); got != tt.inWindow {
@@ -1771,7 +1771,7 @@ func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 	registry := service.NewSourceRegistry(savedlink.MustNewSource(searcherDownloads{searcher}, savedlink.NoPageReader()), searcher)
 	svc := newTestAcquireService(ledger, registry, store)
 
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != rival.URL {
 		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, rival.URL)
@@ -1792,7 +1792,7 @@ func TestExecuteReplace_NeverFetchesTheCurrentSourceAgainEvenWhenItRanksFirst(t 
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
 		t.Errorf("download attempts = %v, want only %q, never the current source %q", searcher.downloadURLs, otherURL, wrongURL)
@@ -1826,7 +1826,7 @@ func acquireLowConfidence(t *testing.T, opts ...any) (ledgerTrack, error) {
 			withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
 			withServiceIdentifier(&stubIdentifier{}),
 		}, opts...)...)
-	err := svc.Execute(context.Background(), userId, track.ID)
+	err := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 	return storedTrack(t, ledger, track), err
 }
 
@@ -1859,7 +1859,7 @@ func retryWithBasis(t *testing.T, catalogLength float64, identity ports.Recordin
 	}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		withServiceRejections(&fakeRejectionStore{active: prior}), withServiceResolver(&stubResolver{identity: identity}))
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 	return searcher
 }
 
@@ -1966,7 +1966,7 @@ func TestExecuteReplace_RetriesAPriorRejectionJudgedOnAnotherLength(t *testing.T
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store,
 		withServiceRejections(rejections), withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if !slices.Contains(searcher.downloadURLs, drmURL) {
 		t.Errorf("download attempts = %v, want %q retried: its rejection was judged on 150s, the replace run expects 200s", searcher.downloadURLs, drmURL)
@@ -1995,9 +1995,8 @@ func executeAfterOwnTimeBudget(t *testing.T, attempt int) (ledgerTrack, *recordi
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(stalledSource{}), newFakeAudioStore(), withServiceEvents(pub), service.WithAcquireTimeout(time.Millisecond))
-	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 
-	execErr := svc.Execute(ctx, userId, track.ID)
+	execErr := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID, Attempt: attempt, SchedulerOwned: true})
 
 	return storedTrack(t, ledger, track), pub, execErr
 }
@@ -2049,7 +2048,7 @@ type replaceFixture struct {
 	store  *fakeAudioStore
 	pub    *recordingPublisher
 	userId ids.UserId
-	ctx    context.Context
+	run    jobrun.Job
 }
 
 func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) replaceFixture {
@@ -2061,14 +2060,14 @@ func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) r
 	store.stored["u/a/b/c.mp3"] = true
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, withServiceEvents(pub))
-	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
-	return replaceFixture{svc: svc, ledger: ledger, track: track, store: store, pub: pub, userId: userId, ctx: ctx}
+	run := jobrun.Job{UserID: userId, TrackID: track.ID, Attempt: attempt, SchedulerOwned: true}
+	return replaceFixture{svc: svc, ledger: ledger, track: track, store: store, pub: pub, userId: userId, run: run}
 }
 
 func TestExecuteReplace_ATransientOutageBelowTheCapIsRetried(t *testing.T) {
 	for attempt := 1; attempt < service.MaxAcquisitionAttempts; attempt++ {
 		f := newReplaceFixture(t, transientSearchFailure(), attempt)
-		err := f.svc.ExecuteReplace(f.ctx, f.userId, f.track.ID)
+		err := f.svc.ExecuteReplace(context.Background(), f.run)
 		stored, store, pub := storedTrack(t, f.ledger, f.track), f.store, f.pub
 
 		if !errors.Is(err, service.ErrAcquisitionRetryable) {
@@ -2088,7 +2087,7 @@ func TestExecuteReplace_ATransientOutageBelowTheCapIsRetried(t *testing.T) {
 
 func TestExecuteReplace_ATransientOutageOnTheLastAttemptFails(t *testing.T) {
 	f := newReplaceFixture(t, transientSearchFailure(), service.MaxAcquisitionAttempts)
-	err := f.svc.ExecuteReplace(f.ctx, f.userId, f.track.ID)
+	err := f.svc.ExecuteReplace(context.Background(), f.run)
 	stored, pub := storedTrack(t, f.ledger, f.track), f.pub
 
 	if err == nil || errors.Is(err, service.ErrAcquisitionRetryable) {
@@ -2104,11 +2103,11 @@ func TestExecuteReplace_ATransientOutageOnTheLastAttemptFails(t *testing.T) {
 
 func TestReplaceGated_ATransientOutageBelowTheCapIsNotRetried(t *testing.T) {
 	f := newReplaceFixture(t, transientSearchFailure(), 1)
-	snapshot, err := f.ledger.Get(f.ctx, f.track.ID, f.userId)
+	snapshot, err := f.ledger.Get(context.Background(), f.track.ID, f.userId)
 	if err != nil || snapshot == nil {
 		t.Fatalf("load track: snapshot = %v, err = %v", snapshot, err)
 	}
-	_, err = f.svc.ReplaceGated(f.ctx, f.userId, snapshot, replacement.ReplacementGate{})
+	_, err = f.svc.ReplaceGated(context.Background(), f.run, snapshot, replacement.ReplacementGate{})
 
 	if err == nil || errors.Is(err, service.ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, want a terminal failure: the upgrade lane keeps its own retry policy", err)
@@ -2123,7 +2122,7 @@ func TestExecute_AWorkerThatLostItsLeaseDoesNotFailTheTrack(t *testing.T) {
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID, Claim: 1})
 
 	if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackPending {
 		t.Errorf("status = %v, want pending: the new lease owner is still downloading", got)
@@ -2138,7 +2137,7 @@ func TestExecute_AWorkerHoldingTheCurrentLeaseStillFailsTheTrack(t *testing.T) {
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 2}), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID, Claim: 2})
 
 	if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackFailed {
 		t.Errorf("status = %v, want failed", got)
@@ -2164,7 +2163,7 @@ func TestExecute_AWorkerThatLostItsLeaseCannotLandItsDownload(t *testing.T) {
 			store := &bytesAudioStore{objects: map[string]string{}}
 			svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-			_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: tc.held}), userId, track.ID)
+			_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID, Claim: tc.held})
 
 			row := committedTrack(t, ledger, track.ID)
 			if row.Status != tc.wantStatus {
@@ -2187,7 +2186,7 @@ func TestExecuteReplace_AWorkerThatLostItsLeaseLeavesTheServingAudioInPlace(t *t
 	ledger.Seed(row)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	_ = svc.ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, trackId)
+	_ = svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: userId, TrackID: trackId, Claim: 1})
 
 	got := committedTrack(t, ledger, trackId)
 	if got.Status != ports.TrackReady || got.AudioRef == nil || *got.AudioRef != originalRef {
@@ -2215,7 +2214,7 @@ func TestExecute_TheSourceIsAskedWithTheCatalogFacts(t *testing.T) {
 	searcher := &fakeAudioSearcher{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	if len(searcher.requests) != 1 {
 		t.Fatalf("source asked %d times, want 1", len(searcher.requests))
@@ -2290,7 +2289,7 @@ func TestReplaceGated_AMuxedFallbackIsSwappedForTheAudioOnlyStreamOfTheSameSourc
 		FloorKbps: 112,
 	}
 
-	if _, err := svc.ReplaceGated(context.Background(), userId, track, gate); err != nil {
+	if _, err := svc.ReplaceGated(context.Background(), jobrun.Job{UserID: userId}, track, gate); err != nil {
 		t.Fatalf("ReplaceGated: %v, want the 140 stream at 130 kbps admitted over the stored format 18 at 96", err)
 	}
 
@@ -2342,7 +2341,7 @@ func TestReplaceGated_AFileThatFitsTheCatalogLengthReplacesAStoredEditAtTheSameG
 	track.CatalogDurationSeconds = &catalog
 	gate := replacement.ReplacementGate{Current: audioquality.B, CatalogSeconds: 285, StoredSeconds: 231}
 
-	if _, err := svc.ReplaceGated(context.Background(), userId, track, gate); err != nil {
+	if _, err := svc.ReplaceGated(context.Background(), jobrun.Job{UserID: userId}, track, gate); err != nil {
 		t.Fatalf("ReplaceGated: %v, want the 285 s file admitted over the 231 s edit", err)
 	}
 
@@ -2376,7 +2375,7 @@ func TestReplaceGated_ASameGradeFileIsRefusedWhenTheLengthRescueDoesNotHold(t *t
 				t.Fatalf("load track: %v %v", track, err)
 			}
 
-			if _, err := svc.ReplaceGated(context.Background(), userId, track, tc.gate); !errors.Is(err, replacement.ErrNotAnUpgrade) {
+			if _, err := svc.ReplaceGated(context.Background(), jobrun.Job{UserID: userId}, track, tc.gate); !errors.Is(err, replacement.ErrNotAnUpgrade) {
 				t.Fatalf("ReplaceGated = %v, want ErrNotAnUpgrade for the same-grade 285 s file", err)
 			}
 
@@ -2521,7 +2520,7 @@ func TestRerecording_NoConfidentOriginalTakesTheOfficialRerecordingLabelledAsIt(
 	cases := []struct {
 		name          string
 		storedSeconds float64
-		run           func(*service.AcquireTrackAudioService, context.Context, ids.UserId, ids.TrackId) error
+		run           func(*service.AcquireTrackAudioService, context.Context, jobrun.Job) error
 	}{
 		{"replace of the 292 s live file", 292, (*service.AcquireTrackAudioService).ExecuteReplace},
 		{"acquire", 0, (*service.AcquireTrackAudioService).Execute},
@@ -2531,7 +2530,7 @@ func TestRerecording_NoConfidentOriginalTakesTheOfficialRerecordingLabelledAsIt(
 			golden := seedItsOnlyLove(t, tc.storedSeconds, nil)
 			finder := findsGoldenRerecording()
 
-			if err := tc.run(golden.service(&itsOnlyLoveSources{}, finder), context.Background(), golden.userId, golden.trackId); err != nil {
+			if err := tc.run(golden.service(&itsOnlyLoveSources{}, finder), context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId}); err != nil {
 				t.Fatalf("run: %v, want the re-recording committed", err)
 			}
 
@@ -2556,7 +2555,7 @@ func TestRerecording_AFoundOriginalNeverAsksForARerecording(t *testing.T) {
 	golden := seedItsOnlyLove(t, 0, nil)
 	finder := findsGoldenRerecording()
 
-	if err := golden.service(&itsOnlyLoveSources{originalOnTopic: true}, finder).Execute(context.Background(), golden.userId, golden.trackId); err != nil {
+	if err := golden.service(&itsOnlyLoveSources{originalOnTopic: true}, finder).Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -2589,7 +2588,7 @@ func TestRerecording_AFailedRerecordingTierKeepsTheOriginalFailure(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			golden := seedItsOnlyLove(t, 0, nil)
 
-			err := golden.service(tc.sources, tc.finder).Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+			err := golden.service(tc.sources, tc.finder).Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 			if got := failureCodeOf(err); got != tc.wantCode {
 				t.Errorf("failure code = %q (%v), want %q", got, err, tc.wantCode)
@@ -2613,7 +2612,7 @@ func TestRerecording_AReplaceOfAFittingOriginalTakesNoRerecording(t *testing.T) 
 	golden := seedItsOnlyLove(t, 195, nil)
 	finder := findsGoldenRerecording()
 
-	err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 	if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
@@ -2645,7 +2644,7 @@ func TestRerecording_AReplaceOfAFileWhoseLengthIsUnknownTakesNoRerecording(t *te
 			golden.book.Seed(row)
 			finder := findsGoldenRerecording()
 
-			err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+			err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 			if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 				t.Errorf("failure code = %q (%v), want no_confident_match from the search, not an earlier failure", got, err)
@@ -2667,7 +2666,7 @@ func TestRerecording_AGatedUpgradeNeverTakesARerecording(t *testing.T) {
 			t.Fatalf("load track: %v %v", track, err)
 		}
 
-		_, err = golden.service(sources, finder).ReplaceGated(context.Background(), golden.userId, track, replacement.ReplacementGate{Current: audioquality.D, CatalogSeconds: 195, StoredSeconds: storedSeconds})
+		_, err = golden.service(sources, finder).ReplaceGated(context.Background(), jobrun.Job{UserID: golden.userId}, track, replacement.ReplacementGate{Current: audioquality.D, CatalogSeconds: 195, StoredSeconds: storedSeconds})
 
 		if err == nil {
 			t.Errorf("stored %v s: ReplaceGated succeeded, want the stored file kept", storedSeconds)
@@ -2714,7 +2713,7 @@ func acquireFromAKnownSourceURL(ctx context.Context, golden itsOnlyLoveTrack, so
 	row := golden.row()
 	useSource(&row, "https://soundcloud.com/bryanadams/its-only-love")
 	golden.book.Seed(row)
-	return golden.service(sources, findsGoldenRerecording()).Execute(ctx, golden.userId, golden.trackId)
+	return golden.service(sources, findsGoldenRerecording()).Execute(ctx, jobrun.Job{UserID: golden.userId, TrackID: golden.trackId})
 }
 
 func TestRerecording_AReplaceOfAGradeFFileTakesTheRerecording(t *testing.T) {
@@ -2723,7 +2722,7 @@ func TestRerecording_AReplaceOfAGradeFFileTakesTheRerecording(t *testing.T) {
 	row.Evidence = json.RawMessage(`{"grade":"F"}`)
 	golden.book.Seed(row)
 
-	if err := golden.service(&itsOnlyLoveSources{}, findsGoldenRerecording()).ExecuteReplace(context.Background(), golden.userId, golden.trackId); err != nil {
+	if err := golden.service(&itsOnlyLoveSources{}, findsGoldenRerecording()).ExecuteReplace(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the grade F file replaced by the re-recording", err)
 	}
 
@@ -2740,7 +2739,7 @@ func TestRerecording_EachPassRemembersItsRejectionsOnItsOwnBasis(t *testing.T) {
 		rejections := &fakeRejectionStore{}
 		svc := golden.service(sources, findsGoldenRerecording(), withServiceRejections(rejections))
 
-		_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+		_ = svc.Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 		var drm []ports.CandidateRejectionRecord
 		for _, rec := range rejections.recorded {
@@ -2761,7 +2760,7 @@ func TestRerecording_AFailedSecondPassLeavesTheOriginalsRecordsAsIfNoSecondPassR
 		rejections := &fakeRejectionStore{}
 		svc := golden.service(&itsOnlyLoveSources{rerecordingBroken: true}, finder, withServiceRejections(rejections))
 
-		_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+		_ = svc.Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 		records := slices.Clone(rejections.recorded)
 		for i := range records {
@@ -2806,7 +2805,7 @@ func TestRerecording_AnOutageOnOneSourceWithNoMatchOnTheOthersTakesNoRerecording
 		withServiceIdentifier(&stubIdentifier{}),
 		withServiceRerecordings(finder))
 
-	_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 	if len(finder.queries) != 0 {
 		t.Errorf("finder queries = %+v, want none after a source outage", finder.queries)
@@ -2828,7 +2827,7 @@ func TestRerecording_AReplaceWhoseRerecordingDownloadFailsLeavesTheTrackAsItWas(
 	svc := golden.service(sources, finder)
 
 	for run := 1; run <= 2; run++ {
-		err := svc.ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+		err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 		if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 			t.Errorf("run %d: failure code = %q (%v), want no_confident_match", run, got, err)
@@ -2870,7 +2869,7 @@ func TestRerecording_AnOriginalWhoseSoundCloudPinFailsToDownloadNeverAsksForARer
 		withServiceIdentifier(&stubIdentifier{}),
 		withServiceRerecordings(finder))
 
-	err := svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	err := svc.Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 	if got := failureCodeOf(err); got != downloadfailure.FailureDownloadFailed {
 		t.Errorf("failure code = %q (%v), want the original's download_failed kept", got, err)
@@ -2891,7 +2890,7 @@ func TestRerecording_ALabelNamingTheTrackItselfRunsNoSecondPass(t *testing.T) {
 	golden.book.Seed(row)
 	sources := &itsOnlyLoveSources{}
 
-	err := golden.service(sources, findsGoldenRerecording()).Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	err := golden.service(sources, findsGoldenRerecording()).Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 	if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
@@ -2920,7 +2919,7 @@ func (s probeCancellingSource) Find(ctx context.Context, req ports.FindRequest) 
 func TestRerecording_AJobCancelledDuringTheFirstPassNeverAsksForARerecording(t *testing.T) {
 	golden := seedItsOnlyLove(t, 0, nil)
 	finder := findsGoldenRerecording()
-	ctx, cancel := context.WithCancel(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}))
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sources := probeCancellingSource{&itsOnlyLoveSources{}, cancel}
 	svc := newTestAcquireService(golden.ledger, service.NewSourceRegistry(sources), golden.store,
@@ -2928,7 +2927,7 @@ func TestRerecording_AJobCancelledDuringTheFirstPassNeverAsksForARerecording(t *
 		withServiceIdentifier(&stubIdentifier{}),
 		withServiceRerecordings(finder))
 
-	_ = svc.Execute(ctx, golden.userId, golden.trackId)
+	_ = svc.Execute(ctx, jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 	if len(finder.queries) != 0 {
 		t.Errorf("finder queries = %+v, want none once the job is cancelled", finder.queries)
@@ -2943,7 +2942,7 @@ func TestRerecording_TheRerecordingIsTaggedAndStoredUnderItsOwnLabels(t *testing
 	var tags ports.TrackTags
 	svc := golden.service(&itsOnlyLoveSources{}, findsGoldenRerecording(), withServiceTagger(&capturingTagger{tags: &tags}))
 
-	if err := svc.Execute(context.Background(), golden.userId, golden.trackId); err != nil {
+	if err := svc.Execute(context.Background(), jobrun.Job{UserID: golden.userId, TrackID: golden.trackId}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -2975,10 +2974,10 @@ func TestRerecording_ASecondPassThatRunsOutOfTimeFailsAsATimeout(t *testing.T) {
 			withServiceResolver(pinnedRecordingResolver{}),
 			withServiceIdentifier(&stubIdentifier{}),
 			withServiceRerecordings(findsGoldenRerecording()))
-		ctx, cancel := context.WithTimeout(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		err := svc.ExecuteReplace(ctx, golden.userId, golden.trackId)
+		err := svc.ExecuteReplace(ctx, jobrun.Job{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
 		reached := false
 		for _, req := range sources.requests {

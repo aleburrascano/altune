@@ -7,6 +7,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -162,7 +163,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 			ledger := inmemoryledger.NewLedger(track)
 			svc := acquireService(ledger, service.NewSourceRegistry(&answeringSource{name: "ytdlp", findErr: tt.searchErr}), &objectStore{objects: map[string]string{}})
 
-			_ = svc.Execute(context.Background(), track.UserId, track.ID)
+			_ = svc.Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID})
 
 			if code := persistedCode(t, ledger, track.ID); code != tt.want {
 				t.Errorf("persisted failure code = %q, want %q", code, tt.want)
@@ -179,7 +180,7 @@ func TestExecute_AStoreThatFailsWithTheContextLiveKeepsTheStorageReason(t *testi
 	store := &objectStore{objects: map[string]string{}, storeErr: errors.New("put object: connection reset")}
 	svc := acquireService(ledger, service.NewSourceRegistry(freshAudioSource{}), store)
 
-	err := svc.Execute(context.Background(), userID, trackID)
+	err := svc.Execute(context.Background(), jobrun.Job{UserID: userID, TrackID: trackID})
 
 	if got := service.FailureCodeOf(err); got != string(downloadfailure.FailureStorageFailed) {
 		t.Errorf("FailureCodeOf(%v) = %q, want %q", err, got, downloadfailure.FailureStorageFailed)
@@ -267,7 +268,7 @@ func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
 	ledger := inmemoryledger.NewLedger(track)
 	svc := acquireService(ledger, firstTierOutage(), &objectStore{objects: map[string]string{}})
 
-	execErr := svc.Execute(context.Background(), track.UserId, track.ID)
+	execErr := svc.Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID})
 
 	if got := service.FailureCodeOf(execErr); got != string(downloadfailure.FailureSourceUnavailable) {
 		t.Errorf("failure code = %q, want source_unavailable: the first tier was down, not empty", got)
@@ -279,7 +280,7 @@ func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
 	ledger := inmemoryledger.NewLedger(track)
 	svc := acquireService(ledger, brokenSearchBesideEmptyResults(), &objectStore{objects: map[string]string{}})
 
-	execErr := svc.Execute(context.Background(), track.UserId, track.ID)
+	execErr := svc.Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID})
 
 	if got := service.FailureCodeOf(execErr); got != string(downloadfailure.FailureAcquisitionFailed) {
 		t.Errorf("failure code = %q, want acquisition_failed", got)
@@ -351,15 +352,15 @@ func TestFailureCode_OwnTimeoutIsReportedAsSourceUnavailable(t *testing.T) {
 
 type retryingAcquirer struct{}
 
-func (retryingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (retryingAcquirer) Execute(context.Context, jobrun.Job) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryingAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (retryingAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (retryingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func backoffAfterRun(t *testing.T, run int) time.Duration {
 	t.Helper()

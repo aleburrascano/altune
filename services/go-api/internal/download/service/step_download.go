@@ -429,7 +429,7 @@ func (s *DownloadStep) fetchFull(
 	candidate ports.AudioCandidate,
 	tmpDir string,
 ) (ports.FetchedAudio, *downloadRejection) {
-	_, queued := startStage(ctx, s.now, "download.queue")
+	_, queued := startStage(ctx, ac, s.now, "download.queue")
 	if err := s.limiter.Acquire(ctx); err != nil {
 		queued(err)
 		return ports.FetchedAudio{}, &downloadRejection{stage: rejectedcandidates.Download, reason: "download failed", err: err}
@@ -439,7 +439,7 @@ func (s *DownloadStep) fetchFull(
 
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	fetchCtx, fetchDone := startStage(fetchCtx, s.now, "download.full")
+	fetchCtx, fetchDone := startStage(fetchCtx, ac, s.now, "download.full")
 	fetched, err := s.fetcher.Fetch(fetchCtx, candidate, tmpDir)
 	fetchDone(err)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/download/internal/core/titlematch"
 	"altune/go-api/internal/download/internal/core/tracklength"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -100,14 +101,13 @@ func (e *StepError) Unwrap() error { return e.Err }
 
 type pipelineRun struct {
 	ac        *AcquisitionContext
-	reporter  jobReporter
 	completed []undoable
 	current   named
 	now       clock.Func
 }
 
 func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error {
-	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx), current: pendingStep{}, now: p.now}
+	run := &pipelineRun{ac: ac, current: pendingStep{}, now: p.now}
 	var err error
 	panicked := background.SafeRun(ctx, "acquisition.pipeline_panic", func() { err = runStages(ctx, run, p) },
 		"step", run, logging.KeyTrackID, ac.Track.ID)
@@ -209,9 +209,9 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 func announceStage(ctx context.Context, run *pipelineRun, s named) {
 	ac := run.ac
 	run.current = s
-	run.reporter.stage(string(s.Name()))
+	ac.Job.Progress().Stage(ctx, string(s.Name()))
 	if ac.Selected != nil {
-		run.reporter.source(ac.Selected.URL)
+		ac.Job.Progress().Source(ac.Selected.URL)
 	}
 	slog.InfoContext(ctx, "pipeline step starting", "step", s.Name(), logging.KeyTrackID, ac.Track.ID)
 }
@@ -226,7 +226,7 @@ func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[
 
 	announceStage(ctx, run, s)
 
-	stageCtx, stageDone := startStage(ctx, run.now, string(s.Name()))
+	stageCtx, stageDone := startStage(ctx, run.ac, run.now, string(s.Name()))
 	out, execErr := s.Execute(stageCtx, run.ac, prev)
 	stageDone(execErr)
 	if execErr != nil {
@@ -244,9 +244,7 @@ const rollbackBudget = 30 * time.Second
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
 	rbCtx, cancel := background.Detach(ctx, rollbackBudget)
 	defer cancel()
-	if schedulerHandedOver(ctx) {
-		rbCtx = withRollbackHandedOver(rbCtx)
-	}
+	ac.rollbackHandedOver = ac.Job.HandedOverByScheduler(ctx)
 
 	for i := len(completed) - 1; i >= 0; i-- {
 		step := completed[i]
@@ -258,6 +256,7 @@ func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext)
 }
 
 type AcquisitionContext struct {
+	Job               jobrun.Job
 	Track             TrackRef
 	Identity          ports.RecordingIdentity
 	Candidates        []ports.AudioCandidate
@@ -286,6 +285,8 @@ type AcquisitionContext struct {
 	PriorRejections []ports.PriorRejection
 
 	Relabel *ports.TrackLabel
+
+	rollbackHandedOver bool
 }
 
 func (ac *AcquisitionContext) Snapshot() AcquisitionContext {

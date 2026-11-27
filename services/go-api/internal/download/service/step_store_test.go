@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/download/internal/core/audiokey"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -170,7 +171,7 @@ func (s storing) execute(opts ...func(*service.AcquireTrackAudioService)) error 
 func (s storing) executeStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) error {
 	s.t.Helper()
 	svc := service.MustNewAcquireTrackAudioService(s.ledger, sourceFor(s.track), s.store, scratchfiles.New(), noVerification(), stages, opts...)
-	return svc.Execute(context.Background(), s.track.UserId, s.track.ID)
+	return svc.Execute(context.Background(), jobrun.Job{UserID: s.track.UserId, TrackID: s.track.ID})
 }
 
 func pending(title, artist, album string) inmemoryledger.LedgerTrack {
@@ -242,7 +243,7 @@ func TestStore_AReplaceStagesItsOwnPrefixedRef(t *testing.T) {
 
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages(), service.WithAcquireStoreKeyPrefix("staging/"))
-	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -291,7 +292,7 @@ func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
 	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {
+	if err := svc.Execute(ctx, jobrun.Job{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want the cancelled store to fail")
 	}
 
@@ -486,7 +487,7 @@ func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(
 	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -520,7 +521,7 @@ func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *tes
 	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: served.userID, TrackID: served.trackID}); err == nil {
 		t.Fatal("ExecuteReplace succeeded, want the failed commit")
 	}
 
@@ -688,7 +689,7 @@ func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T
 	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {
+	if err := svc.Execute(ctx, jobrun.Job{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want the cancelled commit to fail")
 	}
 

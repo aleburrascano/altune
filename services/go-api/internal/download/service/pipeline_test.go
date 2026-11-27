@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
@@ -409,7 +410,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 	svc := service.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(track), sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages(taggedBy(cancellingTagger{cancel})))
 
-	err := svc.Execute(ctx, track.UserId, track.ID)
+	err := svc.Execute(ctx, jobrun.Job{UserID: track.UserId, TrackID: track.ID})
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute = %v, want the cancellation reported", err)

@@ -34,10 +34,10 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, s
 	if err != nil {
 		return afterUpdate{}, err
 	}
-	if err := verifyCommitAllowed(ctx); err != nil {
+	if err := ac.Job.VerifyCommit(ctx); err != nil {
 		return afterUpdate{}, err
 	}
-	err = s.ledger.Complete(ctx, s.trackId, s.userId, jobFenceFrom(ctx), completion)
+	err = s.ledger.Complete(ctx, s.trackId, s.userId, ac.Job.Claim, completion)
 	if errors.Is(err, ports.ErrTrackNotFound) {
 		return afterUpdate{}, errors.New("track not found for update")
 	}
@@ -62,20 +62,4 @@ func completionOf(ac *AcquisitionContext, kept ports.AudioCandidate, evidence Ev
 		RejectedSourceKeys: ac.Replace.ExcludeKeys,
 		Relabel:            ac.Relabel,
 	}, nil
-}
-
-type commitCheckContextKey struct{}
-
-type commitCheck func(ctx context.Context) error
-
-func withCommitCheck(ctx context.Context, check commitCheck) context.Context {
-	return context.WithValue(ctx, commitCheckContextKey{}, check)
-}
-
-func verifyCommitAllowed(ctx context.Context) error {
-	check, ok := ctx.Value(commitCheckContextKey{}).(commitCheck)
-	if !ok {
-		return nil
-	}
-	return check(ctx)
 }

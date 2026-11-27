@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -35,9 +36,9 @@ const (
 )
 
 type acquirer interface {
-	Execute(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
-	ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
-	RefuseQueued(ctx context.Context, userId ids.UserId, trackId ids.TrackId)
+	Execute(ctx context.Context, job jobrun.Job) error
+	ExecuteReplace(ctx context.Context, job jobrun.Job) error
+	RefuseQueued(ctx context.Context, job jobrun.Job)
 }
 
 type BackgroundAcquisitionScheduler struct {
@@ -249,14 +250,14 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) withLeaseFence(ctx context.Context, job ports.Job) context.Context {
+func (s *BackgroundAcquisitionScheduler) leaseFence(job ports.Job) func(context.Context) error {
 	verifier, ok := s.queue.(ports.UpgradeJobQueue)
 	if !ok || job.Kind != ports.JobKindUpgrade {
-		return ctx
+		return nil
 	}
-	return withCommitCheck(ctx, func(ctx context.Context) error {
+	return func(ctx context.Context) error {
 		return verifier.VerifyLease(ctx, job.TrackID, job.ClaimNumber)
-	})
+	}
 }
 
 func (s *BackgroundAcquisitionScheduler) eventsFor(kind ports.JobKind) events.Publisher {
@@ -389,13 +390,12 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(ctx context.Context, job 
 
 	jobCtx, cancelJob := s.jobContextFor(ctx, job)
 	defer cancelJob()
-	jobCtx = s.withLeaseFence(jobCtx, job)
 
 	heartbeatDone := make(chan struct{})
 	background.Go(jobCtx, "acquisition.heartbeat_panic", func() { s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone) })
 
-	reportedCtx := s.startClaimedJob(jobCtx, job.TrackID, job)
-	jobErr := s.execClaimedJob(reportedCtx, job.TrackID, run, job)
+	work := s.startClaimedJob(job)
+	jobErr := s.execClaimedJob(jobCtx, run, work)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
 	finishCtx, cancelFinish := s.finishContextOf(jobCtx)
@@ -420,7 +420,8 @@ func (s *BackgroundAcquisitionScheduler) settleWithin(ctx context.Context, job p
 	return s.queue.Settle(queueCtx, job.TrackID, job.ClaimNumber)
 }
 
-func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, trackId ids.TrackId, job ports.Job) context.Context {
+func (s *BackgroundAcquisitionScheduler) startClaimedJob(job ports.Job) jobrun.Job {
+	trackId := job.TrackID
 	s.inflightCount.Add(1)
 	s.log.register(trackId, "")
 	s.log.markRunning(trackId)
@@ -428,9 +429,17 @@ func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context,
 		r.Kind = job.Kind
 		r.Run = job.Run
 	})
-	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.eventsFor(job.Kind), trackID: trackId, userId: job.UserID}
-	reporter.timing("queue", job.Waited)
-	return withJobReporter(jobCtx, reporter)
+	reporter := schedulerJobReporter{log: s.log, events: s.eventsFor(job.Kind), trackID: trackId, userId: job.UserID}
+	reporter.Timing("queue", job.Waited)
+	return jobrun.Job{
+		UserID:         job.UserID,
+		TrackID:        job.TrackID,
+		Attempt:        job.Run,
+		Claim:          job.ClaimNumber,
+		SchedulerOwned: true,
+		Reporter:       reporter,
+		CommitCheck:    s.leaseFence(job),
+	}
 }
 
 func (s *BackgroundAcquisitionScheduler) stopClaimedJob(cancelJob context.CancelFunc, heartbeatDone <-chan struct{}) {
@@ -453,16 +462,16 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 
 func (s *BackgroundAcquisitionScheduler) jobContextFor(ctx context.Context, job ports.Job) (context.Context, context.CancelFunc) {
 	jobCtx, cancelJob := context.WithCancel(ctx)
-	jobCtx = withJobFence(withJobAttempt(withSchedulerOwnedJobContext(jobCtx), job.Run), job.ClaimNumber)
 	if job.CorrelationID != "" {
 		jobCtx = logging.ContextWithCorrelationID(jobCtx, job.CorrelationID)
 	}
 	return jobCtx, cancelJob
 }
 
-func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, trackId ids.TrackId, run acquisitionRun, job ports.Job) error {
+func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, run acquisitionRun, job jobrun.Job) error {
+	trackId := job.TrackID
 	var err error
-	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job.UserID, job.TrackID) }, logging.KeyTrackID, trackId.String()); panicked != nil {
+	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job) }, logging.KeyTrackID, trackId.String()); panicked != nil {
 		err = errJobPanicked
 	}
 	s.completeClaimedJob(ctx, trackId, err)
@@ -506,7 +515,7 @@ func (s *BackgroundAcquisitionScheduler) classifyJob(ctx context.Context, err er
 	case errors.Is(err, ErrAcquisitionRetryable):
 		reason := redact.LogError(err)
 		return jobCompletion{state: ports.JobRetrying, reason: reason, level: slog.LevelInfo, message: "background acquisition will retry", attrs: []any{"reason", reason}}
-	case err != nil && schedulerCancelledJobContext(ctx):
+	case err != nil && ctx.Err() != nil:
 		return leaseLost
 	case err != nil:
 		reason := redact.LogError(err)
@@ -554,7 +563,7 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 
 var errJobPanicked = errors.New("acquisition job panicked")
 
-type acquisitionRun func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
+type acquisitionRun func(ctx context.Context, job jobrun.Job) error
 
 func (s *BackgroundAcquisitionScheduler) finishJob(ctx context.Context, job ports.Job, jobErr error) {
 	defer s.pending.untrack(job.TrackID.String())
@@ -585,7 +594,7 @@ func (s *BackgroundAcquisitionScheduler) releasePanickedJob(ctx context.Context,
 
 func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(ctx context.Context, job ports.Job) {
 	defer background.RecoverContext(ctx, "acquisition_panic_fail_track", logging.KeyTrackID, job.TrackID.String())
-	s.svc.RefuseQueued(withJobFence(ctx, job.ClaimNumber), job.UserID, job.TrackID)
+	s.svc.RefuseQueued(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID, Claim: job.ClaimNumber})
 }
 
 func (s *BackgroundAcquisitionScheduler) logQueueOutcome(ctx context.Context, op string, trackID ids.TrackId, err error) {

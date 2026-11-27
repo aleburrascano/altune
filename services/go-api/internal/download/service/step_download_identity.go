@@ -123,11 +123,11 @@ func (s *DownloadStep) identifyPreview(
 	}
 	defer removeScratch(ctx, s.workspace, previewDir)
 
-	previewPath, err := s.fetchPreview(ctx, previewer, candidate, previewDir)
+	previewPath, err := s.fetchPreview(ctx, ac, previewer, candidate, previewDir)
 	if err != nil {
 		return ports.RecordingMatch{}, err
 	}
-	identifyCtx, identifyDone := startStage(ctx, s.now, "download.identify")
+	identifyCtx, identifyDone := startStage(ctx, ac, s.now, "download.identify")
 	match, err := s.identifier.Identify(identifyCtx, previewPath, candidate.Duration)
 	identifyDone(err)
 	return match, err
@@ -135,11 +135,12 @@ func (s *DownloadStep) identifyPreview(
 
 func (s *DownloadStep) fetchPreview(
 	ctx context.Context,
+	ac *AcquisitionContext,
 	previewer ports.PreviewFetcher,
 	candidate ports.AudioCandidate,
 	previewDir string,
 ) (string, error) {
-	_, queued := startStage(ctx, s.now, "download.queue")
+	_, queued := startStage(ctx, ac, s.now, "download.queue")
 	if err := s.limiter.Acquire(ctx); err != nil {
 		queued(err)
 		return "", err
@@ -148,7 +149,7 @@ func (s *DownloadStep) fetchPreview(
 	queued(nil)
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	fetchCtx, previewDone := startStage(fetchCtx, s.now, "download.preview")
+	fetchCtx, previewDone := startStage(fetchCtx, ac, s.now, "download.preview")
 	path, err := previewer.FetchPreview(fetchCtx, candidate, previewDir, previewSeconds)
 	previewDone(err)
 	if err != nil {
@@ -168,7 +169,7 @@ func (s *DownloadStep) identify(
 		return nil
 	}
 
-	identifyCtx, identifyDone := startStage(ctx, s.now, "download.identify")
+	identifyCtx, identifyDone := startStage(ctx, ac, s.now, "download.identify")
 	match, err := s.identifier.Identify(identifyCtx, filePath, 0)
 	identifyDone(err)
 	if err != nil {

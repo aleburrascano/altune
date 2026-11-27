@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -41,16 +42,16 @@ func (r *ranTracks) has(id ids.TrackId) bool {
 
 type recordingAcquirer struct{ ranTracks }
 
-func (a *recordingAcquirer) Execute(_ context.Context, _ ids.UserId, id ids.TrackId) error {
-	a.record(id)
+func (a *recordingAcquirer) Execute(_ context.Context, job jobrun.Job) error {
+	a.record(job.TrackID)
 	return nil
 }
 
-func (a *recordingAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (a *recordingAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
 	return nil
 }
 
-func (a *recordingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *recordingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func (r *ranTracks) count() int {
 	r.mu.Lock()
@@ -60,8 +61,8 @@ func (r *ranTracks) count() int {
 
 type recordingUpgrader struct{ ranTracks }
 
-func (u *recordingUpgrader) ExecuteUpgrade(_ context.Context, _ ids.UserId, id ids.TrackId) error {
-	u.record(id)
+func (u *recordingUpgrader) ExecuteUpgrade(_ context.Context, job jobrun.Job) error {
+	u.record(job.TrackID)
 	return nil
 }
 
@@ -70,17 +71,17 @@ type holdingAcquirer struct {
 	release chan struct{}
 }
 
-func (a *holdingAcquirer) Execute(_ context.Context, _ ids.UserId, id ids.TrackId) error {
-	a.record(id)
+func (a *holdingAcquirer) Execute(_ context.Context, job jobrun.Job) error {
+	a.record(job.TrackID)
 	<-a.release
 	return nil
 }
 
-func (a *holdingAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (a *holdingAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
 	return nil
 }
 
-func (a *holdingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *holdingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func TestScheduler_ABurstOfAddsStartsOnEveryIdleAcquireWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -231,15 +232,15 @@ func TestScheduler_ASelectOutageOnTheFinalRunIsNotRetried(t *testing.T) {
 
 type failingAcquirer struct{}
 
-func (failingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (failingAcquirer) Execute(context.Context, jobrun.Job) error {
 	return errors.New("every source refused the track")
 }
 
-func (failingAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (failingAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
 	return errors.New("every source refused the track")
 }
 
-func (failingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (failingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 type panicOnMessage struct {
 	slog.Handler
@@ -281,7 +282,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 
 type succeedingAcquirer struct{ failingAcquirer }
 
-func (succeedingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error { return nil }
+func (succeedingAcquirer) Execute(context.Context, jobrun.Job) error { return nil }
 
 type capturedLogs struct {
 	mu      *sync.Mutex
@@ -302,9 +303,9 @@ func (h capturedLogs) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h capturedLogs) WithGroup(string) slog.Handler { return h }
 
 func logsOfOneJob(t *testing.T, acquirer interface {
-	Execute(context.Context, ids.UserId, ids.TrackId) error
-	ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error
-	RefuseQueued(context.Context, ids.UserId, ids.TrackId)
+	Execute(context.Context, jobrun.Job) error
+	ExecuteReplace(context.Context, jobrun.Job) error
+	RefuseQueued(context.Context, jobrun.Job)
 },
 ) []slog.Record {
 	t.Helper()
@@ -435,16 +436,16 @@ type alwaysPanickingAcquirer struct {
 	refusedCorrID atomic.Value
 }
 
-func (a *alwaysPanickingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a *alwaysPanickingAcquirer) Execute(context.Context, jobrun.Job) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, user ids.UserId, track ids.TrackId) error {
-	return a.Execute(ctx, user, track)
+func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *alwaysPanickingAcquirer) RefuseQueued(ctx context.Context, _ ids.UserId, _ ids.TrackId) {
+func (a *alwaysPanickingAcquirer) RefuseQueued(ctx context.Context, job jobrun.Job) {
 	a.refusedCorrID.Store(logging.CorrelationIDFromContext(ctx))
 	a.refused.Add(1)
 }
@@ -579,7 +580,7 @@ type correlationNotingAcquirer struct {
 	finished chan struct{}
 }
 
-func (a *correlationNotingAcquirer) Execute(ctx context.Context, _ ids.UserId, _ ids.TrackId) error {
+func (a *correlationNotingAcquirer) Execute(ctx context.Context, job jobrun.Job) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.corrIDs = append(a.corrIDs, logging.CorrelationIDFromContext(ctx))
@@ -590,11 +591,11 @@ func (a *correlationNotingAcquirer) Execute(ctx context.Context, _ ids.UserId, _
 	return nil
 }
 
-func (a *correlationNotingAcquirer) ExecuteReplace(ctx context.Context, user ids.UserId, track ids.TrackId) error {
-	return a.Execute(ctx, user, track)
+func (a *correlationNotingAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *correlationNotingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *correlationNotingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func (a *correlationNotingAcquirer) seen() []string {
 	a.mu.Lock()
