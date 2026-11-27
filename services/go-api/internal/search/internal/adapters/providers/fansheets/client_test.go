@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/fansheets"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
@@ -79,7 +80,7 @@ func newSheetsServer(t *testing.T, hub, artist []byte) *sheetsServer {
 	t.Helper()
 	s := &sheetsServer{artistCode: http.StatusOK, tabs: tabsBody("Released", "Unreleased")}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(s.delay)
+		_ = clock.Sleep(r.Context(), s.delay)
 		s.lastKey.Store(r.Header.Get("X-Goog-Api-Key"))
 		onArtistSheet := strings.HasSuffix(r.URL.Path, kenSheetID)
 		if onArtistSheet && r.URL.Query().Get("fields") == tabsFields {

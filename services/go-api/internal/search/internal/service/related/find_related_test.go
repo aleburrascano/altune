@@ -262,9 +262,8 @@ func TestFindRelated_TimeoutReturnsPartialResults(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
-	time.Sleep(5 * time.Millisecond)
 
 	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(slowProvider))
 	slowTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Track", "Artist", nil)

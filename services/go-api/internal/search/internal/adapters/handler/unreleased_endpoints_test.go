@@ -164,7 +164,7 @@ func ownedUnreleasedRouter(t *testing.T, reader goldenOwnershipReader) chi.Route
 		},
 	}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{})))
-	h := wireGoldenOwnership(t, handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), reader, inlibrary.AbsentTrackNumberFiller{})
+	h := wireGoldenOwnership(t, searchtest.NewTracker(t), handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), reader, inlibrary.AbsentTrackNumberFiller{})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -309,7 +309,7 @@ func TestHandleArtistUnreleased_OwnedVersionIsStampedByItsFullTitleNotTheBaseTit
 		domain.OwnershipKey("Sports Car [V3]", "Carti"): {TrackID: "saved-v3", AcquisitionStatus: "ready"},
 		domain.OwnershipKey("Other", "Carti"):           {TrackID: "streaming-other", AcquisitionStatus: "ready"},
 	}}
-	h := wireGoldenOwnership(t, handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), owned, inlibrary.AbsentTrackNumberFiller{})
+	h := wireGoldenOwnership(t, searchtest.NewTracker(t), handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), owned, inlibrary.AbsentTrackNumberFiller{})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())

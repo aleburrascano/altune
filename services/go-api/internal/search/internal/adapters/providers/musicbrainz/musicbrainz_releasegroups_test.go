@@ -8,65 +8,72 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
-	"time"
+	"testing/synctest"
 )
 
-func TestMusicBrainzAdapter_ReleaseGroupTitles_LeaderCancelDoesNotFailWaiters(t *testing.T) {
-	release := make(chan struct{})
-	started := make(chan struct{}, 8)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		started <- struct{}{}
-		select {
-		case <-release:
-		case <-r.Context().Done():
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"release-group-count": 1, "release-groups": [` +
-			mbReleaseGroupJSON("rg-1", "OK Computer", "Radiohead", "mbid-rh") + `]}`))
-	}))
-	defer server.Close()
-	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0", clock.Now)
+type handlerTransport struct{ h http.Handler }
 
-	leaderCtx, cancelLeader := context.WithCancel(context.Background())
-	leaderErr := make(chan error, 1)
-	go func() {
-		_, err := adapter.ReleaseGroupTitles(leaderCtx, "mbid-rh")
-		leaderErr <- err
-	}()
-	<-started
-
-	type result struct {
-		titles []string
-		err    error
+func (tr handlerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rec := httptest.NewRecorder()
+	tr.h.ServeHTTP(rec, req)
+	if err := req.Context().Err(); err != nil {
+		return nil, err
 	}
-	waiter := make(chan result, 1)
-	go func() {
-		titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
-		waiter <- result{titles, err}
-	}()
-	time.Sleep(50 * time.Millisecond)
+	return rec.Result(), nil
+}
 
-	cancelLeader()
-	select {
-	case err := <-leaderErr:
-		if !errors.Is(err, context.Canceled) {
+func TestMusicBrainzAdapter_ReleaseGroupTitles_LeaderCancelDoesNotFailWaiters(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		var requests atomic.Int32
+		client := &http.Client{Transport: handlerTransport{http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests.Add(1)
+			select {
+			case <-release:
+			case <-r.Context().Done():
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"release-group-count": 1, "release-groups": [` +
+				mbReleaseGroupJSON("rg-1", "OK Computer", "Radiohead", "mbid-rh") + `]}`))
+		})}}
+		adapter := musicbrainz.NewMusicBrainzAdapter(client, "altune-test/1.0", clock.Now)
+
+		leaderCtx, cancelLeader := context.WithCancel(context.Background())
+		leaderErr := make(chan error, 1)
+		go func() {
+			_, err := adapter.ReleaseGroupTitles(leaderCtx, "mbid-rh")
+			leaderErr <- err
+		}()
+		synctest.Wait()
+
+		type result struct {
+			titles []string
+			err    error
+		}
+		waiter := make(chan result, 1)
+		go func() {
+			titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
+			waiter <- result{titles, err}
+		}()
+		synctest.Wait()
+
+		cancelLeader()
+		if err := <-leaderErr; !errors.Is(err, context.Canceled) {
 			t.Fatalf("leader err = %v, want context.Canceled promptly", err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("cancelled caller did not return promptly")
-	}
 
-	close(release)
-	select {
-	case res := <-waiter:
+		close(release)
+		res := <-waiter
 		if res.err != nil || len(res.titles) != 1 || res.titles[0] != "OK Computer" {
 			t.Errorf("waiter = %v, %v; want the release groups despite leader cancel", res.titles, res.err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("waiter never got a result")
-	}
+		if got := requests.Load(); got != 1 {
+			t.Errorf("upstream requests = %d, want 1: the waiter must share the leader's fetch", got)
+		}
+	})
 }
 
 func TestMusicBrainzAdapter_ReleaseGroupTitles(t *testing.T) {

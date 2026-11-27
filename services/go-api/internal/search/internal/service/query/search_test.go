@@ -28,6 +28,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -1021,61 +1022,65 @@ func newCollapseService(t *testing.T, release chan struct{}) (*search.SearchServ
 }
 
 func TestService_Search_ColdStampedeSharesOneFanOut(t *testing.T) {
-	release := make(chan struct{})
-	svc, p := newCollapseService(t, release)
-	const callers = 10
-	outs := make([]*search.SearchOutput, callers)
-	var wg sync.WaitGroup
-	for i := range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
-			if err != nil {
-				t.Errorf("Execute: %v", err)
-				return
-			}
-			outs[i] = out
-		}()
-	}
-	time.Sleep(100 * time.Millisecond)
-	close(release)
-	wg.Wait()
-
-	if got := p.calls.Load(); got != 1 {
-		t.Errorf("provider reached %d times for %d concurrent callers, want 1", got, callers)
-	}
-	for i, out := range outs {
-		if out == nil || out.Partial || len(out.Results) != 1 {
-			t.Errorf("caller %d got %+v, want one non-partial result", i, out)
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		svc, p := newCollapseService(t, release)
+		const callers = 10
+		outs := make([]*search.SearchOutput, callers)
+		var wg sync.WaitGroup
+		for i := range callers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
+				if err != nil {
+					t.Errorf("Execute: %v", err)
+					return
+				}
+				outs[i] = out
+			}()
 		}
-	}
+		synctest.Wait()
+		close(release)
+		wg.Wait()
+
+		if got := p.calls.Load(); got != 1 {
+			t.Errorf("provider reached %d times for %d concurrent callers, want 1", got, callers)
+		}
+		for i, out := range outs {
+			if out == nil || out.Partial || len(out.Results) != 1 {
+				t.Errorf("caller %d got %+v, want one non-partial result", i, out)
+			}
+		}
+	})
 }
 
 func TestService_Search_CancelledCallerDoesNotFailSharedFanOut(t *testing.T) {
-	release := make(chan struct{})
-	svc, _ := newCollapseService(t, release)
-	cancelCtx, cancel := context.WithCancel(context.Background())
-	done := make(chan *search.SearchOutput, 1)
-	go func() {
-		out, _ := svc.Execute(cancelCtx, memory.NewUser(), memory.NewQuery(t, "humble"))
-		done <- out
-	}()
-	time.Sleep(50 * time.Millisecond)
-	survivor := make(chan *search.SearchOutput, 1)
-	go func() {
-		out, _ := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
-		survivor <- out
-	}()
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	<-done
-	close(release)
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		svc, _ := newCollapseService(t, release)
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		done := make(chan *search.SearchOutput, 1)
+		go func() {
+			out, _ := svc.Execute(cancelCtx, memory.NewUser(), memory.NewQuery(t, "humble"))
+			done <- out
+		}()
+		synctest.Wait()
+		survivor := make(chan *search.SearchOutput, 1)
+		go func() {
+			out, _ := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
+			survivor <- out
+		}()
+		synctest.Wait()
+		cancel()
+		<-done
+		close(release)
 
-	out := <-survivor
-	if out == nil || out.Partial || len(out.Results) != 1 {
-		t.Errorf("surviving caller got %+v, want one non-partial result", out)
-	}
+		out := <-survivor
+		if out == nil || out.Partial || len(out.Results) != 1 {
+			t.Errorf("surviving caller got %+v, want one non-partial result", out)
+		}
+	})
 }
 
 type panickingIdentityStore struct{}
@@ -1202,29 +1207,31 @@ func TestService_Search_LastCallerCancelStopsProviderCalls(t *testing.T) {
 }
 
 func TestService_Search_CallerAfterAbandonedSearchGetsAFreshAnswer(t *testing.T) {
-	release := make(chan struct{})
-	svc, p := newCollapseService(t, release)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		_, _ = svc.Execute(ctx, memory.NewUser(), memory.NewQuery(t, "humble"))
-		close(done)
-	}()
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	waitFor(t, done, "the cancelled caller to return")
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		svc, p := newCollapseService(t, release)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			_, _ = svc.Execute(ctx, memory.NewUser(), memory.NewQuery(t, "humble"))
+			close(done)
+		}()
+		synctest.Wait()
+		cancel()
+		waitFor(t, done, "the cancelled caller to return")
 
-	close(release)
-	out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if out.Partial || len(out.Results) != 1 {
-		t.Errorf("caller after an abandoned search got partial=%v results=%d, want a complete answer", out.Partial, len(out.Results))
-	}
-	if got := p.calls.Load(); got != 2 {
-		t.Errorf("provider reached %d times, want 2 (the abandoned run, then a fresh one)", got)
-	}
+		close(release)
+		out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
+		if err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		if out.Partial || len(out.Results) != 1 {
+			t.Errorf("caller after an abandoned search got partial=%v results=%d, want a complete answer", out.Partial, len(out.Results))
+		}
+		if got := p.calls.Load(); got != 2 {
+			t.Errorf("provider reached %d times, want 2 (the abandoned run, then a fresh one)", got)
+		}
+	})
 }
 
 func TestService_Search_LogsHowLongEachStageTook(t *testing.T) {

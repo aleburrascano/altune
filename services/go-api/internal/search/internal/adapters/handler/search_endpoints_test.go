@@ -1004,17 +1004,17 @@ func (s *recordingVocabStore) written() []string {
 	return append([]string(nil), s.terms...)
 }
 
-func buildQueryCapRouter(t *testing.T, p search.SearchProvider, vocab search.SpellingHintsStore) chi.Router {
+func buildQueryCapRouter(t *testing.T, p search.SearchProvider, vocab search.SpellingHintsStore) (chi.Router, *background.Tracker) {
 	bg := searchtest.NewTracker(t)
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = vocab })
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Search: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
-	return r
+	return r, bg
 }
 
-func newQueryCapFixture(t *testing.T) (*countingSearchProvider, *recordingVocabStore, chi.Router) {
+func newQueryCapFixture(t *testing.T) (*countingSearchProvider, *recordingVocabStore, chi.Router, *background.Tracker) {
 	p := &countingSearchProvider{fakeSearchProvider: fakeSearchProvider{
 		name: search.ProviderDeezer,
 		results: []search.SearchResult{{
@@ -1026,7 +1026,8 @@ func newQueryCapFixture(t *testing.T) (*countingSearchProvider, *recordingVocabS
 		}},
 	}}
 	vocab := &recordingVocabStore{}
-	return p, vocab, buildQueryCapRouter(t, p, vocab)
+	router, bg := buildQueryCapRouter(t, p, vocab)
+	return p, vocab, router, bg
 }
 
 func wordQuery(n int) string {
@@ -1034,7 +1035,7 @@ func wordQuery(n int) string {
 }
 
 func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) {
-	p, vocab, router := newQueryCapFixture(t)
+	p, vocab, router, bg := newQueryCapFixture(t)
 	raw := wordQuery(domain.MaxSearchQueryTokens + 1)
 	if len([]rune(raw)) > domain.MaxSearchQueryRunes {
 		t.Fatalf("fixture must stay under the rune cap to isolate the token cap")
@@ -1043,7 +1044,7 @@ func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(raw), nil)
 
 	discAssertStatus(t, rec, http.StatusBadRequest)
-	time.Sleep(100 * time.Millisecond)
+	bg.Wait()
 	if n := p.calls.Load(); n != 0 {
 		t.Errorf("provider fan-out calls = %d, want 0", n)
 	}
@@ -1053,7 +1054,7 @@ func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) 
 }
 
 func TestHandleSearch_QueryAtTokenCap_StillSearchesAndIngests(t *testing.T) {
-	p, vocab, router := newQueryCapFixture(t)
+	p, vocab, router, bg := newQueryCapFixture(t)
 	raw := wordQuery(domain.MaxSearchQueryTokens)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(raw), nil)
@@ -1062,10 +1063,7 @@ func TestHandleSearch_QueryAtTokenCap_StillSearchesAndIngests(t *testing.T) {
 	if p.calls.Load() == 0 {
 		t.Fatalf("provider was not called for a query at the token cap")
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for len(vocab.written()) == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	bg.Wait()
 	terms := vocab.written()
 	want := []string{"Song - Artist", "Artist"}
 	if len(terms) != len(want) {

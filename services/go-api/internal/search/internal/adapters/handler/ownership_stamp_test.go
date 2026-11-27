@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -99,15 +100,20 @@ func goldenAlbumPageTracks() []search.SearchResult {
 }
 
 func goldenRouter(t *testing.T, svcs handler.DiscoveryServices, filler search.TrackNumberFiller) chi.Router {
-	h := wireGoldenOwnership(t, handler.MustNewDiscoveryHandler(svcs, time.Now), goldenOwned(), filler)
-	r := chi.NewRouter()
-	r.Use(discAsTestUser)
-	r.Mount("/discovery", h.Routes())
+	r, _ := goldenRouterTracked(t, svcs, filler)
 	return r
 }
 
-func wireGoldenOwnership(t *testing.T, h *search.DiscoveryHandler, reader ports.OwnershipReader, filler search.TrackNumberFiller) *search.DiscoveryHandler {
+func goldenRouterTracked(t *testing.T, svcs handler.DiscoveryServices, filler search.TrackNumberFiller) (chi.Router, *background.Tracker) {
 	bg := searchtest.NewTracker(t)
+	h := wireGoldenOwnership(t, bg, handler.MustNewDiscoveryHandler(svcs, time.Now), goldenOwned(), filler)
+	r := chi.NewRouter()
+	r.Use(discAsTestUser)
+	r.Mount("/discovery", h.Routes())
+	return r, bg
+}
+
+func wireGoldenOwnership(t *testing.T, bg *background.Tracker, h *search.DiscoveryHandler, reader ports.OwnershipReader, filler search.TrackNumberFiller) *search.DiscoveryHandler {
 	if err := h.AttachOwnership(searchtest.NewOwnership(t, bg, reader, filler)); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +156,7 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 		search.ProviderDeezer: &memory.AlbumContentProvider{Results: goldenAlbumPageTracks()},
 	})
 	filler := &recordingTrackNumberFiller{done: make(chan struct{}), want: 1}
-	router := goldenRouter(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Album: albumSvc}), filler)
+	router, bg := goldenRouterTracked(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Album: albumSvc}), filler)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/9/tracks?title=Deluxe", nil)
 	discAssertStatus(t, rec, http.StatusOK)
@@ -161,7 +167,7 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("track number fill never ran")
 	}
-	time.Sleep(50 * time.Millisecond)
+	bg.Wait()
 	filler.mu.Lock()
 	defer filler.mu.Unlock()
 	sort.Slice(filler.calls, func(i, j int) bool { return filler.calls[i].trackID < filler.calls[j].trackID })
@@ -187,13 +193,13 @@ func TestOwnershipGolden_ArtistEndpoints(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			filler := &recordingTrackNumberFiller{done: make(chan struct{})}
-			router := goldenRouter(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Artist: goldenArtistSvc(t)}), filler)
+			router, bg := goldenRouterTracked(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Artist: goldenArtistSvc(t)}), filler)
 
 			rec := discServe(t, router, http.MethodGet, tc.path, nil)
 			discAssertStatus(t, rec, http.StatusOK)
 			assertGoldenBody(t, rec.Body.String(), tc.want)
 
-			time.Sleep(50 * time.Millisecond)
+			bg.Wait()
 			filler.mu.Lock()
 			defer filler.mu.Unlock()
 			if len(filler.calls) != 0 {
