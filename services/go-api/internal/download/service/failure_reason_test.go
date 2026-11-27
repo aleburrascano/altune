@@ -255,7 +255,7 @@ func firstTierOutage() *service.SourceRegistry {
 			Err:    errors.New("yt-dlp download: HTTP Error 429: Too Many Requests"),
 		},
 	}
-	return service.NewSourceRegistry(blocked).WithFallback(&answeringSource{name: "ytdlp"})
+	return service.NewSourceRegistryWithFallback([]ports.AudioSource{blocked}, []ports.AudioSource{&answeringSource{name: "ytdlp"}})
 }
 
 func brokenSearchBesideEmptyResults() *service.SourceRegistry {

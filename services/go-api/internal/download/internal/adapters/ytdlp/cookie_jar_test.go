@@ -111,7 +111,7 @@ func canaryWith(jar string) error {
 }
 
 func canaryIn(environment, jar string) error {
-	return download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).WithEnvironment(environment).Canary(context.Background(), download.YouTubeCanary)
+	return download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep, download.WithYtDlpEnvironment(environment)).Canary(context.Background(), download.YouTubeCanary)
 }
 
 type runKind struct {

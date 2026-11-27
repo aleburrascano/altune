@@ -57,7 +57,7 @@ func (p *casePorts) registry() *service.SourceRegistry {
 		}
 		first = append(first, source)
 	}
-	return service.NewSourceRegistry(first...).WithFallback(fallback...)
+	return service.NewSourceRegistryWithFallback(first, fallback)
 }
 
 func (p *casePorts) sources() []*evalSource {

@@ -376,7 +376,7 @@ func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
 func TestSourceRegistry_AResolvedFirstTierHitSkipsTheFallback(t *testing.T) {
 	first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{resolvedCandidate("https://music.youtube.com/watch?v=abcabcabcab")}}
 	fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
-	reg := service.NewSourceRegistry(first).WithFallback(fallback)
+	reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback})
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if err != nil {
@@ -398,7 +398,7 @@ func TestSourceRegistry_TheFallbackRunsWhenTheFirstTierHasNoResolvedHit(t *testi
 	} {
 		t.Run(name, func(t *testing.T) {
 			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
-			reg := service.NewSourceRegistry(first).WithFallback(fallback)
+			reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback})
 
 			got, err := reg.Find(context.Background(), ports.FindRequest{})
 			if err != nil {
@@ -416,7 +416,7 @@ func TestSourceRegistry_TheFallbackRunsWhenTheFirstTierHasNoResolvedHit(t *testi
 
 func TestSourceRegistry_FetchReachesFallbackSources(t *testing.T) {
 	fallback := &stubSource{name: "ytdlp", fetchPath: "/tmp/a.m4a"}
-	reg := service.NewSourceRegistry(&stubSource{name: "ytmsearch"}).WithFallback(fallback)
+	reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{&stubSource{name: "ytmsearch"}}, []ports.AudioSource{fallback})
 
 	if _, err := reg.Fetch(context.Background(), ports.AudioCandidate{Source: "ytdlp", URL: "u1"}, t.TempDir()); err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
@@ -442,7 +442,7 @@ func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{tc.hit}}
 			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
-			reg := service.NewSourceRegistry(first).WithFallback(fallback)
+			reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback})
 
 			if _, err := reg.Find(context.Background(), ports.FindRequest{}); err != nil {
 				t.Fatalf("Find returned error: %v", err)
@@ -469,10 +469,11 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reg := service.NewSourceRegistry(&stubSource{name: "first", found: tt.first})
+			var fallback []ports.AudioSource
 			if tt.withFallback {
-				reg.WithFallback(&stubSource{name: "fb", found: []ports.AudioCandidate{candidate("u2")}})
+				fallback = []ports.AudioSource{&stubSource{name: "fb", found: []ports.AudioCandidate{candidate("u2")}}}
 			}
+			reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{&stubSource{name: "first", found: tt.first}}, fallback)
 			res, err := reg.FindReportingOutage(context.Background(), tt.req)
 			if err != nil {
 				t.Fatalf("FindReportingOutage: %v", err)

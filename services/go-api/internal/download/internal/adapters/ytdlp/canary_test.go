@@ -123,7 +123,7 @@ func TestCanary_UnreadableCookieJarErrorRedactsItsPath(t *testing.T) {
 
 func TestCanary_TimesOutRatherThanHangingForever(t *testing.T) {
 	installYtDlp(t, "exec sleep 30")
-	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithCanaryTimeout(100 * time.Millisecond)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep, download.WithYtDlpCanaryTimeout(100*time.Millisecond))
 
 	err := s.Canary(context.Background(), download.YouTubeCanary)
 
@@ -246,7 +246,7 @@ func TestCanary_YTMusicAsksForTheAudioOnlyPrefixOfTheDownloadSelector(t *testing
 
 func TestCanary_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
 	installYtDlp(t, "echo '212'")
-	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithCanaryTimeout(0)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep, download.WithYtDlpCanaryTimeout(0))
 
 	if err := s.Canary(context.Background(), download.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil: a zero timeout must leave the default in place", err)

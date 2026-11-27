@@ -50,7 +50,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 	opts = append(opts, pipelineOptions(d)...)
 	acquireSvc := download.MustNewAcquireTrackAudioService(
 		d.Ledger,
-		download.NewSourceRegistry(d.Sources.First...).WithFallback(d.Sources.Fallback...),
+		download.NewSourceRegistryWithFallback(d.Sources.First, d.Sources.Fallback),
 		d.AudioStore,
 		download.NewTempWorkspace(),
 		download.VerificationPorts{
