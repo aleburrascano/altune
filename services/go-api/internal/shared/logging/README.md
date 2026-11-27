@@ -8,7 +8,9 @@ Units: a duration is an integer number of milliseconds under `duration_ms` (`Key
 
 ## Request context
 
-`httpserver.RequestLogger` binds the user and the matched route into the request context with `ContextWithRequestFields`, and the handler stamps `user_id` and `route` on every line logged with that context (or one derived from it), the way it stamps `corr_id`. The user appears once the auth middleware has recorded it, so a line logged before authentication carries the route only. An explicit `user_id` or `route` attr on the line wins. So a request-scoped call site never attaches `user_id` by hand; a site that logs about another user than the caller (a job, a broadcast) still does.
+`httpserver.RequestLogger` binds the user and the matched route into the request context with `ContextWithRequestFields`, and the handler stamps `user_id` and `route` on every line logged with that context (or one derived from it), the way it stamps `corr_id`. The user appears once the auth middleware has recorded it, so a line logged before authentication carries the route only. An explicit `user_id` or `route` attr on the line wins. So a request-scoped call site never attaches `user_id` by hand.
+
+Work done for a user who is not the request user (a claimed job, a broadcast) binds that user once with `ContextWithSubjectUser(ctx, userID)` where the work starts; every line logged with that context then carries `user_id`, and the route of an enclosing request is kept. The subject user replaces the request user. A site never attaches `user_id` by hand there either.
 
 ## Capturing logs in a test
 

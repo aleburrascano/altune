@@ -100,6 +100,35 @@ func seedTwinTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserI
 	return twin.ID
 }
 
+func loggedAttrs(ring *logging.RingBuffer, msg string) (map[string]string, bool) {
+	for _, r := range ring.Snapshot() {
+		if r.Message == msg {
+			return r.Attrs, true
+		}
+	}
+	return nil, false
+}
+
+func TestExecuteReplace_LogsCarryTheUserTheAcquisitionIsFor(t *testing.T) {
+	ring := logging.CaptureRing(t, "debug")
+	ledger, store, userId, trackId, _ := seedReadyTrackWith(t)
+	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
+
+	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	for _, msg := range []string{"track_acquisition_started", "track_acquisition_completed"} {
+		attrs, found := loggedAttrs(ring, msg)
+		if !found {
+			t.Fatalf("no %q line was logged", msg)
+		}
+		if attrs[logging.KeyUserID] != userId.String() {
+			t.Errorf("%s user_id = %q, want %q", msg, attrs[logging.KeyUserID], userId.String())
+		}
+	}
+}
+
 func TestExecuteReplace_KeepsSupersededAudioATwinTrackStillServes(t *testing.T) {
 	ledger, store, userId, trackId, originalRef := seedReadyTrackWith(t)
 	twinId := seedTwinTrack(t, ledger, userId, originalRef)
