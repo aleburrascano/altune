@@ -35,9 +35,7 @@ const (
 
 var deezerPause = backoff.MustCapped(deezerBackoff, deezerBackoff<<(deezerAttempts-1))
 
-var (
-	ErrDeezerThrottled = errors.New("deezer is still throttling after retries")
-)
+var ErrDeezerThrottled = errors.New("deezer is still throttling after retries")
 
 const (
 	noLookupKey       = "no ISRC or Deezer track id to look a preview up by"
