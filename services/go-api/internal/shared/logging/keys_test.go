@@ -21,6 +21,7 @@ func TestKeyConstants_NameTheWireKeys(t *testing.T) {
 		logging.KeyDurationMS:    "duration_ms",
 		logging.KeyBytes:         "bytes",
 		logging.KeyStack:         "stack",
+		logging.KeyPanic:         "panic",
 		logging.KeyJob:           "job",
 	}
 	rules, err := os.ReadFile("../../../_rules/logkeys.rules")

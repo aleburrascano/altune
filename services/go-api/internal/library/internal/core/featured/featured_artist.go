@@ -116,13 +116,16 @@ func (s *FillFeaturedArtistsService) Execute(ctx context.Context, userId ids.Use
 	res := &BackfillFeaturedResult{NextOffset: startOffset}
 	budgetCtx, cancel := context.WithTimeoutCause(ctx, s.timeBudget, errBackfillBudgetSpent)
 	defer cancel()
+	stoppedOnBudget := false
+	defer func() {
+		if stoppedOnBudget {
+			s.admission.release(userId)
+		} else {
+			s.admission.releaseWithCooldown(userId)
+		}
+	}()
 	err := s.run(budgetCtx, userId, res)
-	stoppedOnBudget := res.Truncated && isBudgetSpent(budgetCtx)
-	if stoppedOnBudget {
-		s.admission.release(userId)
-	} else {
-		s.admission.releaseWithCooldown(userId)
-	}
+	stoppedOnBudget = res.Truncated && isBudgetSpent(budgetCtx)
 	if err != nil {
 		return res, err
 	}
