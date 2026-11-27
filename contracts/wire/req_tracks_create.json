@@ -1,0 +1,28 @@
+{
+  "album": "Album",
+  "album_artist": "Artist",
+  "artist": "Artist",
+  "artwork_url": "https://example.com/art.jpg",
+  "duration_seconds": 215.5,
+  "explicit": false,
+  "featured_artists": [
+    {
+      "deezer_id": 42,
+      "mbid": "5b11f4ce-a62d-471e-81fc-a69a8278c7da",
+      "name": "Guest"
+    }
+  ],
+  "genre": "Rock",
+  "isrc": "USRC17607839",
+  "mbid": "9d2e8d0a-2e5b-4f2f-9c7c-4f3d5b7a1c11",
+  "source_url": "https://soundcloud.com/artist/song",
+  "sources": [
+    {
+      "external_id": "12345",
+      "provider": "deezer"
+    }
+  ],
+  "title": "Song",
+  "track_number": 3,
+  "year": 2020
+}

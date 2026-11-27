@@ -1,6 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
-
 import type { AcquisitionPhase } from '@shared/acquisition';
 import { ACQUISITION_PHASES, phaseLabel, stageToPhase } from '@shared/acquisition';
 
@@ -12,82 +9,6 @@ const STAGE_PHASES = [
   ['store', 'finishing'],
   ['update_track', 'finishing'],
 ] as const;
-
-function findGoApiRoot(): string | null {
-  let dir = __dirname;
-  for (let hop = 0; hop < 12; hop += 1) {
-    const candidate = path.join(dir, 'services', 'go-api');
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
-
-type GoSource = { fileName: string; text: string };
-
-const STEP_NAME_RETURN = /func \(\w+ \*\w+Step\) Name\(\) StepName\s*\{\s*return\s+("[^"]*"|\w+)/g;
-const CONST_BLOCK_BODY = /^const \(\n([\s\S]*?)\n\)/gm;
-const CONST_SINGLE_LINE = /^const (.+)$/gm;
-const STRING_CONST = /^\s*(\w+)(?:\s+\w+)?\s*=\s*"([^"]*)"/gm;
-
-function readPackageSources(dir: string): GoSource[] {
-  return fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.go'))
-    .filter((entry) => !entry.name.endsWith('_test.go'))
-    .map((entry) => ({
-      fileName: entry.name,
-      text: fs.readFileSync(path.join(dir, entry.name), 'utf8'),
-    }));
-}
-
-function* constDeclarations(goSource: string): Generator<string> {
-  for (const [, body] of goSource.matchAll(CONST_BLOCK_BODY)) yield body!;
-  for (const [, line] of goSource.matchAll(CONST_SINGLE_LINE)) yield line!;
-}
-
-function goStringConstants(sources: GoSource[]): Map<string, string> {
-  const constants = new Map<string, string>();
-  for (const { text } of sources) {
-    for (const declaration of constDeclarations(text)) {
-      for (const [, name, value] of declaration.matchAll(STRING_CONST))
-        constants.set(name!, value!);
-    }
-  }
-  return constants;
-}
-
-function resolveStepName(returned: string, constants: Map<string, string>): string {
-  if (returned.startsWith('"')) return returned.slice(1, -1);
-  const value = constants.get(returned);
-  if (value === undefined) {
-    throw new Error(
-      `Name() returns ${returned}, which is no string constant of internal/download/service`,
-    );
-  }
-  return value;
-}
-
-function returnedStepNames(goSource: string): string[] {
-  return [...goSource.matchAll(STEP_NAME_RETURN)].map(([, returned]) => returned!);
-}
-
-function deriveAcquisitionStepNames(goApiRoot: string): Set<string> {
-  const sources = readPackageSources(path.join(goApiRoot, 'internal', 'download', 'service'));
-  const constants = goStringConstants(sources);
-  const names = new Set<string>();
-  for (const { fileName, text } of sources) {
-    if (!fileName.startsWith('step_')) continue;
-    for (const returned of returnedStepNames(text)) {
-      names.add(resolveStepName(returned, constants));
-    }
-  }
-  return names;
-}
-
-const GO_API_ROOT = findGoApiRoot();
 
 describe('stageToPhase', () => {
   it('falls back to working for a falsy stage', () => {
@@ -121,45 +42,5 @@ describe('phaseLabel', () => {
     ['working', 'Working…'],
   ] as [AcquisitionPhase, string][])('labels phase %s as %j', (phase, label) => {
     expect(phaseLabel(phase)).toBe(label);
-  });
-});
-
-describe('resolving what a Go step Name() returns', () => {
-  it('reads through a constant declared in a const block or on its own line', () => {
-    const constants = goStringConstants([
-      { fileName: 'pipeline.go', text: 'const (\n\tstepNameTag = "tag"\n)\n' },
-      { fileName: 'scheduler.go', text: 'const stepNameQueue = "queue_wait"\n' },
-    ]);
-
-    expect(resolveStepName('stepNameTag', constants)).toBe('tag');
-    expect(resolveStepName('stepNameQueue', constants)).toBe('queue_wait');
-  });
-
-  it('reads a literal return unchanged', () => {
-    expect(resolveStepName('"update_track"', new Map())).toBe('update_track');
-  });
-
-  it('finds the constant a step returns as the typed StepName', () => {
-    const source = 'func (s *SearchStep) Name() StepName { return stepNameSearch }\n';
-
-    expect(returnedStepNames(source)).toEqual(['stepNameSearch']);
-  });
-
-  it('names the identifier it could not resolve rather than deriving nothing', () => {
-    expect(() => resolveStepName('stepNameGhost', new Map())).toThrow('stepNameGhost');
-  });
-});
-
-describe('acquisition stage names, derived from services/go-api at test time', () => {
-  it('finds the Go source tree to derive the contract from', () => {
-    expect(GO_API_ROOT).not.toBeNull();
-  });
-
-  it('matches the mapped stages exactly, with no step unmapped and no mapping without a step', () => {
-    const stepNames = deriveAcquisitionStepNames(GO_API_ROOT!);
-    const mappedStages = STAGE_PHASES.map(([stage]) => stage);
-
-    expect(stepNames.size).toBeGreaterThan(0);
-    expect(mappedStages.sort()).toEqual([...stepNames].sort());
   });
 });

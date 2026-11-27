@@ -1,0 +1,48 @@
+{
+  "provider_name": "deezer",
+  "status": "ok",
+  "items": [
+    {
+      "kind": "track",
+      "title": "DNA.",
+      "subtitle": "Kendrick Lamar",
+      "image_url": "https://img.example/t1.jpg",
+      "confidence": "low",
+      "result_signature": "track|dna|kendrick lamar",
+      "favorite_key": "kendrick lamar|dna",
+      "sources": [
+        {
+          "provider": "deezer",
+          "external_id": "t1",
+          "url": "https://deezer.com/t1"
+        }
+      ],
+      "extras": {
+        "duration_seconds": 215,
+        "explicit": false
+      }
+    },
+    {
+      "kind": "track",
+      "title": "HUMBLE.",
+      "subtitle": "Kendrick Lamar",
+      "image_url": "https://img.example/t2.jpg",
+      "confidence": "low",
+      "result_signature": "track|humble|kendrick lamar",
+      "favorite_key": "kendrick lamar|humble",
+      "sources": [
+        {
+          "provider": "deezer",
+          "external_id": "t2",
+          "url": "https://deezer.com/t2"
+        }
+      ],
+      "extras": {
+        "duration_seconds": 215,
+        "explicit": false
+      }
+    }
+  ],
+  "partial": false
+}
+

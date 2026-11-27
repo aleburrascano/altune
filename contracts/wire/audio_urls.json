@@ -1,0 +1,12 @@
+{
+  "urls": [
+    {
+      "track_id": "a4d25de7-e7ee-446a-83cc-2f3aa8d3d7db",
+      "url": "https://signed.example/audio/ok.opus?sig=abc",
+      "version": "e1cdc209-d895-4f49-8306-9771cfb3e9b2",
+      "expires_at": "2023-11-14T18:13:20-05:00"
+    }
+  ],
+  "prefetch_enabled": true
+}
+

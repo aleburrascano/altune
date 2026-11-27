@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "genius_id": 2,
+      "title": "Cancun",
+      "cover_url": "https://img.example/c.jpg",
+      "genius_url": "https://genius.com/c",
+      "release_date": "2022-07-24",
+      "has_media": true,
+      "quality": "lossless",
+      "quality_rank": 5,
+      "tracker_key": null,
+      "off_streaming": false,
+      "audio_links": [],
+      "extras": {},
+      "best_version_title": "Cancun"
+    }
+  ],
+  "pending": false
+}
+
