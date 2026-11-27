@@ -420,6 +420,20 @@ test_staging_ahead_with_a_migration_file_skips_sync() {
     rm "$WORK/api/migrations/033_x.sql"
 }
 
+test_staging_ahead_skips_even_when_prod_still_has_a_table_the_manifest_dropped() {
+    reset_databases
+    write_env
+    touch "$WORK/api/migrations/033_x.sql"
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_x')"
+    sql prod -c "CREATE TABLE retired (id int)"
+    run_sync
+    check "a split release with a table prod has not dropped yet skips with exit 0" 0 "$?"
+    check "the split release is reported as a skip" 1 "$(grep -c 'SKIPPED: staging is ahead by 033_x$' "$WORK/out")"
+    check "the split release is not reported as a missing rule" 0 "$(grep -c 'has no rule' "$WORK/out")"
+    check "a split release leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    rm "$WORK/api/migrations/033_x.sql"
+}
+
 test_staging_ahead_without_a_migration_file_aborts_sync() {
     reset_databases
     write_env
@@ -705,6 +719,7 @@ test_array_element_type_drift_aborts_sync
 test_generated_column_drift_aborts_sync
 test_generated_column_on_both_tiers_syncs
 test_staging_ahead_with_a_migration_file_skips_sync
+test_staging_ahead_skips_even_when_prod_still_has_a_table_the_manifest_dropped
 test_staging_ahead_without_a_migration_file_aborts_sync
 test_staging_version_shaped_like_a_path_aborts_sync
 test_prod_ahead_of_staging_aborts_sync

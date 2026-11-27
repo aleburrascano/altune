@@ -256,8 +256,8 @@ if [ "$PROD_URL" = "$STAGING_URL" ] || { [ -n "$PROD_PROJECT" ] && [ "$PROD_PROJ
 fi
 require_psql
 load_manifest
-require_every_table_has_a_rule
 require_equal_migration_versions
+require_every_table_has_a_rule
 require_identical_columns
 
 staging_accounts=$(staging_sql -c "SELECT id, lower(email) FROM auth.users WHERE email IS NOT NULL")
