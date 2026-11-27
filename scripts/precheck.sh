@@ -347,7 +347,7 @@ go_affected() {
 
 if touches '^services/go-api/internal/shared/apierror/|^services/go-api/scripts/genclientcodes/|^client/src/shared/failure/core/apiErrorCodes\.generated\.ts$' || [ $full = 1 ]; then
   go_pin services/go-api
-  if need go "client error codes"; then
+  if [ -d services/go-api/scripts/genclientcodes ] && need go "client error codes"; then
     check "client error codes match the go-api catalog (genclientcodes --check)" services/go-api go run ./scripts/genclientcodes --check "$client_codes_file"
   fi
 fi

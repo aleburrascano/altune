@@ -6,6 +6,7 @@ import {
   isSessionFetchFailure,
   correlationIdOf,
   RETRY_TAIL,
+  type ApiErrorCode,
 } from '@shared/failure';
 import type { FailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/catalog';
@@ -38,7 +39,7 @@ type FailureLogFields = {
   corr_id?: string;
 };
 
-const AUDIO_ORPHANED_CODE = 'catalog.audio_orphaned';
+const AUDIO_ORPHANED_CODE: ApiErrorCode = 'catalog.audio_orphaned';
 
 export function isTrackGoneAfterDelete(error: unknown): boolean {
   if (error instanceof ApiError && error.code === AUDIO_ORPHANED_CODE) return true;
