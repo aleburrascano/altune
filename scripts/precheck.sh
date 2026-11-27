@@ -461,6 +461,10 @@ if touches '^services/go-api/(deploy|migrations)/' && need docker "go-api deploy
   test_check "go-api deploy self-tests" services/go-api bash -c 'for t in deploy/__tests__/*.test.sh; do bash "$t" || exit 1; done; bash deploy/migration-safety.sh'
 fi
 
+if touches '^services/go-api/scripts/|^scripts/ci/go-tools\.sh$'; then
+  test_check "go-api guardrail script self-tests" services/go-api bash -c 'for t in scripts/__tests__/*.test.sh; do bash "$t" || exit 1; done'
+fi
+
 if touches '^scripts/uptime/'; then
   test_check "uptime probe self-tests" . sh -c 'bash scripts/uptime/__tests__/journey.test.sh && bash scripts/uptime/__tests__/check.test.sh'
 fi
