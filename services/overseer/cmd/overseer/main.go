@@ -16,7 +16,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	app.SetupLogging(cfg.LogLevel, cfg.IsDevelopment())
+	if cfg.IsDevelopment() {
+		app.SetupTextLogging(cfg.LogLevel)
+	} else {
+		app.SetupJSONLogging(cfg.LogLevel)
+	}
 
 	if err := app.New(cfg, app.Buckets(cfg, os.Getenv), os.Getenv).Run(context.Background()); err != nil {
 		slog.Error("overseer exited with error", "error", err)

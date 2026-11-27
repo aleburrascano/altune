@@ -162,7 +162,10 @@ type window struct {
 }
 
 func (b *Bucket) advanceWindow(cur goapi.LatencyMetrics, at time.Time) window {
-	delta := windowedLatency(b.prev, cur, b.havePrev)
+	delta := cur
+	if b.havePrev {
+		delta = windowedLatency(b.prev, cur)
+	}
 	requests := totalRequests(delta)
 	var perSecond float64
 	if b.havePrev {
@@ -175,10 +178,7 @@ func (b *Bucket) advanceWindow(cur goapi.LatencyMetrics, at time.Time) window {
 	return window{latency: delta, requests: requests, perSecond: perSecond, at: at.UTC(), measured: measured}
 }
 
-func windowedLatency(prev, cur goapi.LatencyMetrics, havePrev bool) goapi.LatencyMetrics {
-	if !havePrev {
-		return cur
-	}
+func windowedLatency(prev, cur goapi.LatencyMetrics) goapi.LatencyMetrics {
 	routes := make(map[string]goapi.RouteLatency, len(cur.Routes))
 	for route, c := range cur.Routes {
 		p, ok := prev.Routes[route]

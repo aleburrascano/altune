@@ -134,11 +134,15 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		updated = last.Detail.CheckedAt
 	}
 	poll := b.poller.snapshot()
+	state := reliabilityState(reach)
+	if stale && state == core.StateLive {
+		state = core.StateStale
+	}
 	severity, headline := reliabilityHealth(reach, degraded != "", last, poll)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
-		State:     reliabilityState(reach, stale),
+		State:     state,
 		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
@@ -199,16 +203,11 @@ func upProbes(poll []core.Signal) int {
 	return up
 }
 
-func reliabilityState(reach goapi.Status, adminStale bool) core.State {
+func reliabilityState(reach goapi.Status) core.State {
 	switch reach {
 	case goapi.StatusDown:
 		return core.StateSourceDown
-	case goapi.StatusConnecting:
-		return core.StateStale
 	case goapi.StatusUp:
-		if adminStale {
-			return core.StateStale
-		}
 		return core.StateLive
 	default:
 		return core.StateStale
