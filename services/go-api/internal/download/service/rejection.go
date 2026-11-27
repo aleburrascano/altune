@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -42,8 +43,8 @@ func (s *AcquireTrackAudioService) recordRejections(ctx context.Context, ac *Acq
 	}
 }
 
-func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, ac *AcquisitionContext) {
-	prior, err := s.rejections.Active(ctx, ac.Track.ID, s.now().Add(-priorRejectionWindow))
+func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, trackId ids.TrackId, ac *AcquisitionContext) {
+	prior, err := s.rejections.Active(ctx, trackId, s.now().Add(-priorRejectionWindow))
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.rejection_load_failed",
 			logging.KeyTrackID, ac.Track.ID, logging.KeyError, redact.LogError(err))

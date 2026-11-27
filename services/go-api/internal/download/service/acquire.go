@@ -163,7 +163,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId ids.UserI
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
-	s.loadPriorRejections(ctx, ac)
+	s.loadPriorRejections(ctx, trackId, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		return s.outcomes().settleExecute(ctx, jobCtx, userId, trackId, err, ac)
 	}
@@ -221,7 +221,7 @@ func (s *AcquireTrackAudioService) replaceLoaded(ctx, jobCtx context.Context, us
 		return ac, s.outcomes().settleReplace(ctx, jobCtx, userId, trackId, err, retry, ac)
 	}
 	s.storedFiles().fingerprint(ctx, ac, track)
-	s.loadPriorRejections(ctx, ac)
+	s.loadPriorRejections(ctx, trackId, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		return ac, s.outcomes().settleReplace(ctx, jobCtx, userId, trackId, err, retry, ac)
 	}

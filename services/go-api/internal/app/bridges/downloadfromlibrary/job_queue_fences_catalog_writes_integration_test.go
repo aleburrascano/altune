@@ -18,13 +18,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	pool := dbtest.Pool(t)
-	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	return pool
-}
-
 type trackRow struct {
 	ID     ids.TrackId
 	UserId ids.UserId
@@ -94,7 +87,8 @@ func acquisitionStatus(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) st
 
 func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -120,7 +114,8 @@ func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 
 func TestPostgresJobQueue_ClaimDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -142,7 +137,8 @@ func TestPostgresJobQueue_ClaimDoesNotMakeACatalogWriteStale(t *testing.T) {
 
 func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAndClaimable(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -178,7 +174,8 @@ func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPend
 
 func TestPostgresJobQueue_ReplaceEnqueueDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -206,7 +203,8 @@ func TestPostgresJobQueue_ReplaceEnqueueDoesNotMakeACatalogWriteStale(t *testing
 
 func TestPostgresJobQueue_SecondEnqueueDoesNotMakeAWriterLoadedBetweenTheTwoStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -230,7 +228,8 @@ func TestPostgresJobQueue_SecondEnqueueDoesNotMakeAWriterLoadedBetweenTheTwoStal
 
 func TestPostgresJobQueue_ReclaimOfALapsedLeaseDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -256,7 +255,8 @@ func TestPostgresJobQueue_ReclaimOfALapsedLeaseDoesNotMakeACatalogWriteStale(t *
 
 func TestPostgresJobQueue_ClaimOfAReplaceJobDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -281,7 +281,8 @@ func TestPostgresJobQueue_ClaimOfAReplaceJobDoesNotMakeACatalogWriteStale(t *tes
 
 func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -318,7 +319,8 @@ func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *te
 
 func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -361,7 +363,8 @@ func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *te
 
 func TestPostgresJobQueue_ClaimRacingACatalogWriteCannotTouchTheStartTime(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -420,7 +423,8 @@ func (f *flakyRequeuer) Requeue(ctx context.Context, id ids.TrackId) error {
 
 func TestPostgresJobQueue_ARefusedTrackMarkedFailedByTheCatalogIsNotClaimed(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
@@ -456,7 +460,8 @@ func jobRowExists(t *testing.T, pool *pgxpool.Pool, id ids.TrackId) bool {
 
 func TestPostgresJobQueue_EnqueueWhoseStatusFlipFailsStillQueuesTheJobAndTheClaimConverges(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
 	requeuer := &flakyRequeuer{inner: ledger}
 	queue := download.MustNewPostgresJobQueue(pool, requeuer)
@@ -485,7 +490,8 @@ func TestPostgresJobQueue_EnqueueWhoseStatusFlipFailsStillQueuesTheJobAndTheClai
 
 func TestPostgresJobQueue_ClaimWhoseStatusFlipFailsReleasesTheJob(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
 	requeuer := &flakyRequeuer{inner: ledger}
 	queue := download.MustNewPostgresJobQueue(pool, requeuer)
@@ -522,7 +528,8 @@ func TestPostgresJobQueue_ClaimWhoseStatusFlipFailsReleasesTheJob(t *testing.T) 
 
 func TestPostgresJobQueue_EnqueueClearsALeftoverFailureReasonThroughTheLedger(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	ctx := context.Background()
 
@@ -556,7 +563,8 @@ func TestPostgresJobQueue_EnqueueClearsALeftoverFailureReasonThroughTheLedger(t 
 
 func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDuringTheRunValid(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()

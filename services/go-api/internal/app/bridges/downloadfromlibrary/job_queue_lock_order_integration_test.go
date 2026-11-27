@@ -14,7 +14,8 @@ import (
 
 func TestPostgresJobQueue_QueueWritesRacingACatalogWriteThatChangesAMirroredColumnNeverDeadlock(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()

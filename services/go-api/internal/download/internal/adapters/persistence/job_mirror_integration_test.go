@@ -40,7 +40,8 @@ func requireJobRowMirrorsTrack(t *testing.T, pool *pgxpool.Pool, id sharedids.Tr
 
 func TestPostgresJobQueue_EveryQueueStepLeavesTheJobRowEqualToTheTrackColumns(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -76,7 +77,8 @@ func TestPostgresJobQueue_EveryQueueStepLeavesTheJobRowEqualToTheTrackColumns(t 
 
 func TestPostgresJobQueue_ADeletedTrackTakesItsJobRowWithIt(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	ctx := context.Background()
 
 	track := insertFailedTrack(t, pool)
@@ -110,7 +112,8 @@ func upgradeStateOf(t *testing.T, pool *pgxpool.Pool, id sharedids.TrackId) (map
 
 func TestPostgresUpgradeStore_TheStateOwnsTheBookkeepingKeysAndOnlyCopiesThemBackToTracks(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := persistence.NewPostgresUpgradeStore(pool)
 	ctx := context.Background()
 

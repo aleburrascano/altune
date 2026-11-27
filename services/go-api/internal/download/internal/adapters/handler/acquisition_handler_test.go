@@ -7,14 +7,17 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -609,5 +612,61 @@ func TestHandlers_RefusalsAreProblemDocumentsWithACode(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func captureDefaultLog(t *testing.T) *logging.Capture {
+	t.Helper()
+	return logging.CaptureJSON(t, slog.LevelInfo)
+}
+
+func logRecords(t *testing.T, out *logging.Capture) []map[string]any {
+	t.Helper()
+	var records []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("log line %q is not JSON: %v", line, err)
+		}
+		records = append(records, record)
+	}
+	return records
+}
+
+func TestHandleRetryAcquisition_ALedgerFailureIsLoggedOnceByTheBoundaryWithTheTrack(t *testing.T) {
+	out := captureDefaultLog(t)
+	track := failedTrack(retryTestUserId)
+	h := download.NewRetryHandler(unreachableLedger{inmemoryledger.NewLedger(track)}, &retryFakeScheduler{}, download.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
+	router := chi.NewRouter()
+	router.Use(signedInAs(retryTestUserId))
+	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
+
+	retryServe(t, router, http.MethodPost, "/tracks/"+track.ID.UUID().String()+"/retry")
+
+	records := logRecords(t, out)
+	if len(records) != 1 {
+		t.Fatalf("log records = %d, want exactly the boundary's one: %s", len(records), out.String())
+	}
+	if records[0]["msg"] != "request.failed" || records[0]["level"] != "ERROR" {
+		t.Errorf("record = %v, want request.failed at ERROR", records[0])
+	}
+	if got, _ := records[0]["error"].(string); !strings.Contains(got, track.ID.UUID().String()) || !strings.Contains(got, "database unavailable") {
+		t.Errorf("error = %q, want the track id and the cause", got)
+	}
+}
+
+func TestHandleRetryAcquisition_AMissingTrackIsLoggedOnceByTheBoundaryAsARejection(t *testing.T) {
+	out := captureDefaultLog(t)
+	router := buildRetryRouter(inmemoryledger.NewLedger(), &retryFakeScheduler{})
+
+	rec := retryServe(t, router, http.MethodPost, "/tracks/"+uuid.NewString()+"/retry")
+
+	retryAssertStatus(t, rec, http.StatusNotFound)
+	records := logRecords(t, out)
+	if len(records) != 1 || records[0]["msg"] != "request.rejected" || records[0]["level"] != "INFO" {
+		t.Errorf("records = %v, want exactly one request.rejected at INFO", records)
 	}
 }

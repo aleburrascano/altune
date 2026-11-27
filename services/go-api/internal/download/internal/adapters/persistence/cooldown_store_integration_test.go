@@ -20,13 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	pool := dbtest.Pool(t)
-	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	return pool
-}
-
 func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *download.TrackSnapshot {
 	t.Helper()
 	track := failedTrack(t)
@@ -62,7 +55,8 @@ func (c contractPgxCooldowns) PassCooldown(t *testing.T, d time.Duration) {
 
 func TestPostgresCooldownStore_Contract(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	acquisitiontest.CooldownContract(t, func(*testing.T) acquisitiontest.CooldownUnderTest {
 		return contractPgxCooldowns{PostgresCooldownStore: download.NewPostgresCooldownStore(pool), pool: pool}
 	})
@@ -70,7 +64,9 @@ func TestPostgresCooldownStore_Contract(t *testing.T) {
 
 func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	first, second := newPool(t), dbtest.Pool(t)
+	first := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, first)
+	second := dbtest.Pool(t)
 	track := insertFailedTrack(t, first)
 	ctx := context.Background()
 
@@ -85,7 +81,8 @@ func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
 
 func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresCooldownStore(pool)
 	track := insertFailedTrack(t, pool)
 	ctx := context.Background()
@@ -122,7 +119,8 @@ func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing
 
 func TestPostgresCooldownStore_ConcurrentReservesAdmitOne(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	track := insertFailedTrack(t, pool)
 	const racers = 16
 	var wins atomic.Int32

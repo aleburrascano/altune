@@ -3,6 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
@@ -66,7 +67,7 @@ func TestBackgroundJobs_TheAssemblyStartsTheHousekeepingJobsWithTheirOldLogLines
 
 func emptyDatabasePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	admin := integrationPool(t)
+	admin := dbtest.Pool(t)
 	name := pgx.Identifier{"app_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")}.Sanitize()
 	if _, err := admin.Exec(t.Context(), "CREATE DATABASE "+name); err != nil {
 		t.Fatalf("create an empty database: %v", err)

@@ -26,7 +26,8 @@ DROP TABLE IF EXISTS mirror_firings`
 
 func TestJobMirrorTriggers_AWriteOnEitherSideFiresEachSideOnceAndLeavesBothEqual(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	ctx := context.Background()
 
 	if _, err := pool.Exec(ctx, dropCountingTriggersSQL); err != nil {
