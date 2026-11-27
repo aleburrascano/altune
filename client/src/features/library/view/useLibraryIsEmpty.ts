@@ -8,7 +8,7 @@ export function useLibraryIsEmpty(): boolean {
   const port = useLibraryPort();
   const { data } = useQuery({
     queryKey: libraryKeys.summary,
-    queryFn: () => port.getTracks({ limit: 1, offset: 0 }),
+    queryFn: ({ signal }) => port.getTracks({ limit: 1, offset: 0 }, signal),
     staleTime: Infinity,
   });
   return data?.total === 0;

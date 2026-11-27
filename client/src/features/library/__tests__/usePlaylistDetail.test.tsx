@@ -44,7 +44,7 @@ describe('usePlaylistDetail', () => {
     const { result } = renderHook(() => usePlaylistDetail(id), { wrapper });
 
     await waitFor(() => expect(result.current.data).toEqual(detail));
-    expect(port.getPlaylist).toHaveBeenCalledWith('p1');
+    expect(port.getPlaylist).toHaveBeenCalledWith('p1', expect.any(AbortSignal));
     expect(client.getQueryData(playlistKeys.detail(id))).toEqual(detail);
   });
 

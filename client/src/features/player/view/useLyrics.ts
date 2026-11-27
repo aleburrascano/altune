@@ -10,7 +10,7 @@ export function useLyrics(track: { title: string; artist: string } | null) {
   const artist = track?.artist ?? '';
   return useQuery({
     queryKey: discoveryKeys.lyrics(title, artist),
-    queryFn: () => playbackPort().getLyrics({ title, subtitle: artist }),
+    queryFn: ({ signal }) => playbackPort().getLyrics({ title, subtitle: artist }, signal),
     enabled: title.length > 0,
     staleTime: LYRICS_STALE_MS,
   });

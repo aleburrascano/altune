@@ -1,6 +1,7 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoverySuggestion, DiscoverySuggestResponse } from '@shared/catalog';
+import { useDebouncedValue } from '@shared/concurrency';
 import { discoveryKeys } from '@shared/query';
 import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/core/searchPaging';
@@ -26,7 +27,7 @@ export function visibleSuggestions(
 
 export function useAutocompleteSuggestions(inputValue: string, canShow = true) {
   const typedQuery = normalizeQuery(inputValue).toLowerCase();
-  const debouncedQuery = useSettledValue(typedQuery, SUGGEST_DEBOUNCE_MS);
+  const debouncedQuery = useDebouncedValue(typedQuery, SUGGEST_DEBOUNCE_MS);
   const isSettled = debouncedQuery === typedQuery;
   const { data: response, error } = useSuggestQuery(debouncedQuery, canShow && isSettled);
   useReportQueryFailure(error, 'suggest');
@@ -47,17 +48,6 @@ function suggestQueryOptions(port: DiscoverPort, query: string, wanted: boolean)
     staleTime: SUGGEST_STALE_MS,
     retry: false,
   };
-}
-
-function useSettledValue(value: string, delayMs: number): string {
-  const [settled, setSettled] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-
-  return settled;
 }
 
 type SearchInput = {

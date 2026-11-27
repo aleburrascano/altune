@@ -1,4 +1,4 @@
-import { apiFetch, withQuery } from '@shared/apiClient/adapters/http';
+import { apiFetch, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import { asNumber, asRecord, asString, parseArray } from '@shared/apiClient/core/wireDecoders';
 
 export type SyncedLine = {
@@ -38,13 +38,20 @@ function parseLyricsResponse(value: unknown, at = 'LyricsResponse'): LyricsRespo
   };
 }
 
-export async function getLyrics(params: {
+type LyricsParams = {
   title: string;
   subtitle?: string | null | undefined;
-}): Promise<LyricsResponse> {
+};
+
+export async function getLyrics(
+  params: LyricsParams,
+  signal?: AbortSignal,
+): Promise<LyricsResponse> {
   const qs = new URLSearchParams({ title: params.title });
   if (params.subtitle != null && params.subtitle.length > 0) {
     qs.set('subtitle', params.subtitle);
   }
-  return parseLyricsResponse(await apiFetch(withQuery('/v1/discovery/lyrics', qs)));
+  return parseLyricsResponse(
+    await apiFetch(withQuery('/v1/discovery/lyrics', qs), signalInit(signal)),
+  );
 }

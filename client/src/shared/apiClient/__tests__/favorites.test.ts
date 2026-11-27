@@ -1,4 +1,5 @@
 import { addFavorite, listFavorites, removeFavorite } from '@shared/apiClient';
+import { expectAbortsInFlight } from '@shared/apiClient/__tests__/abortInFlight';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -148,5 +149,11 @@ describe('removeFavorite', () => {
       title: 'Heaven Or Hell',
       subtitle: 'Don Toliver',
     });
+  });
+});
+
+describe('listFavorites abort', () => {
+  it('aborts its in-flight request when the caller signal fires', async () => {
+    await expectAbortsInFlight('GET /v1/discovery/favorites', (signal) => listFavorites(signal));
   });
 });

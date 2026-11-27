@@ -203,14 +203,17 @@ export async function retryAcquisition(trackId: TrackId): Promise<void> {
 
 type FeaturingTracksResponse = Pick<ListTracksResponse, 'items' | 'total'>;
 
-export async function listTracksFeaturing(fa: FeaturedArtist): Promise<FeaturingTracksResponse> {
+export async function listTracksFeaturing(
+  fa: FeaturedArtist,
+  signal?: AbortSignal,
+): Promise<FeaturingTracksResponse> {
   const qs = new URLSearchParams();
   setQueryParam(qs, 'mbid', fa.mbid);
   if (fa.deezer_id != null) qs.set('deezer_id', String(fa.deezer_id));
   if (fa.name) qs.set('name', fa.name);
   const at = 'FeaturingTracksResponse';
   return parseListEnvelope(
-    asRecord(await apiFetch(withQuery('/v1/tracks/featuring', qs)), at),
+    asRecord(await apiFetch(withQuery('/v1/tracks/featuring', qs), signalInit(signal)), at),
     at,
     parseTrackResponse,
   );

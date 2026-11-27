@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useEffect, useState } from 'react';
 
+import { useDebouncedCall } from '@shared/concurrency';
 import { onSignOut } from '@shared/session';
 
 import { getSearchState, setSearchState } from '@features/discovery/core/searchState';
@@ -26,13 +27,6 @@ type UseDebouncedSearchReturn = {
   setQuery: (query: string) => void;
 };
 
-type DebounceTimer = MutableRefObject<ReturnType<typeof setTimeout> | null>;
-
-function clearTimer(timer: DebounceTimer): void {
-  if (timer.current) clearTimeout(timer.current);
-  timer.current = null;
-}
-
 function clampQuery(text: string): string {
   return clampQueryWords(sliceCodePoints(text, MAX_QUERY_LENGTH));
 }
@@ -45,23 +39,22 @@ export function useDebouncedSearch({
   const [committedQuery, setCommittedQuery] = useState(savedState.query);
   const [inputValue, setInputValue] = useState(savedState.inputValue);
   const [isExplicitSubmit, setIsExplicitSubmit] = useState(false);
-  const debounceRef: DebounceTimer = useRef(null);
+  const debounce = useDebouncedCall(debounceMs);
+  const cancelDebounce = debounce.cancel;
 
   useEffect(() => {
     setSearchState(committedQuery, inputValue);
   }, [committedQuery, inputValue]);
 
-  useEffect(() => () => clearTimer(debounceRef), []);
-
   useEffect(
     () =>
       onSignOut(() => {
-        clearTimer(debounceRef);
+        cancelDebounce();
         setInputValue('');
         setCommittedQuery('');
         setIsExplicitSubmit(false);
       }),
-    [],
+    [cancelDebounce],
   );
 
   function dropCommittedQuery(): void {
@@ -81,34 +74,34 @@ export function useDebouncedSearch({
   }
 
   function scheduleCommit(query: string): void {
-    debounceRef.current = setTimeout(() => {
+    debounce.schedule(() => {
       setIsExplicitSubmit(false);
       setCommittedQuery(query);
-    }, debounceMs);
+    });
   }
 
   function onSubmit(): void {
-    clearTimer(debounceRef);
+    debounce.cancel();
     commitExplicit(normalizeQuery(inputValue));
   }
 
   function onChangeText(rawText: string): void {
     const text = clampQuery(rawText);
     setInputValue(text);
-    clearTimer(debounceRef);
+    debounce.cancel();
     const query = normalizeQuery(text);
     if (!isSearchableQuery(query)) dropCommittedQuery();
     else if (query !== committedQuery) scheduleCommit(query);
   }
 
   function onClear(): void {
-    clearTimer(debounceRef);
+    debounce.cancel();
     setInputValue('');
     dropCommittedQuery();
   }
 
   function setQuery(rawQuery: string): void {
-    clearTimer(debounceRef);
+    debounce.cancel();
     const query = normalizeQuery(clampQuery(rawQuery));
     setInputValue(query);
     commitExplicit(query);

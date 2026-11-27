@@ -59,7 +59,7 @@ export function useFavorites(): FavoritesApi {
   const port = useFavoritesPort();
   const { data } = useQuery({
     queryKey: discoveryKeys.favorites,
-    queryFn: () => port.listFavorites(),
+    queryFn: ({ signal }) => port.listFavorites(signal),
     staleTime: Infinity,
   });
 

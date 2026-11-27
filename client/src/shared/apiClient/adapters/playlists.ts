@@ -101,8 +101,13 @@ export async function getPlaylists(
   );
 }
 
-export async function getPlaylist(id: PlaylistId): Promise<PlaylistDetailResponse> {
-  return parsePlaylistDetailResponse(await apiFetch(`/v1/playlists/${idPathSegment(id)}`));
+export async function getPlaylist(
+  id: PlaylistId,
+  signal?: AbortSignal,
+): Promise<PlaylistDetailResponse> {
+  return parsePlaylistDetailResponse(
+    await apiFetch(`/v1/playlists/${idPathSegment(id)}`, signalInit(signal)),
+  );
 }
 
 export async function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistResponse> {

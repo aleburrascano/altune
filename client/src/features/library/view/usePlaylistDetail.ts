@@ -9,7 +9,7 @@ export function usePlaylistDetail(playlistId: PlaylistId) {
   const port = useLibraryPort();
   return useQuery({
     queryKey: playlistKeys.detail(playlistId),
-    queryFn: () => port.getPlaylist(playlistId),
+    queryFn: ({ signal }) => port.getPlaylist(playlistId, signal),
     enabled: playlistId.length > 0,
     staleTime: Infinity,
   });

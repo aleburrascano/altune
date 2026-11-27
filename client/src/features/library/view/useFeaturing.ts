@@ -43,7 +43,7 @@ export function useTracksFeaturing(input: FeaturedArtist) {
   const key = fa.mbid ?? (fa.deezer_id != null ? `dz:${fa.deezer_id}` : `name:${fa.name}`);
   const { data, error, isLoading, isError, isRefetching, refetch } = useQuery({
     queryKey: libraryKeys.featuring(key),
-    queryFn: () => port.listTracksFeaturing(fa),
+    queryFn: ({ signal }) => port.listTracksFeaturing(fa, signal),
     enabled: fa.name.length > 0 || fa.mbid != null || fa.deezer_id != null,
     staleTime: 60_000,
   });
