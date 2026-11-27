@@ -5,7 +5,10 @@ import (
 	"altune/go-api/internal/shared/requestuser/internal/core/signedinuser"
 )
 
-var ErrTokenExpired = signedinuser.ErrTokenExpired
+var (
+	ErrTokenExpired   = signedinuser.ErrTokenExpired
+	ErrNoSignedInUser = httpuser.ErrNoSignedInUser
+)
 
 var (
 	ContextWithUserID      = signedinuser.ContextWithUserID
@@ -13,6 +16,6 @@ var (
 	ContextWithTokenExpiry = signedinuser.ContextWithTokenExpiry
 	TokenExpiryFromContext = signedinuser.TokenExpiryFromContext
 	UntilTokenExpiry       = signedinuser.UntilTokenExpiry
-	RequireUserID          = httpuser.RequireUserID
+	UserID                 = httpuser.UserID
 	ClientKey              = httpuser.ClientKey
 )

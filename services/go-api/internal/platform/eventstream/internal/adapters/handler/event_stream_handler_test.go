@@ -943,20 +943,6 @@ func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T)
 	}
 }
 
-func TestSSEHandler_RequestWithoutUserIsRejected(t *testing.T) {
-	h := handler.NewEventStreamHandler(clock.Now, clock.NewTicker, events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
-	rec := httptest.NewRecorder()
-
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/events", nil))
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
-	if got := rec.Header().Get("Content-Type"); got == "text/event-stream" {
-		t.Fatal("unauthenticated request received an event-stream response")
-	}
-}
-
 type nonFlushingWriter struct {
 	header http.Header
 	status int

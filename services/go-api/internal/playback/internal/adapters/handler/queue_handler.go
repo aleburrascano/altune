@@ -102,10 +102,7 @@ type currentTrackResponse struct {
 }
 
 func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var body saveQueueRequest
 	if !httpserver.DecodeJSON(w, r, &body) {
@@ -131,10 +128,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var body saveQueuePositionRequest
 	if !httpserver.DecodeJSON(w, r, &body) {
@@ -155,10 +149,7 @@ func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request
 }
 
 func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	view, err := h.svc.ResumeView(r.Context(), userId)
 	if err != nil {
@@ -172,10 +163,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) handleForget(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	if err := h.svc.Forget(r.Context(), userId); err != nil {
 		writeQueueError(w, r, err)

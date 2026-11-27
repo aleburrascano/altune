@@ -179,7 +179,4 @@ func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason p
 	httpserver.HandleServiceError(w, r, apierror.NewError(rejectionCode(reason), detail))
 }
 
-var (
-	RequireUserID = requestuser.RequireUserID
-	ClientKey     = requestuser.ClientKey
-)
+var ClientKey = requestuser.ClientKey

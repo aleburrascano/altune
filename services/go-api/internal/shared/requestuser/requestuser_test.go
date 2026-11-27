@@ -3,14 +3,10 @@ package requestuser_test
 import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -136,145 +132,32 @@ func TestErrTokenExpired_LookAlikeIsNotTheSentinel(t *testing.T) {
 	}
 }
 
-const missingUserBody = `{"type":"urn:altune:problem:auth.token_missing","title":"Authentication required","status":401,"detail":"authentication required","code":"auth.token_missing"}` + "\n"
-
-func requireMissingUserResponse(t *testing.T, rec *httptest.ResponseRecorder) {
-	t.Helper()
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-	if got := rec.Header().Get("WWW-Authenticate"); got != "Bearer" {
-		t.Errorf("WWW-Authenticate: got %q, want %q", got, "Bearer")
-	}
-	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
-		t.Errorf("Content-Type: got %q, want %q", got, "application/problem+json")
-	}
-	if got := rec.Body.String(); got != missingUserBody {
-		t.Errorf("body: got %q, want %q", got, missingUserBody)
-	}
-}
-
-func TestRequireUserID(t *testing.T) {
-	t.Run("present", func(t *testing.T) {
+func TestUserID(t *testing.T) {
+	t.Run("returns the signed-in user", func(t *testing.T) {
 		uid := ids.NewUserId(uuid.New())
-		ctx := requestuser.ContextWithUserID(context.Background(), uid)
-		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(requestuser.ContextWithUserID(context.Background(), uid))
 
-		got, ok := requestuser.RequireUserID(rec, req)
-		if !ok {
-			t.Fatal("expected ok=true, got false")
-		}
-		if got.UUID() != uid.UUID() {
-			t.Errorf("userId: got %v, want %v", got.UUID(), uid.UUID())
-		}
-		if rec.Code != http.StatusOK {
-			t.Errorf("status: got %d, want %d (no error written)", rec.Code, http.StatusOK)
+		if got := requestuser.UserID(req); got.UUID() != uid.UUID() {
+			t.Errorf("UserID = %v, want %v", got.UUID(), uid.UUID())
 		}
 	})
 
-	t.Run("absent writes 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		rec := httptest.NewRecorder()
+	t.Run("a route without the auth middleware fails closed", func(t *testing.T) {
+		defer func() {
+			if got := recover(); !errors.Is(asError(got), requestuser.ErrNoSignedInUser) {
+				t.Errorf("recovered %v, want requestuser.ErrNoSignedInUser", got)
+			}
+		}()
 
-		got, ok := requestuser.RequireUserID(rec, req)
-		if ok {
-			t.Fatal("expected ok=false, got true")
-		}
-		if !got.IsZero() {
-			t.Errorf("expected zero UserId, got %v", got)
-		}
-		if rec.Code != http.StatusUnauthorized {
-			t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-		}
+		requestuser.UserID(httptest.NewRequest(http.MethodGet, "/", nil))
+
+		t.Error("UserID returned for a request with no user")
 	})
 }
 
-func TestRequireUserID_AbsentBodyIsPinned(t *testing.T) {
-	rec := httptest.NewRecorder()
-
-	_, ok := requestuser.RequireUserID(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if ok {
-		t.Fatal("expected ok=false, got true")
-	}
-	requireMissingUserResponse(t, rec)
-}
-
-func TestRequireUserID_AbsentLogsTheRejection(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	req := httptest.NewRequest(http.MethodGet, "/v1/queue", nil)
-	req.RemoteAddr = "203.0.113.7:5000"
-
-	requestuser.RequireUserID(httptest.NewRecorder(), req)
-
-	var record map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
-		var candidate map[string]any
-		if err := json.Unmarshal([]byte(line), &candidate); err != nil {
-			t.Fatalf("log line %q is not a JSON record: %v", line, err)
-		}
-		if candidate["msg"] == "auth.token_rejected" {
-			record = candidate
-		}
-	}
-	if record == nil {
-		t.Fatalf("no auth.token_rejected record in %q", logs.String())
-	}
-	want := map[string]string{
-		"level":  "WARN",
-		"msg":    "auth.token_rejected",
-		"reason": "missing",
-		"detail": "authentication required",
-		"client": "203.0.113.7",
-		"path":   "/v1/queue",
-	}
-	for key, value := range want {
-		if record[key] != value {
-			t.Errorf("log %s: got %v, want %q", key, record[key], value)
-		}
-	}
-	if _, ok := record["error"]; ok {
-		t.Errorf("log carries an error field: %v", record)
-	}
-}
-
-func TestRequireUserID_PresentWritesNothing(t *testing.T) {
-	uid := ids.NewUserId(uuid.New())
-	req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(requestuser.ContextWithUserID(context.Background(), uid))
-	rec := httptest.NewRecorder()
-
-	got, ok := requestuser.RequireUserID(rec, req)
-
-	if !ok || got.UUID() != uid.UUID() {
-		t.Fatalf("got %v, %v; want %v, true", got.UUID(), ok, uid.UUID())
-	}
-	if rec.Body.Len() != 0 || len(rec.Header()) != 0 {
-		t.Errorf("wrote body %q headers %v, want nothing", rec.Body.String(), rec.Header())
-	}
-}
-
-func TestRequireUserID_ChangesBetweenTicks(t *testing.T) {
-	base := httptest.NewRequest(http.MethodGet, "/", nil)
-
-	first := httptest.NewRecorder()
-	if _, ok := requestuser.RequireUserID(first, base); ok {
-		t.Fatal("first tick: expected ok=false without a user")
-	}
-	requireMissingUserResponse(t, first)
-
-	uid := ids.NewUserId(uuid.New())
-	second := httptest.NewRecorder()
-	got, ok := requestuser.RequireUserID(second, base.WithContext(requestuser.ContextWithUserID(base.Context(), uid)))
-	if !ok || got.UUID() != uid.UUID() {
-		t.Fatalf("second tick: got %v, %v; want %v, true", got.UUID(), ok, uid.UUID())
-	}
-	if second.Body.Len() != 0 {
-		t.Errorf("second tick wrote body %q, want none", second.Body.String())
-	}
+func asError(v any) error {
+	err, _ := v.(error)
+	return err
 }
 
 func TestClientKey(t *testing.T) {

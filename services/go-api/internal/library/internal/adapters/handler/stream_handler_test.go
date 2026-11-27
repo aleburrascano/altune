@@ -161,14 +161,6 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 	}
 }
 
-func TestHandleStreamAudio_NoAuth(t *testing.T) {
-	router := streamOnlyRoute(library.NewInMemoryTrackRepo(), library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler())
-
-	rec := sendAnonymous(router, httptest.NewRequest(http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil))
-
-	assertStatus(t, rec, http.StatusUnauthorized)
-}
-
 func TestHandleRecover(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	sched := &library.InMemoryScheduler{}

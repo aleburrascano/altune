@@ -66,14 +66,6 @@ func TestGate_EmptyPrincipalAdmitsNobody(t *testing.T) {
 	}
 }
 
-func TestGate_NoSubjectIsUnauthorized(t *testing.T) {
-	rec, reached := gatedAs(ids.NewUserId(uuid.New()).String(), nil)
-
-	if reached || rec.Code != http.StatusUnauthorized {
-		t.Errorf("no subject: reached=%v status=%d, want 401", reached, rec.Code)
-	}
-}
-
 func TestGate_DenialLogsActorPathAndCode(t *testing.T) {
 	var logs bytes.Buffer
 	previous := slog.Default()

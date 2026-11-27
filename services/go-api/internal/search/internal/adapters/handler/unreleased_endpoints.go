@@ -48,9 +48,7 @@ func (h *DiscoveryHandler) handleUnreleasedSearch(w http.ResponseWriter, r *http
 		return
 	}
 	dto := unreleasedSearchToDTO(hits)
-	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
-		h.stampOwnership(r.Context(), userId, searchOwnableItems(dto.Items))
-	}
+	h.stampOwnership(r.Context(), requestuser.UserID(r), searchOwnableItems(dto.Items))
 	httpserver.WriteJSON(w, http.StatusOK, dto)
 }
 
@@ -162,9 +160,7 @@ func ownableSongItems(artistName string, item *UnreleasedSongDTO) []inlibrary.Ow
 
 func (h *DiscoveryHandler) writeUnreleased(w http.ResponseWriter, r *http.Request, artistName string, found unreleased.Lookup) {
 	dto := unreleasedToDTO(found)
-	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
-		h.stampOwnership(r.Context(), userId, unreleasedOwnableItems(artistName, dto.Items))
-	}
+	h.stampOwnership(r.Context(), requestuser.UserID(r), unreleasedOwnableItems(artistName, dto.Items))
 	httpserver.WriteJSON(w, http.StatusOK, dto)
 }
 

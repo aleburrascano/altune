@@ -84,10 +84,7 @@ func (h *TrackHandler) Routes() chi.Router {
 }
 
 func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 	trackId, ok := httpserver.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
 	if !ok {
 		return
@@ -166,10 +163,7 @@ func tracksToDTO(tracks []*domain.Track) []TrackResponse {
 }
 
 func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	query, err := libraryQuery(r)
 	if err != nil {
@@ -193,10 +187,7 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	var req CreateTrackRequest
 	if !httpserver.DecodeJSON(w, r, &req) {
@@ -261,10 +252,7 @@ type TrackStatusResponse struct {
 }
 
 func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, ok := httpserver.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
 	if !ok {
@@ -285,10 +273,7 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := requestuser.RequireUserID(w, r)
-	if !ok {
-		return
-	}
+	userId := requestuser.UserID(r)
 
 	trackId, ok := httpserver.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
 	if !ok {

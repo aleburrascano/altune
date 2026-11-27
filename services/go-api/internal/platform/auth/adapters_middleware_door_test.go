@@ -746,44 +746,6 @@ func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
 	}
 }
 
-func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
-	t.Helper()
-	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("body %q is not a JSON object: %v", rec.Body.String(), err)
-	}
-	return body
-}
-
-func TestRequireUserID_UnauthorizedMatchesTheMissingTokenRejection(t *testing.T) {
-	next, _ := noopHandler()
-	viaMiddleware := httptest.NewRecorder()
-	auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(viaMiddleware, httptest.NewRequest(http.MethodGet, "/", nil))
-	viaRequire := httptest.NewRecorder()
-	requestuser.RequireUserID(viaRequire, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if viaRequire.Code != viaMiddleware.Code {
-		t.Errorf("status: RequireUserID %d, middleware %d", viaRequire.Code, viaMiddleware.Code)
-	}
-	for _, header := range []string{"WWW-Authenticate", "Content-Type"} {
-		if got, want := viaRequire.Header().Get(header), viaMiddleware.Header().Get(header); got != want {
-			t.Errorf("%s: RequireUserID %q, middleware %q", header, got, want)
-		}
-	}
-	requireBody, middlewareBody := decodeBody(t, viaRequire), decodeBody(t, viaMiddleware)
-	if len(requireBody) != len(middlewareBody) {
-		t.Errorf("body keys: RequireUserID %v, middleware %v", requireBody, middlewareBody)
-	}
-	for key := range middlewareBody {
-		if _, ok := requireBody[key]; !ok {
-			t.Errorf("RequireUserID body has no %q: %v", key, requireBody)
-		}
-	}
-	if got, want := requireBody["code"], "auth.token_"+reasonMissing; got != want {
-		t.Errorf("code: RequireUserID %q, want %q", got, want)
-	}
-}
-
 func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 	for _, header := range []string{"Basic abc", "Bearer", "Bearerabc"} {
 		t.Run(header, func(t *testing.T) {

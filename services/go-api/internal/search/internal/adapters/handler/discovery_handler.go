@@ -14,7 +14,6 @@ import (
 	"altune/go-api/internal/search/internal/service/vocabulary"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
-	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
@@ -204,7 +203,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 }
 
 func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
-	r.Use(requireUser, h.contentLimiter)
+	r.Use(h.contentLimiter)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
@@ -217,11 +216,3 @@ func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
 	r.Get("/lyrics", h.handleLyrics)
 }
 
-func requireUser(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := requestuser.RequireUserID(w, r); !ok {
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
