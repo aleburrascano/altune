@@ -16,13 +16,12 @@ func missingPort[P any](owner, name string, port P) error {
 }
 
 func isNil[P any](port P) bool {
-	switch reflect.TypeFor[P]().Kind() {
-	case reflect.Interface:
+	kind := reflect.TypeFor[P]().Kind()
+	if kind == reflect.Interface {
 		return any(port) == nil
-	case reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice, reflect.Chan:
-		return reflect.ValueOf(port).IsNil()
 	}
-	return false
+	nilable := kind == reflect.Func || kind == reflect.Map || kind == reflect.Pointer || kind == reflect.Slice || kind == reflect.Chan
+	return nilable && reflect.ValueOf(port).IsNil()
 }
 
 func errMissingPort(owner, name string) error {

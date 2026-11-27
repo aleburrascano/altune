@@ -2177,9 +2177,9 @@ func TestExecute_TheSourceIsAskedWithTheCatalogFacts(t *testing.T) {
 		{Provider: "deezer", ExternalID: "3135556"},
 	}
 	track := seedTrackInRepo(t, ledger, userId, func(tr *ledgerTrack) {
-		tr.ISRC = ptrTo("USUM71703861")
-		tr.CatalogDurationSeconds = ptrTo(214.0)
-		tr.StoredDurationSeconds = ptrTo(200.0)
+		tr.ISRC = new("USUM71703861")
+		tr.CatalogDurationSeconds = new(214.0)
+		tr.StoredDurationSeconds = new(200.0)
 		tr.CatalogExplicit, tr.CatalogSources = &explicit, sources
 	})
 	searcher := &fakeAudioSearcher{}
@@ -2455,7 +2455,7 @@ func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []ports.Catalo
 	track := newLedgerTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
 	isrc, mbid := "USAM18490008", recklessMBID
 	track.ISRC = &isrc
-	track.CatalogDurationSeconds = ptrTo(195.0)
+	track.CatalogDurationSeconds = new(195.0)
 	track.CatalogMBID, track.CatalogSources = &mbid, sources
 	store := &bytesAudioStore{objects: map[string]string{}}
 	var ref string

@@ -118,8 +118,8 @@ func TestIdempotencyKey(t *testing.T) {
 		want   *string
 	}{
 		{name: "absent header", header: nil, want: nil},
-		{name: "blank header", header: ptr("   "), want: nil},
-		{name: "trimmed key", header: ptr("  key-1 "), want: ptr("key-1")},
+		{name: "blank header", header: new("   "), want: nil},
+		{name: "trimmed key", header: new("  key-1 "), want: new("key-1")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -137,7 +137,6 @@ func TestIdempotencyKey(t *testing.T) {
 	}
 }
 
-func ptr(s string) *string { return &s }
 
 func newRequestWithURLParam(name, value string) *http.Request {
 	rctx := chi.NewRouteContext()

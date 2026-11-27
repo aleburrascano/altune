@@ -1089,9 +1089,7 @@ func BenchmarkFailureThrottle_BenignChurn(b *testing.B) { benchmarkChurn(b, 3*ti
 func BenchmarkFailureThrottle_AttackChurn(b *testing.B) { benchmarkChurn(b, 0) }
 
 func benchmarkChurn(b *testing.B, step time.Duration) {
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.DiscardHandler))
-	b.Cleanup(func() { slog.SetDefault(prev) })
+	b.Cleanup(logging.Swap(slog.New(slog.DiscardHandler)))
 	handler, clock := limitedMiddleware(middleware.FailureLimits{Burst: 20, Refill: 3 * time.Second, MaxClients: 10_000})
 	var worst time.Duration
 	for i := 0; b.Loop(); i++ {

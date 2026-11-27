@@ -360,23 +360,24 @@ func savedTrackOf(ledger *inmemoryledger.Ledger, id ids.TrackId) SavedTrack {
 	if len(saved.Evidence) > 0 && json.Unmarshal(saved.Evidence, &evidence) != nil {
 		evidence.ISRCSource = unreadableEvidence
 	}
-	return SavedTrack{
-		ISRC:            derefOrZero(saved.ISRC),
-		ISRCSource:      evidence.ISRCSource,
-		Provenance:      string(saved.Provenance),
-		DurationSeconds: derefOrZero(saved.StoredDurationSeconds),
-		RejectedKeys:    saved.RejectedSourceKeys,
-		Title:           saved.Title,
-		Album:           saved.Album,
-		Year:            derefOrZero(saved.Year),
-		CatalogMBID:     derefOrZero(saved.CatalogMBID),
+	out := SavedTrack{
+		ISRCSource:   evidence.ISRCSource,
+		Provenance:   string(saved.Provenance),
+		RejectedKeys: saved.RejectedSourceKeys,
+		Title:        saved.Title,
+		Album:        saved.Album,
 	}
-}
-
-func derefOrZero[T any](p *T) T {
-	var zero T
-	if p == nil {
-		return zero
+	if saved.ISRC != nil {
+		out.ISRC = *saved.ISRC
 	}
-	return *p
+	if saved.StoredDurationSeconds != nil {
+		out.DurationSeconds = *saved.StoredDurationSeconds
+	}
+	if saved.Year != nil {
+		out.Year = *saved.Year
+	}
+	if saved.CatalogMBID != nil {
+		out.CatalogMBID = *saved.CatalogMBID
+	}
+	return out
 }

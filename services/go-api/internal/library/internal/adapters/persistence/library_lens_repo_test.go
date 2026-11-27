@@ -40,9 +40,7 @@ type libraryTrackSpec struct {
 	addedAt     time.Time
 }
 
-func intPtr(v int) *int { return &v }
 
-func strPtr(v string) *string { return &v }
 
 func titlesOf(ts []*library.Track) []string {
 	out := make([]string, len(ts))
@@ -77,11 +75,11 @@ func TestPostgresTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Second)
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "Alpha", artist: "Artist A", album: "Alpha Album",
-		year: intPtr(2000), addedAt: base.Add(-3 * time.Hour),
+		year: new(2000), addedAt: base.Add(-3 * time.Hour),
 	})
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "bravo", artist: "Artist B", album: "Bravo Album",
-		year: intPtr(2020), addedAt: base.Add(-2 * time.Hour),
+		year: new(2020), addedAt: base.Add(-2 * time.Hour),
 	})
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "Charlie", artist: "Artist C", album: "Charlie Album",
@@ -186,11 +184,11 @@ func TestPostgresTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Second)
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "t1", artist: "Zed", album: "Avenue",
-		year: intPtr(1990), addedAt: base.Add(-3 * time.Hour),
+		year: new(1990), addedAt: base.Add(-3 * time.Hour),
 	})
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "t2", artist: "Amy", album: "Zephyr",
-		year: intPtr(2010), addedAt: base.Add(-1 * time.Hour),
+		year: new(2010), addedAt: base.Add(-1 * time.Hour),
 	})
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "t3", artist: "Bob", album: "Melody",
@@ -302,7 +300,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 	})
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "s2", artist: "Session Player", album: "Compiled",
-		albumArtist: strPtr("Various Composers"), addedAt: base.Add(-1 * time.Hour),
+		albumArtist: new("Various Composers"), addedAt: base.Add(-1 * time.Hour),
 	})
 
 	byArtist, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Search: "solo"})
@@ -523,7 +521,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *tes
 	for i, artist := range tiedArtistNames() {
 		seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 			title: "t" + strconv.Itoa(i), artist: artist, album: "Greatest Hits",
-			year: intPtr(2000), addedAt: addedAt,
+			year: new(2000), addedAt: addedAt,
 		})
 	}
 
@@ -598,7 +596,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_GroupsACompilationByItsAlbumArtist(
 	for i, artist := range []string{"Adele", "Drake"} {
 		seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 			title: "c" + strconv.Itoa(i), artist: artist, album: "Now 100",
-			albumArtist: strPtr("Various Artists"), addedAt: base.Add(time.Duration(-i) * time.Minute),
+			albumArtist: new("Various Artists"), addedAt: base.Add(time.Duration(-i) * time.Minute),
 		})
 	}
 

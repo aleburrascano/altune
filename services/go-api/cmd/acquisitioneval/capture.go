@@ -123,7 +123,7 @@ func parseCaptureDump(raw []byte) (captureDump, error) {
 }
 
 func captureTrack(t captureTrackDump) download.EvalTrack {
-	return download.EvalTrack{
+	track := download.EvalTrack{
 		Title:  t.Title,
 		Artist: t.Artist,
 		Album:  t.Album,
@@ -131,11 +131,14 @@ func captureTrack(t captureTrackDump) download.EvalTrack {
 
 		AudioSourceURL: t.AudioSourceURL,
 
-		CatalogDuration: deref(t.CatalogDurationSeconds),
 		CatalogMBID:     t.CatalogMBID,
 		CatalogSources:  t.CatalogSources,
 		CatalogExplicit: t.CatalogExplicit,
 	}
+	if t.CatalogDurationSeconds != nil {
+		track.CatalogDuration = *t.CatalogDurationSeconds
+	}
+	return track
 }
 
 func captureSources(logs []json.RawMessage) ([]download.EvalSource, string, error) {
@@ -220,9 +223,3 @@ func slug(s string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-func deref(f *float64) float64 {
-	if f == nil {
-		return 0
-	}
-	return *f
-}
