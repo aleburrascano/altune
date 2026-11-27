@@ -59,7 +59,7 @@ func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.Find
 		return FindResult{}, ErrNoAudioSources
 	}
 
-	if req.FallbackOnly {
+	if req.Tier == ports.TierFallbackOnly {
 		slots, errs := findAll(ctx, req, r.fallback)
 		return mergeSlotsReportingOutage(ctx, r.fallback, slots, errs)
 	}

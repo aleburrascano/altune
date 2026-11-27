@@ -173,12 +173,12 @@ func keepFirstTierOutage(fallbackErr, firstTierErr error) error {
 func searchAndDownloadAnyTier(ctx context.Context, run *pipelineRun, p Pipeline) (afterDownload, error) {
 	ac := run.ac
 	downloaded, err := searchAndDownload(ctx, run, p)
-	if err == nil || !ac.FallbackSkipped || ctx.Err() != nil {
+	if err == nil || ac.Pass != PassFallbackSkipped || ctx.Err() != nil {
 		return downloaded, err
 	}
 	slog.InfoContext(ctx, "acquisition.first_tier_failed_trying_fallback",
 		logging.KeyTrackID, ac.Track.ID, logging.KeyError, redact.LogError(err))
-	ac.FallbackSkipped, ac.FallbackOnly = false, true
+	ac.Pass = PassFallbackOnly
 	ac.clearCandidates()
 	run.completed = nil
 	downloaded, fallbackErr := searchAndDownload(ctx, run, p)
@@ -281,8 +281,7 @@ type AcquisitionContext struct {
 
 	Replace ReplaceState
 
-	FallbackSkipped bool
-	FallbackOnly    bool
+	Pass SearchPass
 
 	PriorRejections []ports.PriorRejection
 
@@ -321,7 +320,7 @@ func (ac *AcquisitionContext) clearCandidates() {
 
 func (ac *AcquisitionContext) retargetTo(label ports.TrackLabel) {
 	ac.clearCandidates()
-	ac.FallbackSkipped, ac.FallbackOnly = false, false
+	ac.Pass = PassAllTiers
 	ac.Identity = ports.RecordingIdentity{}
 	ac.Track.Title, ac.Track.Album, ac.Track.Year = label.Title, label.Album, label.Year
 	ac.Track.ISRC, ac.Track.CatalogMBID, ac.Track.CatalogDuration = label.ISRC, label.MBID, label.DurationSeconds

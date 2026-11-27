@@ -238,6 +238,21 @@ func TestSearchStep_TheRequestHintsTheResolvedISRCWhenTheTrackHasNone(t *testing
 	}
 }
 
+func TestSearchStep_AFallbackOnlyPassStaysAFallbackOnlyPass(t *testing.T) {
+	first := &searchSource{name: "first", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u1"}}}
+	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u2"}}}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}, Pass: service.PassFallbackOnly}
+
+	_ = runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
+
+	if got := len(first.seen()); got != 0 {
+		t.Errorf("first tier finds = %d, want 0: a fallback-only pass skips the first tier", got)
+	}
+	if ac.Pass != service.PassFallbackOnly {
+		t.Errorf("Pass = %v, want the fallback-only pass kept after its search", ac.Pass)
+	}
+}
+
 func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing.T) {
 	first := &searchSource{name: "first", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u1"}}}
 	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u2", Kind: ports.KindArtTrack}}}
@@ -251,7 +266,7 @@ func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing
 	if got := len(fallback.seen()); got != 1 {
 		t.Fatalf("fallback finds = %d, want 1: the fallback tier ran", got)
 	}
-	if ac.FallbackSkipped {
-		t.Error("FallbackSkipped = true, want false: the fallback ran, only its candidate is resolved")
+	if ac.Pass == service.PassFallbackSkipped {
+		t.Error("Pass = fallback skipped, want not: the fallback ran, only its candidate is resolved")
 	}
 }

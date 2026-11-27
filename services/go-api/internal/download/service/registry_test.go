@@ -463,7 +463,7 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 		{"resolved first-tier hit skips the configured fallback", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{}, true},
 		{"unresolved first tier runs the fallback", []ports.AudioCandidate{candidate("u1")}, true, ports.FindRequest{}, false},
 		{"no fallback configured", []ports.AudioCandidate{resolvedCandidate("u1")}, false, ports.FindRequest{}, false},
-		{"fallback only", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{FallbackOnly: true}, false},
+		{"fallback only", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{Tier: ports.TierFallbackOnly}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
