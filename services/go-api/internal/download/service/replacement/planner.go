@@ -24,6 +24,7 @@ type ReplacementPlanner struct {
 	retryAfter   time.Duration
 	checkUploads bool
 	lowBitrate   int
+	upgradable   []ports.TrackStatus
 }
 
 func NewReplacementPlanner(store ports.UpgradeStore, scheduler Scheduler, maxQueued int, retryAfter time.Duration) *ReplacementPlanner {
@@ -32,6 +33,11 @@ func NewReplacementPlanner(store ports.UpgradeStore, scheduler Scheduler, maxQue
 
 func (p *ReplacementPlanner) CheckingUploads() *ReplacementPlanner {
 	p.checkUploads = true
+	return p
+}
+
+func (p *ReplacementPlanner) UpgradingFrom(rules ports.StatusRules) *ReplacementPlanner {
+	p.upgradable = rules.Upgradable()
 	return p
 }
 
@@ -49,6 +55,7 @@ func (p *ReplacementPlanner) PlanNext(ctx context.Context) error {
 		CheckInPlace: p.checkUploads,
 
 		LowBitrateFloorKbps: p.lowBitrate,
+		Upgradable:          p.upgradable,
 	})
 	if err != nil {
 		return fmt.Errorf("pick tracks to upgrade: %w", err)

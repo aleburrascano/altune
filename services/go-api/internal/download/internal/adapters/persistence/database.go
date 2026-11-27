@@ -35,7 +35,7 @@ func (db *Database) UpgradeStore() *PostgresUpgradeStore {
 	return NewPostgresUpgradeStore(db.pgxPool())
 }
 
-func (db *Database) JobQueue(requeuer ports.TrackRequeuer) *PostgresJobQueue {
+func (db *Database) JobQueue(requeuer ports.QueueTracks) *PostgresJobQueue {
 	return MustNewPostgresJobQueue(db.pgxPool(), requeuer)
 }
 

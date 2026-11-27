@@ -41,3 +41,16 @@ const (
 	TrackPending = ports.TrackPending
 	TrackReady   = ports.TrackReady
 )
+
+type (
+	StatusRules = ports.StatusRules
+	TrackEvent  = ports.TrackEvent
+)
+
+const (
+	EventFailPending     = ports.EventFailPending
+	EventMarkFailed      = ports.EventMarkFailed
+	EventMarkReady       = ports.EventMarkReady
+	EventReplaceAudio    = ports.EventReplaceAudio
+	EventRevertToPending = ports.EventRevertToPending
+)

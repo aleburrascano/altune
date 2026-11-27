@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/service"
@@ -82,7 +83,7 @@ func committedTrack(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId)
 	return track
 }
 
-type emptyLedger struct{}
+type emptyLedger struct{ acquisitiontest.Rules }
 
 func (emptyLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*acqports.TrackSnapshot, error) {
 	return inmemoryledger.NewLedger().Get(ctx, id, userId)
