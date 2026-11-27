@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/slowclienttest"
 	"bytes"
-	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -64,17 +63,28 @@ func TestWriteDeadline_CutsOffClientThatStopsReading(t *testing.T) {
 }
 
 func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
+	deadlinePassed := make(chan struct{})
 	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/probe" {
+			_ = writeUntilError(w, 2*cutoffWait)
+			close(deadlinePassed)
+			return
+		}
 		httpserver.ClearWriteDeadline(w)
 		w.WriteHeader(http.StatusOK)
 		rc := http.NewResponseController(w)
 		_ = rc.Flush()
-		_ = clock.Sleep(r.Context(), 3*testWriteDeadline)
+		select {
+		case <-deadlinePassed:
+		case <-r.Context().Done():
+			return
+		}
 		_, _ = io.WriteString(w, "late frame")
 		_ = rc.Flush()
 	}))
 
 	conn, br := slowclienttest.Get(t, srv, "/", nil)
+	slowclienttest.Get(t, srv, "/probe", nil)
 	resp := slowclienttest.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
@@ -96,13 +106,15 @@ func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.
 	began := time.Now()
 	got := 0
 	buf := make([]byte, 32<<10)
+	pace := time.NewTicker(20 * time.Millisecond)
+	defer pace.Stop()
 	for {
 		n, err := resp.Body.Read(buf)
 		got += n
 		if err != nil {
 			break
 		}
-		_ = clock.Sleep(context.Background(), 20*time.Millisecond)
+		<-pace.C
 	}
 	if got != size {
 		t.Fatalf("received %d of %d bytes after %s: steady slow client was cut off", got, size, time.Since(began))
