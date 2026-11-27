@@ -34,7 +34,7 @@ func (a *App) mountRoutes(
 		discoveryH.PublicRoutes(r, search.DefaultAuthFailureLimit)
 
 		r.Group(func(r chi.Router) {
-			r.Use(authMiddleware(verifier))
+			r.Use(authMiddleware(verifier, a.metrics))
 
 			r.Route("/tracks", func(r chi.Router) {
 				r.Mount("/", cat.trackHandler.Routes())

@@ -154,6 +154,8 @@ linters:
           msg: take the caller's ctx; a context root belongs to a main package (cmd, scripts), and work that outlives the request goes through background.Detach (internal/shared/background)
         - pattern: ^time\.(Now|Since|Until|After|AfterFunc|NewTimer|NewTicker|Tick)$
           msg: take the clock as a clock.Func parameter and read it through clock.Now at the composition root (internal/shared/clock), the one home for time
+        - pattern: ^expvar\.(NewInt|NewFloat|NewString|NewMap|Publish)$
+          msg: count through the telemetry.Registry that internal/app creates and passes in (internal/shared/telemetry), the one metrics home
     revive:
       rules:
         - name: indent-error-flow
@@ -190,6 +192,10 @@ linters:
         linters:
           - forbidigo
         text: 'use of `(http\.\w+|recover)`'
+      - path: internal/shared/telemetry/stage\.go
+        linters:
+          - spancheck
+        text: span\.End
       - path: (^internal/platform/outbound/|/[^/]*test/)
         linters:
           - forbidigo

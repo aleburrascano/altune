@@ -10,9 +10,9 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
+	"altune/go-api/internal/shared/telemetry"
 	"bytes"
 	"context"
-	"expvar"
 	"io"
 	"log/slog"
 	"math"
@@ -922,7 +922,7 @@ func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 		ClientEvents:    search.NoClientEvents{},
 		ProviderTimeout: 10 * time.Second,
 		ChartTimeout:    15 * time.Second,
-		CacheOps:        new(expvar.Map),
+		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		Providers:       providers,
 		Search:          search.SearchSettings{Deadline: 1500 * time.Millisecond},
 		Unreleased:      search.UnreleasedSettings{Tuning: search.UnreleasedConfig{MaxPages: 1, MaxDetails: 1, DetailConcurrency: 1, Wait: time.Second, JobTimeout: 5 * time.Second}},

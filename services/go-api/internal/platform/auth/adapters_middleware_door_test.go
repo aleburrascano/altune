@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
+	"altune/go-api/internal/shared/telemetry"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -681,16 +682,17 @@ func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
 	}
 }
 
-func TestMiddleware_ExpvarCountersIncrementThroughRealMiddleware(t *testing.T) {
-	metrics := auth.NewExpvarAuthMetrics()
+func TestMiddleware_RegistryCountersIncrementThroughRealMiddleware(t *testing.T) {
+	reg := telemetry.NewRegistry()
+	metrics := auth.NewAuthMetrics(reg)
 	next, _ := noopHandler()
 	rejecting := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), time.Now, metrics, auth.DefaultFailureLimits)(next)
 	unavailable := auth.MustMiddleware(stubVerifier(ids.UserId{}, errors.New("fetch JWKS: timeout")), time.Now, metrics, auth.DefaultFailureLimits)(next)
 
-	before := auth.ReadSnapshot()
+	before := auth.ReadSnapshot(reg)
 	serveBearer(rejecting, "203.0.113.8:1", "t")
 	serveBearer(unavailable, "203.0.113.9:1", "t")
-	after := auth.ReadSnapshot()
+	after := auth.ReadSnapshot(reg)
 
 	if after.TokenRejections != before.TokenRejections+1 {
 		t.Errorf("token_rejections_total %d, want %d", after.TokenRejections, before.TokenRejections+1)

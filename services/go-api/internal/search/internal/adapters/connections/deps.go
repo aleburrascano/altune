@@ -6,8 +6,8 @@ import (
 	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
-	"expvar"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,7 +28,7 @@ type Deps struct {
 	ChartTimeout    time.Duration
 	Pool            *pgxpool.Pool
 	Redis           *goredis.Client
-	CacheOps        *expvar.Map
+	CacheOps        *telemetry.LabeledCounter
 	Activity        ports.ActivityFeed
 	ClientEvents    handler.ClientEventSink
 	IdentityStore   ports.IdentityStore

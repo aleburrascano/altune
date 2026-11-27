@@ -14,6 +14,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"fmt"
 	"log/slog"
@@ -38,6 +39,7 @@ type App struct {
 	alertMonitor  *monitoring.AlertMonitor
 	logRing       *logging.RingBuffer
 	latency       *requestmetrics.Registry
+	metrics       *telemetry.Registry
 	eventFeed     *monitoring.EventFeed
 	evalMeter     *monitoring.EvalMeter
 	lifecycleDone <-chan struct{}
@@ -52,12 +54,13 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 		cfg:     cfg,
 		logRing: logRing,
 		latency: requestmetrics.NewRegistry(),
+		metrics: telemetry.NewRegistry(),
 		jobs:    jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker},
 	}
 }
 
 func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
-	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
+	supaVerifier, err := newAuthVerifier(ctx, a.cfg, a.metrics)
 	if err != nil {
 		return nil, fmt.Errorf("auth: %w", err)
 	}

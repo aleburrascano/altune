@@ -16,6 +16,7 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -51,6 +52,7 @@ func newSources(t *testing.T) sources {
 			EventTap:     tap,
 			EventFeed:    monitoring.NewEventFeed(),
 			AlertMonitor: alertMonitor,
+			Metrics:      telemetry.NewRegistry(),
 			Background:   &background.Tracker{},
 		},
 		bus: bus,
@@ -220,11 +222,11 @@ func TestLive_CarriesAuthCatalogAndPlaybackFailureCounters(t *testing.T) {
 	var before counterWire
 	decode(t, served(t, s), &before)
 
-	auth.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
-	auth.NewExpvarAuthMetrics().VerifierUnavailable()
-	auth.NewExpvarAuthMetrics().JWKSFetchFailed()
-	library.NewExpvarAudioStoreMetrics().PresignFailed()
-	pb := playback.NewExpvarPlaybackMetrics()
+	auth.NewAuthMetrics(s.Metrics).TokenRejected("signature_invalid")
+	auth.NewAuthMetrics(s.Metrics).VerifierUnavailable()
+	auth.NewAuthMetrics(s.Metrics).JWKSFetchFailed()
+	library.NewAudioStoreMetrics(s.Metrics).PresignFailed()
+	pb := playback.NewPlaybackMetrics(s.Metrics)
 	pb.EnrichmentFailed()
 	pb.CorruptStoredState()
 	pb.QueueStateOpTimedOut()
@@ -285,13 +287,13 @@ func TestLive_CarriesProviderBreakerAndLatency(t *testing.T) {
 		"https://api.deezer.com/search?q=" + secret:     http.StatusOK,
 		"https://api.spotify.com/v1/search?q=" + secret: http.StatusTooManyRequests,
 	} {
-		resp, err := search.NewCountingTransport(statusTransport{status}).RoundTrip(httptest.NewRequest(http.MethodGet, url, nil))
+		resp, err := search.NewCountingTransport(statusTransport{status}, s.Metrics).RoundTrip(httptest.NewRequest(http.MethodGet, url, nil))
 		if err != nil {
 			t.Fatal(err)
 		}
 		_ = resp.Body.Close()
 	}
-	pb := playback.NewExpvarPlaybackMetrics()
+	pb := playback.NewPlaybackMetrics(s.Metrics)
 	pb.EnrichmentBreakerOpened()
 	pb.EnrichmentBreakerRejected()
 	defer pb.EnrichmentBreakerClosed()

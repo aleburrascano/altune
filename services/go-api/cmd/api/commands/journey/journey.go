@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"fmt"
@@ -42,11 +43,12 @@ func RankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.
 	if err != nil {
 		return nil, err
 	}
-	transport, err := providertransport.Live()
+	metrics := telemetry.NewRegistry()
+	transport, err := providertransport.New(metrics)
 	if err != nil {
 		return nil, err
 	}
-	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: transport, Tracker: tracker})
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: transport, Tracker: tracker, Metrics: metrics})
 	if err != nil {
 		return nil, err
 	}

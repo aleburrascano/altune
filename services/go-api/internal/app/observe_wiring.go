@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"fmt"
 
@@ -30,7 +31,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 		Discography: monitoringfromsearch.NewDiscographyQualityReader(search.NewPostgresEventStore(a.pool, clock.Now)),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps))
+	mountObserve(r, verifier, a.metrics, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps))
 	return nil
 }
 
@@ -54,10 +55,10 @@ func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitor
 	return meter, nil
 }
 
-func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *monitoring.Handler) {
+func mountObserve(r chi.Router, verifier auth.TokenVerifier, metrics *telemetry.Registry, principalID string, h *monitoring.Handler) {
 	r.Route("/observe", func(or chi.Router) {
 		or.Use(monitoring.NoStoreAndNosniff)
-		or.Use(authMiddleware(verifier))
+		or.Use(authMiddleware(verifier, metrics))
 		or.Use(monitoring.Gate(principalID))
 		h.Register(or)
 	})
@@ -81,6 +82,7 @@ func (a *App) liveMetrics() monitoring.LiveMetrics {
 		EventFeed:    a.eventFeed,
 		AlertMonitor: a.alertMonitor,
 		Background:   a.background,
+		Metrics:      a.metrics,
 	})
 }
 

@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ type Handles struct {
 	Transport http.RoundTripper
 	Tracker   *background.Tracker
 	LogRing   *logging.RingBuffer
+	Metrics   *telemetry.Registry
 }
 
 func NewTracker(cfg *config.Config) (*background.Tracker, error) {
@@ -79,6 +81,9 @@ func (a *App) attach(ctx context.Context, h Handles) {
 		a.probes.Redis = func(ctx context.Context) error { return h.Redis.Ping(ctx).Err() }
 	}
 	a.background = h.Tracker
+	if h.Metrics != nil {
+		a.metrics = h.Metrics
+	}
 	a.lifecycleDone = ctx.Done()
 }
 

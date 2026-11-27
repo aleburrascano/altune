@@ -43,6 +43,7 @@ func (a *App) alertConditions(coverage alerts.CoverageEvents) ([]monitoring.Cond
 		Coverage:              coverage,
 		YouTubeSignedOutSince: downloadsetup.YtDlpSearcher(a.cfg).SignedOutSince,
 		Jobs:                  &a.jobs,
+		Requests:              a.latency.Snapshot,
 		Clock:                 clock.Now,
 	})
 }
