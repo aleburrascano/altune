@@ -7,6 +7,8 @@ Each folder here is one module, and its folder says its role.
 
 A package's tests live in `package <name>_test` and use only its exported API, so a test fails only when behaviour changes.
 
+Call a collaborator, not its parts: `b.poller.snapshot()`, never `b.poller.samples.Snapshot()`. When code reaches through a field into another type's fields, move the behaviour onto that type. Reading plain data is exempt.
+
 Only `cmd/overseer` reads the environment: it passes `os.Getenv` to `internal/config` and `internal/app`. Tests may read it too.
 
 `golangci-lint` checks these rules over the whole tree, configured in `services/overseer/.golangci.strict.yml`: `depguard` for imports, `testpackage` for tests and `forbidigo` for the environment.

@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/app/searchsettings"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/telemetry"
 	"errors"
-	"expvar"
 	"net/http"
 	"reflect"
 	"testing"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestDeps_CopiesEachConfigValueIntoItsOwnField(t *testing.T) {
-	deps := searchsettings.Deps(t.Context(), distinctDiscoveryConfig(), http.DefaultTransport)
+	deps := searchsettings.Deps(t.Context(), distinctDiscoveryConfig(), http.DefaultTransport, telemetry.NewRegistry())
 
 	wantProviders := search.ProviderSettings{
 		MusicBrainzUserAgent: "mb-agent",
@@ -62,7 +62,7 @@ func TestDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{}
 			tt.turnOn(cfg)
-			deps := searchsettings.Deps(t.Context(), cfg, http.DefaultTransport)
+			deps := searchsettings.Deps(t.Context(), cfg, http.DefaultTransport, telemetry.NewRegistry())
 			if !reflect.DeepEqual(deps.Providers, tt.wantProviders) || deps.Search != tt.wantSearch || deps.Unreleased != tt.wantUnreleased {
 				t.Errorf("deps =\n  %+v\n  %+v\n  %+v\nwant\n  %+v\n  %+v\n  %+v",
 					deps.Providers, deps.Search, deps.Unreleased, tt.wantProviders, tt.wantSearch, tt.wantUnreleased)
@@ -102,8 +102,9 @@ func (stubTransport) RoundTrip(*http.Request) (*http.Response, error) {
 func TestDeps_CarriesTheLifecycleTransportTimeoutsAndCacheCounters(t *testing.T) {
 	ctx := t.Context()
 	transport := stubTransport{}
+	reg := telemetry.NewRegistry()
 
-	deps := searchsettings.Deps(ctx, &config.Config{}, transport)
+	deps := searchsettings.Deps(ctx, &config.Config{}, transport, reg)
 
 	if deps.Lifecycle != ctx || deps.Transport != transport {
 		t.Error("deps do not carry the given lifecycle and transport")
@@ -111,11 +112,11 @@ func TestDeps_CarriesTheLifecycleTransportTimeoutsAndCacheCounters(t *testing.T)
 	if deps.ProviderTimeout != 10*time.Second || deps.ChartTimeout != 15*time.Second {
 		t.Errorf("timeouts = %v, %v, want 10s and 15s", deps.ProviderTimeout, deps.ChartTimeout)
 	}
-	if deps.CacheOps == nil || deps.CacheOps != expvar.Get("discovery_cache_ops") {
-		t.Error("deps do not count cache operations into the published discovery_cache_ops map")
+	if deps.CacheOps == nil || deps.CacheOps != reg.LabeledCounter("discovery_cache_ops") {
+		t.Error("deps do not count cache operations into the injected registry's discovery_cache_ops counter")
 	}
-	if again := searchsettings.Deps(ctx, &config.Config{}, transport); again.CacheOps != deps.CacheOps {
-		t.Error("a second build published a second cache counter map instead of reusing the first")
+	if again := searchsettings.Deps(ctx, &config.Config{}, transport, reg); again.CacheOps != deps.CacheOps {
+		t.Error("a second build made a second cache counter instead of reusing the registry's")
 	}
 }
 

@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/audiokey"
@@ -568,7 +569,7 @@ func TestStoreRollback_WaitsLongerBeforeEachRetryOfTheDelete(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := &timingStore{recordingStore: newRecordingStore()}
 		store.failDeletes = 1 << 30
-		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
+		step := mustNewStoreStep(store, scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(store), downloadtest.SilentAudioRefLookup())
 
 		err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/song.mp3"})
 
@@ -592,7 +593,7 @@ func TestStoreRollback_StopsWaitingBetweenDeleteRetriesWhenTheContextIsCancelled
 	synctest.Test(t, func(t *testing.T) {
 		store := &timingStore{recordingStore: newRecordingStore()}
 		store.failDeletes = 1 << 30
-		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
+		step := mustNewStoreStep(store, scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(store), downloadtest.SilentAudioRefLookup())
 		ctx, cancel := context.WithCancel(context.Background())
 		time.AfterFunc(10*time.Millisecond, cancel)
 		start := time.Now()

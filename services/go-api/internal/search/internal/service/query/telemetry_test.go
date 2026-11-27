@@ -11,6 +11,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestService_EmitsSearchTelemetryV2(t *testing.T) {
@@ -171,5 +175,37 @@ func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
 	}
 	if !strings.Contains(rec.Attrs["error"], "db down") {
 		t.Errorf("error = %q, want the store's failure", rec.Attrs["error"])
+	}
+}
+
+func TestService_SearchRecordsAStageSpanAndAProviderSpanUnderIt(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+	bg := searchtest.NewTracker(t)
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(*search.Collaborators) {})
+
+	runSearch(t, svc, "humble")
+	bg.Wait()
+
+	spans := map[string]sdktrace.ReadOnlySpan{}
+	for _, s := range recorder.Ended() {
+		spans[s.Name()] = s
+	}
+	fanout, provider := spans["search.fanout"], spans["search.provider"]
+	if fanout == nil || provider == nil || spans["search.rank"] == nil || spans["search.artwork"] == nil {
+		t.Fatalf("spans = %v, want the fanout, provider, rank and artwork stages", spans)
+	}
+	if provider.Parent().SpanID() != fanout.SpanContext().SpanID() {
+		t.Errorf("provider span parent = %v, want the fanout span", provider.Parent().SpanID())
+	}
+	attrs := map[string]string{}
+	for _, kv := range provider.Attributes() {
+		attrs[string(kv.Key)] = kv.Value.String()
+	}
+	if attrs["provider"] == "" || attrs["provider.status"] != "ok" {
+		t.Errorf("provider span attributes = %v, want the provider and an ok status", attrs)
 	}
 }

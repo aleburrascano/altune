@@ -66,9 +66,13 @@ func (t *failureThrottle) admit(key string) (attempt, time.Duration, bool) {
 }
 
 func (a attempt) succeeded() {
-	a.throttle.mu.Lock()
-	defer a.throttle.mu.Unlock()
-	a.reservation.CancelAt(a.reservedAt)
+	a.throttle.cancel(a.reservation, a.reservedAt)
+}
+
+func (t *failureThrottle) cancel(res *rate.Reservation, at time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	res.CancelAt(at)
 }
 
 func (t *failureThrottle) limiterFor(key string) *rate.Limiter {

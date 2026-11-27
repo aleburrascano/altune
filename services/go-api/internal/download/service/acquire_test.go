@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/savedlink"
 	"altune/go-api/internal/download/internal/core/audioquality"
@@ -3040,7 +3041,7 @@ func (discardingDeleter) Delete(context.Context, string) error { return nil }
 
 func noopStages() service.StagePorts {
 	return service.StagePorts{
-		Prober:        ports.NoopAudioProber(),
+		Prober:        downloadtest.SilentAudioProber(),
 		Tagger:        ports.NoopAudioTagger(),
 		Rejections:    ports.NoopRejectionStore(),
 		StoredAudio:   ports.NoopStoredAudioReader(),
@@ -3115,7 +3116,7 @@ func newTestDownloadStep(fetcher fetcherPort, opts ...any) *service.DownloadStep
 	wired := stepPorts{
 		identifier: ports.NoopAudioIdentifier(),
 		lookup:     ports.NoopRecordingLookup(),
-		prober:     ports.NoopAudioProber(),
+		prober:     downloadtest.SilentAudioProber(),
 		skips:      ports.NoopVerifySkipRecorder(),
 		limit:      service.Unlimited(),
 	}

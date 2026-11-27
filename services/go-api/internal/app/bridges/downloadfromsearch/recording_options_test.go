@@ -108,7 +108,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Previews:        download.NoopPreviewMatcher(),
 			Recordings:      recording.Resolver,
 		}, download.StagePorts{
-			Prober:        download.NoopAudioProber(),
+			Prober:        downloadtest.SilentAudioProber(),
 			Tagger:        download.NoopAudioTagger(),
 			Rejections:    download.NoopRejectionStore(),
 			StoredAudio:   download.NoopStoredAudioReader(),

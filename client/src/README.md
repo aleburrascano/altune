@@ -27,4 +27,6 @@ Work that must finish by a deadline goes through `withDeadline(work, ms, { onExp
 | Packages and JSX per part, tests through doors, no patching, `process.env`, no `Promise.race` | eslint, `client/eslint.config.js` |
 | Each changed line is tested | Stryker, `bash scripts/ci/client-mutate.sh <base>` |
 
+Call a collaborator, not its parts: keep `deps.foreground` in a field and call `this.foreground.isActive()`, never `this.deps.foreground.isActive()`. Reading plain data (`props.theme.color`) is exempt.
+
 For now the fallow and eslint rules above check only the files a branch changes, because older code still breaks them: `node client/scripts/fallow-changed.mjs <base>` and eslint on the changed files. Until then `npm run lint` on the whole tree fails on the older code. `bash scripts/precheck.sh` runs every check.

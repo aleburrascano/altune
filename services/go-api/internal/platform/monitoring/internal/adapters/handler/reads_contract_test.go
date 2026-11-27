@@ -2,9 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
-	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/polltest"
 	"context"
 	"testing"
 	"time"
@@ -18,14 +16,13 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 			Queries:  []monitoring.EvalMeterQueryResult{{Query: "q", Expect: "e", Passed: true, Position: 1}},
 		}, nil
 	}
-	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, clock.NewTicker, runner, background.EveryPassLeads)
+	meter, err := monitoring.NewEvalMeter(clock.Now, runner, func() bool { return false })
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	meter.Start(ctx)
-	polltest.Until(t, 5*time.Second, "the eval meter to record a run", func() bool { return meter.Status().LastRun != nil })
+	if err := meter.Pass(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 
 	rec := serveRead(t, monitoring.Deps{Eval: meter}, "/eval")
 	assertMatchesFixture(t, "observe_eval.json", rec.Body.Bytes())

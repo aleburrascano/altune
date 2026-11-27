@@ -7,6 +7,10 @@ Each folder here is one module, and its folder says its role.
 
 A package's tests live in `package <name>_test` and use only its exported API, so a test fails only when behaviour changes.
 
+Call a collaborator, not its parts: `a.throttle.cancel(res, at)`, never `a.throttle.mu.Lock()`. When code reaches through a field into another type's fields, move the behaviour onto that type. Reading plain data (`cfg.Limits.Burst`) is exempt.
+
+A required collaborator is a constructor parameter that the constructor refuses nil for, and no code nil-checks it afterwards. An optional collaborator defaults to its `Noop` in the constructor, and a `Noop*` constructor exists only while production code uses it. `go run ./cmd/collabcheck ./...` and `bash scripts/ci/noop-reachable.sh` check both, and `scripts/precheck.sh` runs them.
+
 Only `internal/shared/config` reads the environment in production code. Tests, `internal/shared/dbtest` and the programs in `cmd/` and `scripts/` may read it too.
 
 Module boundaries are checked by community tools, configured in this repo. `go-arch-lint check` (v1.19.1, `.go-arch-lint.yml`) fails when a module imports a module its role may not, and when a folder under `internal/` belongs to no module; a new module needs a component and a `deps` entry there. `.go-arch-lint.doors.yml` lists the side-door imports (a package other than a module's root, from outside it); it is not wired until it reaches zero. `golangci-lint` (`.golangci.strict.yml`) checks with `depguard` that core, service, domain, ports and shell packages import no I/O (`layer`), that the database driver is imported only in adapters packages, `shared/database`, `shared/dbtest` and, for the pool type `pgxpool` alone, the composition root (`driver` and `composition`), and that `math/rand` is drawn only in `shared/random` (`random`), and with `testpackage` and `forbidigo` for tests and the environment (`testpackage` lets only a file named `export_test.go` be in-package; today that is `internal/app`, whose tests build a handler through the unexported `assemble`). `revive` `deep-exit` allows `os.Exit` and `log.Fatal` only in `main()`; a helper returns its error to `main`.

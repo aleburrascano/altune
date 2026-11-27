@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
-	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
@@ -119,9 +118,9 @@ func TestReadsMetricsLive_NilSourceAnswersEmptyObject(t *testing.T) {
 }
 
 func TestReadsEval_ServesTheMeterStatus(t *testing.T) {
-	meter, err := monitoring.NewEvalMeter(0, clock.Now, clock.NewTicker, func(context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
 		return monitoring.EvalMeterResult{}, nil
-	}, background.EveryPassLeads)
+	}, func() bool { return false })
 	if err != nil {
 		t.Fatal(err)
 	}
