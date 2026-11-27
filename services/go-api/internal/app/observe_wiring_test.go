@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -257,7 +258,7 @@ func TestObserveHealth_ProbesTheAssembledDatabaseRedisAndAuth(t *testing.T) {
 	redisUp := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { _ = redisUp.Close() })
 
-	got := readObservedHealth(t, app.Handles{Pool: integrationPool(t), Redis: redisUp}, http.StatusOK)
+	got := readObservedHealth(t, app.Handles{Pool: dbtest.Pool(t), Redis: redisUp}, http.StatusOK)
 
 	if got.DB != monitoring.DepUp || got.Redis != monitoring.DepUp || got.Auth != monitoring.DepUp {
 		t.Errorf("health = %+v, want db, redis and auth all ok", got)

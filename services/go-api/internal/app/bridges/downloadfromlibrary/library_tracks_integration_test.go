@@ -17,11 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newLedgerPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	return dbtest.Pool(t)
-}
-
 func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *library.Track {
 	t.Helper()
 	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours", time.Now)
@@ -64,7 +59,7 @@ func rowState(t *testing.T, pool *pgxpool.Pool, trackID library.TrackId) (string
 }
 
 func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew(t *testing.T) {
-	pool := newLedgerPool(t)
+	pool := dbtest.Pool(t)
 	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New())
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
@@ -108,7 +103,7 @@ func (s *claimDuringUpdateStore) UpdateFenced(ctx context.Context, track *librar
 }
 
 func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) {
-	pool := newLedgerPool(t)
+	pool := dbtest.Pool(t)
 	track := insertUnqueuedTrack(t, pool)
 	held := reclaimTrack(t, pool, track.ID)
 	store := &claimDuringUpdateStore{PostgresTrackRepository: library.NewPostgresTrackRepository(pool), pool: pool, t: t}
@@ -160,7 +155,7 @@ func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) 
 }
 
 func TestTrackLedger_OnPostgresMeetsTheLedgerContract(t *testing.T) {
-	store := library.NewPostgresTrackRepository(newLedgerPool(t))
+	store := library.NewPostgresTrackRepository(dbtest.Pool(t))
 	downloadtest.LedgerContract(t, func(*testing.T) downloadtest.LedgerUnderTest {
 		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New()), store: store}
 	})

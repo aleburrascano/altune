@@ -92,7 +92,8 @@ func readEvidence(t *testing.T, pool *pgxpool.Pool, id sharedids.TrackId) record
 
 func TestInPlaceRecorder_RecordInPlaceWritesTheVerdictAndGradeAndKeepsTheRestOfTheEvidence(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown","channel":"topic"}`, sourceURL: sourceURL("art")})
 
@@ -111,7 +112,8 @@ func TestInPlaceRecorder_RecordInPlaceWritesTheVerdictAndGradeAndKeepsTheRestOfT
 
 func TestInPlaceRecorder_RecordInPlaceWithNoGradeOrVerdictOnlyStampsTheGeneration(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown"}`, sourceURL: sourceURL("art")})
 
@@ -127,7 +129,8 @@ func TestInPlaceRecorder_RecordInPlaceWithNoGradeOrVerdictOnlyStampsTheGeneratio
 
 func TestInPlaceRecorder_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegrading(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
 
@@ -145,7 +148,8 @@ func TestInPlaceRecorder_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegrading
 
 func TestInPlaceRecorder_RecordInPlaceNeverLowersTheStoredGrade(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
 	ctx := context.Background()
@@ -173,7 +177,8 @@ func TestInPlaceRecorder_RecordInPlaceNeverLowersTheStoredGrade(t *testing.T) {
 
 func TestInPlaceRecorder_RecordInPlaceLowersTheGradeOnlyForAContradictionThatStands(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
 
@@ -191,7 +196,8 @@ func TestInPlaceRecorder_RecordInPlaceLowersTheGradeOnlyForAContradictionThatSta
 
 func TestInPlaceRecorder_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
 
@@ -207,7 +213,8 @@ func TestInPlaceRecorder_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *testin
 
 func TestInPlaceRecorder_RecordInPlaceNeverReplacesAStoredBestAvailableGrade(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
 
@@ -224,7 +231,8 @@ func TestInPlaceRecorder_RecordInPlaceNeverReplacesAStoredBestAvailableGrade(t *
 
 func TestInPlaceRecorder_RecordInPlaceLowersAWrongLengthGradeAToB(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A"), sourceURL: sourceURL("art")})
 	ref := "u/" + id.String() + ".mp3"
@@ -246,7 +254,8 @@ func TestInPlaceRecorder_RecordInPlaceLowersAWrongLengthGradeAToB(t *testing.T) 
 
 func TestInPlaceRecorder_RecordInPlaceClearsTheFailureCountSoANewGenerationStartsFresh(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), state: `{"in_place_failures":2}`, sourceURL: sourceURL("art")})
 
@@ -262,7 +271,8 @@ func TestInPlaceRecorder_RecordInPlaceClearsTheFailureCountSoANewGenerationStart
 
 func TestInPlaceRecorder_RecordInPlaceClearsAStaleAcoustIDScoreOnAPreviewVerdict(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	recorder := newInPlaceRecorder(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","acoustid_score":0.9}`, sourceURL: sourceURL("art")})
 

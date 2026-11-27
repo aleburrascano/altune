@@ -87,7 +87,8 @@ func leaseUntil(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) time.Time
 
 func TestPostgresJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -112,7 +113,8 @@ func TestPostgresJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 
 func TestPostgresJobQueue_ClaimReportsHowLongTheJobWaited(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 
 	insertPendingTrack(t, pool, time.Now().Add(-90*time.Second))
@@ -128,7 +130,8 @@ func TestPostgresJobQueue_ClaimReportsHowLongTheJobWaited(t *testing.T) {
 
 func TestPostgresJobQueue_ConcurrentClaimersNeverDoubleClaim(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	ctx := context.Background()
 
 	const jobs = 12
@@ -175,7 +178,8 @@ func TestPostgresJobQueue_ConcurrentClaimersNeverDoubleClaim(t *testing.T) {
 
 func TestPostgresJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -209,7 +213,8 @@ func TestPostgresJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 
 func TestPostgresJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -239,7 +244,8 @@ func TestPostgresJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) 
 
 func TestPostgresJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -267,7 +273,8 @@ func TestPostgresJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 
 func TestPostgresJobQueue_EnqueueMarksPendingAndClaimable(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -291,7 +298,8 @@ func TestPostgresJobQueue_EnqueueMarksPendingAndClaimable(t *testing.T) {
 
 func TestPostgresJobQueue_FairAcrossUsersFavoursTheUserWithNoInFlightJob(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -322,7 +330,8 @@ func TestPostgresJobQueue_FairAcrossUsersFavoursTheUserWithNoInFlightJob(t *test
 
 func TestPostgresJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -365,7 +374,8 @@ func TestPostgresJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone
 
 func TestPostgresJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -392,7 +402,8 @@ func TestPostgresJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *t
 
 func TestPostgresJobQueue_SettleOfAFinishedJobClearsItsSchedule(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -420,7 +431,8 @@ func TestPostgresJobQueue_SettleOfAFinishedJobClearsItsSchedule(t *testing.T) {
 
 func TestPostgresJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -443,7 +455,8 @@ func TestPostgresJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testin
 
 func TestPostgresJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -493,7 +506,8 @@ func acquisitionStatus(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) st
 
 func TestPostgresJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -533,7 +547,8 @@ func TestPostgresJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(
 
 func TestPostgresJobQueue_EnqueueOfAcquireOnAReadyTrackLeavesItReady(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 
 	track := insertReadyTrack(t, pool)
@@ -551,7 +566,8 @@ func TestPostgresJobQueue_EnqueueOfAcquireOnAReadyTrackLeavesItReady(t *testing.
 
 func TestPostgresJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -584,7 +600,8 @@ func (a *panickingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackI
 
 func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 	acq := &panickingAcquirer{}
@@ -626,7 +643,8 @@ func (*recordedQueries) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQuery
 
 func TestPostgresJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	ctx := context.Background()
 	insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
 	recorded := &recordedQueries{}
@@ -689,7 +707,8 @@ WHERE track_id IN (SELECT id FROM tracks WHERE title = 'plan seed')`)
 
 func TestPostgresJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -720,7 +739,8 @@ func TestPostgresJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *t
 
 func TestPostgresJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -772,7 +792,8 @@ func availableAt(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) time.Tim
 
 func TestPostgresJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
@@ -815,7 +836,8 @@ func TestPostgresJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T)
 
 func TestPostgresJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 
 	missing := ids.TrackIdFromUUID(uuid.New())
@@ -857,7 +879,8 @@ func TestPostgresJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T
 
 func TestPostgresJobQueue_AFencedUpdateBlockedOnTheRowGivesUpAfterFiveSeconds(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
@@ -891,7 +914,8 @@ func TestPostgresJobQueue_AFencedUpdateBlockedOnTheRowGivesUpAfterFiveSeconds(t 
 
 func TestPostgresJobQueue_AnUpgradeKeepsTheTrackReadyWhileItIsQueued(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("keep")})
 
@@ -910,7 +934,8 @@ func TestPostgresJobQueue_AnUpgradeKeepsTheTrackReadyWhileItIsQueued(t *testing.
 
 func TestPostgresJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	track := insertPendingTrack(t, pool, time.Now().Add(time.Hour))
 
@@ -930,7 +955,8 @@ func TestPostgresJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t 
 
 func TestPostgresJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	upgrading := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("up")})
@@ -970,7 +996,8 @@ func TestPostgresJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 
 func TestPostgresJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("replaced")})
@@ -995,7 +1022,8 @@ func TestPostgresJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.
 
 func TestPostgresJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
@@ -1022,7 +1050,8 @@ func TestPostgresJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
 
 func TestPostgresJobQueue_AnUpgradeLosesItsLeaseTheMomentAReplaceTakesOver(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
@@ -1058,7 +1087,8 @@ func scheduledAvailableAt(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId)
 
 func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)
@@ -1093,7 +1123,8 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 
 func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackoff(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)
@@ -1131,7 +1162,8 @@ func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackof
 
 func TestPostgresJobQueue_AReplaceReEnqueuedOverALapsedLeaseSurvivesTheStaleSettle(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)
@@ -1161,7 +1193,8 @@ func TestPostgresJobQueue_AReplaceReEnqueuedOverALapsedLeaseSurvivesTheStaleSett
 
 func TestPostgresJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)

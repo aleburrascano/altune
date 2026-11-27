@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
-	"log/slog"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -21,7 +21,6 @@ type trackAdmission interface {
 type acquisitionCommand struct {
 	trackRepo ports.LibraryTracks
 	admission trackAdmission
-	logMsg    string
 	schedule  func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
 }
 
@@ -63,8 +62,7 @@ func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, us
 		return nil, false
 	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), c.logMsg, "error", err, "track_id", trackId.String())
-		httpserver.HandleServiceError(w, r, err)
+		httpserver.HandleServiceError(w, r, fmt.Errorf("get track %s: %w", trackId, err))
 		return nil, false
 	}
 	return track, true
@@ -92,7 +90,6 @@ func (h *ReacquireHandler) HandleReacquire(w http.ResponseWriter, r *http.Reques
 	acquisitionCommand{
 		trackRepo: h.trackRepo,
 		admission: h.admission,
-		logMsg:    "reacquire: get track failed",
 		schedule: func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
 			return h.scheduler.ScheduleReplace(ctx, userId, trackId)
 		},
@@ -125,7 +122,6 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 	acquisitionCommand{
 		trackRepo: h.trackRepo,
 		admission: h.admission,
-		logMsg:    "retry acquisition: get track failed",
 		schedule: func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
 			return h.scheduler.Schedule(ctx, userId, trackId, "")
 		},

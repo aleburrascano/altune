@@ -99,7 +99,7 @@ func NoopRejectionStore() RejectionStore { return noopRejectionStore{} }
 
 func (noopRejectionStore) Record(context.Context, []CandidateRejectionRecord) error { return nil }
 
-func (noopRejectionStore) Active(context.Context, string, time.Time) ([]PriorRejection, error) {
+func (noopRejectionStore) Active(context.Context, ids.TrackId, time.Time) ([]PriorRejection, error) {
 	return nil, nil
 }
 

@@ -5,16 +5,26 @@ import (
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func mustTrackId(s string) ids.TrackId {
+	id, err := ids.ParseTrackId(s)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 func activeKeys(store *persistence.PostgresRejectionStore, ctx context.Context, trackID string, since time.Time) ([]string, error) {
-	prior, err := store.Active(ctx, trackID, since)
+	prior, err := store.Active(ctx, mustTrackId(trackID), since)
 	keys := make([]string, len(prior))
 	for i, p := range prior {
 		keys[i] = p.SourceKey
@@ -24,7 +34,8 @@ func activeKeys(store *persistence.PostgresRejectionStore, ctx context.Context, 
 
 func TestPostgresRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -41,7 +52,7 @@ func TestPostgresRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	prior, err := store.Active(ctx, mustTrackId(trackID), time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("Active(...) = %v, want nil", err)
 	}
@@ -58,7 +69,8 @@ func TestPostgresRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 
 func TestPostgresRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -82,7 +94,8 @@ func TestPostgresRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testi
 
 func TestPostgresRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -125,7 +138,8 @@ func TestPostgresRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
 
 func TestPostgresRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -152,7 +166,8 @@ func TestPostgresRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *tes
 
 func TestPostgresRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 
@@ -166,7 +181,8 @@ func TestPostgresRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
 
 func TestPostgresRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 
@@ -180,7 +196,8 @@ func TestPostgresRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
 
 func TestPostgresRejectionStore_RecordWithCancelledContextReturnsError(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -209,7 +226,8 @@ func TestPostgresRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
 
 func TestPostgresRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -236,7 +254,8 @@ func TestPostgresRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testin
 
 func TestPostgresRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackA := uuid.NewString()
@@ -261,7 +280,8 @@ func TestPostgresRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *t
 
 func TestPostgresRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 
 	keys, err := activeKeys(store, context.Background(), uuid.NewString(), time.Now().Add(-30*24*time.Hour))
@@ -275,7 +295,8 @@ func TestPostgresRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *te
 
 func TestPostgresRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -298,7 +319,8 @@ func TestPostgresRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(
 
 func TestPostgresRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -311,7 +333,8 @@ func TestPostgresRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *te
 
 func TestPostgresRejectionStore_RecordWithNoRecordsSucceeds(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 
 	if err := store.Record(context.Background(), nil); err != nil {
@@ -321,7 +344,8 @@ func TestPostgresRejectionStore_RecordWithNoRecordsSucceeds(t *testing.T) {
 
 func TestPostgresRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -344,7 +368,8 @@ func TestPostgresRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *
 
 func TestPostgresRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresOthers(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -393,7 +418,8 @@ func TestPostgresRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresO
 
 func TestPostgresRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -423,7 +449,8 @@ func TestPostgresRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *test
 
 func TestPostgresRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := insertFailedTrack(t, pool).ID.UUID().String()
@@ -456,7 +483,8 @@ const storePruneBatch = 1000
 
 func TestPostgresRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -484,7 +512,8 @@ func TestPostgresRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
 
 func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBasisNotNone(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -495,7 +524,7 @@ func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBa
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	prior, err := store.Active(ctx, mustTrackId(trackID), time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("Active(...) = %v, want nil", err)
 	}
@@ -509,7 +538,8 @@ func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBa
 
 func TestPostgresRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -526,7 +556,7 @@ func TestPostgresRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	prior, err := store.Active(ctx, mustTrackId(trackID), time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("Active(...) = %v, want nil", err)
 	}
@@ -537,7 +567,8 @@ func TestPostgresRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T
 
 func TestPostgresRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
@@ -554,7 +585,7 @@ func TestPostgresRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testi
 		t.Fatalf("second Record(...) = %v, want nil", err)
 	}
 
-	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	prior, err := store.Active(ctx, mustTrackId(trackID), time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("Active(...) = %v, want nil", err)
 	}
@@ -565,7 +596,8 @@ func TestPostgresRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testi
 
 func TestPostgresRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	kept := insertFailedTrack(t, pool).ID.UUID().String()
@@ -596,18 +628,19 @@ func TestPostgresRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	}
 }
 
-func countRejectionsOf(t *testing.T, store *persistence.PostgresRejectionStore, trackID string) int {
+func countRejectionsOf(t *testing.T, pool *pgxpool.Pool, trackID string) int {
 	t.Helper()
-	keys, err := activeKeys(store, context.Background(), trackID, time.Now().Add(-10*365*24*time.Hour))
-	if err != nil {
+	var count int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM acquisition_rejections WHERE track_id = $1`, trackID).Scan(&count); err != nil {
 		t.Fatalf("count rejections: %v", err)
 	}
-	return len(keys)
+	return count
 }
 
 func TestPostgresRejectionStore_PruneKeepsARejectionStoredUnderTheUppercaseIDOfALiveTrack(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
@@ -622,14 +655,15 @@ func TestPostgresRejectionStore_PruneKeepsARejectionStoredUnderTheUppercaseIDOfA
 		t.Fatalf("Prune(...) = %v, want nil", err)
 	}
 
-	if got := countRejectionsOf(t, store, upper); got != 1 {
+	if got := countRejectionsOf(t, pool, upper); got != 1 {
 		t.Errorf("rejections under %q after Prune = %d, want 1 (its track %s is live)", upper, got, live)
 	}
 }
 
 func TestPostgresRejectionStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
@@ -646,14 +680,15 @@ func TestPostgresRejectionStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T
 		t.Fatalf("Prune(...) with a non-uuid track id stored = %v, want nil", err)
 	}
 
-	if got := countRejectionsOf(t, store, live); got != 1 {
+	if got := countRejectionsOf(t, pool, live); got != 1 {
 		t.Errorf("rejections of the live track after Prune = %d, want 1", got)
 	}
 }
 
 func TestPostgresRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameID(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	track := insertFailedTrack(t, pool)
@@ -674,14 +709,15 @@ func TestPostgresRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithThe
 		t.Fatalf("Prune(...) = %v, want nil", err)
 	}
 
-	if got := countRejectionsOf(t, store, trackID); got != 1 {
+	if got := countRejectionsOf(t, pool, trackID); got != 1 {
 		t.Errorf("rejections of the re-created track after Prune = %d, want 1", got)
 	}
 }
 
 func TestPostgresRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLiveRows(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
@@ -703,17 +739,18 @@ func TestPostgresRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKe
 		t.Fatalf("Prune(...) = %v, want nil", err)
 	}
 
-	if got := countRejectionsOf(t, store, deletedID); got != 0 {
+	if got := countRejectionsOf(t, pool, deletedID); got != 0 {
 		t.Errorf("rejections of the deleted track after Prune = %d, want 0", got)
 	}
-	if got := countRejectionsOf(t, store, live); got != 2*storePruneBatch {
+	if got := countRejectionsOf(t, pool, live); got != 2*storePruneBatch {
 		t.Errorf("rejections of the live track after Prune = %d, want %d", got, 2*storePruneBatch)
 	}
 }
 
 func TestPostgresRejectionStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	if _, err := store.Prune(ctx, time.Now()); err != nil {
@@ -748,7 +785,7 @@ func TestPostgresRejectionStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *tes
 	if pruned != 5 {
 		t.Errorf("Prune(...) = %d, want 5 (2 expired live rows + 3 orphan rows, one of them also expired)", pruned)
 	}
-	if got := countRejectionsOf(t, store, orphan); got != 0 {
+	if got := countRejectionsOf(t, pool, orphan); got != 0 {
 		t.Errorf("orphan rejections after Prune = %d, want 0", got)
 	}
 	if keys, _ := activeKeys(store, ctx, live, time.Now().Add(-365*24*time.Hour)); len(keys) != 1 || keys[0] != "live-fresh" {

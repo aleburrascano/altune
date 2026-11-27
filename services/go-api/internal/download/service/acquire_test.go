@@ -775,7 +775,7 @@ func (f *fakeRejectionStore) Record(_ context.Context, recs []ports.CandidateRej
 	return f.recordErr
 }
 
-func (f *fakeRejectionStore) Active(_ context.Context, _ string, since time.Time) ([]ports.PriorRejection, error) {
+func (f *fakeRejectionStore) Active(_ context.Context, _ ids.TrackId, since time.Time) ([]ports.PriorRejection, error) {
 	f.since = since
 	return f.active, f.activeErr
 }

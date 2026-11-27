@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"fmt"
 	"time"
@@ -105,21 +106,14 @@ SELECT source_key, expected_seconds, reference_mbid FROM acquisition_rejections
 WHERE track_id = $1 AND rejected_at >= $2
 ORDER BY source_key`
 
-func scanActiveRejections(rows pgx.Rows) ([]ports.PriorRejection, error) {
-	var prior []ports.PriorRejection
-	for rows.Next() {
-		var key string
-		var expectedSeconds *float64
-		var referenceMBID *string
-		if err := rows.Scan(&key, &expectedSeconds, &referenceMBID); err != nil {
-			return nil, fmt.Errorf("scan active acquisition rejection: %w", err)
-		}
-		prior = append(prior, ports.PriorRejection{SourceKey: key, Basis: recordedBasis(expectedSeconds, referenceMBID)})
+func scanActiveRejection(row pgx.CollectableRow) (ports.PriorRejection, error) {
+	var key string
+	var expectedSeconds *float64
+	var referenceMBID *string
+	if err := row.Scan(&key, &expectedSeconds, &referenceMBID); err != nil {
+		return ports.PriorRejection{}, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate active acquisition rejections: %w", err)
-	}
-	return prior, nil
+	return ports.PriorRejection{SourceKey: key, Basis: recordedBasis(expectedSeconds, referenceMBID)}, nil
 }
 
 func recordedBasis(expectedSeconds *float64, referenceMBID *string) *ports.RejectionBasis {
@@ -129,17 +123,21 @@ func recordedBasis(expectedSeconds *float64, referenceMBID *string) *ports.Rejec
 	return &ports.RejectionBasis{ExpectedSeconds: *expectedSeconds, ReferenceMBID: *referenceMBID}
 }
 
-func (s *PostgresRejectionStore) Active(ctx context.Context, trackID string, since time.Time) ([]ports.PriorRejection, error) {
+func (s *PostgresRejectionStore) Active(ctx context.Context, trackID ids.TrackId, since time.Time) ([]ports.PriorRejection, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	rows, err := s.pool.Query(ctx, activeRejectionsSQL, trackID, since)
+	rows, err := s.pool.Query(ctx, activeRejectionsSQL, trackID.String(), since)
 	if err != nil {
 		return nil, fmt.Errorf("list active acquisition rejections: %w", err)
 	}
 	defer rows.Close()
 
-	return scanActiveRejections(rows)
+	prior, err := pgx.CollectRows(rows, scanActiveRejection)
+	if err != nil {
+		return nil, fmt.Errorf("read active acquisition rejections: %w", err)
+	}
+	return prior, nil
 }
 
 const RejectionRetention = 60 * 24 * time.Hour

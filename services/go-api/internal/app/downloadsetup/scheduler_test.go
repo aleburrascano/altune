@@ -92,7 +92,8 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 
 func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verification) {
 	t.Helper()
-	pool := integrationPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	musicDir := t.TempDir()
 	userID := ids.NewUserId(uuid.New())
 	track, err := library.NewTrack(userID, "Fixture Song", "Fixture Artist", "", time.Now)
@@ -244,13 +245,6 @@ func TestNewScheduler_AcquisitionPausedStartsPaused(t *testing.T) {
 	}
 }
 
-func integrationPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	pool := dbtest.Pool(t)
-	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	return pool
-}
-
 func countAcquisitionOutcomeRows(t *testing.T, pool *pgxpool.Pool, trackID string) int {
 	t.Helper()
 	var count int
@@ -263,7 +257,8 @@ func countAcquisitionOutcomeRows(t *testing.T, pool *pgxpool.Pool, trackID strin
 }
 
 func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
-	pool := integrationPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 
 	userID := ids.NewUserId(uuid.New())
 	track, err := library.NewTrack(userID, "Song", "Artist", "Album", time.Now)
@@ -371,7 +366,8 @@ WHERE j.track_id = $1`, trackID.UUID()).Scan(&s.Kind, &s.Queued, &s.Leased, &s.C
 }
 
 func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testing.T) {
-	pool := integrationPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	userID, trackID := insertReadyTrackGradedC(t, pool)
 
 	cfg := &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionUpgradeConcurrency: 1, AcquisitionUpgradeMaxTries: 3}
@@ -448,7 +444,8 @@ func (sourceThatHangs) Fetch(context.Context, download.AudioCandidate, string) (
 }
 
 func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t *testing.T) {
-	pool := integrationPool(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	userID := ids.NewUserId(uuid.New())
 	track, err := library.NewTrack(userID, "Hanging Song", "Artist", "", time.Now)
 	if err != nil {

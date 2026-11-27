@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"fmt"
@@ -94,7 +95,7 @@ func (r *rememberedRejections) Record(_ context.Context, recs []ports.CandidateR
 	return nil
 }
 
-func (r *rememberedRejections) Active(context.Context, string, time.Time) ([]ports.PriorRejection, error) {
+func (r *rememberedRejections) Active(context.Context, ids.TrackId, time.Time) ([]ports.PriorRejection, error) {
 	return nil, nil
 }
 
