@@ -4,7 +4,7 @@ import type { Favorite, FavoritesResponse, FavoriteTarget } from '@shared/apiCli
 import { useFavoritesPort } from '@features/discovery/view/FavoritesPortProvider';
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 import { RETRY_TAIL } from '@shared/failure';
-import { discoveryKeys, useAppMutation } from '@shared/query';
+import { discoveryKeys, useAppMutation, STALE } from '@shared/query';
 import { guardedMutationOptions, currentSessionEpoch, isSameSession } from '@shared/session';
 import { showFailureAlert } from '@shared/ui';
 
@@ -60,7 +60,7 @@ export function useFavorites(): FavoritesApi {
   const { data } = useQuery({
     queryKey: discoveryKeys.favorites,
     queryFn: ({ signal }) => port.listFavorites(signal),
-    staleTime: Infinity,
+    staleTime: STALE.untilEvent,
   });
 
   const { mutateAsync } = useAppMutation({

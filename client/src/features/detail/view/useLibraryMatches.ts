@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { AlbumGroup } from '@shared/apiClient';
 import type { TrackResponse, DiscoveryResult } from '@shared/catalog';
-import { libraryKeys } from '@shared/query';
+import { libraryKeys, STALE } from '@shared/query';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
@@ -31,7 +31,7 @@ function useLibraryLookup(search: string): Lookup {
     queryKey: libraryKeys.lookup(trimmed),
     queryFn: ({ signal }) => fetchLookup(port, trimmed, signal),
     enabled: trimmed.length > 0,
-    staleTime: 60_000,
+    staleTime: STALE.minute,
   });
   return lookup ?? { items: [], complete: !isError };
 }
@@ -88,7 +88,7 @@ function useLibraryAlbumsQuery(artistName: string, enabled: boolean) {
     queryFn: ({ signal }) =>
       port.getLibraryAlbums({ q: artistName, sort: 'recent', limit: DETAIL_LIST_CAP }, signal),
     enabled: enabled && artistName.length > 0,
-    staleTime: 60_000,
+    staleTime: STALE.minute,
   });
 }
 

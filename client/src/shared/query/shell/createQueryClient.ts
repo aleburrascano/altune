@@ -1,11 +1,10 @@
 import { QueryClient } from '@tanstack/react-query';
 
+import { STALE } from '@shared/query/core/stalePolicy';
 import { transientRetryOptions } from '@shared/query/core/retryDelay';
 import { appMutationCache, appQueryCache } from '@shared/query/shell/useAppMutation';
 
-const QUERY_STALE_TIME_MS = 30_000;
-
-const appQueryDefaults = { staleTime: QUERY_STALE_TIME_MS, ...transientRetryOptions };
+const appQueryDefaults = { staleTime: STALE.default, ...transientRetryOptions };
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({

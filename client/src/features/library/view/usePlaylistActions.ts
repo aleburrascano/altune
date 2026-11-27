@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import type { PlaylistResponse, TrackResponse } from '@shared/catalog';
-import { playlistKeys } from '@shared/query';
+import { playlistKeys, STALE } from '@shared/query';
 import { useCreatePlaylist } from '@shared/playlists';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import {
@@ -51,7 +51,7 @@ export function usePlaylistActions(): PlaylistActionsState {
       port.getPlaylists({ limit: GROUP_PAGE_SIZE, offset: pageParam }, signal),
     getNextPageParam: (lastPage, _pages, lastOffset) =>
       nextGroupPageOffset(lastPage.items.length, lastOffset),
-    staleTime: Infinity,
+    staleTime: STALE.untilEvent,
   });
   const playlists = playlistsData?.pages.flatMap((page) => page.items) ?? [];
 

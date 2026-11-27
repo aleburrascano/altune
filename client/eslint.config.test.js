@@ -565,3 +565,29 @@ describe('mobile eslint config bans a bare HTTP status number', () => {
     assert.strictEqual(errors.length, 0);
   });
 });
+
+async function staleLiteralErrors(code) {
+  const [result] = await eslint.lintText(code, { filePath: 'src/shared/query/core/retryDelay.ts' });
+  return result.messages.filter(
+    (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('goes stale'),
+  );
+}
+
+describe('mobile eslint config requires a named staleTime policy', () => {
+  for (const [name, code] of [
+    ['a number', 'export const a = { staleTime: 60000 };'],
+    ['Infinity', 'export const a = { staleTime: Infinity };'],
+    ['zero', 'export const a = { staleTime: 0 };'],
+  ]) {
+    it(`reports ${name}`, async () => {
+      assert.ok((await staleLiteralErrors(code)).length >= 1);
+    });
+  }
+
+  it('allows a named policy', async () => {
+    const errors = await staleLiteralErrors(
+      'const STALE = { minute: 1 };\nexport const a = { staleTime: STALE.minute };',
+    );
+    assert.strictEqual(errors.length, 0);
+  });
+});

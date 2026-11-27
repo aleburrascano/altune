@@ -5,6 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { apiFetch } from '@shared/apiClient';
 import { useSignOut } from '@shared/auth';
+import { STALE } from '@shared/query';
 const { __http } = require('@testing/doubles/fetch.js');
 
 function makeWrapper(queryClient: QueryClient) {
@@ -78,7 +79,7 @@ describe('sign-out invalidates the React Query cache, verified by an authenticat
     __http.reply('GET /v1/library/tracks', { status: 200, json: [{ id: 'track-1' }] });
 
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { staleTime: Infinity } },
+      defaultOptions: { queries: { staleTime: STALE.untilEvent } },
     });
     const wrapper = makeWrapper(queryClient);
 

@@ -20,7 +20,7 @@ import {
   sheetGrabber,
   sheetTopRadius,
 } from '@shared/ui';
-import { playlistKeys } from '@shared/query';
+import { playlistKeys, STALE } from '@shared/query';
 import { CreatePlaylistModal } from '@shared/playlists/view/CreatePlaylistModal';
 import { usePlaylistsPort } from '@shared/playlists/view/PlaylistsPortProvider';
 import {
@@ -69,7 +69,7 @@ export function AddToPlaylistSheet({
     queryKey: playlistKeys.list,
     queryFn: ({ signal }) => port.getPlaylists({ limit: SHEET_PLAYLIST_CAP }, signal),
     enabled: visible,
-    staleTime: Infinity,
+    staleTime: STALE.untilEvent,
   });
 
   const addMut = useAddTracksToPlaylist();

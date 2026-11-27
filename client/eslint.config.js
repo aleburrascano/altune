@@ -153,6 +153,9 @@ const DEADLINES_GO_THROUGH_WITH_DEADLINE =
 const HTTP_STATUS_BY_NAME =
   'Compare an HTTP status through failureKindOf(error) or a named constant from @shared/failure/core/httpStatus, never a bare number (see client/src/README.md).';
 
+const STALE_BY_NAME =
+  'Say when a query goes stale with a named policy from @shared/query: STALE.untilEvent, STALE.minute, STALE.now or STALE.default, never a bare number or Infinity (see client/src/README.md).';
+
 const syntaxBannedEverywhere = [
   ...abortApisTheHermesPolyfillLacks,
   {
@@ -174,6 +177,10 @@ const syntaxBannedEverywhere = [
     selector:
       'VariableDeclarator[id.name=/(STATUSES|[sS]tatuses)$/] Literal[value>=100][value<600]',
     message: HTTP_STATUS_BY_NAME,
+  },
+  {
+    selector: "Property[key.name='staleTime'] > :matches(Literal, Identifier[name='Infinity'])",
+    message: STALE_BY_NAME,
   },
   {
     selector: "CallExpression[callee.object.name='Promise'][callee.property.name='race']",

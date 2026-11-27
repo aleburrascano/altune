@@ -8,7 +8,7 @@ import {
 import { useEffect } from 'react';
 import type { LibrarySort } from '@shared/apiClient';
 import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
-import { libraryKeys } from '@shared/query';
+import { libraryKeys, STALE } from '@shared/query';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import {
@@ -187,7 +187,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
         ? lastPage.offset + lastPage.items.length
         : undefined,
     enabled,
-    staleTime: Infinity,
+    staleTime: STALE.untilEvent,
     placeholderData: keepPreviousData,
   });
 
@@ -220,7 +220,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           queryKey: libraryKeys.tracksAll(query, sort),
           queryFn: async ({ signal }) =>
             (await port.getAllTracks({ q: query, sort, signal })).items,
-          staleTime: 0,
+          staleTime: STALE.now,
           gcTime: 0,
         })
         .catch(loadedPagesOnFailure({ warn: port.warn, tracks, onFallback })),
