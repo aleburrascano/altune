@@ -319,6 +319,7 @@ add_jest_stub() {
 #!/usr/bin/env bash
 printf 'npx %s\n' "$*" >>"$NPX_LOG"
 case " $* " in *" jest "*) ;; *) exit 0 ;; esac
+case " $* " in *" __tests__/doctor.config.test.ts "*) echo "doctor config stub"; exit "${STUB_DOCTOR_RC:-0}" ;; esac
 case "${STUB_JEST:-pass}" in
     fail)
         echo "FAIL src/__tests__/a.test.ts"
@@ -421,6 +422,15 @@ NPX_LOG="$WORK/npx.log" run_script_with_stubs
 expect_npx "--forceExit"
 expect_npx "--watchman=false"
 expect_out "ok    mobile tests (related)"
+
+CASE="a failing doctor config test fails precheck and names itself"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+STUB_DOCTOR_RC=1 NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_rc 1
+expect_out "FAIL  mobile doctor config test"
 
 CASE="a failing jest run prints each failed test name, not the last 40 lines"
 new_repo
