@@ -127,7 +127,7 @@ describe('audioRequestHeaders', () => {
       expect.objectContaining({
         method: 'GET',
         path: '/v1/tracks/{id}/audio',
-        correlationId: headers[CORRELATION_HEADER],
+        corr_id: headers[CORRELATION_HEADER],
         status: 401,
       }),
     ]);

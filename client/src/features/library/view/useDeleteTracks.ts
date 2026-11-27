@@ -21,6 +21,7 @@ import {
   failureLogFields,
   libraryFailureAlert,
   classifyLibraryError,
+  isTrackGoneAfterDelete,
   failureTail,
   type LibraryFailure,
   type LibraryWarn,
@@ -61,7 +62,7 @@ async function attemptDelete(remove: RemoveTrack, item: BulkItem) {
   try {
     await remove(item.trackId);
   } catch (error) {
-    if (classifyLibraryError(error) !== 'not-found') return { trackId: item.trackId, error };
+    if (!isTrackGoneAfterDelete(error)) return { trackId: item.trackId, error };
   }
   return undefined;
 }
@@ -265,8 +266,7 @@ function putTrackBack(queryClient: QueryClient, trackId: TrackId, removed: Remov
 
 function undoFailedRemoval(queryClient: QueryClient, port: LibraryPort) {
   return (error: Error, trackId: TrackId, removed: RemovedTrack): void => {
-    const failure = classifyLibraryError(error);
-    if (failure === 'not-found') return unpin(trackId);
+    if (isTrackGoneAfterDelete(error)) return unpin(trackId);
     logTrackMutationFailure(port.warn, 'delete track', deleteEndpoint, trackId, error);
     putTrackBack(queryClient, trackId, removed);
     port.showFailure(deleteFailedAlert('library.delete_track', TRACK_DELETE_FAILED, error));

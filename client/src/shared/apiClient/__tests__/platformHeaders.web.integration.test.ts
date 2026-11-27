@@ -31,7 +31,7 @@ describe('request headers on web', () => {
 
     expect(logs.warnings).toContainEqual([
       '[api] request failed',
-      expect.objectContaining({ correlationId: __http.last().headers['X-Correlation-ID'] }),
+      expect.objectContaining({ corr_id: __http.last().headers['X-Correlation-ID'] }),
     ]);
   });
 

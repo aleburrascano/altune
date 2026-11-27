@@ -54,8 +54,12 @@ export function recordPrefetchOutcome(outcome: 'ok' | PrefetchFailureStage): voi
   count(outcome === 'ok' ? 'prefetch_ok' : `prefetch_failed_${outcome}`);
 }
 
-export function recordPresignOutcome(ok: boolean): void {
-  count(ok ? 'presign_ok' : 'presign_failed');
+export function recordPresignOk(): void {
+  count('presign_ok');
+}
+
+export function recordPresignFailed(): void {
+  count('presign_failed');
 }
 
 export function recordQueueRebuildOutcome(rung: QueueRebuildRung): void {

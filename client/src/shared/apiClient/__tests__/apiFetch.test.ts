@@ -524,7 +524,7 @@ describe('correlation id', () => {
       expect(sent).toMatch(SERVER_ACCEPTED_ID);
       expect(logs.warnings).toContainEqual([
         '[api] request failed',
-        expect.objectContaining({ correlationId: sent }),
+        expect.objectContaining({ corr_id: sent }),
       ]);
     });
 
@@ -535,7 +535,7 @@ describe('correlation id', () => {
 
       expect(logs.warnings).toContainEqual([
         '[api] request failed',
-        expect.objectContaining({ correlationId: sentCorrelationId() }),
+        expect.objectContaining({ corr_id: sentCorrelationId() }),
       ]);
     });
   });
@@ -615,7 +615,7 @@ describe('failure logging', () => {
         {
           method: 'POST',
           path: '/v1/playlists/p1/tracks',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           status: 409,
           code: 'catalog.playlist_full',
         },
@@ -632,7 +632,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           failure: 'transport',
         },
       ]);
@@ -648,7 +648,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           failure: 'transport',
         },
       ]);
@@ -664,7 +664,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           status: 401,
         },
       ]);
@@ -723,7 +723,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           error: 'ContractError',
           at: 'Session.access_token',
         },
@@ -742,7 +742,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/discovery/search',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           error: 'TypeError',
         },
       ]);
@@ -759,7 +759,7 @@ describe('failure logging', () => {
         {
           method: 'GET',
           path: '/v1/playlists',
-          correlationId: expect.any(String),
+          corr_id: expect.any(String),
           error: 'string',
         },
       ]);

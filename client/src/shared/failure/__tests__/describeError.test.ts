@@ -102,3 +102,42 @@ describe('describeError — an ApiError is never a transport failure', () => {
     expect(describeError(err).title).not.toBe('No connection');
   });
 });
+
+describe('describeError — codes whose server kind would hide the fix get their own copy', () => {
+  it.each([
+    ['catalog.batch_too_large', 'Too many tracks at once', 'Pick fewer tracks and try again.'],
+    [
+      'playback.queue_too_long',
+      'Queue is too long',
+      'Remove some tracks from the queue, then try again.',
+    ],
+    [
+      'acquisition.retry_not_failed',
+      'Nothing to retry',
+      'This track has not failed, so there is nothing to retry.',
+    ],
+    [
+      'acquisition.reacquire_not_ready',
+      'Not ready yet',
+      "This track isn't ready to re-download yet. Try again in a minute.",
+    ],
+    [
+      'discovery.provider_rate_limited',
+      'Music source is busy',
+      'The music source is busy. Try again in a minute.',
+    ],
+  ] as const)('%s says what happened and what to do', (code, title, body) => {
+    const status = 400;
+    expect(describeError(new ApiError(status, 'x', code))).toEqual({ title, body });
+  });
+
+  it('keeps the specific copy when an action is named', () => {
+    const status = 400;
+    expect(
+      describeError(new ApiError(status, 'x', 'catalog.batch_too_large'), 'add the tracks'),
+    ).toEqual({
+      title: 'Too many tracks at once',
+      body: 'Pick fewer tracks and try again.',
+    });
+  });
+});

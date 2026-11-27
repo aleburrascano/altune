@@ -103,6 +103,7 @@ afterEach(() => {
   useTrackStatusStore.getState().reset();
 });
 
+const CORRELATION_ID_SHAPE = /^[0-9a-f]{16}$/;
 const TAP_RETRY = /Tap Retry\./;
 const COULDNT_SAVE = /Couldn't save this track\./;
 const SERVER_FAULT_BODY = /Something went wrong on our end\./;
@@ -119,7 +120,11 @@ describe('TrackDetailBody save failure', () => {
     await waitFor(() => expect(screen.getByTestId('detail-save-error')).toBeTruthy());
     expect(ports.detail.warnings).toContainEqual([
       '[detail] save track failed',
-      expect.objectContaining({ title: TITLE, retryable: true }),
+      expect.objectContaining({
+        title: TITLE,
+        retryable: true,
+        corr_id: expect.stringMatching(CORRELATION_ID_SHAPE),
+      }),
     ]);
     expect(banner().getByText(TAP_RETRY)).toBeTruthy();
     expect(banner().getByText(COULDNT_SAVE)).toBeTruthy();

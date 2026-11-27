@@ -46,9 +46,20 @@ describe('failureKindOf', () => {
     for (const code of API_ERROR_CODES) expect(() => kindOfCode(code)).not.toThrow();
   });
 
+  it.each([
+    ['catalog.audio_orphaned', 'server'],
+    ['discovery.provider_rate_limited', 'server'],
+    ['eventstream.too_many_streams', 'rate-limited'],
+    ['catalog.playlist_full', 'rejected'],
+    ['request.too_large', 'limit-reached'],
+    ['request.timeout', 'timeout'],
+  ] as const)('gives %s the kind the server catalog assigns it: %s', (code, kind) => {
+    expect(kindOfCode(code)).toBe(kind);
+  });
+
   it('lets a known code decide over the status', () => {
-    const error = new ApiError(STATUS.badRequest, 'x', 'catalog.playlist_full');
-    expect(failureKindOf(error)).toBe('limit-reached');
+    const error = new ApiError(STATUS.badRequest, 'x', 'auth.token_expired');
+    expect(failureKindOf(error)).toBe('unauthorized');
   });
 
   it('falls back to the status for a code this build does not know, and keeps the raw code', () => {
