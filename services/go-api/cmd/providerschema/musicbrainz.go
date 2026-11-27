@@ -77,7 +77,7 @@ func (musicBrainz *musicBrainzClient) get(ctx context.Context, target string) (j
 			return body, err
 		}
 		if err := clock.Sleep(ctx, musicBrainz.backoff<<attempt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("sleep: %w", err)
 		}
 	}
 }

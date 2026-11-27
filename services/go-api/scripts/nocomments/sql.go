@@ -28,7 +28,7 @@ func matchSQLFile(path string, _ []byte) bool {
 func sqlComments(src []byte) ([]span, error) {
 	scan, err := pgquery.Scan(string(src))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan: %w", err)
 	}
 	var spans []span
 	for _, tok := range scan.Tokens {
@@ -72,11 +72,11 @@ func sqlParsesEqual(before, after []byte) error {
 func sqlParseTree(src []byte) (any, error) {
 	raw, err := pgquery.ParseToJSON(string(src))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse to json: %w", err)
 	}
 	var tree any
 	if err := json.Unmarshal([]byte(raw), &tree); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 	return sqlDropLocations(tree), nil
 }

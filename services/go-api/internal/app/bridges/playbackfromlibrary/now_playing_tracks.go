@@ -30,7 +30,7 @@ func (s nowPlayingTracks) NowPlayingTrack(ctx context.Context, userId ids.UserId
 		return nil, fmt.Errorf("%w: %w", playback.ErrTrackSourceUnavailable, err)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get by id: %w", err)
 	}
 	return &playback.NowPlayingTrack{
 		Id:                track.ID.String(),

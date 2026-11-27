@@ -48,7 +48,7 @@ func schemaPath(root, provider string) string {
 func repoRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getwd: %w", err)
 	}
 	for {
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
@@ -120,9 +120,13 @@ func (p provider) sourceDirs(root string) []string {
 func (raw rawField) readThrough(reads providerfields.Reads, dirs []string) (providerfields.Reads, error) {
 	later, err := providerfields.DecodedFields(dirs, raw.decodedAs)
 	if err != nil {
-		return reads, err
+		return reads, fmt.Errorf("call failed: %w", err)
 	}
-	return reads.Graft(raw.path, later)
+	r0, err := reads.Graft(raw.path, later)
+	if err != nil {
+		return r0, fmt.Errorf("graft: %w", err)
+	}
+	return r0, nil
 }
 
 func sameEntities(s providerfields.Schema, p provider) error {

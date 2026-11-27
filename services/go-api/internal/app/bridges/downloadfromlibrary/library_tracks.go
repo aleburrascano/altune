@@ -64,11 +64,18 @@ func translate(err error) error {
 }
 
 func (l *LibraryTracks) AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID ids.TrackId) (bool, error) {
-	return l.store.AudioRefInUse(ctx, audioRef, excludeTrackID)
+	r0, err := l.store.AudioRefInUse(ctx, audioRef, excludeTrackID)
+	if err != nil {
+		return r0, fmt.Errorf("audio ref in use: %w", err)
+	}
+	return r0, nil
 }
 
 func (l *LibraryTracks) Requeue(ctx context.Context, id ids.TrackId) error {
-	return l.store.Requeue(ctx, id)
+	if err := l.store.Requeue(ctx, id); err != nil {
+		return fmt.Errorf("requeue: %w", err)
+	}
+	return nil
 }
 
 func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*download.TrackSnapshot, error) {
@@ -77,7 +84,7 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 		return nil, download.ErrTrackNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get by id: %w", err)
 	}
 	if track == nil {
 		return nil, download.ErrTrackNotFound
@@ -335,8 +342,6 @@ func (l *LibraryTracks) writeFenced(ctx context.Context, track *library.Track, e
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, library.ErrTrackVersionConflict):
-		return err
 	case errors.Is(err, library.ErrTrackFenceSuperseded):
 		return fmt.Errorf("%w: %w", download.ErrLeaseLost, err)
 	default:

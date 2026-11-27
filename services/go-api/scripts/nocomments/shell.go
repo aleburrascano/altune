@@ -453,7 +453,11 @@ func trimTrailingSpace(src []byte, floor, offset int) int {
 func parseShell(src []byte, opts ...syntax.ParserOption) (*syntax.File, error) {
 	opts = append(opts, syntax.Variant(syntax.LangBash))
 	parser := syntax.NewParser(opts...)
-	return parser.Parse(bytes.NewReader(src), "")
+	r0, err := parser.Parse(bytes.NewReader(src), "")
+	if err != nil {
+		return r0, fmt.Errorf("parse: %w", err)
+	}
+	return r0, nil
 }
 
 func shellCommentFreePrintsEqual(before, after []byte) error {
@@ -495,7 +499,7 @@ func printShellCommentFree(src []byte) (string, error) {
 	var buf bytes.Buffer
 	printer := syntax.NewPrinter(syntax.Minify(true))
 	if err := printer.Print(&buf, file); err != nil {
-		return "", err
+		return "", fmt.Errorf("print: %w", err)
 	}
 	return buf.String(), nil
 }

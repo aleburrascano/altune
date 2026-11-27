@@ -594,7 +594,7 @@ func decodeYamlDocs(src []byte) ([]*yaml.Node, error) {
 			return docs, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode: %w", err)
 		}
 		docs = append(docs, &doc)
 	}

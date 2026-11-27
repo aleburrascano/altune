@@ -91,7 +91,7 @@ func printSummary(w io.Writer, found []violation) {
 func scanDir(root string) ([]violation, error) {
 	resolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("eval symlinks: %w", err)
 	}
 	var found []violation
 	err = filepath.WalkDir(resolved, func(path string, d fs.DirEntry, err error) error {
@@ -114,7 +114,10 @@ func scanDir(root string) ([]violation, error) {
 		found = append(found, hits...)
 		return nil
 	})
-	return found, err
+	if err != nil {
+		return found, fmt.Errorf("walk directory: %w", err)
+	}
+	return found, nil
 }
 
 func importName(file *ast.File, importPath, fallback string) string {

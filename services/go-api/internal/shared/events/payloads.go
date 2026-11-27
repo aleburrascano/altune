@@ -1,6 +1,9 @@
 package events
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type Payload interface {
 	EventType() EventType
@@ -22,18 +25,22 @@ func (p TrackAddedToLibrary) Subject() string { return p.TrackID }
 func (p TrackAddedToLibrary) MarshalJSON() ([]byte, error) {
 	raw, err := json.Marshal(p.Track)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal track: %w", err)
 	}
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal track fields: %w", err)
 	}
 	id, err := json.Marshal(p.TrackID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal track id: %w", err)
 	}
 	fields["track_id"] = id
-	return json.Marshal(fields)
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("marshal payload: %w", err)
+	}
+	return out, nil
 }
 
 type TrackDeleted struct {

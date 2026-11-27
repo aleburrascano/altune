@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"sync"
 )
@@ -19,7 +20,11 @@ type Capture struct {
 func (c *Capture) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.buf.Write(p)
+	r0, err := c.buf.Write(p)
+	if err != nil {
+		return r0, fmt.Errorf("write: %w", err)
+	}
+	return r0, nil
 }
 
 func (c *Capture) String() string {

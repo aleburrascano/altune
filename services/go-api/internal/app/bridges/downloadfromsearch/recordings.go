@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/search"
 	"context"
+	"fmt"
 )
 
 type musicBrainz interface {
@@ -30,7 +31,7 @@ func NewRecordings(mb musicBrainz) Recordings {
 func (r Recordings) RecordingsByISRC(ctx context.Context, isrc string) ([]download.ISRCRecording, error) {
 	found, err := r.musicBrainz.RecordingsByISRC(ctx, isrc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("recordings by isrc: %w", err)
 	}
 	recordings := make([]download.ISRCRecording, len(found))
 	for i, rec := range found {
@@ -47,7 +48,7 @@ func (r Recordings) RecordingByMBID(ctx context.Context, mbid string) (download.
 func (r Recordings) WorkRecordings(ctx context.Context, recordingMBID string) ([]download.WorkRecording, error) {
 	found, err := r.musicBrainz.WorkRecordings(ctx, recordingMBID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("work recordings: %w", err)
 	}
 	recordings := make([]download.WorkRecording, len(found))
 	for i, rec := range found {
@@ -60,8 +61,11 @@ func (r Recordings) WorkRecordings(ctx context.Context, recordingMBID string) ([
 
 func (r Recordings) RecordingDetail(ctx context.Context, mbid string) (download.RecordingDetail, bool, error) {
 	detail, found, err := r.musicBrainz.RecordingDetail(ctx, mbid)
-	if err != nil || !found {
-		return download.RecordingDetail{}, false, err
+	if err != nil {
+		return download.RecordingDetail{}, false, fmt.Errorf("musicbrainz recording detail: %w", err)
+	}
+	if !found {
+		return download.RecordingDetail{}, false, nil
 	}
 	return download.RecordingDetail{
 		MBID:             detail.MBID,

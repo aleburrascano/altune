@@ -38,7 +38,7 @@ func newAlertMonitor(notifier monitoring.AlertNotifier, interval time.Duration, 
 }
 
 func (a *application) alertConditions(coverage alerts.CoverageEvents) ([]monitoring.Condition, error) {
-	return alerts.Conditions(alerts.Sources{
+	r0, err := alerts.Conditions(alerts.Sources{
 		DependencyHealth:      a.dependencyHealth,
 		Coverage:              coverage,
 		YouTubeSignedOutSince: downloadsetup.YtDlpSearcher(a.cfg).SignedOutSince,
@@ -46,4 +46,8 @@ func (a *application) alertConditions(coverage alerts.CoverageEvents) ([]monitor
 		Requests:              a.latency.Snapshot,
 		Clock:                 clock.Now,
 	})
+	if err != nil {
+		return r0, fmt.Errorf("conditions: %w", err)
+	}
+	return r0, nil
 }

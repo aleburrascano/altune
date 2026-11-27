@@ -75,4 +75,9 @@ func (b *cappedBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (b *cappedBody) Close() error { return b.body.Close() }
+func (b *cappedBody) Close() error {
+	if err := b.body.Close(); err != nil {
+		return fmt.Errorf("close capped body: %w", err)
+	}
+	return nil
+}

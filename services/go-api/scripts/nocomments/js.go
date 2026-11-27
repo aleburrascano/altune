@@ -103,7 +103,7 @@ func jsRegexStarts(src []byte) (map[int]bool, error) {
 	buf := jsSourceBuffer(src)
 	tree, err := js.Parse(parse.NewInputBytes(buf), js.Options{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse: %w", err)
 	}
 	collector := &regexCollector{buf: buf, starts: map[int]bool{}}
 	js.Walk(collector, tree)
@@ -140,7 +140,7 @@ func nextJSToken(lexer *js.Lexer, input *parse.Input, regexStarts map[int]bool) 
 		tokenType, tokenBytes = lexer.RegExp()
 	}
 	if tokenType == js.ErrorToken {
-		return scanToken{}, lexer.Err()
+		return scanToken{}, fmt.Errorf("lex js: %w", lexer.Err())
 	}
 	if isHTMLLikeComment(tokenType, tokenBytes) {
 		return scanToken{}, fmt.Errorf("HTML-like comment token at offset %d is code in a module", start)

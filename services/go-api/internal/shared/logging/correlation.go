@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/trace"
@@ -64,7 +65,10 @@ func (h *correlationHandler) Handle(ctx context.Context, r slog.Record) error {
 	stamps = append(stamps, requestFieldStamps(ctx, r)...)
 	r = r.Clone()
 	r.AddAttrs(stamps...)
-	return h.inner.Handle(ctx, r)
+	if err := h.inner.Handle(ctx, r); err != nil {
+		return fmt.Errorf("handle: %w", err)
+	}
+	return nil
 }
 
 func (h *correlationHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

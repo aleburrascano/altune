@@ -144,7 +144,7 @@ func (spotify *spotifySession) pathfinder(ctx context.Context, op spotifyOperati
 	query.Extensions.PersistedQuery.Sha256Hash = op.hash
 	payload, err := json.Marshal(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal: %w", err)
 	}
 	return fetch(ctx, spotify.client, request{method: http.MethodPost, url: spotify.urls.pathfinder, body: payload, header: map[string]string{
 		"Content-Type":  "application/json;charset=UTF-8",

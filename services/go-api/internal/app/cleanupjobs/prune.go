@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -19,12 +20,12 @@ func PruneDiscoveryEvents(pruner DiscoveryEventPruner, clk clock.Func) func(cont
 		discographyPruned, err := pruner.PruneDiscographyObserved(ctx, now)
 		if err != nil {
 			slog.WarnContext(ctx, "discography event prune failed", logging.KeyError, err)
-			return err
+			return fmt.Errorf("prune discography events: %w", err)
 		}
 		otherPruned, err := pruner.PruneEvents(ctx, now)
 		if err != nil {
 			slog.WarnContext(ctx, "discovery event retention prune failed", logging.KeyError, err)
-			return err
+			return fmt.Errorf("prune discovery events: %w", err)
 		}
 		if pruned := discographyPruned + otherPruned; pruned > 0 {
 			slog.InfoContext(ctx, "discovery events pruned",
@@ -44,12 +45,12 @@ func PruneAcquisitionRows(outcomes, rejections RetentionPruner, clk clock.Func) 
 		outcomesPruned, err := outcomes.Prune(ctx, now)
 		if err != nil {
 			slog.WarnContext(ctx, "acquisition outcome prune failed", logging.KeyError, err)
-			return err
+			return fmt.Errorf("prune acquisition outcomes: %w", err)
 		}
 		rejectionsPruned, err := rejections.Prune(ctx, now)
 		if err != nil {
 			slog.WarnContext(ctx, "acquisition rejection prune failed", logging.KeyError, err)
-			return err
+			return fmt.Errorf("prune acquisition rejections: %w", err)
 		}
 		if outcomesPruned+rejectionsPruned > 0 {
 			slog.InfoContext(ctx, "acquisition rows pruned",

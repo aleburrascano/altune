@@ -106,7 +106,7 @@ func ToolClient(ctx context.Context, env func(string) string, timeout time.Durat
 	}
 	client, err := outbound.NewClient(timeout, budget.Transport(nil))
 	if err != nil {
-		return nil, Settings{}, err
+		return nil, Settings{}, fmt.Errorf("new client: %w", err)
 	}
 	return client, settings, nil
 }
