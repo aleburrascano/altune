@@ -211,8 +211,8 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	eventType := domain.ParseEventType(req.Type)
-	if eventType == domain.EventTypeUnknown {
+	eventType := domain.ParseInteractionType(req.Type)
+	if eventType == domain.InteractionTypeUnknown {
 		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeDiscoveryInvalidEventType, "invalid event type"))
 		return
 	}
@@ -240,7 +240,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.EventType, userId ids.UserId, req DiscoveryEventRequest) {
+func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.InteractionType, userId ids.UserId, req DiscoveryEventRequest) {
 	h.clientEvents.Emit(r.Context(), telemetry.ClientEvent{
 		Type:       eventType.String(),
 		EventID:    req.EventID,

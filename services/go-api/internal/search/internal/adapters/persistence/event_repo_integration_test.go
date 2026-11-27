@@ -18,7 +18,7 @@ import (
 func performSearch(t *testing.T, store *persistence.PostgresEventStore, userId ids.UserId, queryNorm, searchID string) {
 	t.Helper()
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeSearchPerformed,
+		UserId: userId, Type: domain.InteractionTypeSearchPerformed,
 		QueryNorm: queryNorm, SearchId: searchID,
 		Payload: map[string]any{"zero_result": false},
 	})
@@ -51,7 +51,7 @@ func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *test
 
 	performSearch(t, store, honest, qAnswered, answeredSearch)
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: honest, Type: domain.EventTypeResultClicked,
+		UserId: honest, Type: domain.InteractionTypeResultClicked,
 		SearchId: answeredSearch, QueryNorm: "garbled " + suffix,
 		Payload: map[string]any{"result_signature": "s"},
 	})
@@ -61,7 +61,7 @@ func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *test
 	performSearch(t, store, attacker, "qn attacker own "+suffix, attackerSearch)
 	for _, searchID := range []string{"", attackerSearch} {
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: attacker, Type: domain.EventTypeResultClicked,
+			UserId: attacker, Type: domain.InteractionTypeResultClicked,
 			SearchId: searchID, QueryNorm: qTarget,
 			Payload: map[string]any{"result_signature": "s"},
 		})
@@ -110,7 +110,7 @@ func TestPostgresEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.
 		t.Run(tc.name, func(t *testing.T) {
 			eventID := uuid.New().String()
 			appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-				UserId: tc.userId, Type: domain.EventTypePlay,
+				UserId: tc.userId, Type: domain.InteractionTypePlay,
 				SearchId: tc.searchID, EventId: eventID, QueryNorm: "forged " + suffix,
 			})
 			got := storedQueryNorm(t, pool, tc.userId, eventID)
@@ -149,7 +149,7 @@ func showResults(t *testing.T, store *persistence.PostgresEventStore, userId ids
 	t.Helper()
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		OccurredAt: occurredAt,
-		UserId:     userId, Type: domain.EventTypeSearchPerformed,
+		UserId:     userId, Type: domain.InteractionTypeSearchPerformed,
 		SearchId:  uuid.New().String(),
 		QueryNorm: "shown",
 		Payload:   map[string]any{"shown_signatures": sigs},
@@ -174,7 +174,7 @@ func TestPostgresEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T
 
 	showResults(t, store, viewer, now, "track|other "+suffix+"|x")
 	showResults(t, store, attacker, now, sigLegit)
-	for _, typ := range []domain.EventType{domain.EventTypePlay, domain.EventTypeCompleted} {
+	for _, typ := range []domain.InteractionType{domain.InteractionTypePlay, domain.InteractionTypeCompleted} {
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: attacker, Type: typ,
 			Payload: map[string]any{"result_signature": sigForged},
@@ -182,20 +182,20 @@ func TestPostgresEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T
 	}
 	showResults(t, store, viewer, now, sigForged)
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: attacker, Type: domain.EventTypePlay,
+		UserId: attacker, Type: domain.InteractionTypePlay,
 		Payload: map[string]any{"result_signature": sigForged},
 	})
 
 	const shownResultWindow = 24 * time.Hour
 	showResults(t, store, stale, now.Add(-shownResultWindow-time.Hour), sigForged)
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: stale, Type: domain.EventTypePlay,
+		UserId: stale, Type: domain.InteractionTypePlay,
 		Payload: map[string]any{"result_signature": sigForged},
 	})
 
 	showResults(t, store, honest, now.Add(-time.Minute), sigLegit)
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: honest, Type: domain.EventTypeCompleted,
+		UserId: honest, Type: domain.InteractionTypeCompleted,
 		Payload: map[string]any{"result_signature": sigLegit},
 	})
 
@@ -238,26 +238,26 @@ func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
 
 	for range 10 {
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: userA, Type: domain.EventTypePlay,
+			UserId: userA, Type: domain.InteractionTypePlay,
 			Payload: map[string]any{"result_signature": sigCapped},
 		})
 	}
 
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userA, Type: domain.EventTypePlay,
+		UserId: userA, Type: domain.InteractionTypePlay,
 		Payload: map[string]any{"result_signature": sigMixed},
 	})
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userA, Type: domain.EventTypeCompleted,
+		UserId: userA, Type: domain.InteractionTypeCompleted,
 		Payload: map[string]any{"result_signature": sigMixed},
 	})
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userB, Type: domain.EventTypeSkip,
+		UserId: userB, Type: domain.InteractionTypeSkip,
 		Payload: map[string]any{"result_signature": sigMixed, "dwell_ms": 1500},
 	})
 
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userB, Type: domain.EventTypePlay,
+		UserId: userB, Type: domain.InteractionTypePlay,
 		Payload: map[string]any{"result_signature": sigPoisoned},
 	})
 	for _, dwell := range []any{"abc", map[string]any{"ms": 5}, nil, 25000} {
@@ -266,16 +266,16 @@ func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
 			payload["dwell_ms"] = dwell
 		}
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: userB, Type: domain.EventTypeSkip, Payload: payload,
+			UserId: userB, Type: domain.InteractionTypeSkip, Payload: payload,
 		})
 	}
 
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userC, Type: domain.EventTypePlay,
+		UserId: userC, Type: domain.InteractionTypePlay,
 		Payload: map[string]any{"result_signature": sigZeroNet},
 	})
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userC, Type: domain.EventTypeSkip,
+		UserId: userC, Type: domain.InteractionTypeSkip,
 		Payload: map[string]any{"result_signature": sigZeroNet, "dwell_ms": 100},
 	})
 
@@ -317,7 +317,7 @@ func TestPostgresEventStore_ZeroResultQueries(t *testing.T) {
 
 	search := func(queryNorm string, payload map[string]any) {
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: userId, Type: domain.EventTypeSearchPerformed,
+			UserId: userId, Type: domain.InteractionTypeSearchPerformed,
 			QueryNorm: queryNorm, Payload: payload,
 		})
 	}
@@ -357,7 +357,7 @@ func TestPostgresEventStore_ZeroResultTotal(t *testing.T) {
 
 	search := func(queryNorm string, payload map[string]any) {
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: userId, Type: domain.EventTypeSearchPerformed,
+			UserId: userId, Type: domain.InteractionTypeSearchPerformed,
 			QueryNorm: queryNorm, Payload: payload,
 		})
 	}
@@ -405,24 +405,24 @@ func TestPostgresEventStore_NonZeroNoClickQueries(t *testing.T) {
 	qPoison := "qa noclick poison " + suffix
 
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeSearchPerformed,
+		UserId: userId, Type: domain.InteractionTypeSearchPerformed,
 		QueryNorm: qNoClick, Payload: map[string]any{"zero_result": false},
 	})
 	clickedSearchID := uuid.New().String()
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeSearchPerformed, SearchId: clickedSearchID,
+		UserId: userId, Type: domain.InteractionTypeSearchPerformed, SearchId: clickedSearchID,
 		QueryNorm: qClicked, Payload: map[string]any{"zero_result": false},
 	})
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeResultClicked, SearchId: clickedSearchID,
+		UserId: userId, Type: domain.InteractionTypeResultClicked, SearchId: clickedSearchID,
 		Payload: map[string]any{"result_signature": "s"},
 	})
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeSearchPerformed,
+		UserId: userId, Type: domain.InteractionTypeSearchPerformed,
 		QueryNorm: qZero, Payload: map[string]any{"zero_result": true},
 	})
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeSearchPerformed,
+		UserId: userId, Type: domain.InteractionTypeSearchPerformed,
 		QueryNorm: qPoison, Payload: map[string]any{"zero_result": "nope"},
 	})
 
@@ -455,7 +455,7 @@ func TestPostgresEventStore_AbandonedSearches(t *testing.T) {
 
 	search := func(userId ids.UserId, queryNorm, searchID string, at time.Time) {
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: userId, Type: domain.EventTypeSearchPerformed,
+			UserId: userId, Type: domain.InteractionTypeSearchPerformed,
 			QueryNorm: queryNorm, SearchId: searchID, OccurredAt: at,
 		})
 	}
@@ -480,7 +480,7 @@ func TestPostgresEventStore_AbandonedSearches(t *testing.T) {
 	clickedSearchID := uuid.New().String()
 	search(userD, qClicked, clickedSearchID, base)
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: userD, Type: domain.EventTypeResultClicked, SearchId: clickedSearchID,
+		UserId: userD, Type: domain.InteractionTypeResultClicked, SearchId: clickedSearchID,
 		OccurredAt: base.Add(5 * time.Second),
 		Payload:    map[string]any{"result_signature": "s"},
 	})
@@ -546,7 +546,7 @@ func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 		userId := newEventTestUser(t.Context(), t, pool)
 		eventID := uuid.New().String()
 		ev := domain.InteractionEvent{
-			UserId: userId, Type: domain.EventTypeLibraryAdd, EventId: eventID,
+			UserId: userId, Type: domain.InteractionTypeLibraryAdd, EventId: eventID,
 			Payload: map[string]any{"result_signature": "sig-dedup"},
 		}
 		appendOrFatal(t.Context(), t, store, ev)
@@ -562,11 +562,11 @@ func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 		eventID := uuid.New().String()
 
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: replayer, Type: domain.EventTypeLibraryAdd, EventId: eventID,
+			UserId: replayer, Type: domain.InteractionTypeLibraryAdd, EventId: eventID,
 			Payload: map[string]any{"result_signature": "sig-replayed"},
 		})
 		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-			UserId: victim, Type: domain.EventTypeLibraryAdd, EventId: eventID,
+			UserId: victim, Type: domain.InteractionTypeLibraryAdd, EventId: eventID,
 			Payload: map[string]any{"result_signature": "sig-own"},
 		})
 
@@ -578,7 +578,7 @@ func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	t.Run("malformed event_id inserts without dedup", func(t *testing.T) {
 		userId := newEventTestUser(ctx, t, pool)
 		ev := domain.InteractionEvent{
-			UserId: userId, Type: domain.EventTypeLibraryAdd, EventId: "not-a-uuid",
+			UserId: userId, Type: domain.InteractionTypeLibraryAdd, EventId: "not-a-uuid",
 		}
 		appendOrFatal(ctx, t, store, ev)
 		appendOrFatal(ctx, t, store, ev)
@@ -600,7 +600,7 @@ func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	t.Run("malformed search_id persists as NULL", func(t *testing.T) {
 		userId := newEventTestUser(ctx, t, pool)
 		appendOrFatal(ctx, t, store, domain.InteractionEvent{
-			UserId: userId, Type: domain.EventTypePlay, SearchId: "bogus-not-a-uuid",
+			UserId: userId, Type: domain.InteractionTypePlay, SearchId: "bogus-not-a-uuid",
 		})
 		var searchID *uuid.UUID
 		if err := pool.QueryRow(ctx,

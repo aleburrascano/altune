@@ -5,90 +5,90 @@ import (
 	"time"
 )
 
-type EventType int
+type InteractionType int
 
 const (
-	EventTypeUnknown EventType = iota
-	EventTypeSearchPerformed
-	EventTypeResultsShown
-	EventTypeResultClicked
-	EventTypePlay
-	EventTypeSkip
-	EventTypeCompleted
-	EventTypeLibraryAdd
-	EventTypeWrongAlbum
-	EventTypeSearchFailed
-	EventTypeSearchDegraded
-	EventTypePlaybackHealth
-	EventTypeDiscographyObserved
-	EventTypeDetailHealth
-	EventTypeAcquisitionUi
-	EventTypeClientError
-	EventTypeUserAction
-	EventTypeFailureShown
-	EventTypeSseReconnect
-	EventTypeOutboxFlushFailed
-	EventTypeDownloadFailed
-	EventTypeAuthFailed
-	EventTypeScreenView
-	EventTypePlayStart
+	InteractionTypeUnknown InteractionType = iota
+	InteractionTypeSearchPerformed
+	InteractionTypeResultsShown
+	InteractionTypeResultClicked
+	InteractionTypePlay
+	InteractionTypeSkip
+	InteractionTypeCompleted
+	InteractionTypeLibraryAdd
+	InteractionTypeWrongAlbum
+	InteractionTypeSearchFailed
+	InteractionTypeSearchDegraded
+	InteractionTypePlaybackHealth
+	InteractionTypeDiscographyObserved
+	InteractionTypeDetailHealth
+	InteractionTypeAcquisitionUi
+	InteractionTypeClientError
+	InteractionTypeUserAction
+	InteractionTypeFailureShown
+	InteractionTypeSseReconnect
+	InteractionTypeOutboxFlushFailed
+	InteractionTypeDownloadFailed
+	InteractionTypeAuthFailed
+	InteractionTypeScreenView
+	InteractionTypePlayStart
 )
 
-var eventTypeNames = map[EventType]string{
-	EventTypeSearchPerformed:     "search_performed",
-	EventTypeResultsShown:        "results_shown",
-	EventTypeResultClicked:       "result_clicked",
-	EventTypePlay:                "play",
-	EventTypeSkip:                "skip",
-	EventTypeCompleted:           "completed",
-	EventTypeLibraryAdd:          "library_add",
-	EventTypeWrongAlbum:          "wrong_album",
-	EventTypeSearchFailed:        "search_failed",
-	EventTypeSearchDegraded:      "search_degraded",
-	EventTypePlaybackHealth:      "playback_health",
-	EventTypeDetailHealth:        "detail_health",
-	EventTypeAcquisitionUi:       "acquisition_ui",
-	EventTypeClientError:         "client_error",
-	EventTypeUserAction:          "user_action",
-	EventTypeFailureShown:        "failure_shown",
-	EventTypeDiscographyObserved: "discography_observed",
-	EventTypeSseReconnect:        "sse_reconnect",
-	EventTypeOutboxFlushFailed:   "outbox_flush_failed",
-	EventTypeDownloadFailed:      "download_failed",
-	EventTypeAuthFailed:          "auth_failed",
-	EventTypeScreenView:          "screen_view",
-	EventTypePlayStart:           "play_start",
+var interactionTypeNames = map[InteractionType]string{
+	InteractionTypeSearchPerformed:     "search_performed",
+	InteractionTypeResultsShown:        "results_shown",
+	InteractionTypeResultClicked:       "result_clicked",
+	InteractionTypePlay:                "play",
+	InteractionTypeSkip:                "skip",
+	InteractionTypeCompleted:           "completed",
+	InteractionTypeLibraryAdd:          "library_add",
+	InteractionTypeWrongAlbum:          "wrong_album",
+	InteractionTypeSearchFailed:        "search_failed",
+	InteractionTypeSearchDegraded:      "search_degraded",
+	InteractionTypePlaybackHealth:      "playback_health",
+	InteractionTypeDetailHealth:        "detail_health",
+	InteractionTypeAcquisitionUi:       "acquisition_ui",
+	InteractionTypeClientError:         "client_error",
+	InteractionTypeUserAction:          "user_action",
+	InteractionTypeFailureShown:        "failure_shown",
+	InteractionTypeDiscographyObserved: "discography_observed",
+	InteractionTypeSseReconnect:        "sse_reconnect",
+	InteractionTypeOutboxFlushFailed:   "outbox_flush_failed",
+	InteractionTypeDownloadFailed:      "download_failed",
+	InteractionTypeAuthFailed:          "auth_failed",
+	InteractionTypeScreenView:          "screen_view",
+	InteractionTypePlayStart:           "play_start",
 }
 
-func (e EventType) String() string {
-	if name, ok := eventTypeNames[e]; ok {
+func (e InteractionType) String() string {
+	if name, ok := interactionTypeNames[e]; ok {
 		return name
 	}
 	return "unknown"
 }
 
-func (e EventType) ClientSubmittable() bool {
+func (e InteractionType) ClientSubmittable() bool {
 	switch e {
-	case EventTypeResultsShown, EventTypeResultClicked, EventTypePlay, EventTypeSkip,
-		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
-		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth,
-		EventTypeAcquisitionUi, EventTypeClientError, EventTypeUserAction, EventTypeFailureShown,
-		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed,
-		EventTypeScreenView, EventTypePlayStart:
+	case InteractionTypeResultsShown, InteractionTypeResultClicked, InteractionTypePlay, InteractionTypeSkip,
+		InteractionTypeCompleted, InteractionTypeLibraryAdd, InteractionTypeWrongAlbum, InteractionTypeSearchFailed,
+		InteractionTypeSearchDegraded, InteractionTypePlaybackHealth, InteractionTypeDetailHealth,
+		InteractionTypeAcquisitionUi, InteractionTypeClientError, InteractionTypeUserAction, InteractionTypeFailureShown,
+		InteractionTypeSseReconnect, InteractionTypeOutboxFlushFailed, InteractionTypeDownloadFailed,
+		InteractionTypeScreenView, InteractionTypePlayStart:
 		return true
-	case EventTypeUnknown, EventTypeSearchPerformed, EventTypeDiscographyObserved, EventTypeAuthFailed:
+	case InteractionTypeUnknown, InteractionTypeSearchPerformed, InteractionTypeDiscographyObserved, InteractionTypeAuthFailed:
 		return false
 	}
 	return false
 }
 
-func ParseEventType(s string) EventType {
-	for t, name := range eventTypeNames {
+func ParseInteractionType(s string) InteractionType {
+	for t, name := range interactionTypeNames {
 		if name == s {
 			return t
 		}
 	}
-	return EventTypeUnknown
+	return InteractionTypeUnknown
 }
 
 const (
@@ -108,7 +108,7 @@ const (
 type InteractionEvent struct {
 	OccurredAt       time.Time
 	UserId           ids.UserId
-	Type             EventType
+	Type             InteractionType
 	QueryNorm        string
 	SearchId         string
 	EventId          string

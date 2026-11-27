@@ -3,9 +3,8 @@ package library
 import domain "altune/go-api/internal/library/internal/domain"
 
 type (
-	SearchKeys = domain.SearchKeys
-	Track      = domain.Track
-	TrackId    = domain.TrackId
+	Track   = domain.Track
+	TrackId = domain.TrackId
 )
 
 type (
@@ -26,7 +25,6 @@ var (
 )
 
 var (
-	CleanSearchKeys           = domain.CleanSearchKeys
 	PlausibleYear             = domain.PlausibleYear
 	FailureMessage            = domain.FailureMessage
 	JoinFailureReason         = domain.JoinFailureReason

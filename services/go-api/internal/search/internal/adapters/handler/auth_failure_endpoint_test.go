@@ -44,7 +44,7 @@ func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 		t.Fatalf("appended %d events, want 1", len(store.events))
 	}
 	got := store.events[0]
-	if got.Type != domain.EventTypeAuthFailed || got.UserId != ids.AnonymousUserId() {
+	if got.Type != domain.InteractionTypeAuthFailed || got.UserId != ids.AnonymousUserId() {
 		t.Errorf("event = %v for %v, want auth_failed for the anonymous user", got.Type, got.UserId)
 	}
 	want := map[string]any{"reason": "invalid_credentials", "app_version": "1.2.3"}

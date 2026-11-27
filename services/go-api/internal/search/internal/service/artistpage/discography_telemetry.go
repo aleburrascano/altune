@@ -55,7 +55,7 @@ func (t *DiscographyTelemetry) append(ctx context.Context, occurredAt time.Time,
 	event := domain.InteractionEvent{
 		OccurredAt: occurredAt,
 		UserId:     ids.SystemUserId(),
-		Type:       domain.EventTypeDiscographyObserved,
+		Type:       domain.InteractionTypeDiscographyObserved,
 		Payload:    payload,
 	}
 	if err := t.eventStore.Append(ctx, event); err != nil {

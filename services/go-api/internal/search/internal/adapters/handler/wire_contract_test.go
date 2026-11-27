@@ -179,9 +179,9 @@ func TestWire_DiscoveryUnreleased(t *testing.T) {
 	wireGet(t, unreleasedSearchRouter(t, store), "/discovery/unreleased/search?q=cancun", "discovery_unreleased_search")
 }
 
-func eventTypeNames(accept func(domain.EventType) bool) []string {
+func interactionTypeNames(accept func(domain.InteractionType) bool) []string {
 	var names []string
-	for e := domain.EventType(1); e < 128; e++ {
+	for e := domain.InteractionType(1); e < 128; e++ {
 		if e.String() != "unknown" && accept(e) {
 			names = append(names, e.String())
 		}
@@ -200,8 +200,8 @@ func marshalWire(t *testing.T, v any) []byte {
 }
 
 func TestWire_DiscoveryEventTypes(t *testing.T) {
-	all := eventTypeNames(func(domain.EventType) bool { return true })
-	submittable := eventTypeNames(domain.EventType.ClientSubmittable)
+	all := interactionTypeNames(func(domain.InteractionType) bool { return true })
+	submittable := interactionTypeNames(domain.InteractionType.ClientSubmittable)
 
 	jsoncontract.AssertWireExact(t, "discovery_event_types", marshalWire(t, all))
 	jsoncontract.AssertWireExact(t, "discovery_event_types_client_submittable", marshalWire(t, submittable))

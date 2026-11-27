@@ -129,7 +129,7 @@ func seedSearchTextOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId, queryN
 	searchID := uuid.New().String()
 	performSearch(t, store, owner, queryNorm, searchID)
 	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
-		UserId: owner, Type: domain.EventTypeResultClicked, SearchId: searchID,
+		UserId: owner, Type: domain.InteractionTypeResultClicked, SearchId: searchID,
 		Payload: map[string]any{domain.PayloadKeyResultSignature: "sig " + queryNorm},
 	})
 	seedHistoryEntry(t, persistence.NewPostgresSearchHistoryRepository(pool), owner, queryNorm, time.Now().UTC())
@@ -197,7 +197,7 @@ func TestClearSearchHistory_ALateEventCannotRestoreTheErasedText(t *testing.T) {
 	clearSearchHistoryOf(t, pool, owner)
 
 	appendOrFatal(t.Context(), t, persistence.NewPostgresEventStore(pool, clock.Now), domain.InteractionEvent{
-		UserId: owner, Type: domain.EventTypePlay, SearchId: searchID,
+		UserId: owner, Type: domain.InteractionTypePlay, SearchId: searchID,
 		QueryNorm: queryNorm,
 		Payload:   map[string]any{domain.PayloadKeyResultSignature: "sig " + suffix},
 	})
@@ -230,7 +230,7 @@ func TestClearSearchHistory_ALateSearchPerformedEventKeepsNoSearchText(t *testin
 
 	clearSearchHistoryOf(t, pool, owner)
 	appendOrFatal(t.Context(), t, persistence.NewPostgresEventStore(pool, clock.Now), domain.InteractionEvent{
-		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
+		UserId: owner, Type: domain.InteractionTypeSearchPerformed, OccurredAt: began,
 		QueryNorm: "late event " + uuid.New().String()[:8], SearchId: uuid.New().String(),
 		Payload: map[string]any{"zero_result": false},
 	})
@@ -256,7 +256,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 	}
 	recorder.Record(context.Background(), owner, query, "after erase", time.Now().UTC())
 	appendOrFatal(t.Context(), t, persistence.NewPostgresEventStore(pool, clock.Now), domain.InteractionEvent{
-		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: time.Now().UTC(),
+		UserId: owner, Type: domain.InteractionTypeSearchPerformed, OccurredAt: time.Now().UTC(),
 		QueryNorm: "after erase", SearchId: uuid.New().String(),
 		Payload: map[string]any{"zero_result": false},
 	})
@@ -324,7 +324,7 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 	}()
 	go func() {
 		written <- persistence.NewPostgresEventStore(pool, clock.Now).Append(ctx, domain.InteractionEvent{
-			UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
+			UserId: owner, Type: domain.InteractionTypeSearchPerformed, OccurredAt: began,
 			QueryNorm: "racing " + suffix, SearchId: uuid.New().String(),
 			Payload: map[string]any{"zero_result": false},
 		})

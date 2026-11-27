@@ -28,7 +28,7 @@ func TestPostgresEventStore_AppendAndRead(t *testing.T) {
 
 	event := domain.InteractionEvent{
 		UserId:    userId,
-		Type:      domain.EventTypeSearchPerformed,
+		Type:      domain.InteractionTypeSearchPerformed,
 		QueryNorm: "kendrick lamar",
 		Payload: map[string]any{
 			"result_count": 12,
@@ -82,7 +82,7 @@ func TestPostgresEventStore_NilPayloadAndQuery(t *testing.T) {
 
 	event := domain.InteractionEvent{
 		UserId: userId,
-		Type:   domain.EventTypeWrongAlbum,
+		Type:   domain.InteractionTypeWrongAlbum,
 	}
 
 	if err := store.Append(ctx, event); err != nil {
@@ -123,7 +123,7 @@ func TestPostgresEventStore_Append_StampsAnEventWithoutATimeFromTheInjectedClock
 		_, _ = pool.Exec(context.WithoutCancel(t.Context()), `DELETE FROM discovery_events WHERE user_id = $1`, userId.UUID())
 	})
 
-	if err := store.Append(t.Context(), domain.InteractionEvent{UserId: userId, Type: domain.EventTypePlay}); err != nil {
+	if err := store.Append(t.Context(), domain.InteractionEvent{UserId: userId, Type: domain.InteractionTypePlay}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 

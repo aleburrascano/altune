@@ -126,7 +126,7 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 		},
 	})
 
-	if ev.Type != domain.EventTypeDiscographyObserved {
+	if ev.Type != domain.InteractionTypeDiscographyObserved {
 		t.Fatalf("event type = %v, want discography_observed", ev.Type)
 	}
 	if !ev.UserId.IsSystem() {
