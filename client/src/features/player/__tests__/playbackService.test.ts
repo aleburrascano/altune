@@ -27,6 +27,7 @@ import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlayb
 import { signInTestUser } from '@testing/signInTestUser';
 import { freezeDate, type FrozenDate } from '@testing/freezeDate';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 const RESTART_THRESHOLD_MS = 3_000;
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
@@ -115,7 +116,7 @@ describe('native PlaybackError handling', () => {
         message: `Response code: 403 url=${streamUrl}`,
       });
 
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
       const stored = usePlaybackErrorStore.getState();
       expect(stored.key).toBe('preview:https://cdn.example/p.mp3');
       expect(stored.message).not.toMatch(/s3cr3t-token|deadbeef|audio\.altune\.example/);
@@ -131,7 +132,7 @@ describe('native PlaybackError handling', () => {
 
       handler({ code, message });
 
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
       expect(usePlaybackErrorStore.getState().key).toBe('preview:https://cdn.example/p.mp3');
       return usePlaybackErrorStore.getState().kind;
     }
@@ -169,7 +170,7 @@ describe('native PlaybackError handling', () => {
       useQueueStore.getState().loadQueue([track], 0, null);
       const handler = await playbackErrorHandler();
       handler({ code, message });
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
       return track;
     }
 
@@ -212,7 +213,7 @@ describe('native PlaybackError handling', () => {
 
     async function failPlaybackOnce(onError: PlaybackErrorHandler): Promise<void> {
       onError({ code: 'android-io-bad-http-status', message: 'Response code: 403' });
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     }
 
     async function failPlayback(times: number): Promise<PlaybackErrorHandler> {
@@ -249,7 +250,7 @@ describe('native PlaybackError handling', () => {
 
       onError({ code: 'android-decoding-failed', message: 'Source error' });
 
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
       expect(usePlaybackErrorStore.getState().kind).toBe('decode');
     });
 
@@ -409,7 +410,7 @@ describe('remote skip commands', () => {
   }
 
   function settled(): Promise<void> {
-    return new Promise((resolve) => setImmediate(resolve));
+    return flushPromises();
   }
 
   let recorded: RecordedLogs;
@@ -530,8 +531,8 @@ describe('playbackService — handler rejections are reported, not left unhandle
   }
 
   async function settle(): Promise<void> {
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
+    await flushPromises();
   }
 
   beforeEach(() => {
@@ -654,7 +655,7 @@ describe('the widget snapshot publisher the service starts at boot', () => {
         0,
         null,
       );
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
 
     const published = snapshots.map((json) => JSON.parse(json) as unknown);
     expect(published).toContainEqual(

@@ -11,6 +11,7 @@ import {
 } from '@testing/queryHarness';
 import { freezeDate } from '@testing/freezeDate';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 beforeEach(() => {
   recordLogs();
@@ -190,7 +191,7 @@ describe('useAlbumDiscovery', () => {
       clock.advance(elapsedMs);
       renderHook(useHook, { wrapper });
       await act(async () => {
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushPromises();
       });
 
       expect(__http.countFor(DISCOVERED_TRACKS_PATH)).toBe(expectedRequests);

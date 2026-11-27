@@ -603,6 +603,38 @@ async function clockWaitErrors(code, filePath) {
   );
 }
 
+describe('mobile eslint config requires a locale when case folding', () => {
+  const PATH = 'src/shared/acquisition/state/trackStatusStore.ts';
+  const foldErrors = async (code) => {
+    const [result] = await eslint.lintText(code, { filePath: PATH });
+    return result.messages.filter(
+      (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('Case folding'),
+    );
+  };
+
+  it('reports toLocaleLowerCase and toLocaleUpperCase without a locale', async () => {
+    assert.strictEqual(
+      (await foldErrors('export const a = (s: string) => s.toLocaleLowerCase();')).length,
+      1,
+    );
+    assert.strictEqual(
+      (await foldErrors('export const a = (s: string) => s.toLocaleUpperCase();')).length,
+      1,
+    );
+  });
+
+  it('allows a named locale and the plain folds', async () => {
+    assert.strictEqual(
+      (await foldErrors("export const a = (s: string) => s.toLocaleLowerCase('en-US');")).length,
+      0,
+    );
+    assert.strictEqual(
+      (await foldErrors('export const a = (s: string) => s.toLowerCase();')).length,
+      0,
+    );
+  });
+});
+
 describe('mobile eslint config bans waiting on the real clock in a test', () => {
   const TEST_PATH = 'src/shared/query/__tests__/retryDelay.test.ts';
 
@@ -619,11 +651,47 @@ describe('mobile eslint config bans waiting on the real clock in a test', () => 
     ],
     ['timers', "import { setImmediate as soon } from 'timers';\nexport const a = soon;"],
     ['require of timers/promises', "export const a = require('timers/promises');"],
+    [
+      'a timer on globalThis',
+      'export const a = () => { globalThis.setTimeout(() => undefined, 5); };',
+    ],
+    ['a timer on self', 'export const a = () => { self.setTimeout(() => undefined, 5); };'],
+    ['a dynamic import of timers', "export const a = () => import('node:timers/promises');"],
+    ['a re-export of timers', "export { setTimeout } from 'node:timers/promises';"],
+    ['a star re-export of timers', "export * from 'timers';"],
   ]) {
     it(`reports ${name}`, async () => {
       assert.ok((await clockWaitErrors(code, TEST_PATH)).length >= 1);
     });
   }
+
+  it('reports a wait in a .tsx test and in the root __tests__ folder', async () => {
+    const code = 'export const a = () => { setTimeout(() => undefined, 0); };';
+    assert.ok((await clockWaitErrors(code, 'src/shared/ui/__tests__/Thing.test.tsx')).length >= 1);
+    assert.ok((await clockWaitErrors(code, '__tests__/rootLayout.test.ts')).length >= 1);
+  });
+
+  it('still applies the rules banned everywhere in a test file', async () => {
+    const [result] = await eslint.lintText('export const a = { staleTime: 60000 };', {
+      filePath: TEST_PATH,
+    });
+    assert.ok(result.messages.some((m) => m.ruleId === 'no-restricted-syntax'));
+  });
+
+  it('reports a wait in jest/__tests__ and leaves the Hermes abort check to src', async () => {
+    const wait = 'export const a = () => { setTimeout(() => undefined, 0); };';
+    assert.ok((await clockWaitErrors(wait, 'jest/__tests__/queryHarness.test.tsx')).length >= 1);
+    const [result] = await eslint.lintText(
+      'export const a = new AbortController().signal.throwIfAborted;',
+      {
+        filePath: 'jest/__tests__/setup-env.test.ts',
+      },
+    );
+    assert.strictEqual(
+      result.messages.filter((m) => m.ruleId === 'no-restricted-syntax').length,
+      0,
+    );
+  });
 
   it('allows setTimeout in production code and jest.setTimeout in a test', async () => {
     assert.strictEqual(

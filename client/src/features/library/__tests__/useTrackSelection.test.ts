@@ -7,6 +7,7 @@ import type { FailureAlert } from '@shared/ui';
 import { trackResponseFactory } from '@testing/factories';
 
 import { buildSelectionActions } from '@features/library';
+import { flushPromises } from '@testing/flushPromises';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return trackResponseFactory.build({
@@ -261,14 +262,12 @@ function shownAlerts(opts: Opts): FailureAlert[] {
 }
 
 describe('buildSelectionActions — batch download summary', () => {
-  const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-
   it('shows "N of M downloads failed" once a mixed batch settles', async () => {
     const opts = makeOpts({ pinMany: jest.fn().mockResolvedValue({ requested: 10, failed: 3 }) });
     buildSelectionActions(readyTracks(10), opts)
       .find((a) => a.key === 'offline')!
       .onPress();
-    await flush();
+    await flushPromises();
     expect(shownAlerts(opts)).toHaveLength(1);
     expect(shownAlerts(opts)[0]?.message).toContain('3 of 10 downloads failed');
   });
@@ -280,7 +279,7 @@ describe('buildSelectionActions — batch download summary', () => {
     buildSelectionActions(readyTracks(3), opts)
       .find((a) => a.key === 'offline')!
       .onPress();
-    await flush();
+    await flushPromises();
     expect(shownAlerts(opts)).toHaveLength(1);
     expect(shownAlerts(opts)[0]?.title).toBe('Not enough storage');
   });
@@ -290,14 +289,12 @@ describe('buildSelectionActions — batch download summary', () => {
     buildSelectionActions(readyTracks(2), opts)
       .find((a) => a.key === 'offline')!
       .onPress();
-    await flush();
+    await flushPromises();
     expect(shownAlerts(opts)).toEqual([]);
   });
 });
 
 describe('buildSelectionActions — batch download-removal summary', () => {
-  const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-
   function removing(selected: TrackResponse[], result: UnpinBatchResult): Opts {
     return makeOpts({
       pinnedEntries: allPinned(selected),
@@ -312,7 +309,7 @@ describe('buildSelectionActions — batch download-removal summary', () => {
     buildSelectionActions(selected, opts)
       .find((a) => a.key === 'offline')!
       .onPress();
-    await flush();
+    await flushPromises();
 
     expect(shownAlerts(opts)).toHaveLength(1);
     expect(shownAlerts(opts)[0]?.message).toContain('4 of 10 downloads could not be removed');
@@ -325,7 +322,7 @@ describe('buildSelectionActions — batch download-removal summary', () => {
     buildSelectionActions(selected, opts)
       .find((a) => a.key === 'offline')!
       .onPress();
-    await flush();
+    await flushPromises();
 
     expect(shownAlerts(opts)).toEqual([]);
   });

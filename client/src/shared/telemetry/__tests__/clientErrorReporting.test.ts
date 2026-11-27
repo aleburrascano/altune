@@ -3,6 +3,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError } from '@shared/failure';
 import { createAppTelemetry, type Telemetry } from '@shared/telemetry';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -50,7 +51,7 @@ const TWO_REPORTS = 2;
 const THREE_REPORTS = 3;
 
 async function settle(): Promise<void> {
-  await new Promise((resolve) => setImmediate(resolve));
+  await flushPromises();
 }
 
 async function forgetDelivered(): Promise<void> {

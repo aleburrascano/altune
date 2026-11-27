@@ -21,6 +21,7 @@ import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { PlaylistsPortProvider } from '@shared/playlists';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
+import { flushPromises } from '@testing/flushPromises';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -226,7 +227,7 @@ describe('usePlaylistOfflineAction', () => {
       const item = menuFor([track('a'), track('b')], ['a', 'b']);
       item.onPress();
       await act(async () => {
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        await flushPromises();
       });
       expect(dialogs.alerts).toHaveLength(1);
       expect(dialogs.alerts[0]?.message).toContain('1 of 2 downloads could not be removed');
@@ -237,7 +238,7 @@ describe('usePlaylistOfflineAction', () => {
       const item = menuFor([track('a'), track('b')], []);
       item.onPress();
       await act(async () => {
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        await flushPromises();
       });
       expect(dialogs.alerts).toHaveLength(1);
       expect(dialogs.alerts[0]?.message).toContain('1 of 2 downloads failed');

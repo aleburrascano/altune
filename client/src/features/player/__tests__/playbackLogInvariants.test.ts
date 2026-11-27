@@ -18,6 +18,7 @@ import { libraryTrack } from '@features/player/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { flushPromises } from '@testing/flushPromises';
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;
@@ -145,7 +146,7 @@ describe('unmapped native playback error log', () => {
       code: 'android-audio-track-init-failed',
       message: leaky().message,
     });
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
     expectLoggedClean();
   });
 });

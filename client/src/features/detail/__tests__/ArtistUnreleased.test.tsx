@@ -22,6 +22,7 @@ import {
   idlePlayback,
   signInTestUser,
 } from '@testing/queryHarness';
+import { flushPromises } from '@testing/flushPromises';
 
 beforeEach(() => {
   recordLogs();
@@ -378,7 +379,7 @@ describe('ArtistUnreleased', () => {
   it('asks nothing and offers no retry for an artist with no source', async () => {
     renderSectionFor({ ...ARTIST, sources: [] });
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
 
     expect(__http.countFor(UNRELEASED)).toBe(0);

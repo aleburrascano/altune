@@ -16,6 +16,7 @@ import {
   type AuthBrowserMock,
   createSupabaseAuthMock,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { flushPromises } from '@testing/flushPromises';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const { signInWithOAuth, exchangeCodeForSession } = createSupabaseAuthMock(
@@ -291,7 +292,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
 
     rejectBrowser(new Error('no browser is open'));
     jest.useRealTimers();
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushPromises();
 
     expect(unhandled).not.toHaveBeenCalled();
     process.off('unhandledRejection', unhandled);

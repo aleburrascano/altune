@@ -10,10 +10,6 @@ function Probe({ answer }: { answer: Promise<string> }) {
   return <Text>{query.data ?? query.status}</Text>;
 }
 
-function nextTick(): Promise<void> {
-  return flushPromises();
-}
-
 describe('createTestQueryClient', () => {
   it('delivers a query result that settles after the render without an act warning', async () => {
     const errors: unknown[][] = [];
@@ -32,8 +28,8 @@ describe('createTestQueryClient', () => {
     );
 
     settle('answered');
-    await nextTick();
-    await nextTick();
+    await flushPromises();
+    await flushPromises();
 
     console.error = original;
     expect(screen.getByText('answered')).toBeTruthy();

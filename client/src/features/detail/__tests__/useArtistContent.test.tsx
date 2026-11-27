@@ -14,6 +14,7 @@ import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort
 import type { DetailPort } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 import { freezeDate } from '@testing/freezeDate';
+import { flushPromises } from '@testing/flushPromises';
 
 const CLOCK_START = 1_700_000_000_000;
 
@@ -255,7 +256,7 @@ describe('useArtistContent reopened against the 30-minute content cache window',
     clock.advance(elapsedMs);
     renderHook(useHook, { wrapper });
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
 
     expect(__http.countFor(CACHED_ARTIST_PATH)).toBe(expectedRequests);
@@ -422,7 +423,7 @@ describe('useArtistContent with no source to ask', () => {
       wrapper: createWrapper(queryClient),
     });
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
 
     expect(__http.requests).toHaveLength(0);
@@ -465,7 +466,7 @@ describe('useArtistContent under caller control', () => {
       wrapper: createWrapper(createTestQueryClient()),
     });
     await act(async () => {
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
     });
 
     expect(__http.countFor(ARTIST_CONTENT_PATH)).toBe(0);

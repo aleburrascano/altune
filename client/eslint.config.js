@@ -160,6 +160,12 @@ const syntaxBannedEverywhere = [
   ...abortApisTheHermesPolyfillLacks,
   {
     selector:
+      'CallExpression[callee.property.name=/^toLocale(Lower|Upper)Case$/][arguments.length=0]',
+    message:
+      'Case folding without a locale follows the device (Turkish folds I to a dotless i): pass the locale, or use toLowerCase / toUpperCase for text that is not shown to the user.',
+  },
+  {
+    selector:
       'BinaryExpression:matches([left.property.name=/[sS]tatus$/], [left.name=/[sS]tatus$/]) > Literal.right[value>=100][value<600]',
     message: HTTP_STATUS_BY_NAME,
   },
@@ -525,25 +531,32 @@ const TIMER_NAMES = '/^(setTimeout|setInterval|setImmediate)$/';
 const TIMER_HOSTS = '/^(global|globalThis|window|self)$/';
 const NODE_TIMERS = '/^(node:)?timers(.promises)?$/';
 
+const clockWaitSelectors = [
+  { selector: `CallExpression[callee.name=${TIMER_NAMES}]`, message: NO_CLOCK_WAITS },
+  { selector: `ImportExpression[source.value=${NODE_TIMERS}]`, message: NO_CLOCK_WAITS },
+  { selector: `ExportNamedDeclaration[source.value=${NODE_TIMERS}]`, message: NO_CLOCK_WAITS },
+  { selector: `ExportAllDeclaration[source.value=${NODE_TIMERS}]`, message: NO_CLOCK_WAITS },
+  {
+    selector: `CallExpression[callee.object.name=${TIMER_HOSTS}][callee.property.name=${TIMER_NAMES}]`,
+    message: NO_CLOCK_WAITS,
+  },
+  { selector: `ImportDeclaration[source.value=${NODE_TIMERS}]`, message: NO_CLOCK_WAITS },
+  {
+    selector: `CallExpression[callee.name='require'][arguments.0.value=${NODE_TIMERS}]`,
+    message: NO_CLOCK_WAITS,
+  },
+];
+
 const testsNeverWaitOnTheClock = {
   name: 'testsNeverWaitOnTheClock',
-  files: ['**/__tests__/**/*.{ts,tsx}'],
-  rules: {
-    'no-restricted-syntax': [
-      'error',
-      ...syntaxBannedEverywhere,
-      { selector: `CallExpression[callee.name=${TIMER_NAMES}]`, message: NO_CLOCK_WAITS },
-      {
-        selector: `CallExpression[callee.object.name=${TIMER_HOSTS}][callee.property.name=${TIMER_NAMES}]`,
-        message: NO_CLOCK_WAITS,
-      },
-      { selector: `ImportDeclaration[source.value=${NODE_TIMERS}]`, message: NO_CLOCK_WAITS },
-      {
-        selector: `CallExpression[callee.name='require'][arguments.0.value=${NODE_TIMERS}]`,
-        message: NO_CLOCK_WAITS,
-      },
-    ],
-  },
+  files: ['src/**/__tests__/**/*.{ts,tsx}', '__tests__/**/*.{ts,tsx}'],
+  rules: { 'no-restricted-syntax': ['error', ...syntaxBannedEverywhere, ...clockWaitSelectors] },
+};
+
+const setupTestsNeverWaitOnTheClock = {
+  name: 'setupTestsNeverWaitOnTheClock',
+  files: ['jest/__tests__/**/*.{ts,tsx}'],
+  rules: { 'no-restricted-syntax': ['error', ...clockWaitSelectors] },
 };
 
 const testsPassFakesInNeverPatch = {
@@ -635,6 +648,7 @@ module.exports = [
   testsImportThroughDoors,
   testsPassFakesInNeverPatch,
   testsNeverWaitOnTheClock,
+  setupTestsNeverWaitOnTheClock,
   onlyTheCompositionRootReadsTheEnvironment,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
