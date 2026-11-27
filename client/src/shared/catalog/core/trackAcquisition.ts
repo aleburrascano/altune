@@ -6,7 +6,7 @@ import type {
   TrackAcquisition,
 } from '@shared/catalog/core/trackResponse';
 
-type MaybeStatus = AcquisitionStatus | string | null | undefined;
+type MaybeStatus = string | null | undefined;
 
 export function isReady<S extends MaybeStatus>(status: S): status is S & 'ready' {
   return status === 'ready';
