@@ -8,9 +8,4 @@ type (
 	RateLimitMetrics     = ports.RateLimitMetrics
 )
 
-var (
-	ErrIdentityStoreUnavailable = ports.ErrIdentityStoreUnavailable
-	NoopDeletedUserDataCleaner  = ports.NoopDeletedUserDataCleaner
-	NoopErasureSweepMetrics     = ports.NoopErasureSweepMetrics
-	NoopQueueStateMetrics       = ports.NoopQueueStateMetrics
-)
+var ErrIdentityStoreUnavailable = ports.ErrIdentityStoreUnavailable

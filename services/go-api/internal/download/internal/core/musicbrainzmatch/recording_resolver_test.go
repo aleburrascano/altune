@@ -2,6 +2,7 @@ package musicbrainzmatch_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
 	"bytes"
@@ -41,7 +42,7 @@ func newResolver(t testing.TB, search download.RecordingSearch, with lookups) *m
 
 func TestNewRecordingResolver_RefusesEachMissingPort(t *testing.T) {
 	full := download.RecordingResolverPorts{
-		Search:      ports.NoopRecordingSearch(),
+		Search:      downloadtest.SilentRecordingSearch(),
 		ISRC:        download.NoopISRCLookup(),
 		Recording:   download.NoopRecordingLookup(),
 		Rerecording: download.NoopRerecordingLookup(),
@@ -726,7 +727,7 @@ func TestResolve_PinnedIdentityHoldsWhateverTheTextSearchDoes(t *testing.T) {
 	}{
 		{"search finds nothing", stubSearcher{}},
 		{"search fails", failingSearcher{}},
-		{"search is the explicit no-op", ports.NoopRecordingSearch()},
+		{"search is the explicit no-op", downloadtest.SilentRecordingSearch()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -820,13 +821,13 @@ func TestResolve_PinSurvivesAnUnknownOrUnreachablePinnedRecording(t *testing.T) 
 }
 
 func TestResolver_RecordingByMBIDServesTheWiredLookup(t *testing.T) {
-	resolver := newResolver(t, ports.NoopRecordingSearch(), lookups{recording: cureLookup()})
+	resolver := newResolver(t, downloadtest.SilentRecordingSearch(), lookups{recording: cureLookup()})
 
 	facts, found, err := resolver.RecordingByMBID(context.Background(), cureLiveMBID)
 	if err != nil || !found || facts.Disambiguation != cureLiveFacts.Disambiguation {
 		t.Errorf("facts %+v found %v err %v; want the live recording's facts", facts, found, err)
 	}
-	if _, found, _ := newResolver(t, ports.NoopRecordingSearch(), lookups{}).RecordingByMBID(context.Background(), cureLiveMBID); found {
+	if _, found, _ := newResolver(t, downloadtest.SilentRecordingSearch(), lookups{}).RecordingByMBID(context.Background(), cureLiveMBID); found {
 		t.Error("a resolver without a lookup must report not found")
 	}
 }

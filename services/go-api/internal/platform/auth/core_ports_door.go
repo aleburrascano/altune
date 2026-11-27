@@ -11,7 +11,4 @@ type (
 
 const ReasonSignatureInvalid = ports.ReasonSignatureInvalid
 
-var (
-	NoopAuthMetrics  = ports.NoopAuthMetrics
-	NoopTokenRevoker = ports.NoopTokenRevoker
-)
+var NoopTokenRevoker = ports.NoopTokenRevoker

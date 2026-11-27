@@ -32,6 +32,13 @@ const (
 	reasonClaimMissingEXP = "claim_missing_exp"
 )
 
+type silentAuthMetrics struct{}
+
+func (silentAuthMetrics) TokenRejected(string) {}
+func (silentAuthMetrics) RequestThrottled()    {}
+func (silentAuthMetrics) VerifierUnavailable() {}
+func (silentAuthMetrics) JWKSFetchFailed()     {}
+
 func stubVerifier(userID ids.UserId, err error) auth.VerifierFunc {
 	return func(context.Context, string) (auth.VerifiedToken, error) {
 		return auth.VerifiedToken{UserID: userID, ExpiresAt: time.Now().Add(time.Hour)}, err
@@ -58,7 +65,7 @@ func decodeRejectBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]a
 
 func TestMiddleware_MissingHeader(t *testing.T) {
 	next, called := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -90,7 +97,7 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			next, called := noopHandler()
-			handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+			handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set("Authorization", tt.header)
@@ -120,7 +127,7 @@ func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 			return auth.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 		})
 		next, called := noopHandler()
-		handler := auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+		handler := auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 		rec := serveBearer(handler, "203.0.113.7:1", strings.Repeat("a", size))
 
@@ -145,7 +152,7 @@ func TestMiddleware_BearerAtTheBoundStillReachesTheVerifier(t *testing.T) {
 	next, _ := noopHandler()
 	token := strings.Repeat("a", maxBearerBytes)
 
-	rec := serveBearer(auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next), "203.0.113.7:1", token)
+	rec := serveBearer(auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next), "203.0.113.7:1", token)
 
 	if rec.Code != http.StatusOK || got != token {
 		t.Fatalf("%d-byte bearer: status %d, verifier got %d bytes; want 200 and the full token", len(token), rec.Code, len(got))
@@ -169,7 +176,7 @@ func TestMiddleware_TheVerifiedUserReachesTheRequestCompleteLine(t *testing.T) {
 	uid := ids.NewUserId(uuid.New())
 	next, _ := noopHandler()
 
-	serveBearer(httpserver.RequestLogger(clock.Now)(auth.MustMiddleware(stubVerifier(uid, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)), "203.0.113.7:1", "valid")
+	serveBearer(httpserver.RequestLogger(clock.Now)(auth.MustMiddleware(stubVerifier(uid, nil), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)), "203.0.113.7:1", "valid")
 
 	var complete []logging.CapturedRecord
 	for _, rec := range ring.Snapshot() {
@@ -193,7 +200,7 @@ func TestMiddleware_ValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -216,7 +223,7 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 	verifier := stubVerifier(ids.UserId{},
 		&auth.InvalidTokenError{Reason: reasonExpired, Detail: "token expired"})
 	next, called := noopHandler()
-	handler := auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer expired-token")
@@ -267,7 +274,7 @@ func TestMiddleware_TokenRejectedLogNamesTheCallerAndRoute(t *testing.T) {
 	const bearer = "gqxz-token-value-that-must-not-be-logged"
 	buf := captureJSONLog(t)
 	next, _ := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks", nil)
 	req.RemoteAddr = "203.0.113.42:5555"
 	req.Header.Set("Authorization", "Bearer "+bearer)
@@ -288,7 +295,7 @@ func TestMiddleware_TokenRejectedLogNamesTheCallerAndRoute(t *testing.T) {
 func TestMiddleware_UnreachableVerifierIs503NotTokenRejection(t *testing.T) {
 	verifierThatCouldNotRun := stubVerifier(ids.UserId{}, errors.New("fetch JWKS: connection refused"))
 	next, called := noopHandler()
-	handler := auth.MustMiddleware(verifierThatCouldNotRun, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(verifierThatCouldNotRun, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
@@ -315,7 +322,7 @@ func TestMiddleware_RepeatedFailedVerificationsFromOneCallerAreThrottled(t *test
 		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	next, _ := noopHandler()
-	handler := auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	throttled := 0
 	for range 200 {
@@ -340,7 +347,7 @@ var testFailureLimits = auth.FailureLimits{Burst: 3, Refill: time.Minute, MaxCli
 func throttledMiddleware(verifier auth.TokenVerifier) (http.Handler, *fakeClock) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	next, _ := noopHandler()
-	return auth.MustMiddleware(verifier, clock.now, auth.NoopAuthMetrics(), testFailureLimits)(next), clock
+	return auth.MustMiddleware(verifier, clock.now, silentAuthMetrics{}, testFailureLimits)(next), clock
 }
 
 func TestMiddleware_ThrottleRefusesWithoutVerifyingOnceFailuresExhaustBurst(t *testing.T) {
@@ -390,7 +397,7 @@ func TestMiddleware_SuccessfulVerificationsAreNeverThrottled(t *testing.T) {
 		return auth.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, _ := noopHandler()
-	handler := auth.MustMiddleware(verifier, clock.now, auth.NoopAuthMetrics(), testFailureLimits)(next)
+	handler := auth.MustMiddleware(verifier, clock.now, silentAuthMetrics{}, testFailureLimits)(next)
 
 	for i := range testFailureLimits.Burst * 10 {
 		if rec := serveBearer(handler, "203.0.113.7:1", "valid"); rec.Code != http.StatusOK {
@@ -536,7 +543,7 @@ func serveThroughMiddleware(t *testing.T, verifier auth.TokenVerifier) (time.Tim
 	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer token")
-	auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(httptest.NewRecorder(), req)
+	auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next).ServeHTTP(httptest.NewRecorder(), req)
 	return expiresAt, known
 }
 
@@ -557,7 +564,7 @@ func TestMiddleware_RejectsVerifiedTokenWithoutExpiry(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer token")
 	rec := httptest.NewRecorder()
 
-	auth.MustMiddleware(verifies(auth.VerifiedToken{UserID: ids.NewUserId(uuid.New())}), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
+	auth.MustMiddleware(verifies(auth.VerifiedToken{UserID: ids.NewUserId(uuid.New())}), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 for a token with no expiry", rec.Code)
@@ -733,7 +740,7 @@ func requireExactResponse(t *testing.T, rec *httptest.ResponseRecorder, status i
 
 func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
 	next, called := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -756,7 +763,7 @@ func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 func TestRequireUserID_UnauthorizedMatchesTheMissingTokenRejection(t *testing.T) {
 	next, _ := noopHandler()
 	viaMiddleware := httptest.NewRecorder()
-	auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(viaMiddleware, httptest.NewRequest(http.MethodGet, "/", nil))
+	auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next).ServeHTTP(viaMiddleware, httptest.NewRequest(http.MethodGet, "/", nil))
 	viaRequire := httptest.NewRecorder()
 	requestuser.RequireUserID(viaRequire, httptest.NewRequest(http.MethodGet, "/", nil))
 
@@ -795,7 +802,7 @@ func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 			req.Header.Set("Authorization", header)
 			rec := httptest.NewRecorder()
 
-			auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
+			auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
 
 			requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"type":"urn:altune:problem:auth.token_malformed","title":"Malformed authorization header","status":401,"detail":"malformed authorization header","code":"auth.token_malformed"}`+"\n")
 			if verified || *called {
@@ -816,7 +823,7 @@ func TestMiddleware_LowerCaseSchemeReachesTheVerifier(t *testing.T) {
 	req.Header.Set("Authorization", "bearer abc")
 	rec := httptest.NewRecorder()
 
-	auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
+	auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK || got != "abc" || !*called {
 		t.Fatalf("status %d, verifier token %q, next ran %v; want 200, %q, true", rec.Code, got, *called, "abc")
@@ -825,7 +832,7 @@ func TestMiddleware_LowerCaseSchemeReachesTheVerifier(t *testing.T) {
 
 func TestMiddleware_InvalidTokenBodyIsPinned(t *testing.T) {
 	next, called := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	rec := serveBearer(handler, "203.0.113.7:1", "expired-token")
 
@@ -837,7 +844,7 @@ func TestMiddleware_InvalidTokenBodyIsPinned(t *testing.T) {
 
 func TestMiddleware_VerifierUnavailableBodyIsPinned(t *testing.T) {
 	next, called := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, errors.New("fetch JWKS: connection refused")), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, errors.New("fetch JWKS: connection refused")), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	rec := serveBearer(handler, "203.0.113.7:1", "some-token")
 
@@ -865,7 +872,7 @@ func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	next, _ := noopHandler()
 	limits := auth.FailureLimits{Burst: 1, Refill: time.Millisecond, MaxClients: 10}
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), clock.now, auth.NoopAuthMetrics(), limits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), clock.now, silentAuthMetrics{}, limits)(next)
 	serveBearer(handler, "203.0.113.7:1", "t")
 
 	rec := serveBearer(handler, "203.0.113.7:1", "t")
@@ -890,7 +897,7 @@ func TestMiddleware_AClientThatLeftDuringVerificationGets499WithNoBody(t *testin
 	req.Header.Set("Authorization", "Bearer t")
 	rec := httptest.NewRecorder()
 
-	auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
+	auth.MustMiddleware(verifier, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
 
 	if rec.Code != 499 || rec.Body.Len() != 0 {
 		t.Errorf("answered %d with %q, want 499 and no body", rec.Code, rec.Body.String())
@@ -911,7 +918,7 @@ func TestMiddleware_EachRejectionReasonAnswersItsOwnCode(t *testing.T) {
 	for _, rejection := range rejections {
 		reason := string(rejection.Reason)
 		next, _ := noopHandler()
-		handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, rejection), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+		handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, rejection), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 		rec := serveBearer(handler, "203.0.113.7:1", "t")
 
@@ -927,7 +934,7 @@ func TestMiddleware_EachRejectionReasonAnswersItsOwnCode(t *testing.T) {
 
 func TestMiddleware_AnUnknownRejectionReasonAnswersTheGenericInvalidTokenCode(t *testing.T) {
 	next, _ := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: "from_a_future_verifier"}), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: "from_a_future_verifier"}), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	rec := serveBearer(handler, "203.0.113.7:1", "t")
 
@@ -939,7 +946,7 @@ func TestMiddleware_AnUnknownRejectionReasonAnswersTheGenericInvalidTokenCode(t 
 func TestMiddleware_AVerifierOutageIsLoggedOnceAtErrorWithItsCause(t *testing.T) {
 	logs := captureJSONLog(t)
 	next, _ := noopHandler()
-	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, errors.New("fetch JWKS: connection refused")), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
+	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, errors.New("fetch JWKS: connection refused")), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next)
 
 	serveBearer(handler, "203.0.113.7:1", "t")
 
@@ -966,7 +973,7 @@ func failingVerifier() auth.VerifierFunc {
 func limitedMiddleware(limits auth.FailureLimits) (http.Handler, *fakeClock) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	next, _ := noopHandler()
-	return auth.MustMiddleware(failingVerifier(), clock.now, auth.NoopAuthMetrics(), limits)(next), clock
+	return auth.MustMiddleware(failingVerifier(), clock.now, silentAuthMetrics{}, limits)(next), clock
 }
 
 func admitted(handler http.Handler, addr string) bool {
@@ -974,7 +981,7 @@ func admitted(handler http.Handler, addr string) bool {
 }
 
 func TestMiddleware_RefusesANilClock(t *testing.T) {
-	mw, err := auth.Middleware(failingVerifier(), nil, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)
+	mw, err := auth.Middleware(failingVerifier(), nil, silentAuthMetrics{}, auth.DefaultFailureLimits)
 
 	if !errors.Is(err, auth.ErrMiddlewareClockRequired) || mw != nil {
 		t.Fatalf("Middleware(nil clock) = (%v, %v), want ErrMiddlewareClockRequired and no middleware", mw != nil, err)
@@ -998,7 +1005,7 @@ func TestFailureThrottle_NonPositiveLimitsKeepTheDefaults(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			next, _ := noopHandler()
-			handler := auth.MustMiddleware(failingVerifier(), tc.now, auth.NoopAuthMetrics(), tc.limits)(next)
+			handler := auth.MustMiddleware(failingVerifier(), tc.now, silentAuthMetrics{}, tc.limits)(next)
 			codes := map[int]int{}
 			for i := range tc.burst + 5 {
 				admitted(handler, clientAddr(i))
@@ -1148,7 +1155,7 @@ func benchmarkChurn(b *testing.B, step time.Duration) {
 
 func TestMiddleware_RefusesAMissingVerifierOrMetrics(t *testing.T) {
 	for name, build := range map[string]func(){
-		"no verifier": func() { auth.MustMiddleware(nil, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits) },
+		"no verifier": func() { auth.MustMiddleware(nil, time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits) },
 		"no metrics":  func() { auth.MustMiddleware(failingVerifier(), time.Now, nil, auth.DefaultFailureLimits) },
 	} {
 		t.Run(name, func(t *testing.T) {

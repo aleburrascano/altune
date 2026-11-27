@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -56,9 +57,9 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	}{
 		{service.NewSearchStep(nil), "search", downloadfailure.FailureNoMatchFound},
 		{service.NewSelectStep(), "select", downloadfailure.FailureNoMatchFound},
-		{mustNewDownloadStep(&fileWritingSearcher{}, scratchfiles.New(), ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited()), "download", downloadfailure.FailureDownloadFailed},
+		{mustNewDownloadStep(&fileWritingSearcher{}, scratchfiles.New(), ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited()), "download", downloadfailure.FailureDownloadFailed},
 		{mustNewTagStep(ports.NoopAudioTagger()), "tag", downloadfailure.FailureAcquisitionFailed},
-		{mustNewStoreStep(newFakeAudioStore(), scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}), ports.NoopAudioRefLookup()), "store", downloadfailure.FailureStorageFailed},
+		{mustNewStoreStep(newFakeAudioStore(), scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}), downloadtest.SilentAudioRefLookup()), "store", downloadfailure.FailureStorageFailed},
 		{service.NewUpdateTrackStep(nil, ids.UserId{}, ids.TrackId{}), "update_track", downloadfailure.FailureAcquisitionFailed},
 	}
 

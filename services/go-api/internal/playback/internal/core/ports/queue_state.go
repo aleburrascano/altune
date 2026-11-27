@@ -25,15 +25,6 @@ type QueueStateMetrics interface {
 	QueueStateStaleWrite()
 }
 
-func NoopQueueStateMetrics() QueueStateMetrics { return noopQueueStateMetrics{} }
-
-type noopQueueStateMetrics struct{}
-
-func (noopQueueStateMetrics) CorruptStoredState()          {}
-func (noopQueueStateMetrics) QueueStateOpTimedOut()        {}
-func (noopQueueStateMetrics) QueueStateOpFailedTransient() {}
-func (noopQueueStateMetrics) QueueStateStaleWrite()        {}
-
 type RateLimitMetrics interface {
 	QueueStateRateLimited()
 }

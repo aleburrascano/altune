@@ -115,6 +115,7 @@ func (a *App) wireAudioSources(
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
 		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, download.NewPostgresUpgradeStore(a.pool)),
+		scheduler:      library.NoopAcquisitionScheduler(),
 		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      ytmCanary,
@@ -160,7 +161,7 @@ func (a *App) wireCatalogServices(
 	audioStoreMetrics := library.NewExpvarAudioStoreMetrics()
 	library.SetDBCallMetrics(library.NewExpvarDBCallMetrics())
 
-	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, addTrackScheduler(audio.scheduler), clock.Now)
+	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, audio.scheduler, clock.Now)
 	if err != nil {
 		return catalogServicesStaging{}, fmt.Errorf("build the add-track service: %w", err)
 	}
@@ -185,16 +186,9 @@ func (a *App) wireCatalogServices(
 		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, clock.Now),
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, addTrackScheduler(audio.scheduler), audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
+		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, audio.scheduler, audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery), clock.Now),
 		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, clock.Now, audioStoreMetrics),
 	}, nil
-}
-
-func addTrackScheduler(scheduler library.AcquisitionScheduler) library.AcquisitionScheduler {
-	if scheduler == nil {
-		return library.NoopAcquisitionScheduler()
-	}
-	return scheduler
 }
 
 func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
