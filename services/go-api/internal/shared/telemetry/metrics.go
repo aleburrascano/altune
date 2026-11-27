@@ -51,7 +51,7 @@ type Histogram struct {
 	count   atomic.Uint64
 }
 
-type HistogramSnapshot struct {
+type histogramSnapshot struct {
 	Bounds  []int64
 	Buckets []uint64
 	Sum     uint64
@@ -74,12 +74,12 @@ func (h *Histogram) Observe(value int64) {
 	h.count.Add(1)
 }
 
-func (h *Histogram) Snapshot() HistogramSnapshot {
+func (h *Histogram) Snapshot() histogramSnapshot {
 	buckets := make([]uint64, len(h.buckets))
 	for i := range h.buckets {
 		buckets[i] = h.buckets[i].Load()
 	}
-	return HistogramSnapshot{Bounds: append([]int64(nil), h.bounds...), Buckets: buckets, Sum: h.sum.Load(), Count: h.count.Load()}
+	return histogramSnapshot{Bounds: append([]int64(nil), h.bounds...), Buckets: buckets, Sum: h.sum.Load(), Count: h.count.Load()}
 }
 
 type Registry struct {

@@ -11,25 +11,25 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type Stage struct {
+type stage struct {
 	span  trace.Span
 	now   clock.Func
 	start time.Time
 }
 
-func StartStage(ctx context.Context, now clock.Func, name string, attrs ...attribute.KeyValue) (context.Context, *Stage) {
+func StartStage(ctx context.Context, now clock.Func, name string, attrs ...attribute.KeyValue) (context.Context, *stage) {
 	if now == nil {
 		panic("telemetry.StartStage: a clock is required")
 	}
 	ctx, span := otel.Tracer(ScopeName).Start(ctx, name, trace.WithAttributes(attrs...))
-	return ctx, &Stage{span: span, now: now, start: now()}
+	return ctx, &stage{span: span, now: now, start: now()}
 }
 
-func (s *Stage) Annotate(attrs ...attribute.KeyValue) {
+func (s *stage) Annotate(attrs ...attribute.KeyValue) {
 	s.span.SetAttributes(attrs...)
 }
 
-func (s *Stage) End(err error) time.Duration {
+func (s *stage) End(err error) time.Duration {
 	elapsed := s.now().Sub(s.start)
 	if err != nil {
 		s.span.RecordError(err)
