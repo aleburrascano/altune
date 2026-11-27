@@ -196,6 +196,22 @@ func TestQueueStateRepo_KeepsTheRepositoryContract(t *testing.T) {
 				t.Fatalf("GetForUser after delete = %v, want ErrQueueStateNotFound", err)
 			}
 		},
+		"a save handled before the forget does not bring the state back": func(t *testing.T, s subject) {
+			user := newUser(t, s)
+			if err := s.repo.DeleteForUser(context.Background(), user); err != nil {
+				t.Fatalf("DeleteForUser: %v", err)
+			}
+
+			err := s.repo.Upsert(context.Background(), stateOf(t, user, time.Now().Add(-10*time.Second), aTrack(), aTrack()))
+			_, got := s.repo.GetForUser(context.Background(), user)
+
+			if !errors.Is(err, domain.ErrStaleQueueWrite) {
+				t.Fatalf("Upsert stamped before the forget = %v, want ErrStaleQueueWrite", err)
+			}
+			if !errors.Is(got, domain.ErrQueueStateNotFound) {
+				t.Fatalf("GetForUser after the refused save = %v, want ErrQueueStateNotFound", got)
+			}
+		},
 		"users do not see each other's state": func(t *testing.T, s subject) {
 			mine, theirs := newUser(t, s), newUser(t, s)
 			if err := s.repo.Upsert(context.Background(), stateOf(t, mine, time.Now(), aTrack(), aTrack())); err != nil {

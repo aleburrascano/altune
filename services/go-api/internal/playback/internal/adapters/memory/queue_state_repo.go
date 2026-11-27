@@ -3,10 +3,12 @@ package memory
 import (
 	ports "altune/go-api/internal/playback/internal"
 	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -16,10 +18,13 @@ var _ ports.QueueStateRepository = (*QueueStateRepo)(nil)
 type QueueStateRepo struct {
 	mu     sync.Mutex
 	states map[uuid.UUID]*domain.QueueState
+	erased map[uuid.UUID]time.Time
 }
 
+const erasureFenceWindow = 3 * time.Second
+
 func NewQueueStateRepo() *QueueStateRepo {
-	return &QueueStateRepo{states: map[uuid.UUID]*domain.QueueState{}}
+	return &QueueStateRepo{states: map[uuid.UUID]*domain.QueueState{}, erased: map[uuid.UUID]time.Time{}}
 }
 
 func (r *QueueStateRepo) Seed(state *domain.QueueState) {
@@ -52,6 +57,9 @@ func (r *QueueStateRepo) Upsert(_ context.Context, state *domain.QueueState) err
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if stored, ok := r.states[state.UserId.UUID()]; ok && stored.UpdatedAt.After(state.UpdatedAt) {
+		return domain.ErrStaleQueueWrite
+	}
+	if erasedAt, ok := r.erased[state.UserId.UUID()]; ok && !erasedAt.Add(erasureFenceWindow).Before(state.UpdatedAt) {
 		return domain.ErrStaleQueueWrite
 	}
 	copied := *state
@@ -95,5 +103,6 @@ func (r *QueueStateRepo) DeleteForUser(_ context.Context, userId ids.UserId) err
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.states, userId.UUID())
+	r.erased[userId.UUID()] = clock.Now()
 	return nil
 }

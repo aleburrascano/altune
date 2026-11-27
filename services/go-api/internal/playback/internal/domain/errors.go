@@ -33,6 +33,14 @@ const (
 	KindNaturalOrderMismatch  ValidationKind = "natural_order_mismatch"
 )
 
+func ValidationKinds() []ValidationKind {
+	return []ValidationKind{
+		KindPositionMsNegative, KindQueueTooLong, KindStringTooLong, KindStringContainsNul,
+		KindCurrentIdxOutOfRange, KindCurrentTrackIdMissing, KindUnknownRepeatMode,
+		KindUnknownSourceKind, KindUnrecognizedSourceId, KindMalformedTrackId, KindNaturalOrderMismatch,
+	}
+}
+
 type ValidationError struct {
 	Kind ValidationKind
 	msg  string

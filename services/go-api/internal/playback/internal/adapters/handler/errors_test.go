@@ -11,12 +11,7 @@ import (
 )
 
 func TestValidationErrors_EachKindAnswers400WithItsWireCode(t *testing.T) {
-	kinds := []domain.ValidationKind{
-		domain.KindPositionMsNegative, domain.KindQueueTooLong, domain.KindStringTooLong, domain.KindStringContainsNul,
-		domain.KindCurrentIdxOutOfRange, domain.KindCurrentTrackIdMissing, domain.KindUnknownRepeatMode,
-		domain.KindUnknownSourceKind, domain.KindUnrecognizedSourceId, domain.KindMalformedTrackId, domain.KindNaturalOrderMismatch,
-	}
-	for _, kind := range kinds {
+	for _, kind := range domain.ValidationKinds() {
 		t.Run(string(kind), func(t *testing.T) {
 			repo := &recordingRepo{positionErr: fmt.Errorf("wrapped: %w", &domain.ValidationError{Kind: kind})}
 			rec := httptest.NewRecorder()

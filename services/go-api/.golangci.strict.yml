@@ -99,6 +99,7 @@ linters:
             - "**/internal/**/service/**"
             - "**/internal/**/domain/**"
             - "**/internal/**/ports/**"
+            - "**/internal/*/internal/*.go"
             - "**/internal/**/shell/**"
             - "!$test"
           deny:
@@ -122,6 +123,8 @@ linters:
           list-mode: lax
           files:
             - "**/internal/**/core/**"
+            - "**/internal/*/internal/*.go"
+            - "**/internal/playback/internal/domain/**"
             - "!$test"
           deny:
             - pkg: log/slog
