@@ -52,24 +52,50 @@ func MustNewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleReposit
 	return s
 }
 
-func (s *PlaylistLifecycleService) Create(ctx context.Context, userId ids.UserId, name string) (*domain.Playlist, error) {
+func (s *PlaylistLifecycleService) Create(ctx context.Context, userId ids.UserId, name string, idempotencyKey *string) (*domain.Playlist, bool, error) {
+	if idempotencyKey != nil {
+		if err := domain.ValidateIdempotencyKey(*idempotencyKey); err != nil {
+			return nil, false, fmt.Errorf("validate idempotency key: %w", err)
+		}
+		existing, found, err := s.playlistRepo.GetByIdempotencyKey(ctx, userId, *idempotencyKey)
+		if err != nil {
+			return nil, false, domain.WrapRepoError(ctx, "find playlist by idempotency key", err)
+		}
+		if found {
+			return existing, false, nil
+		}
+	}
 	playlist, err := domain.NewPlaylist(userId, name, s.now(), s.source)
 	if err != nil {
-		return nil, fmt.Errorf("new playlist: %w", err)
+		return nil, false, fmt.Errorf("new playlist: %w", err)
 	}
 	if err := s.requirePlaylistSpace(ctx, userId); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if err := s.playlistRepo.Create(ctx, playlist); err != nil {
-		return nil, domain.WrapRepoError(ctx, "create playlist", err)
+	stored, created, err := s.store(ctx, playlist, idempotencyKey)
+	if err != nil {
+		return nil, false, domain.WrapRepoError(ctx, "create playlist", err)
+	}
+	if !created {
+		return stored, false, nil
 	}
 	slog.InfoContext(ctx, "playlist created",
-		"playlist_id", playlist.ID.String())
+		"playlist_id", stored.ID.String())
 	s.events.Publish(ctx, userId, events.PlaylistCreated{
-		PlaylistID: playlist.ID.String(),
-		Name:       name,
+		PlaylistID: stored.ID.String(),
+		Name:       stored.Name,
 	})
-	return playlist, nil
+	return stored, true, nil
+}
+
+func (s *PlaylistLifecycleService) store(ctx context.Context, playlist *domain.Playlist, idempotencyKey *string) (*domain.Playlist, bool, error) {
+	if idempotencyKey != nil {
+		return s.playlistRepo.CreateKeyed(ctx, playlist, *idempotencyKey)
+	}
+	if err := s.playlistRepo.Create(ctx, playlist); err != nil {
+		return nil, false, err
+	}
+	return playlist, true, nil
 }
 
 func (s *PlaylistLifecycleService) requirePlaylistSpace(ctx context.Context, userId ids.UserId) error {

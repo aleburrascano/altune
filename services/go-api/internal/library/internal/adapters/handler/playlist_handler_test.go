@@ -17,6 +17,38 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestHandleCreatePlaylist_IdempotencyKey(t *testing.T) {
+	rig := newWriteRig(time.Now)
+	user := librarytest.UserId()
+	send := func(key string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/playlists/", jsonBody(t, map[string]string{"name": "Road trip"}))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(httpserver.IdempotencyKeyHeader, key)
+		return sendAs(rig.router, req, user)
+	}
+
+	first := send("retry-1")
+	again := send("retry-1")
+	other := send("retry-2")
+
+	assertStatus(t, first, http.StatusCreated)
+	assertStatus(t, again, http.StatusOK)
+	assertStatus(t, other, http.StatusCreated)
+	var a, b, c struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, first, &a)
+	decodeJSON(t, again, &b)
+	decodeJSON(t, other, &c)
+	if a.ID != b.ID {
+		t.Errorf("the repeat returned playlist %s, want the first, %s", b.ID, a.ID)
+	}
+	if c.ID == a.ID {
+		t.Error("a different key reused the first playlist")
+	}
+	assertStatus(t, send("a\x00b"), http.StatusBadRequest)
+}
+
 func TestHandleCreatePlaylist(t *testing.T) {
 	tests := []struct {
 		name       string

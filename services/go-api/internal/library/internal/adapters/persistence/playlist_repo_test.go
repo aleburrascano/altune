@@ -51,6 +51,56 @@ func TestPostgresPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *
 	}
 }
 
+func TestPostgresPlaylistRepo_CreateKeyed_ARepeatedKeyReturnsTheFirstRowAndRacesToOne(t *testing.T) {
+	pool := dbtest.Pool(t)
+	repo := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics())
+	ctx := context.Background()
+	userId := sharedids.NewUserId(uuid.New())
+	otherId := sharedids.NewUserId(uuid.New())
+
+	first, created, err := repo.CreateKeyed(ctx, newTestPlaylistForDB(t, userId), "k1")
+	if err != nil || !created {
+		t.Fatalf("first CreateKeyed = (%v, %v), want created", created, err)
+	}
+	again, created, err := repo.CreateKeyed(ctx, newTestPlaylistForDB(t, userId), "k1")
+	if err != nil || created || again.ID != first.ID {
+		t.Fatalf("repeat CreateKeyed = (%v, %v, %v), want the first playlist", again, created, err)
+	}
+	theirs, created, err := repo.CreateKeyed(ctx, newTestPlaylistForDB(t, otherId), "k1")
+	if err != nil || !created || theirs.ID == first.ID {
+		t.Fatalf("other user's CreateKeyed = (%v, %v, %v), want their own playlist", theirs, created, err)
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	winners := 0
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, made, raceErr := repo.CreateKeyed(ctx, newTestPlaylistForDB(t, userId), "race")
+			if raceErr != nil {
+				t.Errorf("racing CreateKeyed: %v", raceErr)
+			}
+			if made {
+				mu.Lock()
+				winners++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if winners != 1 {
+		t.Errorf("%d racing creates reported created, want exactly 1", winners)
+	}
+	if _, found, err := repo.GetByIdempotencyKey(ctx, userId, "race"); err != nil || !found {
+		t.Fatalf("GetByIdempotencyKey = (%v, %v), want the winner", found, err)
+	}
+	if _, found, err := repo.GetByIdempotencyKey(ctx, userId, "never"); err != nil || found {
+		t.Fatalf("GetByIdempotencyKey(never) = (%v, %v), want not found", found, err)
+	}
+}
+
 func TestPostgresPlaylistRepo_CreateAndGetByID(t *testing.T) {
 	pool := dbtest.Pool(t)
 	repo := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics())
