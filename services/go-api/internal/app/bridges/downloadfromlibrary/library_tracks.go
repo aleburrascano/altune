@@ -82,7 +82,10 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 	if track == nil {
 		return nil, download.ErrTrackNotFound
 	}
-	snapshot := snapshotOf(track)
+	snapshot, err := snapshotOf(track)
+	if err != nil {
+		return nil, err
+	}
 	state, err := l.state.State(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("read upgrade state: %w", err)
@@ -94,16 +97,20 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 	return snapshot, nil
 }
 
-func snapshotOf(track *library.Track) *download.TrackSnapshot {
+func snapshotOf(track *library.Track) (*download.TrackSnapshot, error) {
+	status, err := mapStatus(track.DownloadStatus)
+	if err != nil {
+		return nil, err
+	}
 	snapshot := catalogFactsOf(track)
 	snapshot.AudioRef = track.AudioRef
 	snapshot.AudioSourceURL = track.AudioSourceURL
 	snapshot.StoredDurationSeconds = track.DurationSeconds
 	snapshot.Evidence = track.AcquisitionEvidence()
-	snapshot.Status = mapStatus(track.DownloadStatus)
+	snapshot.Status = status
 	snapshot.Streamable = track.IsStreamable()
 	snapshot.Version = track.Version
-	return snapshot
+	return snapshot, nil
 }
 
 func catalogFactsOf(track *library.Track) *download.TrackSnapshot {
@@ -136,15 +143,18 @@ func snapshotSources(sources []library.CatalogSource) []download.CatalogSource {
 	return out
 }
 
-func mapStatus(s library.DownloadStatus) download.TrackStatus {
+var errUnmappedStatus = errors.New("library download status has no acquisition status")
+
+func mapStatus(s library.DownloadStatus) (download.TrackStatus, error) {
 	switch s {
+	case library.AcquisitionPending:
+		return download.TrackPending, nil
 	case library.AcquisitionReady:
-		return download.TrackReady
+		return download.TrackReady, nil
 	case library.AcquisitionFailed:
-		return download.TrackFailed
-	default:
-		return download.TrackPending
+		return download.TrackFailed, nil
 	}
+	return 0, fmt.Errorf("%w: %d", errUnmappedStatus, int(s))
 }
 
 func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {

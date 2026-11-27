@@ -377,7 +377,7 @@ func failedTrack(userId ids.UserId) inmemoryledger.LedgerTrack {
 func readyTrack(userId ids.UserId) inmemoryledger.LedgerTrack {
 	track := pendingTrack(userId)
 	audioRef := "audio/ready.opus"
-	track.AudioRef, track.Status = &audioRef, download.TrackReady
+	track.AudioRef, track.Status, track.Streamable = &audioRef, download.TrackReady, true
 	return track
 }
 

@@ -102,7 +102,7 @@ func seedReadyTrack(t *testing.T) servedTrack {
 	sourceURL := "https://www.youtube.com/watch?v=currentAAAA"
 	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
-		Status: ports.TrackReady, AudioRef: &originalRef, AudioSourceURL: &sourceURL,
+		Status: ports.TrackReady, Streamable: true, AudioRef: &originalRef, AudioSourceURL: &sourceURL,
 	}})
 	store := &objectStore{objects: map[string]string{originalRef: "original bytes"}}
 	return servedTrack{ledger: ledger, store: store, userID: userID, trackID: trackID, originalRef: originalRef}

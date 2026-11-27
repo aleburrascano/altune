@@ -53,7 +53,7 @@ func newLedgerTrack(userId ids.UserId, title, artist, album string) ledgerTrack 
 }
 
 func makeReady(track *ledgerTrack, audioRef string) {
-	track.Status, track.AudioRef, track.FailureReason = acqports.TrackReady, &audioRef, ""
+	track.Status, track.AudioRef, track.FailureReason, track.Streamable = acqports.TrackReady, &audioRef, "", true
 }
 
 func makeFailed(track *ledgerTrack, reason string) {

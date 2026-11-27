@@ -57,7 +57,7 @@ func (l *Ledger) Track(id ids.TrackId) (LedgerTrack, bool) {
 	if !ok {
 		return LedgerTrack{}, false
 	}
-	return withStreamable(copyTrack(track)), true
+	return copyTrack(track), true
 }
 
 func (l *Ledger) FailWrites(err error) {
@@ -73,7 +73,7 @@ func (l *Ledger) Get(_ context.Context, id ids.TrackId, userId ids.UserId) (*por
 	if !ok || track.UserId != userId {
 		return nil, ports.ErrTrackNotFound
 	}
-	snapshot := withStreamable(copyTrack(track)).TrackSnapshot
+	snapshot := copyTrack(track).TrackSnapshot
 	return &snapshot, nil
 }
 
@@ -110,7 +110,7 @@ func (l *Ledger) Fail(_ context.Context, id ids.TrackId, userId ids.UserId, fenc
 		if reason == "" {
 			return errors.New("failure reason required for failed status")
 		}
-		track.Status, track.FailureReason, track.AudioRef = ports.TrackFailed, reason, nil
+		track.Status, track.FailureReason, track.AudioRef, track.Streamable = ports.TrackFailed, reason, nil, false
 		return nil
 	})
 }
@@ -128,7 +128,7 @@ func (l *Ledger) RevertAt(_ context.Context, snapshot ports.TrackSnapshot) error
 	if track.Status == ports.TrackPending {
 		return illegalTransition("revert to pending", track.Status)
 	}
-	track.Status, track.AudioRef, track.FailureReason = ports.TrackPending, nil, ""
+	track.Status, track.AudioRef, track.FailureReason, track.Streamable = ports.TrackPending, nil, "", false
 	return l.write(track)
 }
 
@@ -176,15 +176,14 @@ func settleAudio(track *LedgerTrack, c ports.Completion) error {
 	if c.AudioRef == "" {
 		return errors.New("audio_ref required for ready status")
 	}
-	streamable := isStreamable(track.TrackSnapshot)
-	if c.ReplaceAudio && !streamable {
+	if c.ReplaceAudio && !track.Streamable {
 		return illegalTransition("replace audio", track.Status)
 	}
-	if !c.ReplaceAudio && streamable && *track.AudioRef != c.AudioRef {
+	if !c.ReplaceAudio && track.Streamable && *track.AudioRef != c.AudioRef {
 		return illegalTransition("mark ready", track.Status)
 	}
 	ref := c.AudioRef
-	track.Status, track.AudioRef, track.FailureReason = ports.TrackReady, &ref, ""
+	track.Status, track.AudioRef, track.FailureReason, track.Streamable = ports.TrackReady, &ref, "", true
 	return nil
 }
 
@@ -298,13 +297,4 @@ func clonePointer[T any](p *T) *T {
 	}
 	v := *p
 	return &v
-}
-
-func isStreamable(track ports.TrackSnapshot) bool {
-	return track.Status == ports.TrackReady && track.AudioRef != nil
-}
-
-func withStreamable(track LedgerTrack) LedgerTrack {
-	track.Streamable = isStreamable(track.TrackSnapshot)
-	return track
 }

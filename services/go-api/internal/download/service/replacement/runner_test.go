@@ -131,7 +131,7 @@ func seed(t *testing.T, stored audioquality.Grade) *world {
 		TrackSnapshot: download.TrackSnapshot{
 			ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 			Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
-			Status: download.TrackReady, AudioRef: &ref, AudioSourceURL: &sourceURL, ISRC: &isrc,
+			Status: download.TrackReady, Streamable: true, AudioRef: &ref, AudioSourceURL: &sourceURL, ISRC: &isrc,
 			Evidence: json.RawMessage(fmt.Sprintf(`{"grade":%q,"pipeline_generation":1}`, stored)),
 		},
 		Confidence: 0.5,
