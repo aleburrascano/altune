@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
-	"log/slog"
+	"fmt"
 	"math"
 	"net/http"
 	"strings"
@@ -98,13 +98,6 @@ func isOpaqueIDChar(c rune) bool {
 	return strings.ContainsRune("_:.-", c)
 }
 
-type limitOverflowPolicy int
-
-const (
-	clampToMax limitOverflowPolicy = iota
-	resetToDefault
-)
-
 func parseIntParam(w http.ResponseWriter, r *http.Request, param string, def int) (int, bool) {
 	return httpserver.QueryInt(w, r, param, def, math.MinInt, math.MaxInt, apierror.CodeDiscoveryInvalidParam)
 }
@@ -120,19 +113,14 @@ func limitOrDefault(w http.ResponseWriter, r *http.Request, param string, def in
 	return limit, true
 }
 
-func parseLimit(w http.ResponseWriter, r *http.Request, param string, def, maxLimit int, policy limitOverflowPolicy) (int, bool) {
+func parseLimit(w http.ResponseWriter, r *http.Request, param string, def, maxLimit int) (int, bool) {
 	limit, ok := limitOrDefault(w, r, param, def)
 	if !ok {
 		return 0, false
 	}
-	if limit <= maxLimit {
-		return limit, true
+	if limit > maxLimit {
+		httpserver.HandleServiceError(w, r, invalidParam(fmt.Sprintf("%s must be between 1 and %d", param, maxLimit)))
+		return 0, false
 	}
-	applied := maxLimit
-	if policy == resetToDefault {
-		applied = def
-	}
-	slog.InfoContext(r.Context(), "search.limit_out_of_range",
-		"param", param, "requested", limit, "max", maxLimit, "applied", applied)
-	return applied, true
+	return limit, true
 }

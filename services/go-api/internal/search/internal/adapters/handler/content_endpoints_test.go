@@ -71,7 +71,7 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	}{
 		{"absent limit uses default 5", "", 5},
 		{"explicit limit truncates", "?limit=3", 3},
-		{"limit above cap 50 clamps but keeps all 7", "?limit=100", 7},
+		{"limit at cap 50 keeps all 7", "?limit=50", 7},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -92,24 +92,27 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	}
 }
 
-func TestHandleArtistTopTracks_AnOverRangeLimitIsClampedAndLogged(t *testing.T) {
-	ring := captureLogs(t)
-	artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: seedTracks(7)},
-	}
-	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+func TestContentEndpoints_AnOverRangeLimitIsA400NamingTheRange(t *testing.T) {
+	for name, path := range map[string]string{
+		"top tracks":      "/discovery/artists/deezer/1/top-tracks?limit=51",
+		"artist albums":   "/discovery/artists/deezer/1/albums?limit=101",
+		"related tracks":  "/discovery/tracks/deezer/1/related?limit=51",
+		"album tracks":    "/discovery/albums/deezer/1/tracks?limit=251",
+		"artist content":  "/discovery/artists/deezer/1/content?tracks_limit=51",
+		"content albums":  "/discovery/artists/deezer/1/content?albums_limit=201",
+		"absurdly large":  "/discovery/artists/deezer/1/top-tracks?limit=1000000000",
+		"unparseable too": "/discovery/artists/deezer/1/top-tracks?limit=lots",
+	} {
+		t.Run(name, func(t *testing.T) {
+			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, nil)
 
-	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/top-tracks?limit=100", nil)
+			rec := discServe(t, router, http.MethodGet, path, nil)
 
-	discAssertStatus(t, rec, http.StatusOK)
-	record, ok := findRecord(ring, "search.limit_out_of_range")
-	if !ok {
-		t.Fatal("no search.limit_out_of_range line for a clamped limit")
-	}
-	for k, want := range map[string]string{"param": "limit", "requested": "100", "max": "50", "applied": "50"} {
-		if got := record.Attrs[k]; got != want {
-			t.Errorf("attr %s = %q, want %q", k, got, want)
-		}
+			discAssertStatus(t, rec, http.StatusBadRequest)
+			if body := rec.Body.String(); !strings.Contains(body, "discovery.invalid_param") || !strings.Contains(body, "limit") {
+				t.Errorf("body = %s, want the invalid_param code naming the limit", body)
+			}
+		})
 	}
 }
 
@@ -410,14 +413,14 @@ func numberedAlbums(n int) []search.SearchResult {
 	return out
 }
 
-func TestHandleArtistAlbums_LimitClamping(t *testing.T) {
+func TestHandleArtistAlbums_LimitDefaultsAndCap(t *testing.T) {
 	cases := []struct {
 		name      string
 		query     string
 		wantItems int
 	}{
 		{"absent limit uses default 50", "", 50},
-		{"limit above the max clamps to 100", "?limit=500", 100},
+		{"limit at the max keeps 100", "?limit=100", 100},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

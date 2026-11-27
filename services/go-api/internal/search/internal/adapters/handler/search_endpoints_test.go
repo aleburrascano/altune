@@ -369,7 +369,22 @@ func TestHandleSuggest(t *testing.T) {
 		}
 	})
 
-	t.Run("limit boundaries clamp to default 5", func(t *testing.T) {
+	t.Run("an over-range limit is a 400 and never reaches the store", func(t *testing.T) {
+		vocab := &fakeVocabStore{}
+		router := buildSuggestRouter(t, vocab)
+
+		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=x&limit=11", nil)
+
+		discAssertStatus(t, rec, http.StatusBadRequest)
+		if !strings.Contains(rec.Body.String(), "limit must be between 1 and 10") {
+			t.Errorf("body = %s, want the allowed range named", rec.Body)
+		}
+		if vocab.capturedLimit != 0 {
+			t.Errorf("store limit = %d, want the store untouched", vocab.capturedLimit)
+		}
+	})
+
+	t.Run("limit boundaries use the default or pass through", func(t *testing.T) {
 		cases := []struct {
 			query string
 			want  int
@@ -377,7 +392,6 @@ func TestHandleSuggest(t *testing.T) {
 			{"/discovery/suggest?q=x", 5},
 			{"/discovery/suggest?q=x&limit=0", 5},
 			{"/discovery/suggest?q=x&limit=-3", 5},
-			{"/discovery/suggest?q=x&limit=11", 5},
 			{"/discovery/suggest?q=x&limit=1", 1},
 			{"/discovery/suggest?q=x&limit=10", 10},
 		}
@@ -931,7 +945,19 @@ func TestSearch_OutcomeFollowsTheProviders(t *testing.T) {
 	}
 }
 
-func TestHandleSearchHistory_LimitClamping(t *testing.T) {
+func TestHandleSearchHistory_AnOverRangeLimitIsA400(t *testing.T) {
+	historyRepo := &fakeSearchHistoryRepo{}
+	router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=101", nil)
+
+	discAssertStatus(t, rec, http.StatusBadRequest)
+	if historyRepo.lastLimit != 0 {
+		t.Errorf("repo limit = %d, want the repository untouched", historyRepo.lastLimit)
+	}
+}
+
+func TestHandleSearchHistory_LimitDefaultsAndPassThrough(t *testing.T) {
 	cases := []struct {
 		name      string
 		query     string
@@ -940,7 +966,6 @@ func TestHandleSearchHistory_LimitClamping(t *testing.T) {
 		{"absent limit uses default 10", "", 10},
 		{"explicit limit passes through", "?limit=7", 7},
 		{"limit at cap passes through", "?limit=100", 100},
-		{"huge limit clamps to cap 100", "?limit=1000000000", 100},
 		{"non-positive limit falls back to default", "?limit=-5", 10},
 	}
 	for _, c := range cases {
