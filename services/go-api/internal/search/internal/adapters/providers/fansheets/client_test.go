@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/fansheets"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
@@ -61,7 +60,6 @@ type sheetsServer struct {
 	tabs         string
 	released     []byte
 	releasedCode int
-	delay        time.Duration
 }
 
 func tabsBody(titles ...string) string {
@@ -80,7 +78,6 @@ func newSheetsServer(t *testing.T, hub, artist []byte) *sheetsServer {
 	t.Helper()
 	s := &sheetsServer{artistCode: http.StatusOK, tabs: tabsBody("Released", "Unreleased")}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = clock.Sleep(r.Context(), s.delay)
 		s.lastKey.Store(r.Header.Get("X-Goog-Api-Key"))
 		onArtistSheet := strings.HasSuffix(r.URL.Path, kenSheetID)
 		if onArtistSheet && r.URL.Query().Get("fields") == tabsFields {
@@ -276,15 +273,14 @@ func TestClient_ABrokenHubBodyIsAnError(t *testing.T) {
 
 func TestNewClient_UsesItsOwnTimeoutWithoutTouchingTheSharedClient(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
-	srv.delay = 50 * time.Millisecond
 	shared := srv.httpClient()
-	shared.Timeout = 10 * time.Millisecond
+	shared.Timeout = time.Nanosecond
 
 	songs, err := newTrackersClient(t, shared, fansheets.NoIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) != 4 {
-		t.Errorf("ArtistSongs = %d songs, err %v; want the client's own timeout, not the shared 10ms", len(songs), err)
+		t.Errorf("ArtistSongs = %d songs, err %v; want the client's own timeout, not the shared 1ns", len(songs), err)
 	}
-	if shared.Timeout != 10*time.Millisecond {
+	if shared.Timeout != time.Nanosecond {
 		t.Errorf("shared timeout = %v, want it untouched", shared.Timeout)
 	}
 }
