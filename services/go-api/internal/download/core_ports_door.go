@@ -7,7 +7,6 @@ type (
 	Verification         = ports.Verification
 	AudioIdentifier      = ports.AudioIdentifier
 	AudioSource          = ports.AudioSource
-	PreviewingSource     = ports.PreviewingSource
 	CatalogSource        = ports.CatalogSource
 	FetchedAudio         = ports.FetchedAudio
 	JobRecord            = ports.JobRecord

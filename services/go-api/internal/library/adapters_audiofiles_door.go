@@ -14,8 +14,3 @@ type (
 	NoAudioLinks = storage.NoAudioLinks
 	NoAgeListing = storage.NoAgeListing
 )
-
-var (
-	ErrAudioLinksUnsupported = storage.ErrAudioLinksUnsupported
-	ErrAgeListingUnsupported = storage.ErrAgeListingUnsupported
-)
