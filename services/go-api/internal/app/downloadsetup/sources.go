@@ -2,89 +2,36 @@ package downloadsetup
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
-	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const (
-	ytmSearchTimeout = 10 * time.Second
-	acoustIDTimeout  = 15 * time.Second
-)
-
-type SourceOrder struct {
-	First    []download.AudioSource
-	Fallback []download.AudioSource
-}
-
-func (t SourceOrder) All() []download.AudioSource {
-	return append(append([]download.AudioSource{}, t.First...), t.Fallback...)
-}
+type SourceOrder = download.SourceOrder
 
 func EnabledSources(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (SourceOrder, download.Verification, error) {
-	searcher := YtDlpSearcher(cfg)
-	tools := download.Verification{YtDlp: searcher.Available()}
-	tiers, err := sourcesFor(ctx, cfg, redis, transport, searcher)
-	return tiers, tools, err
+	tiers, tools, err := download.EnabledSources(ctx, sourceDeps(cfg, redis, transport))
+	if err != nil {
+		return SourceOrder{}, download.Verification{}, fmt.Errorf("enable audio sources: %w", err)
+	}
+	return tiers, tools, nil
 }
 
 func YtDlpSearcher(cfg *config.Config) *download.YouTubeAudioSearcher {
-	return download.MustNewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime, clock.Now, clock.Sleep,
-		download.WithYtDlpRemoteComponents(cfg.YtDLPRemoteComponents),
-		download.WithYtDlpPOTokenURL(cfg.YtDLPPOTokenURL),
-		download.WithYtDlpEnvironment(cfg.Env))
+	return download.YtDlpSearcher(cfg)
 }
 
 func CanaryYTMClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
-	return budgetedYTMSearchClient(ctx, cfg, redis, transport)
-}
-
-func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
-	r0, err := download.NewYtmSearchFor(innerTubeClient(ctx, cfg, redis, transport))
+	client, err := download.CanaryYTMClient(ctx, sourceDeps(cfg, redis, transport))
 	if err != nil {
-		return r0, fmt.Errorf("call failed: %w", err)
+		return nil, fmt.Errorf("canary ytmusic client: %w", err)
 	}
-	return r0, nil
+	return client, nil
 }
 
-func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) *http.Client {
-	settings := youtubemusicapi.Settings{MinInterval: cfg.YtmInnerTubeMinInterval, Cooldown: cfg.YtmInnerTubeCooldown}
-	budget, err := youtubemusicapi.NewBudget(redis, settings, clock.Now, clock.Sleep)
-	if err != nil {
-		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing through the shared outbound pacer only")
-		return outbound.MustNewClient(ytmSearchTimeout, transport)
-	}
-	return outbound.MustNewClient(ytmSearchTimeout, budget.Transport(transport))
-}
-
-func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper, searcher *download.YouTubeAudioSearcher) (SourceOrder, error) {
-	var tiers SourceOrder
-	switch {
-	case cfg.YtMusicEnabled:
-		songs, err := budgetedYTMSearchClient(ctx, cfg, redis, transport)
-		if err != nil {
-			return SourceOrder{}, fmt.Errorf("build the ytmusic search client: %w", err)
-		}
-		tiers.First = append(tiers.First, download.NewYtmSearchSource(songs, searcher), download.NewYtMusicSource(searcher, songs))
-	default:
-		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
-	}
-	switch {
-	case cfg.YtDLPEnabled:
-		tiers.Fallback = append(tiers.Fallback, download.NewYtDlpSource(searcher))
-	default:
-		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
-	}
-	if len(tiers.All()) > 0 {
-		tiers.First = append([]download.AudioSource{download.MustNewSource(searcher, download.NewHTTPPageReader(transport, cfg.AcquisitionFileHostPageTimeout))}, tiers.First...)
-	}
-	return tiers, nil
+func sourceDeps(cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) download.SourceDeps {
+	return download.SourceDeps{Config: cfg, Redis: redis, Transport: transport, NewClient: newClient}
 }
