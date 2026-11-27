@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -13,6 +14,7 @@ import type {
   PlaylistDetailResponse,
   PlaylistResponse,
 } from '@shared/catalog';
+import { randomUuid } from '@shared/id';
 import { countLabel, showFailureAlert } from '@shared/ui';
 import {
   playlistKeys,
@@ -119,12 +121,41 @@ async function fillCreatedPlaylist(
   );
 }
 
+type CreateAttempt = { identity: string; key: string };
+type CreateKey = ReturnType<typeof useCreateKey>;
+
+function attemptFor(previous: CreateAttempt | null, identity: string): CreateAttempt {
+  return previous !== null && previous.identity === identity
+    ? previous
+    : { identity, key: randomUuid() };
+}
+
+function useCreateKey() {
+  const attempt = useRef<CreateAttempt | null>(null);
+  return {
+    keyFor: (identity: string) => {
+      attempt.current = attemptFor(attempt.current, identity);
+      return attempt.current.key;
+    },
+    settle: () => {
+      attempt.current = null;
+    },
+  };
+}
+
+function createIdentity({ name, trackIds }: CreateWithTracksVariables): string {
+  return JSON.stringify([name, trackIds]);
+}
+
 async function createWithTracks(
   port: PlaylistsPort,
-  { name, trackIds }: CreateWithTracksVariables,
+  variables: CreateWithTracksVariables,
+  createKey: CreateKey,
 ): Promise<CreateWithTracksResult> {
+  const { name, trackIds } = variables;
   const epoch = currentSessionEpoch();
-  const playlist = await port.createPlaylist({ name });
+  const playlist = await port.createPlaylist({ name }, createKey.keyFor(createIdentity(variables)));
+  createKey.settle();
   return fillCreatedPlaylist(port, { playlist, trackIds, epoch });
 }
 
@@ -178,10 +209,15 @@ function reinsertTracks<T extends { id: TrackId }>(
 
 export function useCreatePlaylist() {
   const port = usePlaylistsPort();
+  const createKey = useCreateKey();
   return useAppMutation({
     action: 'playlist.create',
     ...guardedMutationOptions({
-      mutationFn: (name: string) => port.createPlaylist({ name }),
+      mutationFn: async (name: string) => {
+        const playlist = await port.createPlaylist({ name }, createKey.keyFor(name));
+        createKey.settle();
+        return playlist;
+      },
       onError: alertCreateFailed,
     }),
   });
@@ -189,10 +225,12 @@ export function useCreatePlaylist() {
 
 export function useCreatePlaylistWithTracks() {
   const port = usePlaylistsPort();
+  const createKey = useCreateKey();
   return useAppMutation({
     action: 'playlist.create_with_tracks',
     ...guardedMutationOptions({
-      mutationFn: (variables: CreateWithTracksVariables) => createWithTracks(port, variables),
+      mutationFn: (variables: CreateWithTracksVariables) =>
+        createWithTracks(port, variables, createKey),
       onSuccess: alertCreatedWithTracks,
       onError: alertCreateFailed,
     }),

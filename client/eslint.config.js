@@ -209,6 +209,14 @@ const noAbortApisTheHermesPolyfillLacks = {
   },
 };
 
+const noEmptyBlocks = {
+  name: 'noEmptyBlocks',
+  files: ['**/*.{ts,tsx,js,mjs,cjs}'],
+  rules: {
+    'no-empty': ['error', { allowEmptyCatch: false }],
+  },
+};
+
 const noInlinePlatformBranchesInFeatureUi = {
   name: 'noInlinePlatformBranchesInFeatureUi',
   files: [
@@ -658,6 +666,7 @@ const styleRulesConfig = [
 module.exports = [
   ...styleRulesConfig.map(onlyWithinSrc),
   noCommentsAnywhere,
+  noEmptyBlocks,
   theNounIsTrackNeverSong,
   oneAliasPerFolder,
   noParentRelativeImports,

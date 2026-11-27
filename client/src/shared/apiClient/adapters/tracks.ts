@@ -1,5 +1,6 @@
 import { randomUuid } from '@shared/id';
 
+import { clampLimit } from '@shared/apiClient/core/endpointLimits';
 import { ContractError, fail, ok, type Result } from '@shared/failure';
 import {
   apiFetch,
@@ -150,7 +151,7 @@ export async function getTracks(
   signal?: AbortSignal,
 ): Promise<ListTracksResponse> {
   const qs = new URLSearchParams({
-    limit: String(params.limit),
+    limit: String(clampLimit('library_page', params.limit)),
     offset: String(params.offset),
   });
   setQueryParam(qs, 'q', params.q);

@@ -1,5 +1,6 @@
 export { ApiError, NetworkError } from '@shared/failure';
 export { apiFetch } from '@shared/apiClient/adapters/http';
+export { ENDPOINT_LIMITS } from '@shared/apiClient/core/endpointLimits';
 
 export {
   backfillFeaturedArtists,

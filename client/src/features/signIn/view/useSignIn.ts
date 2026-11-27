@@ -7,6 +7,7 @@ import {
   type SignInFailureReason,
   type SupabaseAuthErrorLike,
 } from '@features/signIn/core/authError';
+import { recordSignInOk } from '@features/signIn/core/signInHealth';
 import { useAttemptLockout, useAuthPort } from '@features/signIn/view/AuthPortProvider';
 
 import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';
@@ -32,7 +33,10 @@ export function useSignIn() {
       'sign-in',
       async (email: string, password: string) => {
         const { error } = await signInWithPassword({ email, password });
-        if (!error) return { kind: 'ok' } as const;
+        if (!error) {
+          recordSignInOk();
+          return { kind: 'ok' } as const;
+        }
         const reason = signInErrorReason(error);
         authPort.reportSignInFailure(reason);
         return { kind: 'error', reason } as const;

@@ -2,7 +2,13 @@ import { State } from 'react-native-track-player';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { markPlayRequested, notePlaybackState, resetPlayStartTiming } from '@features/player';
+import {
+  _resetPlaybackHealthForTest,
+  flushPlaybackHealth,
+  markPlayRequested,
+  notePlaybackState,
+  resetPlayStartTiming,
+} from '@features/player';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -29,6 +35,14 @@ function sentPlayStarts(): Record<string, unknown>[] {
     .map((body: SentEvent) => body.payload);
 }
 
+function sentHealth(): Record<string, unknown>[] {
+  return __http.requests
+    .filter((r: SentRequest) => r.method === 'POST' && r.path === '/v1/discovery/events')
+    .map((r: SentRequest) => JSON.parse(r.body ?? '{}'))
+    .filter((body: SentEvent) => body.type === 'playback_health')
+    .map((body: SentEvent) => body.payload);
+}
+
 async function waitMs(ms: number): Promise<void> {
   await jest.advanceTimersByTimeAsync(ms);
 }
@@ -37,6 +51,7 @@ beforeEach(async () => {
   await signInTestUser();
   __http.reply(EVENTS, { status: 202 });
   resetPlayStartTiming();
+  _resetPlaybackHealthForTest();
   jest.useFakeTimers();
 });
 
@@ -128,5 +143,77 @@ describe('play_start: time from a play request until the player reports playing'
     await waitMs(GIVE_UP_MS);
 
     expect(sentPlayStarts()).toEqual([]);
+  });
+});
+
+describe('play_attempt, play_ok and the fast or slow start: the play-a-song SLI in the health tally', () => {
+  const FAST_MS = 500;
+  const SLOW_MS = 3000;
+
+  async function healthAfter(run: () => Promise<void>): Promise<Record<string, unknown>[]> {
+    await run();
+    flushPlaybackHealth();
+    await waitMs(0);
+    return sentHealth();
+  }
+
+  it('counts an attempt that reaches audio quickly as ok and fast', async () => {
+    const health = await healthAfter(async () => {
+      markPlayRequested('play');
+      await waitMs(FAST_MS);
+      notePlaybackState(State.Playing);
+    });
+
+    expect(health).toEqual([
+      expect.objectContaining({
+        play_attempt: 1,
+        play_ok: 1,
+        play_start_fast: 1,
+        play_start_slow: 0,
+      }),
+    ]);
+  });
+
+  it('counts an attempt that takes long as ok and slow', async () => {
+    const health = await healthAfter(async () => {
+      markPlayRequested('play');
+      await waitMs(SLOW_MS);
+      notePlaybackState(State.Playing);
+    });
+
+    expect(health).toEqual([
+      expect.objectContaining({
+        play_attempt: 1,
+        play_ok: 1,
+        play_start_fast: 0,
+        play_start_slow: 1,
+      }),
+    ]);
+  });
+
+  it('counts an attempt that never reaches audio as an attempt only', async () => {
+    const health = await healthAfter(async () => {
+      markPlayRequested('play');
+      await waitMs(GIVE_UP_MS);
+    });
+
+    expect(health).toEqual([
+      expect.objectContaining({
+        play_attempt: 1,
+        play_ok: 0,
+        play_start_fast: 0,
+        play_start_slow: 0,
+      }),
+    ]);
+  });
+
+  it('counts a retry while still silent once, like the play_start event', async () => {
+    const health = await healthAfter(async () => {
+      markPlayRequested('play');
+      markPlayRequested('play');
+      notePlaybackState(State.Playing);
+    });
+
+    expect(health).toEqual([expect.objectContaining({ play_attempt: 1, play_ok: 1 })]);
   });
 });
