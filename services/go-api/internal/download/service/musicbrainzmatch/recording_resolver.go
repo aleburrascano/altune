@@ -324,7 +324,7 @@ func agreement(res, q songfields.RecordingIdentity) int {
 	if q.Year != 0 && res.Year == q.Year {
 		score++
 	}
-	if q.Position.Track != 0 && res.Position == q.Position {
+	if q.Position.Track != 0 && res.Position.Track == q.Position.Track {
 		score++
 	}
 	return score

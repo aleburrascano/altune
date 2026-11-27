@@ -1100,6 +1100,18 @@ func TestResolve_TheExplicitFlagOfTheSavedTrackPicksBetweenEqualTitleAndArtistHi
 	}
 }
 
+func TestResolve_TheTrackNumberOfTheSavedTrackPicksBetweenEqualHitsWhateverTheDisc(t *testing.T) {
+	other := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Position: songfields.TrackPosition{Disc: 1, Track: 9}, RecordingMBID: "track-9"}
+	right := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Position: songfields.TrackPosition{Disc: 1, Track: 3}, RecordingMBID: "track-3"}
+
+	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{other, right}}, lookups{}).
+		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Position: songfields.TrackPosition{Track: 3}})
+
+	if err != nil || got.MBID != "track-3" {
+		t.Errorf("identity %+v, err %v; want the hit on track 3 though the saved track has no disc", got, err)
+	}
+}
+
 func TestResolve_ASavedTrackThatKnowsNothingExtraTakesTheFirstEqualHit(t *testing.T) {
 	first := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "A", RecordingMBID: "first-mbid"}
 	second := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "B", RecordingMBID: "second-mbid"}
