@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/audioverdict"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/tracklength"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
@@ -148,12 +149,10 @@ func (s *AcquireTrackAudioService) storedFiles() storedFileFingerprinter {
 	return storedFileFingerprinter{workspace: s.workspace, reader: s.storedAudio, identifier: s.identifier}
 }
 
-func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
-	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
-	jobCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
+func (s *AcquireTrackAudioService) Execute(ctx context.Context, job jobrun.Job) error {
+	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
-	track, found, err := s.loadTrack(ctx, userId, trackId)
+	track, found, err := s.loadTrack(ctx, job.UserID, job.TrackID)
 	if err != nil || !found {
 		return err
 	}
@@ -161,12 +160,12 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId ids.UserI
 	if err != nil || !proceed {
 		return err
 	}
-	ac := s.startAcquisition(ctx, userId, trackId, track)
+	ac := s.startAcquisition(ctx, job, track)
 	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
-	s.loadPriorRejections(ctx, trackId, ac)
-	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
-		return s.outcomes().settleExecute(ctx, jobCtx, userId, trackId, err, ac)
+	s.loadPriorRejections(ctx, job.TrackID, ac)
+	if err := s.runAcquisition(ctx, ac); err != nil {
+		return s.outcomes().settleExecute(ctx, err, ac)
 	}
 	return nil
 }
@@ -175,26 +174,27 @@ func (s *AcquireTrackAudioService) observe(ac *AcquisitionContext) {
 	s.contextObserver(ac)
 }
 
-func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
-	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
-	jobCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
+func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
-	track, found, err := s.loadTrack(ctx, userId, trackId)
+	track, found, err := s.loadTrack(ctx, job.UserID, job.TrackID)
 	if err != nil || !found {
 		return err
 	}
-	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, replacement.ReplacementGate{}, WillRetry)
+	_, err = s.replaceLoaded(ctx, job, track, replacement.ReplacementGate{}, WillRetry)
 	return err
 }
 
-func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, userId ids.UserId, track *ports.TrackSnapshot, gate replacement.ReplacementGate) (replacement.Attempt, error) {
-	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
-	jobCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
+func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, job jobrun.Job, track *ports.TrackSnapshot, gate replacement.ReplacementGate) (replacement.Attempt, error) {
+	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
-	ac, err := s.forUpgradeSweep().replaceLoaded(ctx, jobCtx, userId, track, gate, neverRetry)
+	ac, err := s.forUpgradeSweep().replaceLoaded(ctx, job, track, gate, neverRetry)
 	return attemptOf(ac, err), err
+}
+
+func (s *AcquireTrackAudioService) acquireBudget(ctx context.Context, job jobrun.Job) (context.Context, context.CancelFunc) {
+	ctx = logging.ContextWithSubjectUser(ctx, job.UserID.String())
+	return context.WithTimeoutCause(ctx, s.acquireTimeout, errAcquireBudgetSpent)
 }
 
 func (s *AcquireTrackAudioService) forUpgradeSweep() *AcquireTrackAudioService {
@@ -213,22 +213,23 @@ func attemptOf(ac *AcquisitionContext, err error) replacement.Attempt {
 	return attempt
 }
 
-func (s *AcquireTrackAudioService) replaceLoaded(ctx, jobCtx context.Context, userId ids.UserId, track *ports.TrackSnapshot, gate replacement.ReplacementGate, retry retryPolicy) (*AcquisitionContext, error) {
+func (s *AcquireTrackAudioService) replaceLoaded(ctx context.Context, job jobrun.Job, track *ports.TrackSnapshot, gate replacement.ReplacementGate, retry retryPolicy) (*AcquisitionContext, error) {
 	trackId := track.ID
-	ac := s.startAcquisition(ctx, userId, trackId, track)
+	job.TrackID = trackId
+	ac := s.startAcquisition(ctx, job, track)
 	ac.Replace.Gate = gate
 	ac.Replace.StoredKnownWrong = storedFileKnownWrong(track)
 	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
-		return ac, s.outcomes().settleReplace(ctx, jobCtx, userId, trackId, err, retry, ac)
+		return ac, s.outcomes().settleReplace(ctx, err, retry, ac)
 	}
 	s.storedFiles().fingerprint(ctx, ac, track)
 	s.loadPriorRejections(ctx, trackId, ac)
-	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
-		return ac, s.outcomes().settleReplace(ctx, jobCtx, userId, trackId, err, retry, ac)
+	if err := s.runAcquisition(ctx, ac); err != nil {
+		return ac, s.outcomes().settleReplace(ctx, err, retry, ac)
 	}
-	s.supersededAudio().release(ctx, userId, trackId, ac)
+	s.supersededAudio().release(ctx, job.UserID, trackId, ac)
 	return ac, nil
 }
 
@@ -244,31 +245,32 @@ func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId ids.Use
 	return track, true, nil
 }
 
-func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId ids.UserId, trackId ids.TrackId, track *ports.TrackSnapshot) *AcquisitionContext {
-	jobReporterFrom(ctx).meta(track.Title, track.Artist, track.Album)
+func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, job jobrun.Job, track *ports.TrackSnapshot) *AcquisitionContext {
+	job.Progress().Meta(track.Title, track.Artist, track.Album)
 
 	slog.InfoContext(ctx, "track_acquisition_started",
-		logging.KeyTrackID, trackId.String(),
+		logging.KeyTrackID, job.TrackID.String(),
 		"has_isrc", track.ISRC != nil,
 	)
-	s.events.Publish(ctx, userId, events.TrackAcquisitionStarted{
-		TrackID: trackId.String(),
+	s.events.Publish(ctx, job.UserID, events.TrackAcquisitionStarted{
+		TrackID: job.TrackID.String(),
 		Title:   track.Title,
 		Artist:  track.Artist,
 	})
 	return &AcquisitionContext{
+		Job:     job,
 		Track:   buildTrackRef(track),
 		Replace: ReplaceState{ExcludeKeys: mergeSourceKeys(track.RejectedSourceKeys)},
 	}
 }
 
-func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId ids.UserId, trackId ids.TrackId, ac *AcquisitionContext) error {
+func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, ac *AcquisitionContext) error {
 	defer s.recordRejections(ctx, ac)
-	defer reportDecision(ctx, ac)
-	identityCtx, identityDone := startStage(ctx, s.now, "identity")
+	defer reportDecision(ac)
+	identityCtx, identityDone := startStage(ctx, ac, s.now, "identity")
 	s.resolveIdentity(identityCtx, ac)
 	identityDone(nil)
-	steps := s.buildSteps(userId, trackId)
+	steps := s.buildSteps(ac.Job.UserID, ac.Job.TrackID)
 	failure := RunPipeline(ctx, steps, ac)
 	if failure != nil {
 		failure = s.takeRerecording(ctx, steps, ac, failure)
@@ -277,9 +279,9 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId id
 		return failure
 	}
 
-	jobReporterFrom(ctx).fetched(ac.SourceFormat)
-	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
-	s.outcomes().completed(ctx, userId, trackId, ac.AudioRef)
+	ac.Job.Progress().Fetched(ac.SourceFormat)
+	ac.Job.Progress().Provenance(string(ac.Provenance()))
+	s.outcomes().completed(ctx, ac.Job.UserID, ac.Job.TrackID, ac.AudioRef)
 	return nil
 }
 
@@ -354,12 +356,12 @@ func storedFileKnownWrong(track *ports.TrackSnapshot) bool {
 	return json.Unmarshal(track.Evidence, &evidence) == nil && evidence.Grade == audioquality.F
 }
 
-func reportDecision(ctx context.Context, ac *AcquisitionContext) {
+func reportDecision(ac *AcquisitionContext) {
 	var key string
 	if ac.Selected != nil {
 		key = sourceKey(ac.Selected.URL)
 	}
-	jobReporterFrom(ctx).decided(ac.Confidence, key, ac.ExpectedLength(), ac.StoredLength().Seconds())
+	ac.Job.Progress().Decided(ac.Confidence, key, ac.ExpectedLength(), ac.StoredLength().Seconds())
 }
 
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId ids.TrackId) error {
@@ -392,8 +394,8 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 	return reacquirePolicy{ledger: s.ledger, audioStore: s.audioStore}.reconcile(ctx, track)
 }
 
-func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, userId ids.UserId, trackId ids.TrackId) {
-	s.outcomes().refuseQueued(logging.ContextWithSubjectUser(ctx, userId.String()), userId, trackId)
+func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, job jobrun.Job) {
+	s.outcomes().refuseQueued(logging.ContextWithSubjectUser(ctx, job.UserID.String()), job)
 }
 
 func deref[T any](p *T) T {

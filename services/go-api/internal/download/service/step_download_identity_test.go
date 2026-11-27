@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"bufio"
@@ -71,7 +72,7 @@ func acquireIdentifiedAs(t *testing.T, results []ports.AcoustIDResult) {
 		download.NewTempWorkspace(),
 		resolving(resolvedTo("mbid-a"), verifiedBy(&identifier{match: download.RecordingMatch{AcoustID: "ac-1", Results: results}})), noStages())
 
-	_ = svc.Execute(context.Background(), track.UserId, track.ID)
+	_ = svc.Execute(context.Background(), jobrun.Job{UserID: track.UserId, TrackID: track.ID})
 }
 
 type loggedResult struct {

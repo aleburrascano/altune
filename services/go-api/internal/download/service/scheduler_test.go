@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
@@ -440,18 +441,18 @@ type startedAcquirer struct {
 	calls   atomic.Int32
 }
 
-func (a *startedAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a *startedAcquirer) Execute(context.Context, jobrun.Job) error {
 	a.calls.Add(1)
 	a.once.Do(func() { close(a.started) })
 	<-a.release
 	return nil
 }
 
-func (a *startedAcquirer) ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
-	return a.Execute(ctx, userId, trackId)
+func (a *startedAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *startedAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *startedAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -582,17 +583,17 @@ type stubAcquirer struct {
 	ran []string
 }
 
-func (s *stubAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (s *stubAcquirer) Execute(context.Context, jobrun.Job) error {
 	s.record("Execute")
 	return nil
 }
 
-func (s *stubAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (s *stubAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
 	s.record("ExecuteReplace")
 	return nil
 }
 
-func (s *stubAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (s *stubAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func (s *stubAcquirer) record(entryPoint string) {
 	s.mu.Lock()
@@ -992,16 +993,16 @@ type panickingAcquirer struct {
 	refused atomic.Int32
 }
 
-func (a *panickingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a *panickingAcquirer) Execute(context.Context, jobrun.Job) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, u ids.UserId, t ids.TrackId) error {
-	return a.Execute(ctx, u, t)
+func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *panickingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {
+func (a *panickingAcquirer) RefuseQueued(context.Context, jobrun.Job) {
 	a.refused.Add(1)
 }
 
@@ -1074,7 +1075,7 @@ func (q *scriptedClaimQueue) awaitLeaving(t *testing.T) {
 
 type panickingUpgrader struct{}
 
-func (panickingUpgrader) ExecuteUpgrade(context.Context, ids.UserId, ids.TrackId) error {
+func (panickingUpgrader) ExecuteUpgrade(context.Context, jobrun.Job) error {
 	panic("boom")
 }
 
@@ -1083,11 +1084,11 @@ type panicsAfterClaim struct {
 	panickingUpgrader
 }
 
-func (panicsAfterClaim) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (panicsAfterClaim) Execute(context.Context, jobrun.Job) error {
 	panic("boom")
 }
 
-func (panicsAfterClaim) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (panicsAfterClaim) ExecuteReplace(context.Context, jobrun.Job) error {
 	panic("boom")
 }
 
@@ -1381,17 +1382,17 @@ type blockingAcquirer struct {
 	calls   atomic.Int32
 }
 
-func (a *blockingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a *blockingAcquirer) Execute(context.Context, jobrun.Job) error {
 	a.calls.Add(1)
 	<-a.release
 	return nil
 }
 
-func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
-	return a.Execute(ctx, userId, trackId)
+func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *blockingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *blockingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -1575,7 +1576,7 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), withServiceEvents(pub))
 
-	svc.RefuseQueued(context.Background(), userId, track.ID)
+	svc.RefuseQueued(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID})
 
 	stored := committedTrack(t, ledger, track.ID)
 	if stored.Status != acqports.TrackReady {
@@ -1618,13 +1619,13 @@ func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
 
 type outcomeAcquirer struct{ err error }
 
-func (a outcomeAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error { return a.err }
+func (a outcomeAcquirer) Execute(context.Context, jobrun.Job) error { return a.err }
 
-func (a outcomeAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (a outcomeAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
 	return a.err
 }
 
-func (outcomeAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (outcomeAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func finishJobs(t *testing.T, s *service.BackgroundAcquisitionScheduler, count int) {
 	t.Helper()
@@ -2399,7 +2400,7 @@ type ctxCapturingAcquirer struct {
 	ctx     atomic.Value
 }
 
-func (a *ctxCapturingAcquirer) Execute(ctx context.Context, _ ids.UserId, _ ids.TrackId) error {
+func (a *ctxCapturingAcquirer) Execute(ctx context.Context, job jobrun.Job) error {
 	a.ctx.Store(ctx)
 	a.once.Do(func() { close(a.started) })
 	select {
@@ -2409,11 +2410,11 @@ func (a *ctxCapturingAcquirer) Execute(ctx context.Context, _ ids.UserId, _ ids.
 	return ctx.Err()
 }
 
-func (a *ctxCapturingAcquirer) ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
-	return a.Execute(ctx, userId, trackId)
+func (a *ctxCapturingAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *ctxCapturingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *ctxCapturingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 type flakyHeartbeatQueue struct {
 	*memJobQueue
@@ -2618,17 +2619,17 @@ type gatedAcquirer struct {
 	release chan struct{}
 }
 
-func (a gatedAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a gatedAcquirer) Execute(context.Context, jobrun.Job) error {
 	a.running <- struct{}{}
 	<-a.release
 	return nil
 }
 
-func (a gatedAcquirer) ExecuteReplace(ctx context.Context, u ids.UserId, t ids.TrackId) error {
-	return a.Execute(ctx, u, t)
+func (a gatedAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (gatedAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (gatedAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) {
 	queue := backlogQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), pending: 5, oldestAge: 90 * time.Second}
@@ -2913,7 +2914,7 @@ type orderedAcquirer struct {
 	firstOnce    sync.Once
 }
 
-func (a *orderedAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a *orderedAcquirer) Execute(context.Context, jobrun.Job) error {
 	a.firstOnce.Do(func() {
 		close(a.firstStarted)
 		<-a.releaseFirst
@@ -2922,7 +2923,7 @@ func (a *orderedAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) erro
 	return nil
 }
 
-func (a *orderedAcquirer) ExecuteUpgrade(context.Context, ids.UserId, ids.TrackId) error {
+func (a *orderedAcquirer) ExecuteUpgrade(context.Context, jobrun.Job) error {
 	a.record("ExecuteUpgrade")
 	return nil
 }
@@ -2969,7 +2970,7 @@ func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUser
 
 type keptUpgrader struct{ stubAcquirer }
 
-func (*keptUpgrader) ExecuteUpgrade(context.Context, ids.UserId, ids.TrackId) error {
+func (*keptUpgrader) ExecuteUpgrade(context.Context, jobrun.Job) error {
 	return replacement.ErrKept
 }
 
@@ -3007,10 +3008,10 @@ type committingUpgrader struct {
 	startedOne sync.Once
 }
 
-func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, _ ids.UserId, _ ids.TrackId) error {
+func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, job jobrun.Job) error {
 	u.startedOne.Do(func() { close(u.started) })
 	<-u.proceed
-	_, err := u.step.Execute(ctx, &service.AcquisitionContext{AudioRef: "upgraded.mp3"}, service.AfterStore{Kept: acqports.AudioCandidate{URL: "https://www.youtube.com/watch?v=upgradedAAA"}})
+	_, err := u.step.Execute(ctx, &service.AcquisitionContext{Job: job, AudioRef: "upgraded.mp3"}, service.AfterStore{Kept: acqports.AudioCandidate{URL: "https://www.youtube.com/watch?v=upgradedAAA"}})
 	u.commitErr <- err
 	return err
 }
@@ -3177,15 +3178,15 @@ func TestBackgroundScheduler_APanickedJobsRetryDelayIsSpreadByTheInjectedUnit(t 
 
 type retryableAcquirer struct{}
 
-func (retryableAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (retryableAcquirer) Execute(context.Context, jobrun.Job) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryableAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {
+func (retryableAcquirer) ExecuteReplace(context.Context, jobrun.Job) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryableAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (retryableAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -3316,7 +3317,7 @@ func TestExecute_ALedgerRefusalForAStaleFenceSurfacesErrLeaseLostWithTheCause(t 
 	cause := errors.New("boom")
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: cause}), newFakeAudioStore())
 
-	err := svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, track.ID)
+	err := svc.Execute(context.Background(), jobrun.Job{UserID: userId, TrackID: track.ID, Claim: 1})
 
 	if !errors.Is(err, acqdomain.ErrLeaseLost) || !errors.Is(err, cause) {
 		t.Errorf("err = %v, want both ErrLeaseLost and the pipeline's cause", err)

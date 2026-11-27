@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -47,7 +48,7 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -74,7 +75,7 @@ func TestExecuteReplace_SupersededAudioIsQueuedAfterTheGraceAndKept(t *testing.T
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -100,7 +101,7 @@ func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 	queue := &recordingOrphanQueue{err: errors.New("queue down")}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)))
 
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want success despite the queue failing", err)
 	}
 }
@@ -110,7 +111,7 @@ func TestExecuteReplace_NothingIsDeletedAtCommitAndExactlyOneEntryIsQueued(t *te
 	queue := &recordingOrphanQueue{}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(time.Hour))
 
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 	if !track.store.holds(track.originalRef) {
@@ -128,7 +129,7 @@ func TestExecuteReplace_FailedRollbackDeleteIsQueuedForTheSweep(t *testing.T) {
 	queue := &recordingOrphanQueue{}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)))
 
-	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), jobrun.Job{UserID: track.userID, TrackID: track.trackID}); err == nil {
 		t.Fatal("expected the replace to fail")
 	}
 

@@ -46,13 +46,12 @@ func (s *YouTubeAudioSearcher) Canary(ctx context.Context, source CanarySource) 
 	}
 	defer cookies.cleanup()
 
-	canaryCtx, cancel := context.WithTimeout(ctx, s.canaryTimeout)
-	defer cancel()
-
-	return s.runCanaryProbe(ctx, canaryCtx, source, cookies)
+	return s.runCanaryProbe(ctx, source, cookies)
 }
 
-func (s *YouTubeAudioSearcher) runCanaryProbe(parent, ctx context.Context, source CanarySource, cookies cookieLease) error {
+func (s *YouTubeAudioSearcher) runCanaryProbe(parent context.Context, source CanarySource, cookies cookieLease) error {
+	ctx, cancel := context.WithTimeout(parent, s.canaryTimeout)
+	defer cancel()
 	format := source.Format
 	if format == "" {
 		format = audioFormatSelector

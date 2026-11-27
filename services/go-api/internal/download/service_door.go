@@ -1,8 +1,12 @@
 package download
 
-import service "altune/go-api/internal/download/service"
+import (
+	service "altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
+)
 
 type (
+	AcquisitionJob                 = jobrun.Job
 	AcquireTrackAudioService       = service.AcquireTrackAudioService
 	BackgroundAcquisitionScheduler = service.BackgroundAcquisitionScheduler
 	StagePorts                     = service.StagePorts

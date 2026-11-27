@@ -2,7 +2,6 @@ package service
 
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/random"
@@ -39,8 +38,14 @@ func isTransientFailure(err error) bool {
 	return acqdomain.IsSourceUnavailable(err) || errors.Is(err, ErrAcquisitionTimedOut)
 }
 
-func ownTimeout(jobCtx, ctx context.Context, err error) error {
-	if !ports.RunTimedOut(jobCtx, ctx) {
+var errAcquireBudgetSpent = errors.New("acquisition budget spent")
+
+func ownBudgetSpent(ctx context.Context) bool {
+	return errors.Is(context.Cause(ctx), errAcquireBudgetSpent)
+}
+
+func ownTimeout(ctx context.Context, err error) error {
+	if !ownBudgetSpent(ctx) {
 		return err
 	}
 	return fmt.Errorf("%w: %w", ErrAcquisitionTimedOut, err)

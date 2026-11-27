@@ -90,22 +90,17 @@ func remainingAfter(ac *AcquisitionContext, rest []ports.AudioCandidate, started
 }
 
 func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, window []ports.AudioCandidate) []attempt {
-	slots := make([]windowSlot, len(window))
-	for i := range slots {
-		slots[i] = newWindowSlot(ctx)
-	}
-	defer cancelSlots(slots)
-
 	results := make([]attempt, len(window))
-	var mu sync.Mutex
+	cutoff := newSlotCutoff(len(window))
 	g := parallel.New("acquisition.download_attempt_panic", len(window))
 	for rank := range window {
 		g.Go(ctx, func() {
-			results[rank] = s.guardedWindowAttempt(slots[rank].ctx, ac, window[rank])
+			slotCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			cutoff.enter(rank, cancel)
+			results[rank] = s.guardedWindowAttempt(slotCtx, ac, window[rank])
 			if results[rank].status == attemptAccepted && !results[rank].muxed() {
-				mu.Lock()
-				cancelSlots(slots[rank+1:])
-				mu.Unlock()
+				cutoff.cancelAfter(rank)
 			}
 		})
 	}
@@ -113,19 +108,33 @@ func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, wi
 	return results
 }
 
-type windowSlot struct {
-	ctx    context.Context
-	cancel context.CancelFunc
+type slotCutoff struct {
+	mu      sync.Mutex
+	cancels []context.CancelFunc
+	from    int
 }
 
-func newWindowSlot(parent context.Context) windowSlot {
-	ctx, cancel := context.WithCancel(parent)
-	return windowSlot{ctx: ctx, cancel: cancel}
+func newSlotCutoff(slots int) *slotCutoff {
+	return &slotCutoff{cancels: make([]context.CancelFunc, slots), from: slots}
 }
 
-func cancelSlots(slots []windowSlot) {
-	for _, slot := range slots {
-		slot.cancel()
+func (c *slotCutoff) enter(rank int, cancel context.CancelFunc) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cancels[rank] = cancel
+	if rank >= c.from {
+		cancel()
+	}
+}
+
+func (c *slotCutoff) cancelAfter(rank int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.from = min(c.from, rank+1)
+	for _, cancel := range c.cancels[c.from:] {
+		if cancel != nil {
+			cancel()
+		}
 	}
 }
 

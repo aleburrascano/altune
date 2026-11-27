@@ -10,67 +10,31 @@ import (
 	"time"
 )
 
-type jobReporterKey struct{}
-
-type jobReporter interface {
-	meta(title, artist, album string)
-	stage(name string)
-	source(url string)
-	provenance(value string)
-	timing(stage string, d time.Duration)
-	fetched(format ports.SourceFormat)
-	stored(file ports.StoredFile)
-	decided(confidence float64, sourceKey string, target, measured float64)
-}
-
-type noopJobReporter struct{}
-
-func (noopJobReporter) meta(_, _, _ string)                       {}
-func (noopJobReporter) stage(_ string)                            {}
-func (noopJobReporter) source(_ string)                           {}
-func (noopJobReporter) provenance(_ string)                       {}
-func (noopJobReporter) timing(_ string, _ time.Duration)          {}
-func (noopJobReporter) fetched(_ ports.SourceFormat)              {}
-func (noopJobReporter) stored(_ ports.StoredFile)                 {}
-func (noopJobReporter) decided(_ float64, _ string, _, _ float64) {}
-
-func startStage(ctx context.Context, now clock.Func, stage string) (context.Context, func(error)) {
+func startStage(ctx context.Context, ac *AcquisitionContext, now clock.Func, stage string) (context.Context, func(error)) {
 	stageCtx, span := telemetry.StartStage(ctx, now, stage)
 	return stageCtx, func(err error) {
-		jobReporterFrom(ctx).timing(stage, span.End(err))
+		ac.Job.Progress().Timing(stage, span.End(err))
 	}
-}
-
-func withJobReporter(ctx context.Context, r jobReporter) context.Context {
-	return context.WithValue(ctx, jobReporterKey{}, r)
-}
-
-func jobReporterFrom(ctx context.Context) jobReporter {
-	if r, ok := ctx.Value(jobReporterKey{}).(jobReporter); ok && r != nil {
-		return r
-	}
-	return noopJobReporter{}
 }
 
 type schedulerJobReporter struct {
-	ctx     context.Context
 	log     *jobLog
 	events  events.Publisher
 	trackID ids.TrackId
 	userId  ids.UserId
 }
 
-func (r schedulerJobReporter) meta(title, artist, album string) {
+func (r schedulerJobReporter) Meta(title, artist, album string) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
 }
 
-func (r schedulerJobReporter) stage(name string) {
+func (r schedulerJobReporter) Stage(ctx context.Context, name string) {
 	var title, artist string
 	r.log.update(r.trackID, func(j *ports.JobRecord) {
 		j.Stage = name
 		title, artist = j.Title, j.Artist
 	})
-	r.events.Publish(r.ctx, r.userId, events.TrackAcquisitionProgress{
+	r.events.Publish(ctx, r.userId, events.TrackAcquisitionProgress{
 		TrackID: r.trackID.String(),
 		Stage:   name,
 		Title:   title,
@@ -78,15 +42,15 @@ func (r schedulerJobReporter) stage(name string) {
 	})
 }
 
-func (r schedulerJobReporter) provenance(value string) {
+func (r schedulerJobReporter) Provenance(value string) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Provenance = value })
 }
 
-func (r schedulerJobReporter) source(url string) {
+func (r schedulerJobReporter) Source(url string) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.ResolvedSource = url })
 }
 
-func (r schedulerJobReporter) timing(stage string, d time.Duration) {
+func (r schedulerJobReporter) Timing(stage string, d time.Duration) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) {
 		if j.StageMs == nil {
 			j.StageMs = map[string]int64{}
@@ -95,15 +59,15 @@ func (r schedulerJobReporter) timing(stage string, d time.Duration) {
 	})
 }
 
-func (r schedulerJobReporter) fetched(format ports.SourceFormat) {
+func (r schedulerJobReporter) Fetched(format ports.SourceFormat) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Source = format })
 }
 
-func (r schedulerJobReporter) stored(file ports.StoredFile) {
+func (r schedulerJobReporter) Stored(file ports.StoredFile) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stored = file })
 }
 
-func (r schedulerJobReporter) decided(confidence float64, sourceKey string, target, measured float64) {
+func (r schedulerJobReporter) Decided(confidence float64, sourceKey string, target, measured float64) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) {
 		j.Confidence, j.SourceKey, j.TargetSeconds, j.MeasuredSeconds = confidence, sourceKey, target, measured
 	})

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/jobrun"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
@@ -588,16 +589,16 @@ func TestPostgresJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 
 type panickingAcquirer struct{ runs atomic.Int32 }
 
-func (a *panickingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+func (a *panickingAcquirer) Execute(context.Context, jobrun.Job) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, u ids.UserId, t ids.TrackId) error {
-	return a.Execute(ctx, u, t)
+func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, job jobrun.Job) error {
+	return a.Execute(ctx, jobrun.Job{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *panickingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+func (a *panickingAcquirer) RefuseQueued(context.Context, jobrun.Job) {}
 
 func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) {
 	dbtest.RequireIntegration(t)
