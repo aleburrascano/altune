@@ -214,7 +214,11 @@ func (d *Previews) fingerprintPreview(ctx context.Context, previewURL string) ([
 	if err := os.WriteFile(file, audio, 0o600); err != nil {
 		return nil, fmt.Errorf("write preview: %w", err)
 	}
-	return d.printer.Print(ctx, file)
+	r0, err := d.printer.Print(ctx, file)
+	if err != nil {
+		return r0, fmt.Errorf("fingerprint audio: %w", err)
+	}
+	return r0, nil
 }
 
 func isThrottleStatus(status int, _ []byte) bool { return status == http.StatusTooManyRequests }

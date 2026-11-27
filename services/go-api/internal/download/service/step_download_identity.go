@@ -407,7 +407,7 @@ func fetchRecorded(ctx context.Context, mbid string, fetch recordingFetch) (know
 		known = recordedFacts{facts: facts, found: found}
 	}, "mbid", mbid)
 	if panicked != nil {
-		return recordedFacts{}, panicked
+		return recordedFacts{}, fmt.Errorf("run background task: %w", panicked)
 	}
 	return known, err
 }

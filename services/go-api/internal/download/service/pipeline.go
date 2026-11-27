@@ -333,7 +333,10 @@ func (ac *AcquisitionContext) refetchesCurrentSource() bool {
 }
 
 func (ac *AcquisitionContext) admitFetched(fetched audioquality.Grade) error {
-	return ac.Replace.Gate.AdmitFetched(fetched, ac.SourceFormat, ac.ProbedDuration.Seconds())
+	if err := ac.Replace.Gate.AdmitFetched(fetched, ac.SourceFormat, ac.ProbedDuration.Seconds()); err != nil {
+		return fmt.Errorf("admit fetched: %w", err)
+	}
+	return nil
 }
 
 type AttemptedCandidate struct {

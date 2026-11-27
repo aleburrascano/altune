@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -35,7 +36,10 @@ func MustDirectDeleteOrphans(store audioDeleter) ports.OrphanedAudioRecorder {
 }
 
 func (d directDeleteOrphans) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
-	return d.store.Delete(ctx, orphan.AudioRef)
+	if err := d.store.Delete(ctx, orphan.AudioRef); err != nil {
+		return fmt.Errorf("delete orphaned audio: %w", err)
+	}
+	return nil
 }
 
 func recordOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, userId ids.UserId, trackId ids.TrackId, audioRef string) {
