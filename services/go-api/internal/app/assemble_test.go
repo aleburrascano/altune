@@ -34,12 +34,6 @@ func testTracker(t *testing.T) *background.Tracker {
 	return tracker
 }
 
-func integrationPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbtest.RequireIntegration(t)
-	return dbtest.Pool(t)
-}
-
 func unreachablePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	pool, err := pgxpool.New(context.Background(), "postgres://nobody@127.0.0.1:1/none?connect_timeout=1")
@@ -71,7 +65,7 @@ func TestAssemble_RefusesMissingHandles(t *testing.T) {
 }
 
 func TestAssemble_ServesHealthStartsTheJobsAndShutsDownCleanly(t *testing.T) {
-	pool := integrationPool(t)
+	pool := dbtest.Pool(t)
 	redisClient := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	ctx, cancel := context.WithCancel(t.Context())

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
 	"bufio"
@@ -261,7 +262,7 @@ func TestDiscovery_AStoredClientEventReachesTheObserveStreamAndTheTelemetryExpor
 	recorded := recordClientEvents(t)
 	f := newJWKSFixture(t)
 	f.cfg.OTLPEndpoint = "https://otlp.example.com"
-	srv := httptest.NewServer(assembledRouter(t, f.cfg, integrationPool(t)))
+	srv := httptest.NewServer(assembledRouter(t, f.cfg, dbtest.Pool(t)))
 	t.Cleanup(srv.Close)
 	token := signedToken(t, f.key, f.operator)
 	lines := eventStreamLines(t, srv, token)

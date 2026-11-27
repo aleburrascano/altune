@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"time"
 )
@@ -25,5 +26,5 @@ type PriorRejection struct {
 
 type RejectionStore interface {
 	Record(ctx context.Context, recs []CandidateRejectionRecord) error
-	Active(ctx context.Context, trackID string, since time.Time) ([]PriorRejection, error)
+	Active(ctx context.Context, trackID ids.TrackId, since time.Time) ([]PriorRejection, error)
 }

@@ -3,6 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -198,7 +199,7 @@ func TestCapabilityNotes_NameMountedRoutes(t *testing.T) {
 }
 
 func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testing.T) {
-	r := assembledRouter(t, jwksConfig(t), integrationPool(t))
+	r := assembledRouter(t, jwksConfig(t), dbtest.Pool(t))
 
 	rec := httptest.NewRecorder()
 	body := strings.NewReader(`{"reason":"invalid_credentials","app_version":"1.2.3"}`)
@@ -243,7 +244,7 @@ func TestRouter_EveryRouteButThePublicOnesAnswersAnAnonymousCallerWith401(t *tes
 }
 
 func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
-	r := assembledRouter(t, jwksConfig(t), integrationPool(t))
+	r := assembledRouter(t, jwksConfig(t), dbtest.Pool(t))
 
 	for _, tc := range []struct {
 		name, method, path, body string

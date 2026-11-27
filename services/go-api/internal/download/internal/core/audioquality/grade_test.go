@@ -3,6 +3,7 @@ package audioquality_test
 import (
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/shared/downloadprovenance"
+	"slices"
 	"testing"
 )
 
@@ -49,5 +50,17 @@ func TestBestAvailable_IsNotOnTheLadderTheGradesAreOrderedBy(t *testing.T) {
 	}
 	if audioquality.BestAvailable <= audioquality.F {
 		t.Error("best_available must not sort among the grades A..F")
+	}
+}
+
+func TestWorstFirst_ListsEveryRankedGradeWorstToBestAndIsACopy(t *testing.T) {
+	want := []audioquality.Grade{audioquality.F, audioquality.D, audioquality.C, audioquality.B, audioquality.A, audioquality.AUser}
+	got := audioquality.WorstFirst()
+	if !slices.Equal(got, want) {
+		t.Fatalf("WorstFirst() = %v, want %v", got, want)
+	}
+	got[0] = audioquality.A
+	if again := audioquality.WorstFirst(); again[0] != audioquality.F {
+		t.Errorf("WorstFirst()[0] = %q after a caller changed its copy, want %q", again[0], audioquality.F)
 	}
 }
