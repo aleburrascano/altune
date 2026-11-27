@@ -79,9 +79,9 @@ export {
   refreshUpcomingPresign,
 } from '@features/player/adapters/native/loadNativeTrack';
 export { reorderUpcomingNative } from '@features/player/adapters/native/rebuildNativeTail';
-export { claimLoad } from '@features/player/domain/loadToken';
+export { claimLoad } from '@features/player/core/loadToken';
 export { activeNativeTrackId, toNativeTrack } from '@features/player/adapters/native/nativeTrack';
-export { NATIVE_QUEUE_WINDOW, markPresignedFrom } from '@features/player/domain/presignWindow';
+export { NATIVE_QUEUE_WINDOW, markPresignedFrom } from '@features/player/core/presignWindow';
 export {
   createPlaybackService,
   playbackService,
@@ -89,7 +89,7 @@ export {
   resetPlaybackForSignOut,
 } from '@features/player/adapters/native/playbackService';
 export type { PlaybackServiceDeps } from '@features/player/adapters/native/playbackService';
-export { _lyricsView, activeLineIndex } from '@features/player/domain/lyricsSync';
+export { _lyricsView, activeLineIndex } from '@features/player/core/lyricsSync';
 export {
   beginNativeLoad,
   endNativeLoad,
@@ -114,14 +114,14 @@ export {
   endedLabel,
   libraryTrackId,
   statusFlagsOf,
-} from '@features/player/domain/playerStatus';
+} from '@features/player/core/playerStatus';
 export {
   markPlayRequested,
   notePlaybackState,
   resetPlayStartTiming,
 } from '@features/player/adapters/native/playStartTiming';
-export { isExpoGo } from '@features/player/domain/isExpoGo';
-export { playsThroughTrackPlayer } from '@features/player/domain/playsThroughTrackPlayer';
+export { isExpoGo } from '@features/player/core/isExpoGo';
+export { playsThroughTrackPlayer } from '@features/player/core/playsThroughTrackPlayer';
 export {
   currentOccurrence,
   currentTrackId,
@@ -131,7 +131,7 @@ export {
   resolveResumeStartIndex,
   showSavedTrackWhileRehydrating,
 } from '@features/player/core/queueResume';
-export { savedQueueLists } from '@features/player/domain/queueSaveWindow';
+export { savedQueueLists } from '@features/player/core/queueSaveWindow';
 export {
   asRepeatMode,
   fromWireSource,
@@ -142,7 +142,7 @@ export {
   claimRecoveryAttempt,
   resetRecoveryBudget,
 } from '@features/player/adapters/native/recoveryBudget';
-export { buildTrackPayload, hasCrossedListenThreshold } from '@features/player/domain/signals';
+export { buildTrackPayload, hasCrossedListenThreshold } from '@features/player/core/signals';
 export { TrackPlayerPlaybackProvider } from '@features/player/view/native/TrackPlayerPlaybackProvider';
 export { NativePlaybackProvider } from '@features/player/view/NativePlaybackProvider';
 export { trackPlayerPlayback } from '@features/player/adapters/native/trackPlayerPlayback';
@@ -153,14 +153,14 @@ export {
   progressSecondsToMs,
   progressSecondsToRoundedMs,
   secondsToMs,
-} from '@features/player/domain/time';
+} from '@features/player/core/time';
 export {
   buildUpNextItems,
   formatSeconds,
   queueMenuOptions,
   queueSourceLabel,
-} from '@features/player/domain/upNextQueue';
-export type { QueueItem, QueueMenuContext } from '@features/player/domain/upNextQueue';
+} from '@features/player/core/upNextQueue';
+export type { QueueItem, QueueMenuContext } from '@features/player/core/upNextQueue';
 export { useMediaSession } from '@features/player/view/useMediaSession';
 export { usePlaybackPosition } from '@features/player/view/usePlaybackPosition';
 export { usePlaybackSignals } from '@features/player/view/usePlaybackSignals';

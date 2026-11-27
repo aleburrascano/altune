@@ -20,7 +20,7 @@ import {
   isPreviewTrack,
   libraryTrackId,
   statusFlagsOf,
-} from '@features/player/domain/playerStatus';
+} from '@features/player/core/playerStatus';
 
 export function MiniPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage, errorKind } =

@@ -3,7 +3,7 @@ import type { TrackId } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 
 import { warnPlayback } from '@features/player/core/playbackError';
-import { libraryTrackId } from '@features/player/domain/playerStatus';
+import { libraryTrackId } from '@features/player/core/playerStatus';
 
 const CACHE_SUBDIR = 'audio-prefetch';
 const KEEP_WINDOW = 4;

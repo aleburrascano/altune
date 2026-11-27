@@ -28,7 +28,7 @@ import {
   queueMenuOptions,
   queueSourceLabel,
   type QueueItem,
-} from '@features/player/domain/upNextQueue';
+} from '@features/player/core/upNextQueue';
 import {
   SheetHeader,
   SheetHeaderCenter,

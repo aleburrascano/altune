@@ -1,6 +1,6 @@
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 
-import { playsThroughTrackPlayer } from '@features/player/domain/playsThroughTrackPlayer';
+import { playsThroughTrackPlayer } from '@features/player/core/playsThroughTrackPlayer';
 
 type ProviderComponent = ComponentType<{ children: ReactNode }>;
 

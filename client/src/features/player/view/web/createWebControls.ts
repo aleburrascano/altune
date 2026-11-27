@@ -1,4 +1,4 @@
-import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
+import { shouldRestartOnPrevious } from '@features/player/core/restartOnPrevious';
 import { useQueueStore } from '@shared/playback';
 import type { PlaybackControls, PlaybackTrack } from '@shared/playback';
 import {
@@ -8,7 +8,7 @@ import {
   represignAndResume,
   stopPlayer,
 } from '@features/player/view/web/webLoad';
-import { msToSeconds, secondsToMs } from '@features/player/domain/time';
+import { msToSeconds, secondsToMs } from '@features/player/core/time';
 import { isSourceStale, type WebAudioPlayer } from '@features/player/view/web/webPlayer';
 import { prefetchNextTrack } from '@features/player/view/web/webPresign';
 

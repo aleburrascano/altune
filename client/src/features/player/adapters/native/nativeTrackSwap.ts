@@ -4,7 +4,7 @@ import { trackKey, type PlaybackTrack } from '@shared/playback';
 
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import type { TrackId } from '@shared/catalog';
-import { currentLoadToken, isStale } from '@features/player/domain/loadToken';
+import { currentLoadToken, isStale } from '@features/player/core/loadToken';
 import {
   NativeQueueTimeoutError,
   withNativeQueue,

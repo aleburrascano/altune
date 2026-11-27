@@ -3,7 +3,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 
 import { Text, useTheme, halved, touchTarget, spacing } from '@shared/ui';
 import { useScrubberGesture } from '@features/player/view/useScrubberGesture';
-import { msToSeconds } from '@features/player/domain/time';
+import { msToSeconds } from '@features/player/core/time';
 
 interface ScrubberProps {
   positionMs: number;

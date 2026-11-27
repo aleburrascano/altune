@@ -12,7 +12,7 @@
     "modules/*/index.ts",
     "src/**/*.{android,ios,native}.{ts,tsx}",
     "src/features/player/view/PlaybackProvider.tsx",
-    "src/features/player/domain/playsThroughTrackPlayer.ts",
+    "src/features/player/core/playsThroughTrackPlayer.ts",
     "src/features/signIn/view/useOAuth.ts",
     "src/features/signIn/view/AuthCallbackScreen.tsx",
     "src/mobile/authStorage.ts",

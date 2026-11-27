@@ -22,7 +22,7 @@ import {
 } from '@features/player/view/web/webPlayer';
 import { createWebControls } from '@features/player/view/web/createWebControls';
 import { bindAudioVolume } from '@features/player/web/playbackVolume';
-import { secondsToMs } from '@features/player/domain/time';
+import { secondsToMs } from '@features/player/core/time';
 
 const PHASE_EVENTS = ['play', 'pause', 'waiting', 'seeked'];
 

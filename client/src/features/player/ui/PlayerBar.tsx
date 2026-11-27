@@ -11,7 +11,7 @@ import {
   SkipForward,
 } from 'lucide-react-native';
 import { withFeaturing } from '@shared/catalog';
-import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
+import { shouldRestartOnPrevious } from '@features/player/core/restartOnPrevious';
 import type { PlaybackTrack } from '@shared/playback';
 import { Artwork, Text, IconButton, Tappable, useTheme, radius, spacing } from '@shared/ui';
 import {
@@ -19,7 +19,7 @@ import {
   endedLabel,
   isPreviewTrack,
   libraryTrackId,
-} from '@features/player/domain/playerStatus';
+} from '@features/player/core/playerStatus';
 import { PlayerOptionsSheets } from '@features/player/view/PlayerOptionsSheets';
 import { Scrubber } from '@features/player/view/Scrubber';
 import { VolumeSlider } from '@features/player/view/web/VolumeSlider';

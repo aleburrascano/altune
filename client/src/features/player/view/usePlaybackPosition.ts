@@ -5,7 +5,7 @@ import type { PlaybackTrack } from '@shared/playback';
 
 import { useIsForeground } from '@shared/lifecycle';
 
-import { progressSecondsToMs } from '@features/player/domain/time';
+import { progressSecondsToMs } from '@features/player/core/time';
 import { useNativePlayback } from '@features/player/view/NativePlaybackProvider';
 
 const PROGRESS_INTERVAL_MS = 500;

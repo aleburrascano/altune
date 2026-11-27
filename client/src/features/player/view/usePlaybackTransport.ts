@@ -1,7 +1,7 @@
-import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
+import { shouldRestartOnPrevious } from '@features/player/core/restartOnPrevious';
 import { useQueueStore, usePlayback, useQueuePlayback } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
-import { statusFlagsOf } from '@features/player/domain/playerStatus';
+import { statusFlagsOf } from '@features/player/core/playerStatus';
 
 function useQueueTransportState() {
   const { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode } = useQueuePlayback();

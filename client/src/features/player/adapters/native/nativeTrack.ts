@@ -12,8 +12,8 @@ import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import { artworkPlaceholderUri } from '@features/player/ports/artworkPlaceholder';
 import { classifyPlaybackFailure, warnPlayback } from '@features/player/core/playbackError';
 import { recordPresignFailed, recordPresignOk } from '@features/player/core/playbackHealth';
-import { libraryTrackId } from '@features/player/domain/playerStatus';
-import { MAX_PRESIGN } from '@features/player/domain/presignWindow';
+import { libraryTrackId } from '@features/player/core/playerStatus';
+import { MAX_PRESIGN } from '@features/player/core/presignWindow';
 import { ContractError } from '@shared/failure';
 
 function playablePreviewUrl(previewUrl: string): string {
