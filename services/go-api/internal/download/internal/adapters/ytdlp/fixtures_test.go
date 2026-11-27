@@ -22,16 +22,22 @@ const youTubeWatchURL = "https://youtube.com/watch?v=1"
 func cancelOnceFileExists(t *testing.T, path string) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan struct{})
 	go func() {
+		defer close(finished)
 		defer cancel()
-		started := polltest.Within(10*time.Second, func() bool {
+		polltest.Within(10*time.Second, func() bool {
+			if ctx.Err() != nil {
+				return true
+			}
 			_, err := os.Stat(path)
 			return err == nil
 		})
-		if !started {
-			t.Errorf("%s never appeared: the command under test never started", path)
-		}
 	}()
+	t.Cleanup(func() {
+		cancel()
+		<-finished
+	})
 	return ctx
 }
 

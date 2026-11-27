@@ -63,10 +63,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		printSummary(stdout, found)
 	} else {
 		for _, v := range found {
-			say(stdout, "%s:%d: sleep outside a synctest bubble; wait on the event itself, a condition with a deadline or a channel the test controls, or run the test inside synctest.Test\n", v.path, v.line)
+			say(stdout, "%s:%d: wait outside a synctest bubble (sleep or timer); wait on the event itself, a condition with a deadline or a channel the test controls, or run the test inside synctest.Test\n", v.path, v.line)
 		}
 	}
-	say(stdout, "time.Sleep and test clock.Sleep calls outside a synctest bubble: %d\n", len(found))
+	say(stdout, "sleeps and timer waits outside a synctest bubble: %d\n", len(found))
 	if len(found) > 0 {
 		return 1
 	}

@@ -262,9 +262,13 @@ func TestSource_ACancelledCallerIsNotAnOutage(t *testing.T) {
 	t.Cleanup(slow.Close)
 	t.Cleanup(func() { close(hung) })
 	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	go func() {
-		<-arrived
-		cancel()
+		select {
+		case <-arrived:
+			cancel()
+		case <-ctx.Done():
+		}
 	}()
 
 	_, err := download.NewYtmSearchSource(clientFor(slow, time.Minute), &recordingDownloader{}).Find(ctx, vibesRequest)

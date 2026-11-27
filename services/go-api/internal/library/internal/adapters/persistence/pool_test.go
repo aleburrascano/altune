@@ -309,6 +309,7 @@ func markEngaged(conn net.Conn) {
 }
 
 func cancelledOnceEngaged(addr string) (context.Context, context.CancelFunc) {
+	engagements.Delete(addr)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		select {

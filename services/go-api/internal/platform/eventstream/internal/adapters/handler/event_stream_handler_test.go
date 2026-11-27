@@ -585,6 +585,9 @@ func (w *blockingFlushWriter) FlushError() error {
 			return errors.New("flush blocked with no deadline")
 		}
 	}
+	if !time.Now().Before(dl) {
+		return os.ErrDeadlineExceeded
+	}
 	expired, cancel := context.WithDeadline(context.Background(), dl)
 	defer cancel()
 	select {

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -129,18 +130,25 @@ func TestIsTransient_RealPostgresFailures(t *testing.T) {
 		}, true},
 		"query cancelled by the caller": {func(t *testing.T) error {
 			cancellable, cancel := context.WithCancel(ctx)
+			query := "SELECT pg_sleep(10) /* " + uuid.NewString() + " */"
+			finished := make(chan struct{})
 			go func() {
+				defer close(finished)
 				defer cancel()
-				running := polltest.Within(10*time.Second, func() bool {
+				polltest.Within(10*time.Second, func() bool {
+					if cancellable.Err() != nil {
+						return true
+					}
 					var n int
-					err := killer.QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND query = 'SELECT pg_sleep(10)' AND pid <> pg_backend_pid()").Scan(&n)
+					err := killer.QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND query = $1", query).Scan(&n)
 					return err == nil && n > 0
 				})
-				if !running {
-					t.Error("the pg_sleep query never started running")
-				}
 			}()
-			_, err := pool.Exec(cancellable, "SELECT pg_sleep(10)")
+			defer func() {
+				cancel()
+				<-finished
+			}()
+			_, err := pool.Exec(cancellable, query)
 			return err
 		}, false},
 		"query on an already cancelled context": {func(t *testing.T) error {

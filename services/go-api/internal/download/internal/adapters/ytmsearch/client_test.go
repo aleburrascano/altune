@@ -239,9 +239,13 @@ func TestClient_ACancelledCallerIsNotAnOutage(t *testing.T) {
 	t.Cleanup(func() { close(hung) })
 	client := clientFor(srv, time.Minute)
 	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	go func() {
-		<-arrived
-		cancel()
+		select {
+		case <-arrived:
+			cancel()
+		case <-ctx.Done():
+		}
 	}()
 
 	_, searchErr := client.SearchSongs(ctx, "anything")
