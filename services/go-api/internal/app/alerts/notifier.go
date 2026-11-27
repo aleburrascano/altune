@@ -10,7 +10,7 @@ import (
 
 func NewNotifier(ctx context.Context, cfg *config.Config) monitoring.AlertNotifier {
 	if cfg.HasAlertEmail() {
-		return monitoring.NewEmailNotifier(cfg.ResendAPIKey, cfg.AlertEmailTo, outbound.DefaultTransport())
+		return monitoring.NewEmailNotifier(cfg.ResendAPIKey, cfg.AlertEmailTo, outbound.NewGuardedTransport())
 	}
 	if cfg.AlertWebhookURL != "" {
 		return monitoring.NewWebhookNotifier(cfg.AlertWebhookURL)

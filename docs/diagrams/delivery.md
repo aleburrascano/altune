@@ -15,7 +15,7 @@ flowchart TD
 
     subgraph ghgate [PR gate · GitHub pr-checks]
         ghtests["pr-checks · backend-tests<br/>migrations · INTEGRATION=1 go test -race · mutation on changed lines"]
-        ghprecheck["pr-checks · precheck<br/>scripts/ci/ci-precheck.sh · whole go-api module linted"]
+        ghprecheck["pr-checks · precheck<br/>scripts/ci/ci-precheck.sh · what push runs, plus the whole module linted on main"]
     end
 
     precheck --> shape

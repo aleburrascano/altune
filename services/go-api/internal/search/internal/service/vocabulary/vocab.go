@@ -41,7 +41,7 @@ func (v *SpellingHintsIngestor) Ingest(parentCtx context.Context, results []doma
 		for _, e := range entries {
 			if err := v.vocabStore.Add(ctx, e); err != nil {
 				slog.WarnContext(ctx, "search.v2.vocab_ingest_failed",
-					"kind", e.Kind, logging.SearchTextAttr(e.Term), "error", logging.ScrubSearchErr(err, e.Term))
+					"kind", e.Kind, logging.SearchTextAttr(e.Term), logging.KeyError, logging.ScrubSearchErr(err, e.Term))
 			}
 		}
 	})

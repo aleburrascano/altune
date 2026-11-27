@@ -15,12 +15,17 @@ func RequestLogger(now clock.Func) func(http.Handler) http.Handler {
 }
 
 func routePattern(r *http.Request) string {
-	if rc := chi.RouteContext(r.Context()); rc != nil {
-		if pattern := rc.RoutePattern(); pattern != "" {
-			return pattern
-		}
+	if pattern := matchedRoute(r); pattern != "" {
+		return pattern
 	}
 	return unmatchedRoute
+}
+
+func matchedRoute(r *http.Request) string {
+	if rc := chi.RouteContext(r.Context()); rc != nil {
+		return rc.RoutePattern()
+	}
+	return ""
 }
 
 const unmatchedRoute = "unmatched"

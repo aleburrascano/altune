@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -132,7 +133,7 @@ func mergeSlotsReportingOutage(
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.source_find_failed",
-				"source", sources[i].Name(), "error", redact.LogError(err))
+				"source", sources[i].Name(), logging.KeyError, redact.LogError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("every audio source failed: %w", firstErr)

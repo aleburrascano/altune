@@ -6,7 +6,7 @@ import (
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
-	"maps"
+	"slices"
 	"sort"
 )
 
@@ -297,15 +297,19 @@ func (r *PlaylistRepo) ReorderTracks(_ context.Context, userId sharedids.UserId,
 }
 
 func coversExactly(planned, members []domain.PlaylistTrack) bool {
-	return maps.Equal(trackIdSet(planned), trackIdSet(members))
+	if len(planned) != len(members) {
+		return false
+	}
+	for _, want := range planned {
+		if !holdsTrack(members, want.TrackId) {
+			return false
+		}
+	}
+	return true
 }
 
-func trackIdSet(tracks []domain.PlaylistTrack) map[domain.TrackId]bool {
-	set := make(map[domain.TrackId]bool, len(tracks))
-	for _, t := range tracks {
-		set[t.TrackId] = true
-	}
-	return set
+func holdsTrack(tracks []domain.PlaylistTrack, id domain.TrackId) bool {
+	return slices.ContainsFunc(tracks, func(t domain.PlaylistTrack) bool { return t.TrackId == id })
 }
 
 func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {
@@ -315,10 +319,9 @@ func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {
 func (r *PlaylistRepo) SeedWithTracks(t TB, playlist *domain.Playlist, tracks []*domain.Track) {
 	t.Helper()
 	r.Playlists[playlist.ID.String()] = playlist
-	held := trackIdSet(playlist.Tracks)
 	for _, track := range tracks {
 		r.Tracks.Tracks[track.ID.String()] = track
-		if held[track.ID] {
+		if holdsTrack(playlist.Tracks, track.ID) {
 			continue
 		}
 		if err := playlist.AddTrack(track.ID, playlist.UpdatedAt); err != nil {

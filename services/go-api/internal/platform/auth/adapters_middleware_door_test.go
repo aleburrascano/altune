@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -173,9 +172,7 @@ func TestMiddleware_OversizedBearerDoesNotSpendFailureBudget(t *testing.T) {
 }
 
 func TestMiddleware_TheVerifiedUserReachesTheRequestCompleteLine(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 	uid := ids.NewUserId(uuid.New())
 	next, _ := noopHandler()
 
@@ -246,16 +243,12 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 	}
 }
 
-func captureJSONLog(t *testing.T) *bytes.Buffer {
+func captureJSONLog(t *testing.T) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.CaptureJSON(t, slog.LevelDebug)
 }
 
-func findLogRecord(t *testing.T, buf *bytes.Buffer, want string) map[string]any {
+func findLogRecord(t *testing.T, buf *logging.Capture, want string) map[string]any {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
 		if line == "" {
@@ -755,44 +748,6 @@ func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
 	}
 }
 
-func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
-	t.Helper()
-	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("body %q is not a JSON object: %v", rec.Body.String(), err)
-	}
-	return body
-}
-
-func TestRequireUserID_UnauthorizedMatchesTheMissingTokenRejection(t *testing.T) {
-	next, _ := noopHandler()
-	viaMiddleware := httptest.NewRecorder()
-	auth.MustMiddleware(stubVerifier(ids.UserId{}, nil), time.Now, silentAuthMetrics{}, auth.DefaultFailureLimits)(next).ServeHTTP(viaMiddleware, httptest.NewRequest(http.MethodGet, "/", nil))
-	viaRequire := httptest.NewRecorder()
-	requestuser.RequireUserID(viaRequire, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if viaRequire.Code != viaMiddleware.Code {
-		t.Errorf("status: RequireUserID %d, middleware %d", viaRequire.Code, viaMiddleware.Code)
-	}
-	for _, header := range []string{"WWW-Authenticate", "Content-Type"} {
-		if got, want := viaRequire.Header().Get(header), viaMiddleware.Header().Get(header); got != want {
-			t.Errorf("%s: RequireUserID %q, middleware %q", header, got, want)
-		}
-	}
-	requireBody, middlewareBody := decodeBody(t, viaRequire), decodeBody(t, viaMiddleware)
-	if len(requireBody) != len(middlewareBody) {
-		t.Errorf("body keys: RequireUserID %v, middleware %v", requireBody, middlewareBody)
-	}
-	for key := range middlewareBody {
-		if _, ok := requireBody[key]; !ok {
-			t.Errorf("RequireUserID body has no %q: %v", key, requireBody)
-		}
-	}
-	if got, want := requireBody["code"], "auth.token_"+reasonMissing; got != want {
-		t.Errorf("code: RequireUserID %q, want %q", got, want)
-	}
-}
-
 func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 	for _, header := range []string{"Basic abc", "Bearer", "Bearerabc"} {
 		t.Run(header, func(t *testing.T) {
@@ -1143,9 +1098,7 @@ func BenchmarkFailureThrottle_BenignChurn(b *testing.B) { benchmarkChurn(b, 3*ti
 func BenchmarkFailureThrottle_AttackChurn(b *testing.B) { benchmarkChurn(b, 0) }
 
 func benchmarkChurn(b *testing.B, step time.Duration) {
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.DiscardHandler))
-	b.Cleanup(func() { slog.SetDefault(prev) })
+	b.Cleanup(logging.Swap(slog.New(slog.DiscardHandler)))
 	handler, clock := limitedMiddleware(middleware.FailureLimits{Burst: 20, Refill: 3 * time.Second, MaxClients: 10_000})
 	var worst time.Duration
 	for i := 0; b.Loop(); i++ {

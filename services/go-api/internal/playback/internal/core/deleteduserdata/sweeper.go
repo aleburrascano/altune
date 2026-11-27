@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/playback/internal/core/queue"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -142,7 +143,7 @@ func (s *Sweeper) keepForRetry(ctx context.Context, owners []ids.UserId) {
 			continue
 		}
 		if len(s.retryOwners) >= s.retryCap {
-			slog.WarnContext(ctx, "playback.deleted_identity_retry_owner_dropped", "user_id", owner.String())
+			slog.WarnContext(ctx, "playback.deleted_identity_retry_owner_dropped", logging.KeyUserID, owner.String())
 			s.metrics.RetryOwnerDropped()
 			continue
 		}
@@ -153,7 +154,7 @@ func (s *Sweeper) keepForRetry(ctx context.Context, owners []ids.UserId) {
 func (s *Sweeper) recordScanFailure(ctx, runCtx context.Context, run *sweepRun, err error) {
 	switch {
 	case errors.Is(err, ports.ErrIdentityStoreUnavailable):
-		slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
+		slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", logging.KeyError, err)
 		s.metrics.SweepIdle()
 		run.failures = append(run.failures, fmt.Errorf("deleted identity sweep idle: %w", ports.ErrIdentityStoreUnavailable))
 	case ctx.Err() == nil && runCtx.Err() != nil:
@@ -180,7 +181,7 @@ func (s *Sweeper) recordOwnerScanTimeout(ctx context.Context, err error) {
 	if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 		return
 	}
-	slog.WarnContext(ctx, "playback.deleted_identity_owner_scan_timed_out", "error", err)
+	slog.WarnContext(ctx, "playback.deleted_identity_owner_scan_timed_out", logging.KeyError, err)
 	s.metrics.OwnerScanTimedOut()
 }
 

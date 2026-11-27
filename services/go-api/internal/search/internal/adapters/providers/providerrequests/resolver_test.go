@@ -1,6 +1,7 @@
 package providerrequests_test
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
@@ -66,7 +67,7 @@ func newRetryTestResolver() *providerrequests.CachedResolver[string] {
 func TestWithAuthRetry_authFailureAfterRefreshIsPersistent(t *testing.T) {
 	r := newRetryTestResolver()
 	_, err := providerrequests.WithAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
-		return 0, http.StatusUnauthorized, providerrequests.StatusError{Status: http.StatusUnauthorized}
+		return 0, http.StatusUnauthorized, outbound.StatusError{Status: http.StatusUnauthorized}
 	})
 	var marker persistentAuthMarker
 	if !errors.As(err, &marker) || !marker.PersistentAuthFailure() {
@@ -80,7 +81,7 @@ func TestWithAuthRetry_refreshThatFixesItIsNotAFailure(t *testing.T) {
 	got, err := providerrequests.WithAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
 		calls++
 		if calls == 1 {
-			return 0, http.StatusUnauthorized, providerrequests.StatusError{Status: http.StatusUnauthorized}
+			return 0, http.StatusUnauthorized, outbound.StatusError{Status: http.StatusUnauthorized}
 		}
 		return 7, http.StatusOK, nil
 	})
@@ -95,9 +96,9 @@ func TestWithAuthRetry_nonAuthFailureOnRetryIsNotPersistentAuth(t *testing.T) {
 	_, err := providerrequests.WithAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
 		calls++
 		if calls == 1 {
-			return 0, http.StatusForbidden, providerrequests.StatusError{Status: http.StatusForbidden}
+			return 0, http.StatusForbidden, outbound.StatusError{Status: http.StatusForbidden}
 		}
-		return 0, http.StatusInternalServerError, providerrequests.StatusError{Status: http.StatusInternalServerError}
+		return 0, http.StatusInternalServerError, outbound.StatusError{Status: http.StatusInternalServerError}
 	})
 	var marker persistentAuthMarker
 	if errors.As(err, &marker) {

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/platform/monitoring/internal/core/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -168,7 +169,7 @@ func (m *Monitor) raise(ctx context.Context, key string, fired domain.Alert) {
 	if err := m.notifier.Notify(ctx, m.pageFor(key, fired)); err != nil {
 		m.notifyFailures.Add(1)
 		m.notifyErrorAt.Store(m.now().UnixNano())
-		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, "error", err)
+		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, logging.KeyError, err)
 		return
 	}
 	m.notifyFailures.Store(0)

@@ -6,9 +6,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -147,10 +147,7 @@ func TestNewEvalDiscovery_RefusesAMissingTransport(t *testing.T) {
 }
 
 func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logs := logging.CaptureText(t, slog.LevelInfo)
 
 	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -238,7 +239,7 @@ func TestCheckInPlace_UnreadableStoredEvidenceJudgesLikeNoEvidence(t *testing.T)
 		}
 	}
 
-	logs := captureLogs(t)
+	logs := logging.CaptureRing(t, "debug")
 	track := fromSource(inPlaceTrack(), `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)","pipeline_generation":"x"}`)
 
 	unreadable := checkInPlace(t, wiring(), track)

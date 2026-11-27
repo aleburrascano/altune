@@ -27,17 +27,17 @@ func NoObserver() func(*AcquisitionContext) { return func(*AcquisitionContext) {
 
 func (p StagePorts) validate(owner string) error {
 	return errors.Join(
-		missingPort(owner, "Prober", p.Prober == nil),
-		missingPort(owner, "Tagger", p.Tagger == nil),
-		missingPort(owner, "Rejections", p.Rejections == nil),
-		missingPort(owner, "StoredAudio", p.StoredAudio == nil),
-		missingPort(owner, "Orphans", p.Orphans == nil),
-		missingPort(owner, "Skips", p.Skips == nil),
-		missingPort(owner, "Events", p.Events == nil),
-		missingPort(owner, "DownloadLimit", p.DownloadLimit == nil),
-		missingPort(owner, "Observer", p.Observer == nil),
-		missingPort(owner, "Sleep", p.Sleep == nil),
-		missingPort(owner, "Now", p.Now == nil),
-		missingPort(owner, "Unit", p.Unit == nil),
+		missingPort(owner, "Prober", p.Prober),
+		missingPort(owner, "Tagger", p.Tagger),
+		missingPort(owner, "Rejections", p.Rejections),
+		missingPort(owner, "StoredAudio", p.StoredAudio),
+		missingPort(owner, "Orphans", p.Orphans),
+		missingPort(owner, "Skips", p.Skips),
+		missingPort(owner, "Events", p.Events),
+		missingPort(owner, "DownloadLimit", p.DownloadLimit),
+		missingPort(owner, "Observer", p.Observer),
+		missingPort(owner, "Sleep", p.Sleep),
+		missingPort(owner, "Now", p.Now),
+		missingPort(owner, "Unit", p.Unit),
 	)
 }

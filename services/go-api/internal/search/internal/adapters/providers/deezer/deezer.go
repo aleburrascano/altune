@@ -62,9 +62,10 @@ func deezerStructuredQuery(artist, track string, kind domain.ResultKind) string 
 		return "artist:" + providersearch.DslQuote(deezerStripQuotes(artist)) + " album:" + providersearch.DslQuote(deezerStripQuotes(track))
 	case domain.ResultKindArtist:
 		return artist
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return artist + " " + track
 	}
+	return artist + " " + track
 }
 
 func (a *DeezerAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
@@ -95,9 +96,10 @@ func deezerSearchEndpoint(kind domain.ResultKind) string {
 		return "album"
 	case domain.ResultKindArtist:
 		return "artist"
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return ""
 	}
+	return ""
 }
 
 func preferURL(hi, lo string) string {

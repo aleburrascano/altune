@@ -15,20 +15,18 @@ var (
 )
 
 func NormalizeForMatch(text string) string {
-	return normalize(text, true)
+	return finishNormalize(bracketSuffixRe.ReplaceAllString(foldCase(text), " "))
 }
 
 func NormalizeForIdentity(text string) string {
-	return normalize(text, false)
+	return finishNormalize(foldCase(text))
 }
 
-func normalize(text string, dropBrackets bool) string {
-	s := norm.NFKC.String(text)
-	s = strings.ToLower(s)
-	s = stripDiacritics(s)
-	if dropBrackets {
-		s = bracketSuffixRe.ReplaceAllString(s, " ")
-	}
+func foldCase(text string) string {
+	return stripDiacritics(strings.ToLower(norm.NFKC.String(text)))
+}
+
+func finishNormalize(s string) string {
 	s = strings.ReplaceAll(s, "&", " and ")
 	s = stripApostrophes(s)
 	s = stripSymbols(s)

@@ -2,6 +2,7 @@ package artistpage
 
 import (
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -75,7 +76,7 @@ func (r *FeaturedArtistResolver) Resolve(ctx context.Context, artist, title stri
 
 func logFeaturedFailure(ctx context.Context, source string, err error) {
 	slog.WarnContext(ctx, "featured.resolve.source_failed",
-		"source", source, "error", redact.Secrets(err.Error()))
+		"source", source, logging.KeyError, redact.Secrets(err.Error()))
 }
 
 func (r *FeaturedArtistResolver) mbFeatured(ctx context.Context, artist, title string) ([]domain.FeaturedArtist, error) {

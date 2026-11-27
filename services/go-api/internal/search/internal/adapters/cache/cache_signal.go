@@ -2,6 +2,7 @@ package cache
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"log/slog"
@@ -73,7 +74,7 @@ func (s *Signal) failure(ctx context.Context, kind CacheKind, op cacheOp, err er
 	slog.WarnContext(ctx, "discovery.cache_error",
 		slog.String("cache", string(kind)),
 		slog.String("op", string(op)),
-		slog.Any("error", err),
+		slog.Any(logging.KeyError, err),
 	)
 }
 

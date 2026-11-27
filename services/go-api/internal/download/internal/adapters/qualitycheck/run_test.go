@@ -8,8 +8,8 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/ids/idstest"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/tracklength"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,7 +26,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	logging.Swap(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	m.Run()
 }
 
@@ -1111,7 +1111,7 @@ func TestRun_TheShadowJudgeSeesEachCandidatesAlbum(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logged := capturedLog(t)
+			logged := logging.CaptureText(t, slog.LevelInfo)
 			candidate := artTrack("art-track", 200, false)
 			candidate.Album, candidate.Artists = tt.album, []string{"a"}
 
@@ -1692,16 +1692,7 @@ func TestLoad_RefusesAnObservedCandidateThatAlsoSetsWhatTheAdapterEmits(t *testi
 	}
 }
 
-func capturedLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var logged bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &logged
-}
-
-func auditedGrade(t *testing.T, logged *bytes.Buffer) string {
+func auditedGrade(t *testing.T, logged *logging.Capture) string {
 	t.Helper()
 	for line := range strings.Lines(logged.String()) {
 		if !strings.Contains(line, "msg=acquisition.audio_verdict") {
@@ -1749,7 +1740,7 @@ func TestRun_APinnedVideoIsGradedAsTheKindItsWatchReports(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logged := capturedLog(t)
+			logged := logging.CaptureText(t, slog.LevelInfo)
 
 			out := qualitycheck.Run(context.Background(), time.Now, idstest.Sequence(), pinned(tt.candidate))
 
@@ -1779,6 +1770,8 @@ func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
 			if cand.Resolved || cand.Channel != "" {
 				t.Errorf("upload %+v is not what ytdlp emits for a SoundCloud result", cand)
 			}
+		case ports.KindPinnedVideo, ports.KindCatalogPin:
+			fallthrough
 		default:
 			t.Errorf("candidate %q has kind %q: prod's ytmusic emits nothing for this resolution", cand.URL, cand.Kind)
 		}
@@ -1958,7 +1951,7 @@ func TestRun_RecordedObservationsGoThroughTheRealAdapters(t *testing.T) {
 	})
 
 	t.Run("ytmusic emits the recorded watch of the pinned video as an art track", func(t *testing.T) {
-		logged := capturedLog(t)
+		logged := logging.CaptureText(t, slog.LevelInfo)
 
 		out := qualitycheck.Run(context.Background(), time.Now, idstest.Sequence(), watchesAlone([]qualitycheck.CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}}))
 

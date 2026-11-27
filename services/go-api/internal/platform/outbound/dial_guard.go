@@ -46,6 +46,8 @@ func refuseNonPublicDial(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+func NewGuardedTransport() http.RoundTripper { return baseTransport() }
+
 func baseTransport() http.RoundTripper {
 	t, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {

@@ -1,6 +1,7 @@
 package background
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -47,5 +48,5 @@ func newPanicError(event string, value any) *PanicError {
 
 func logPanic(ctx context.Context, panicked *PanicError, attrs []any) {
 	slog.ErrorContext(ctx, panicked.Event,
-		append(slices.Clip(attrs), "panic", panicked.loggable(), "stack", string(panicked.Stack))...)
+		append(slices.Clip(attrs), logging.KeyPanic, panicked.loggable(), logging.KeyStack, string(panicked.Stack))...)
 }

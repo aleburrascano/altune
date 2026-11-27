@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -96,7 +97,7 @@ func fetchTracklist(ctx context.Context, source domain.ProviderLink, lister port
 	if err != nil {
 		into.markIncomplete()
 		slog.WarnContext(ctx, "catalog_titles.album_tracks_failed",
-			"provider", source.Provider.String(), "album_id", source.ExternalID, "error", redact.Secrets(err.Error()))
+			"provider", source.Provider.String(), "album_id", source.ExternalID, logging.KeyError, redact.Secrets(err.Error()))
 		return
 	}
 	into.add(tracks)

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
@@ -57,7 +58,7 @@ func (a *MusicBrainzAnchoring) verifyGroups(ctx context.Context, identity Resolv
 		if ctx.Err() != nil {
 			return groups, false
 		}
-		slog.WarnContext(ctx, "artist_albums.mb_anchor_failed", "mbid", identity.MBID, "error", redact.Secrets(err.Error()))
+		slog.WarnContext(ctx, "artist_albums.mb_anchor_failed", "mbid", identity.MBID, logging.KeyError, redact.Secrets(err.Error()))
 		return groups, true
 	}
 	if len(titles) == 0 {

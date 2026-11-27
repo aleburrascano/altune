@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -74,7 +75,7 @@ func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Conte
 	r.WhenLeader(name, func(ctx context.Context) {
 		run := r.newRun(name, interval)
 		if err := background.Every(ctx, &r.loops, interval, r.NewTicker, func() { r.tickAsLeader(ctx, run, fn) }); err != nil {
-			slog.ErrorContext(ctx, "job not started", "job", string(name), "error", err)
+			slog.ErrorContext(ctx, "job not started", logging.KeyJob, string(name), logging.KeyError, err)
 		}
 	})
 }
@@ -158,7 +159,7 @@ func (r *Runner) StartTicker(ctx context.Context, name Name, interval time.Durat
 func WarnOnFailure(name Name, run func(context.Context) error) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if err := run(ctx); err != nil {
-			slog.WarnContext(ctx, string(name)+" failed", "error", err)
+			slog.WarnContext(ctx, string(name)+" failed", logging.KeyError, err)
 			return err
 		}
 		return nil

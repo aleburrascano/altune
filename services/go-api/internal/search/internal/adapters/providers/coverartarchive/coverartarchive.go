@@ -1,6 +1,7 @@
 package coverartarchive
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
@@ -28,12 +29,12 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 
 	u := fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-1200", url.PathEscape(mbid))
 
-	req, err := providerrequests.NewHeadRequest(ctx, u, providerrequests.WithHeader("Accept", "image/*"))
+	req, err := outbound.NewHeadRequest(ctx, u, outbound.WithHeader("Accept", "image/*"))
 	if err != nil {
 		return providerrequests.ArtworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
 
-	resp, err := providerrequests.Send(r.client, req)
+	resp, err := outbound.Send(r.client, req)
 	if err != nil {
 		return providerrequests.ArtworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
@@ -52,7 +53,7 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 		return u, nil
 	}
 
-	return providerrequests.ArtworkFailure(domain.ProviderKeyCoverArtArchive, providerrequests.StatusError{Status: resp.StatusCode})
+	return providerrequests.ArtworkFailure(domain.ProviderKeyCoverArtArchive, outbound.StatusError{Status: resp.StatusCode})
 }
 
 func (*CoverArtArchiveResolver) ArtworkSource() domain.ProviderKey {

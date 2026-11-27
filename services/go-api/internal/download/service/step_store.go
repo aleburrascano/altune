@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -46,12 +47,12 @@ type StoreStep struct {
 func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, sleep clock.Sleeper, unit random.Unit, opts ...func(*StoreStep)) (*StoreStep, error) {
 	const owner = "NewStoreStep"
 	if err := errors.Join(
-		missingPort(owner, "audio store", audioStore == nil),
-		missingPort(owner, "prober", prober == nil),
-		missingPort(owner, "orphan recorder", orphans == nil),
-		missingPort(owner, "audio ref lookup", refs == nil),
-		missingPort(owner, "sleeper", sleep == nil),
-		missingPort(owner, "jitter source", unit == nil),
+		missingPort(owner, "audio store", audioStore),
+		missingPort(owner, "prober", prober),
+		missingPort(owner, "orphan recorder", orphans),
+		missingPort(owner, "audio ref lookup", refs),
+		missingPort(owner, "sleeper", sleep),
+		missingPort(owner, "jitter source", unit),
 		requireWorkspace(owner, workspace),
 	); err != nil {
 		return nil, err
@@ -146,7 +147,7 @@ func (s *StoreStep) stillServesATrack(ctx context.Context, ac *AcquisitionContex
 		return false
 	}
 	slog.WarnContext(ctx, "acquisition.rollback_kept_shared_audio",
-		"audio_ref", ac.AudioRef, "track_id", ac.Track.ID)
+		"audio_ref", ac.AudioRef, logging.KeyTrackID, ac.Track.ID)
 	return true
 }
 
@@ -154,7 +155,7 @@ func (s *StoreStep) sharedWithAnotherTrack(ctx context.Context, audioRef string)
 	inUse, err := s.trackRefs.AudioRefInUse(ctx, audioRef, s.ownTrackID)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.audio_usage_unknown",
-			"audio_ref", audioRef, "error", redact.LogError(err))
+			"audio_ref", audioRef, logging.KeyError, redact.LogError(err))
 		return true
 	}
 	return inUse
@@ -167,12 +168,12 @@ func (s *StoreStep) deleteWithRetry(ctx context.Context, audioRef string) error 
 			return nil
 		}
 		slog.WarnContext(ctx, "acquisition.rollback_delete_retrying",
-			"audio_ref", audioRef, "attempt", attempt, "error", err)
+			"audio_ref", audioRef, "attempt", attempt, logging.KeyError, err)
 		if attempt == s.deleteTries || s.sleep(ctx, rollbackDeleteBackoff.DelayAt(attempt, s.unit())) != nil {
 			break
 		}
 	}
 	slog.ErrorContext(ctx, "orphaned audio file after rollback",
-		"audio_ref", audioRef, "error", err)
+		"audio_ref", audioRef, logging.KeyError, err)
 	return fmt.Errorf("rollback delete audio %q: %w", audioRef, err)
 }

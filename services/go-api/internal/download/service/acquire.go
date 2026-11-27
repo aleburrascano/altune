@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
@@ -61,9 +62,9 @@ func NewAcquireTrackAudioService(
 ) (*AcquireTrackAudioService, error) {
 	const owner = "NewAcquireTrackAudioService"
 	if err := errors.Join(
-		missingPort(owner, "ledger", ledger == nil),
-		missingPort(owner, "source registry", sources == nil),
-		missingPort(owner, "audio store", audioStore == nil),
+		missingPort(owner, "ledger", ledger),
+		missingPort(owner, "source registry", sources),
+		missingPort(owner, "audio store", audioStore),
 		wiring.validate(owner), stages.validate(owner), requireWorkspace(owner, workspace),
 	); err != nil {
 		return nil, err
@@ -231,7 +232,7 @@ func (s *AcquireTrackAudioService) replaceLoaded(ctx, jobCtx context.Context, us
 func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId ids.UserId, trackId ids.TrackId) (*ports.TrackSnapshot, bool, error) {
 	track, err := s.ledger.Get(ctx, trackId, userId)
 	if errors.Is(err, ports.ErrTrackNotFound) {
-		slog.WarnContext(ctx, "acquire_track_not_found", "track_id", trackId.String())
+		slog.WarnContext(ctx, "acquire_track_not_found", logging.KeyTrackID, trackId.String())
 		return nil, false, nil
 	}
 	if err != nil {
@@ -244,8 +245,8 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 	jobReporterFrom(ctx).meta(track.Title, track.Artist, track.Album)
 
 	slog.InfoContext(ctx, "track_acquisition_started",
-		"track_id", trackId.String(),
-		"user_id", userId.String(),
+		logging.KeyTrackID, trackId.String(),
+		logging.KeyUserID, userId.String(),
 		"has_isrc", track.ISRC != nil,
 	)
 	s.events.Publish(ctx, userId, events.TrackAcquisitionStarted{
@@ -334,9 +335,9 @@ func (s *AcquireTrackAudioService) findRerecording(ctx context.Context, ac *Acqu
 }
 
 func logRerecordingTier(ctx context.Context, ac *AcquisitionContext, originalMBID, rerecordingMBID, outcome string, err error) {
-	attrs := []any{"track_id", ac.Track.ID, "original_mbid", originalMBID, "rerecording_mbid", rerecordingMBID, "outcome", outcome}
+	attrs := []any{logging.KeyTrackID, ac.Track.ID, "original_mbid", originalMBID, "rerecording_mbid", rerecordingMBID, "outcome", outcome}
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.rerecording_tier", append(attrs, "error", redact.LogError(err))...)
+		slog.WarnContext(ctx, "acquisition.rerecording_tier", append(attrs, logging.KeyError, redact.LogError(err))...)
 		return
 	}
 	slog.InfoContext(ctx, "acquisition.rerecording_tier", attrs...)
@@ -369,11 +370,11 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 		)
 	}
 	if track.AudioSourceURL == nil {
-		slog.InfoContext(ctx, "acquisition.replacing_unknown_source", "track_id", trackId.String())
+		slog.InfoContext(ctx, "acquisition.replacing_unknown_source", logging.KeyTrackID, trackId.String())
 	}
 	if len(ac.Replace.ExcludeKeys) > 0 {
 		slog.InfoContext(ctx, "acquisition.replacing_source",
-			"track_id", trackId.String(), "excluded_keys", ac.Replace.ExcludeKeys)
+			logging.KeyTrackID, trackId.String(), "excluded_keys", ac.Replace.ExcludeKeys)
 	}
 	return requireCurrentFileFact(track)
 }

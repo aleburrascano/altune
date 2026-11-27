@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/logging"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -45,23 +43,6 @@ func (f *flakyNotifier) Notify(context.Context, monitoring.Alert) error {
 		return errors.New("transient push failure")
 	}
 	return nil
-}
-
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *lockedBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
 }
 
 type passes struct {
@@ -96,11 +77,9 @@ func clockedMonitor(t *testing.T, n monitoring.AlertNotifier, clk *clocktest.Man
 	return m, passes{m: m}
 }
 
-func captureLogs(t *testing.T) *lockedBuffer {
+func captureLogs(t *testing.T) *logging.Capture {
 	t.Helper()
-	logs := &lockedBuffer{}
-	t.Cleanup(logging.Swap(slog.New(slog.NewJSONHandler(logs, nil))))
-	return logs
+	return logging.CaptureJSON(t, slog.LevelInfo)
 }
 
 func signalCond(key string, firing *bool) monitoring.Condition {

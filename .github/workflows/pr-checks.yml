@@ -181,7 +181,7 @@ jobs:
           pnpm install --frozen-lockfile
           npm ci --prefix client
           npm ci --prefix services/overseer/web
-      - name: precheck, whole go-api module linted
+      - name: precheck, as push runs it
         env:
           BEFORE: ${{ github.event.before }}
         run: bash scripts/ci/ci-precheck.sh

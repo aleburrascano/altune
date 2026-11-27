@@ -1,6 +1,7 @@
 package theaudiodb
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -52,7 +53,7 @@ func (a *Adapter) Search(ctx context.Context, query string, kinds map[domain.Res
 	var body struct {
 		Artists []artistHit `json:"artists"`
 	}
-	if err := providerrequests.GetJSON(ctx, a.client, u, &body); err != nil {
+	if err := outbound.GetJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -113,7 +114,7 @@ func (a *Adapter) resolveAlbum(ctx context.Context, title, subtitle string) (str
 			StrAlbumThumb string `json:"strAlbumThumb"`
 		} `json:"album"`
 	}
-	if err := providerrequests.GetJSON(ctx, a.client, u, &body); err != nil {
+	if err := outbound.GetJSON(ctx, a.client, u, &body); err != nil {
 		return providerrequests.ArtworkFailure(a.ArtworkSource(), err)
 	}
 	if len(body.Album) > 0 && body.Album[0].StrAlbumThumb != "" {
@@ -129,7 +130,7 @@ func (a *Adapter) artistThumbByMBID(ctx context.Context, mbid string) string {
 			StrArtistThumb string `json:"strArtistThumb"`
 		} `json:"artists"`
 	}
-	if err := providerrequests.GetJSON(ctx, a.client, u, &body); err != nil {
+	if err := outbound.GetJSON(ctx, a.client, u, &body); err != nil {
 		return ""
 	}
 	if len(body.Artists) > 0 {

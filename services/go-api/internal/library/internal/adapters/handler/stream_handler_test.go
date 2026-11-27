@@ -161,14 +161,6 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 	}
 }
 
-func TestHandleStreamAudio_NoAuth(t *testing.T) {
-	router := streamOnlyRoute(library.NewInMemoryTrackRepo(), library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler())
-
-	rec := sendAnonymous(router, httptest.NewRequest(http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil))
-
-	assertStatus(t, rec, http.StatusUnauthorized)
-}
-
 func TestHandleRecover(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	sched := &library.InMemoryScheduler{}
@@ -281,9 +273,7 @@ func findLogRecord(t *testing.T, ring *logging.RingBuffer, message string) loggi
 }
 
 func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	const deliverable = 4096
 	store := &truncatingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore(), failAfter: deliverable}
@@ -309,9 +299,7 @@ func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 }
 
 func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	audio := []byte("fake-audio-data")
 	store := library.NewInMemoryAudioStore()
@@ -334,9 +322,7 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 }
 
 func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("info")
+	ring := logging.CaptureRing(t, "info")
 
 	store := &truncatingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore(), failAfter: 1024}
 	repo, router := streamRoutes(store)

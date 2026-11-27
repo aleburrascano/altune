@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_NO_CACHE HEAVY_HELD
+unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_NO_CACHE PRECHECK_WHOLE_MODULE HEAVY_HELD
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FAILURES=0
@@ -232,6 +232,19 @@ expect_jest_cache_in_checkout() {
     ! grep -qE -- '--cacheDirectory /' "$WORK/npx.log" 2>/dev/null || fail "jest got an absolute cache directory, which keeps heavy.sh from running it on a remote slot"
 }
 
+CASE="any client change runs the doctor config test, which reads the whole tree and so fails in CI for files a push never touched"
+new_repo
+add_mobile_stubs
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client/src
+    printf 'export const x = 1;\n' >client/src/x.ts
+    git add -A
+    git commit -qm "mobile change"
+)
+run_script_with_stubs
+expect_npx "__tests__/doctor.config.test.ts"
+
 CASE="mobile related tests keep the jest cache inside the checkout, so heavy.sh can run them remotely"
 new_repo
 add_mobile_stubs
@@ -306,6 +319,7 @@ add_jest_stub() {
 #!/usr/bin/env bash
 printf 'npx %s\n' "$*" >>"$NPX_LOG"
 case " $* " in *" jest "*) ;; *) exit 0 ;; esac
+case " $* " in *" __tests__/doctor.config.test.ts "*) echo "doctor config stub"; exit "${STUB_DOCTOR_RC:-0}" ;; esac
 case "${STUB_JEST:-pass}" in
     fail)
         echo "FAIL src/__tests__/a.test.ts"
@@ -408,6 +422,15 @@ NPX_LOG="$WORK/npx.log" run_script_with_stubs
 expect_npx "--forceExit"
 expect_npx "--watchman=false"
 expect_out "ok    mobile tests (related)"
+
+CASE="a failing doctor config test fails precheck and names itself"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+STUB_DOCTOR_RC=1 NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_rc 1
+expect_out "FAIL  mobile doctor config test"
 
 CASE="a failing jest run prints each failed test name, not the last 40 lines"
 new_repo
@@ -983,13 +1006,15 @@ run_push_scoped
 expect_rc 0
 expect_out "ok    capability notes name mounted routes"
 
-CASE="--full lints the whole module and every line, not only new code"
+CASE="--full lints the changed package and its importers on every line, not only new code"
 new_repo
 add_go_fixture
 edit_go_file internal/shared/s/s.go
 run_with_tools
 expect_rc 0
-expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./..."
+expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./internal/shared/s"
+! grep -E "^golangci-lint .*altune/go-api" "$WORK/tools.log" >/dev/null 2>&1 || fail "golangci-lint takes directories, not import paths: $(grep -E "^golangci-lint" "$WORK/tools.log" | head -n 1)"
+forbid_log "--allow-serial-runners ./..."
 forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
 expect_log_line "go-arch-lint check"
@@ -1249,13 +1274,68 @@ expect_rc 1
 expect_out "FAIL  go-api vet (whole module"
 expect_out "not enough arguments in call to s.S"
 
-CASE="--full lints the whole module for a one-package change"
+CASE="--full lints the whole module when the lint configuration or a rule file changes"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'version: "2"\n' >services/go-api/.golangci.strict.yml
+    git add -A
+    git commit -qm "lint config"
+)
+run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints the whole module when a rule file changes"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/_rules
+    printf 'package gorules\n' >services/go-api/_rules/x.rules
+    git add -A
+    git commit -qm "rule"
+)
+run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints the whole module when the caller says so, as CI does on a push to main"
+new_repo
+add_go_fixture
+edit_go_file internal/search/adapters/x/x.go
+PRECHECK_WHOLE_MODULE=1 run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="--full lints and tests a one-package change with its importers and still runs govulncheck over the module"
 new_repo
 add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
 run_with_tools
-expect_log "--allow-serial-runners ./..."
+expect_log "--allow-serial-runners ./internal/search/adapters/x"
+forbid_log "--allow-serial-runners ./..."
+expect_log "test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
 expect_log "govulncheck ./..."
+
+CASE="with heavy.sh present the go tests ask for INTEGRATION=1 and name no database, so heavy.sh sends them to chudbox"
+new_repo
+add_go_fixture
+edit_go_file internal/search/adapters/x/x.go
+mkdir -p "$WORK/home/.claude/bin"
+printf '#!/usr/bin/env bash\nprintf "heavy %%s\\n" "$*" >>"%s/tools.log"\nexec "$@"\n' "$WORK" >"$WORK/home/.claude/bin/heavy.sh"
+run_with_tools
+expect_log "heavy env INTEGRATION=1 go test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
+forbid_log "DATABASE_URL"
+rm -rf "$WORK/home/.claude"
+
+CASE="a DATABASE_URL already set is left alone, with no INTEGRATION=1 added"
+new_repo
+add_go_fixture
+edit_go_file internal/search/adapters/x/x.go
+mkdir -p "$WORK/home/.claude/bin"
+printf '#!/usr/bin/env bash\nprintf "heavy %%s\\n" "$*" >>"%s/tools.log"\nexec "$@"\n' "$WORK" >"$WORK/home/.claude/bin/heavy.sh"
+DATABASE_URL=postgres://u@localhost/x run_with_tools
+expect_log "heavy go test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
+rm -rf "$WORK/home/.claude"
 
 CASE="a change to go.sum runs govulncheck"
 new_repo
@@ -1509,7 +1589,7 @@ commit_as_base
 )
 run_with_tools
 expect_log "vet altune/go-api/internal/search/adapters/x"
-expect_log "test -race -shuffle=on -count=1 ./internal/search/adapters/x"
+expect_log "test -race -shuffle=on -count=1 altune/go-api/internal/search/adapters/x"
 
 CASE="every golangci-lint call runs with a cache inside the checkout"
 new_repo

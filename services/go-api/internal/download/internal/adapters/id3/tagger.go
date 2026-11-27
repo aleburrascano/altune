@@ -2,6 +2,7 @@ package id3
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -60,6 +61,6 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 		return fmt.Errorf("save tags: %w", err)
 	}
 
-	slog.InfoContext(ctx, "id3_tags_written", "path", filePath)
+	slog.InfoContext(ctx, "id3_tags_written", logging.KeyPath, filePath)
 	return nil
 }

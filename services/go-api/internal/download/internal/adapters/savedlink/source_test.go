@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/savedlink"
 	"altune/go-api/internal/download/internal/core/ports"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -35,15 +35,6 @@ const pickedUpload = "https://soundcloud.com/vvhhhhkk/sophie-ellis-bextor-murder
 
 func requestPinning(sources ...download.CatalogSource) download.FindRequest {
 	return download.FindRequest{Title: "Murder On The Dancefloor", Artist: "Sophie Ellis-Bextor", CatalogSources: sources}
-}
-
-func capturedLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
 }
 
 func TestFind_EmitsThePickedSoundCloudUpload(t *testing.T) {
@@ -87,7 +78,7 @@ func TestFind_ASoundCloudPinWithoutAUsableURLIsSkippedAndLogged(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logs := capturedLog(t)
+			logs := logging.CaptureText(t, slog.LevelDebug)
 
 			got, err := newSource(t, &recordingFetcher{}, savedlink.NoPageReader()).Find(context.Background(),
 				requestPinning(download.CatalogSource{Provider: "soundcloud", ExternalID: "1", URL: tt.url}))

@@ -185,14 +185,14 @@ function downloadFailed(
   return null;
 }
 
-function cacheFileFor(trackId: TrackId, resolved: ResolvedAudio, partial: boolean): File {
-  const build = partial ? buildPartialCacheFileName : buildCacheFileName;
+function cacheFileFor(trackId: TrackId, resolved: ResolvedAudio, kind: 'final' | 'partial'): File {
+  const build = kind === 'partial' ? buildPartialCacheFileName : buildCacheFileName;
   return new File(cacheDir(), build(trackId, resolved.version, extFromUrl(resolved.url)));
 }
 
 function moveIntoCache(trackId: TrackId, resolved: ResolvedAudio, partial: File): File {
   try {
-    const file = cacheFileFor(trackId, resolved, false);
+    const file = cacheFileFor(trackId, resolved, 'final');
     partial.moveSync(file, { overwrite: true });
     return file;
   } catch (err) {
@@ -203,7 +203,7 @@ function moveIntoCache(trackId: TrackId, resolved: ResolvedAudio, partial: File)
 
 async function downloadAndSwap(claimed: ClaimedPrefetch, resolved: ResolvedAudio): Promise<void> {
   const { trackId, controller } = claimed;
-  const partial = atStage('download', () => cacheFileFor(trackId, resolved, true));
+  const partial = atStage('download', () => cacheFileFor(trackId, resolved, 'partial'));
   const downloaded = await atStage('download', () =>
     boundedDownload(resolved.url, partial, controller),
   ).catch((err: unknown) => downloadFailed(claimed, partial, err));

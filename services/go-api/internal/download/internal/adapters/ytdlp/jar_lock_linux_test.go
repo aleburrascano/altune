@@ -3,9 +3,11 @@ package ytdlp_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/binary"
 	"errors"
+	"log/slog"
 	"os"
 	"strings"
 	"syscall"
@@ -84,7 +86,7 @@ func TestCookieJar_AWriteBackRetriesUntilAnotherProcessReleasesTheJarLock(t *tes
 }
 
 func TestCookieJar_AWriteBackGivesUpAndWarnsWhenTheRunEndsWhileTheJarIsLocked(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	outDir := t.TempDir()
 	jar := liveJar(t, signedInJar("old"))
 	ytDlpRenewing(t, signedInJar("new"), stubDownload(outDir))
@@ -113,7 +115,7 @@ func TestCookieJar_AWriteBackGivesUpAndWarnsWhenTheRunEndsWhileTheJarIsLocked(t 
 }
 
 func TestCookieJar_AWriteBackForACallerWithNoDeadlineGivesUpOnALockThatIsNeverReleased(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	outDir := t.TempDir()
 	jar := liveJar(t, signedInJar("old"))
 	ytDlpRenewing(t, signedInJar("new"), stubDownload(outDir))

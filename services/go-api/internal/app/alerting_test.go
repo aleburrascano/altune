@@ -16,9 +16,7 @@ import (
 
 func captureLeaderLoopLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("info")
+	return logging.CaptureRing(t, "info")
 }
 
 type alwaysLeader struct{}

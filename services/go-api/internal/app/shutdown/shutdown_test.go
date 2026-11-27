@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"net/http"
@@ -21,13 +21,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func captureLogs(t *testing.T, level slog.Level) *bytes.Buffer {
+func captureLogs(t *testing.T, level slog.Level) *logging.Capture {
 	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: level})))
-	t.Cleanup(func() { slog.SetDefault(restore) })
-	return &buf
+	return logging.CaptureText(t, level)
 }
 
 func outcomeOf(t *testing.T, outcomes []shutdown.Outcome, component string) shutdown.Outcome {

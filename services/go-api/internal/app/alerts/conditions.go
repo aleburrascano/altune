@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -126,7 +127,7 @@ func (c *coverageCheck) evalGap(ctx context.Context) *monitoring.Alert {
 	total, err := c.events.ZeroResultTotal(ctx, since)
 	if err != nil {
 		c.failures++
-		slog.WarnContext(ctx, "coverage alert query failed", "error", err, "consecutive_failures", c.failures)
+		slog.WarnContext(ctx, "coverage alert query failed", logging.KeyError, err, "consecutive_failures", c.failures)
 		return c.last
 	}
 	c.failures = 0

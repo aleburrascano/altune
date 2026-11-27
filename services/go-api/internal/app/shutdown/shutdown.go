@@ -2,6 +2,7 @@ package shutdown
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"net/http"
@@ -154,8 +155,8 @@ func DrainServer(parent context.Context, server *http.Server, timeout time.Durat
 	if err == nil {
 		return
 	}
-	slog.ErrorContext(ctx, "server shutdown error", "error", err)
+	slog.ErrorContext(ctx, "server shutdown error", logging.KeyError, err)
 	if closeErr := server.Close(); closeErr != nil {
-		slog.ErrorContext(ctx, "server close error", "error", closeErr)
+		slog.ErrorContext(ctx, "server close error", logging.KeyError, closeErr)
 	}
 }

@@ -52,9 +52,7 @@ func TestObserver_RecordPanicDoesNotFailRequest(t *testing.T) {
 }
 
 func TestObserver_RecordPanicIsLoggedOnceWithTheRequestID(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error")
+	ring := logging.CaptureRing(t, "error")
 	panicRec := func(string, time.Duration, int) { panic("histogram exploded") }
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks/42", nil)
 	req = req.WithContext(logging.ContextWithCorrelationID(context.Background(), "corr-reqm-3"))

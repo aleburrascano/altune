@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -80,7 +81,7 @@ func (r *Runner) DisableAtStartup(ctx context.Context, names []string) error {
 			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
 		}
 		if r.Control(name).DisableIfEnabled() {
-			slog.InfoContext(ctx, "job disabled at startup", "job", raw)
+			slog.InfoContext(ctx, "job disabled at startup", logging.KeyJob, raw)
 		}
 	}
 	return nil

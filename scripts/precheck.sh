@@ -76,6 +76,8 @@ link_deps() {
 
 heavy=()
 [ -f "$HOME/.claude/bin/heavy.sh" ] && heavy=(bash "$HOME/.claude/bin/heavy.sh")
+db_env=()
+[ ${#heavy[@]} -gt 0 ] && [ -z "${HEAVY_HELD:-}" ] && [ -z "${DATABASE_URL:-}${TEST_DATABASE_URL:-}" ] && db_env=(env INTEGRATION=1)
 
 failed=0
 missing=0
@@ -380,7 +382,7 @@ if touches '^services/go-api/'; then
       fi
     else
       affected=()
-      if touches "^$m/go\.(mod|sum)\$" || ! affected_out=$(go_affected $m); then
+      if [ "${PRECHECK_WHOLE_MODULE:-}" = 1 ] || touches "^$m/(go\.(mod|sum)|\.golangci[^/]*|_rules/.*|tools\.go)\$" || ! affected_out=$(go_affected $m); then
         whole_module=1
       else
         whole_module=0
@@ -394,14 +396,24 @@ if touches '^services/go-api/'; then
       elif [ ${#affected[@]} -gt 0 ]; then
         par check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
       fi
-      par check "go-api strict linters (whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./...
+      if [ $whole_module = 1 ]; then
+        par check "go-api strict linters (whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./...
+      elif [ ${#affected[@]} -gt 0 ]; then
+        module_path=$(cd "$m" && go list -m)
+        lint_dirs=()
+        for pkg in "${affected[@]}"; do
+          if [ "$pkg" = "$module_path" ]; then lint_dirs+=(.); else lint_dirs+=("./${pkg#"$module_path"/}"); fi
+        done
+        par check "go-api strict linters (changed packages and their importers)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners "${lint_dirs[@]}"
+      fi
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "history is whole, so the whole-tree checks see every file" . bash scripts/history-complete.sh
       check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
       need go-arch-lint "go-api architecture" && check "go-api architecture: every module imports only what its role may (go-arch-lint, whole tree)" $m go-arch-lint check
       check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports, whole tree)" $m go run ./scripts/lintdoors --exports .
       mapfile -t pkgs < <(go_pkgs $m)
-      [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+      if [ $whole_module = 1 ]; then test_pkgs=(./...); else test_pkgs=("${affected[@]}"); fi
+      [ ${#pkgs[@]} -gt 0 ] && [ ${#test_pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages and their importers)" $m "${heavy[@]}" "${db_env[@]}" go test -race -shuffle=on -count=1 "${test_pkgs[@]}"
       if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
         echo "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it"
       elif [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation"; then
@@ -539,6 +551,7 @@ if touches '^client/'; then
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint/rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
     touches '^client/eslint' && test_check "mobile eslint config tests" $m "${heavy[@]}" node --test eslint.config.test.js
     touches '^client/jest\.config' && test_check "mobile jest config tests" $m "${heavy[@]}" node --test jest.config.test.js
+    jest_check "mobile doctor config test (reads the whole client tree)" $m npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" __tests__/doctor.config.test.ts
     [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" --findRelatedTests $src
     test_check "mobile fallow" $m npm run --silent fallow
     test_check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" node scripts/fallow-changed.mjs "$base"

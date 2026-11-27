@@ -33,7 +33,9 @@ func ObserveRequests(now clock.Func, observers ...Observer) func(http.Handler) h
 			start := now()
 			sw := newStatusWriter(w)
 			ctx, scope := withRequestScope(r.Context())
-			r = r.WithContext(ctx)
+			r = r.WithContext(logging.ContextWithRequestFields(ctx, func() logging.RequestFields {
+				return logging.RequestFields{UserID: scope.user(), Route: matchedRoute(r)}
+			}))
 			finishers := make([]func(Outcome), 0, len(observers))
 			for _, observe := range observers {
 				var finish func(Outcome)
@@ -73,11 +75,8 @@ func LogRequest(r *http.Request) (*http.Request, func(Outcome)) {
 			logging.KeyPath, o.Path,
 			logging.KeyRoute, o.Route,
 			logging.KeyStatus, o.Status,
-			logging.KeyDuration, o.Duration,
+			logging.KeyDurationMS, o.Duration.Milliseconds(),
 			logging.KeyBytes, o.Bytes,
-		}
-		if o.UserID != "" {
-			attrs = append(attrs, logging.KeyUserID, o.UserID)
 		}
 		slog.InfoContext(r.Context(), "request.complete", attrs...)
 	}

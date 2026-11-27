@@ -52,7 +52,8 @@ linters:
         - pkg: net/http
           alias: http
     exhaustive:
-      default-signifies-exhaustive: true
+      default-signifies-exhaustive: false
+      ignore-enum-types: '^github\.com/tdewolff/parse/v2/(css|js)\.TokenType$'
     rowserrcheck:
       packages:
         - github.com/jackc/pgx/v5
@@ -161,6 +162,7 @@ linters:
         - name: indent-error-flow
         - name: superfluous-else
         - name: deep-exit
+        - name: flag-parameter
     gocritic:
       enabled-tags:
         - diagnostic
@@ -186,8 +188,11 @@ linters:
           - errcheck
           - gocritic
           - revive
-          - forbidigo
           - noctx
+      - path: _test\.go
+        linters:
+          - forbidigo
+        text: 'use of `(http\.|os\.|exec\.|slog\.(Debug|Info|Warn|Error)|recover|sync\.WaitGroup|context\.|time\.)'
       - path: internal/shared/httpserver/
         linters:
           - forbidigo

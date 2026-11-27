@@ -4,7 +4,9 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,7 +94,7 @@ func TestSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
 
 func TestSearch_MixedOutputKeepsGoodEntriesAndLogsSkipped(t *testing.T) {
 	installSearch(t, `printf '%s\ngarbage\n%s\n' '{"title":"Good","webpage_url":"https://youtube.com/watch?v=aaaaaaaaaaa","duration":12}' '{"title":"No URL"}'`)
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
 	got, err := searchOneQuery(t)
 	if err != nil {
@@ -157,7 +159,7 @@ func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testi
 }
 
 func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testing.T) {
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	s := download.MustNewYtDlpAudioSearcher("", secretCookiePath, "", time.Now, clock.Sleep)
 
 	if _, err := s.SearchQueries(context.Background(), []string{"q"}); err == nil {
@@ -561,7 +563,7 @@ func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
 
 func TestYtDlpAudioSearcher_InspectFailureLogCapsStderr(t *testing.T) {
 	installYtDlp(t, leakyStderr)
-	logs := captureLogs(t)
+	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	candidates := []download.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}}
 
 	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(context.Background(), candidates)

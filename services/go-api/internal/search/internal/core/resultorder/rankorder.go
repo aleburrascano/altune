@@ -42,10 +42,10 @@ func compare(a, b Key) int {
 }
 
 func preferTrue(a, b bool) int {
-	if a == b {
+	switch {
+	case a == b:
 		return 0
-	}
-	if a {
+	case a:
 		return -1
 	}
 	return 1

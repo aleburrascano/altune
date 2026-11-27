@@ -11,6 +11,7 @@ type (
 
 var (
 	NewYtmSearch       = ytmsearch.New
+	NewYtmSearchFor    = ytmsearch.ForClient
 	NewYtmSearchSource = ytmsearch.NewSource
 	ParseYtmSongs      = ytmsearch.ParseSongs
 )

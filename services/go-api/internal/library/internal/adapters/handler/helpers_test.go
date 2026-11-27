@@ -110,11 +110,6 @@ func requestAs(t *testing.T, router http.Handler, user ids.UserId, method, path 
 	return sendAs(router, req, user)
 }
 
-func requestAnonymous(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
-	t.Helper()
-	return sendAnonymous(router, httptest.NewRequest(method, path, body))
-}
-
 func newWriteRig(now func() time.Time) *writeRig {
 	tracks := library.NewInMemoryTrackRepo()
 	playlists := library.NewInMemoryPlaylistRepo()

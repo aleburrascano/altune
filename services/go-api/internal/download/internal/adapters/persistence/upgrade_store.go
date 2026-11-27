@@ -230,7 +230,7 @@ SET rejected_source_keys = $2,
 	evidence = CASE WHEN $3::boolean THEN '{}'::jsonb ELSE evidence END
 WHERE track_id = $1`
 
-func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, rejectedSourceKeys []string, resetEvidence bool) error {
+func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, rejectedSourceKeys []string, evidence ports.EvidenceFate) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
@@ -249,7 +249,7 @@ func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID id
 			return fmt.Errorf("lock upgrade state: %w", err)
 		}
 		merged := ports.AppendRejectedSourceKeys(existing, rejectedSourceKeys)
-		if _, err := tx.Exec(ctx, settleUpgradeStateSQL, trackID.UUID(), merged, resetEvidence); err != nil {
+		if _, err := tx.Exec(ctx, settleUpgradeStateSQL, trackID.UUID(), merged, evidence == ports.ResetEvidence); err != nil {
 			return fmt.Errorf("settle upgrade state: %w", err)
 		}
 		return nil
