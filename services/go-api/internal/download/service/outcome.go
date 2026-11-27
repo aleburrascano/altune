@@ -66,7 +66,6 @@ func (o outcomeReporter) settle(ctx, jobCtx context.Context, userId ids.UserId, 
 func (o outcomeReporter) reportReplaceFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		logging.KeyTrackID, trackId.String(),
-		logging.KeyUserID, userId.String(),
 		"replace", true,
 		logging.KeyError, redact.LogError(err),
 	)
@@ -83,7 +82,6 @@ func (o outcomeReporter) reportReplaceFailure(ctx context.Context, userId ids.Us
 func (o outcomeReporter) reportSchedulerCancelledWithoutMarkingFailed(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_cancelled",
 		logging.KeyTrackID, trackId.String(),
-		logging.KeyUserID, userId.String(),
 		logging.KeyError, redact.LogError(err),
 	)
 	return err
@@ -92,7 +90,6 @@ func (o outcomeReporter) reportSchedulerCancelledWithoutMarkingFailed(ctx contex
 func (o outcomeReporter) reportRetryableFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_retryable",
 		logging.KeyTrackID, trackId.String(),
-		logging.KeyUserID, userId.String(),
 		logging.KeyError, redact.LogError(err),
 	)
 	return fmt.Errorf("%w: %w", ErrAcquisitionRetryable, err)
@@ -101,7 +98,6 @@ func (o outcomeReporter) reportRetryableFailure(ctx context.Context, userId ids.
 func (o outcomeReporter) reportAcquireFailure(ctx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		logging.KeyTrackID, trackId.String(),
-		logging.KeyUserID, userId.String(),
 		"replace", false,
 		logging.KeyError, redact.LogError(err),
 	)
@@ -131,7 +127,6 @@ func rejectionAwareReason(ctx context.Context, trackId ids.TrackId, err error, a
 func (o outcomeReporter) completed(ctx context.Context, userId ids.UserId, trackId ids.TrackId, audioRef string) {
 	slog.InfoContext(ctx, "track_acquisition_completed",
 		logging.KeyTrackID, trackId.String(),
-		logging.KeyUserID, userId.String(),
 		"audio_ref", audioRef,
 	)
 	o.events.Publish(ctx, userId, events.TrackAcquisitionCompleted{
