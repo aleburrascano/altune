@@ -6,6 +6,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 type answeringSongs []download.YouTubeMusicSong
@@ -345,4 +347,40 @@ func TestSourceKey_CollapsesAnUppercaseMobileSoundCloudHost(t *testing.T) {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
+}
+
+func TestSourceKey_EveryYouTubeFormOfAVideoGivesOneKey(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		id := rapid.StringMatching(`[A-Za-z0-9_-]{11}`).Draw(t, "id")
+		want := "youtube:" + id
+		for _, form := range []string{
+			"https://www.youtube.com/watch?v=" + id,
+			"https://youtu.be/" + id,
+			"https://m.youtube.com/embed/" + id,
+			"https://music.youtube.com/watch?v=" + id + "&list=PL1",
+			"  https://youtube.com/shorts/" + id + "  ",
+		} {
+			if got := sourcekey.SourceKey(form); got != want {
+				t.Fatalf("SourceKey(%q) = %q, want %q", form, got, want)
+			}
+		}
+	})
+}
+
+func TestSourceKey_IgnoresPaddingTrailingSlashAndHostCase(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		host := rapid.StringMatching(`[a-z]{3,10}\.(com|net|org)`).Filter(func(h string) bool {
+			return !strings.Contains(h, "youtu")
+		}).Draw(t, "host")
+		path := rapid.StringMatching(`(/[a-z0-9]{1,8}){0,3}`).Draw(t, "path")
+		base := "https://" + host + path
+
+		want := sourcekey.SourceKey(base)
+
+		for _, variant := range []string{" " + base + " ", "https://" + strings.ToUpper(host) + path + "/", "HTTPS://" + host + path} {
+			if got := sourcekey.SourceKey(variant); got != want {
+				t.Fatalf("SourceKey(%q) = %q, want %q (the key of %q)", variant, got, want, base)
+			}
+		}
+	})
 }

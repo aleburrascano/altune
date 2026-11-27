@@ -206,31 +206,40 @@ func TestDeezerPreviews_GivesUpAfterFiveAttemptsWhenQuotaNeverLifts(t *testing.T
 	})
 }
 
-func TestDeezerPreviews_AnHTTP429BacksOffLikeAQuotaError(t *testing.T) {
+func TestDeezerPreviews_AnHTTP429EndsTheCallAtOnceAndHoldsTheNextCallerToTheCooldown(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stub := &throttlingOnce{deezerStub: deezerStub{trackBody: func(int) string { return noPreview }}}
 		previews := download.MustNewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{}, clock.Sleep, time.Now)
 		started := time.Now()
 
-		clip, err := previews.Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
+		_, err := previews.Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
 
+		if !errors.Is(err, previewcheck.ErrDeezerThrottled) {
+			t.Fatalf("err = %v, want ErrDeezerThrottled: the egress transport has already retried the 429, so this layer must not loop on it again", err)
+		}
+		if stub.throttledCalls != 1 {
+			t.Errorf("upstream saw %d throttled requests from this layer, want 1", stub.throttledCalls)
+		}
+		clip, err := previews.Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
 		if err != nil || clip.Unavailable == "" {
-			t.Fatalf("clip = %+v, err = %v, want the answer after one 429", clip, err)
+			t.Fatalf("next caller: clip = %+v, err = %v, want the answer once the cooldown is over", clip, err)
 		}
 		if times := stub.times(); len(times) != 1 || times[0].Sub(started) != 10*time.Second {
-			t.Errorf("track requests after the 429 = %v, want one at +10s", times)
+			t.Errorf("track requests after the 429 = %v, want one at +10s: the 429 must set the shared cooldown", times)
 		}
 	})
 }
 
 type throttlingOnce struct {
 	deezerStub
-	throttled bool
+	throttled      bool
+	throttledCalls int
 }
 
 func (s *throttlingOnce) RoundTrip(r *http.Request) (*http.Response, error) {
 	if !s.throttled {
 		s.throttled = true
+		s.throttledCalls++
 		return &http.Response{StatusCode: http.StatusTooManyRequests, Body: http.NoBody, Request: r}, nil
 	}
 	return s.deezerStub.RoundTrip(r)

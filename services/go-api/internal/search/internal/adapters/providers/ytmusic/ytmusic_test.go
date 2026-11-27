@@ -309,6 +309,40 @@ func TestYouTubeMusicAdapter_Search_retriesOn403HTML(t *testing.T) {
 	}
 }
 
+func TestYouTubeMusicAdapter_Search_AnAuthChallengeIsRetriedOnceAndNoMore(t *testing.T) {
+	cases := map[string]struct {
+		statuses  []int
+		wantCalls int32
+	}{
+		"a persistent challenge":     {[]int{http.StatusForbidden}, 2},
+		"a challenge then a 5xx":     {[]int{http.StatusForbidden, http.StatusServiceUnavailable}, 2},
+		"a 401 challenge then a 403": {[]int{http.StatusUnauthorized, http.StatusForbidden}, 2},
+		"a challenge then a 404":     {[]int{http.StatusForbidden, http.StatusNotFound}, 2},
+		"a 5xx with no challenge":    {[]int{http.StatusServiceUnavailable}, 1},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var hits atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				n := int(hits.Add(1))
+				w.WriteHeader(tc.statuses[min(n, len(tc.statuses))-1])
+			}))
+			defer srv.Close()
+			noWait := func(context.Context, time.Duration) error { return nil }
+
+			adapter := ytmusic.MustNewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL}, noWait, randomtest.Fixed(0))
+			_, err := adapter.Search(context.Background(), "q", providertest.TrackKinds())
+
+			if err == nil {
+				t.Fatal("Search succeeded against an upstream that never answered 200")
+			}
+			if hits.Load() != tc.wantCalls {
+				t.Errorf("requests = %d, want %d: the adapter makes at most 2 calls, and the egress layer, which retries only 429 and 5xx up to 3 attempts, multiplies each (worst case 2 x 3 = 6)", hits.Load(), tc.wantCalls)
+			}
+		})
+	}
+}
+
 func TestYouTubeMusicAdapter_Search_pausesForTheJitteredBackoffThroughTheGivenSleeper(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

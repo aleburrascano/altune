@@ -22,6 +22,8 @@ A handler never picks a status. The boundary reads `err`'s chain and takes the f
 | Any status below 500 | `request.rejected` | Info |
 | A client that left | `request.cancelled` | Info |
 
+`request.rejected` stays at Info, not Debug: `request.complete` carries no problem code or cause, so this line is the only record of the problem code and the cause of a rejected request, and Debug would hide it in production (ruling 2026-11-27).
+
 A handler adds context by wrapping the error (`fmt.Errorf("...: %w", err)`), not by logging it. Separately, `RequestLogger` logs `request.complete` at Info for every request, including failed ones.
 
 Write every error through `HandleServiceError`; the strict lint (`forbidigo`) bans `http.Error`.

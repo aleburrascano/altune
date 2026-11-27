@@ -333,6 +333,7 @@ func TestCheckInPlace_APreviewThatDoesNotMatchOrCannotBeFetchedLeavesTheFileUnan
 		"the preview is another song": {comparison: ports.PreviewComparison{BitErrorRate: 0.5}},
 		"deezer has no preview":       {comparison: ports.PreviewComparison{Unavailable: "deezer has no preview for this track"}},
 		"deezer is down":              {err: errors.New("deezer unreachable")},
+		"deezer is throttling":        {err: fmt.Errorf("fetch the preview: %w", errors.New("deezer is still throttling after retries"))},
 		"an unavailable preview whatever it reports": {comparison: ports.PreviewComparison{
 			Unavailable: "deezer has no preview for this track", Matched: true, BitErrorRate: 0.02, OverlapSeconds: 29,
 		}},

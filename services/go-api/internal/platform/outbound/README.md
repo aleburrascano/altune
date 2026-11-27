@@ -2,6 +2,12 @@
 
 `NewLiveTransport` retries only requests that are safe to send twice: GET, HEAD, OPTIONS, TRACE, PUT and DELETE. A POST is sent once unless its context went through `shared/retrysafe.Mark`, which a caller applies only to a POST that reads, such as a search or lookup.
 
+Three layers retry, and each handles a different class of failure, so none repeats another (ruling 2026-11-27):
+
+- The egress transport (`NewLiveTransport`) retries a transport error, a 429 and any 5xx, up to 3 attempts per request, with jitter. It never retries a 401 or 403.
+- The YouTube Music adapter retries once, after a jittered pause, when the reply is an auth challenge (401 or 403), which the egress transport leaves alone. A search that meets a challenge and then 5xx makes at most 2 x 3 = 6 upstream requests.
+- The Deezer preview client waits out a shared cooldown and makes up to 5 attempts when Deezer answers with its quota code in a 200 body, which the egress transport cannot see. A 429 is the egress transport's class, so the client does not retry it: a 429 that survives the 3 egress attempts ends the call with `ErrDeezerThrottled` and still sets the shared cooldown, so other callers back off.
+
 `NewClient(timeout, transport)` is the one way to build an HTTP client: it refuses a timeout that is not positive, and a nil transport means the net/http default, as it does for `http.Client`. `MustNewClient` is the same for a timeout that is a constant or validated config, and panics on a bad one. `NewTransport(opts)` builds a bare `http.Transport` from `TransportOptions`, with no proxy, no HTTP/2 upgrade and no per-host cap, for an adapter that needs its own pool settings. `DefaultTransport()` is the process-wide default transport. `NewLiveTransport` is the one that refuses non-public addresses and paces and retries.
 
 `NewClient` and `MustNewClient` take options after the transport. `WithBodyCap(n)` makes every response body fail with `ErrBodyTooLarge` once it holds more than `n` bytes, counted after decompression, and refuses a response that announces a longer `Content-Length` before reading it. Use it where a body past the cap is an error, not something to truncate. `NewGuardedTransport()` is the default transport with the non-public dial refusal and no retry or pacing, for a caller that paces itself, such as the InnerTube budget in `shared/youtubemusicapi`.

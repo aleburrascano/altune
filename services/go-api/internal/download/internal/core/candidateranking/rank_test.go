@@ -5,8 +5,13 @@ import (
 	"altune/go-api/internal/download/internal/core/candidateranking"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/titlemarkers"
+	"fmt"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 func TestRank_PicksTheBestCandidate(t *testing.T) {
@@ -1258,4 +1263,65 @@ func TestRank_RefusingTheRerecordingStillRanksTheOriginalBesideIt(t *testing.T) 
 	if len(rejected) != 1 || rejected[0].Reason != "unrequested re-recorded" {
 		t.Fatalf("rejected=%+v, want the Classic Version refused as re-recorded", rejected)
 	}
+}
+
+func TestRank_EveryCandidateIsRankedOrRefusedExactlyOnceWhateverTheOrder(t *testing.T) {
+	titles := []string{"Song", "Song (Live)", "Song (Remix)", "Song [Instrumental]", "Other Thing", "Artist - Song"}
+	channels := []string{"Artist - Topic", "ArtistVEVO", "Someone Else", ""}
+	rapid.Check(t, func(t *rapid.T) {
+		count := rapid.IntRange(0, 12).Draw(t, "count")
+		candidates := make([]download.AudioCandidate, count)
+		for i := range candidates {
+			candidates[i] = download.AudioCandidate{
+				Title:      rapid.SampledFrom(titles).Draw(t, "title"),
+				Channel:    rapid.SampledFrom(channels).Draw(t, "channel"),
+				Duration:   rapid.Float64Range(60, 400).Draw(t, "duration"),
+				ViewCount:  rapid.Int64Range(0, 1_000_000).Draw(t, "views"),
+				URL:        fmt.Sprintf("https://example.com/watch?v=%d", i),
+				Unplayable: rapid.SampledFrom([]string{"", "", "", ports.UnplayablePreview}).Draw(t, "unplayable"),
+			}
+		}
+		track := candidateranking.Track{Title: "Song", Artist: "Artist", ExpectedLength: 200}
+		shuffled := rapid.Permutation(candidates).Draw(t, "shuffled")
+
+		ranked, refused, _ := candidateranking.Rank(track, candidates)
+		rankedAgain, refusedAgain, _ := candidateranking.Rank(track, shuffled)
+
+		if len(ranked)+len(refused) != len(candidates) {
+			t.Fatalf("%d ranked + %d refused, want %d candidates accounted for", len(ranked), len(refused), len(candidates))
+		}
+		if got, want := urlSet(ranked), urlSet(rankedAgain); !reflect.DeepEqual(got, want) {
+			t.Fatalf("ranked set changed with the input order: %v then %v", got, want)
+		}
+		if got, want := refusalSet(refused), refusalSet(refusedAgain); !reflect.DeepEqual(got, want) {
+			t.Fatalf("refused set changed with the input order: %v then %v", got, want)
+		}
+		seen := map[string]bool{}
+		for _, c := range ranked {
+			seen[c.URL] = true
+		}
+		for _, r := range refused {
+			if seen[r.Candidate.URL] {
+				t.Fatalf("%s is both ranked and refused", r.Candidate.URL)
+			}
+		}
+	})
+}
+
+func urlSet(candidates []download.AudioCandidate) []string {
+	out := make([]string, len(candidates))
+	for i, c := range candidates {
+		out[i] = c.URL
+	}
+	slices.Sort(out)
+	return out
+}
+
+func refusalSet(refused []candidateranking.Refusal) []string {
+	out := make([]string, len(refused))
+	for i, r := range refused {
+		out[i] = r.Candidate.URL + "|" + string(r.Stage)
+	}
+	slices.Sort(out)
+	return out
 }
