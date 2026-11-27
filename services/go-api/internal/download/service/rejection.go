@@ -30,7 +30,7 @@ func (ac *AcquisitionContext) rejectionBasis() ports.RejectionBasis {
 	return ports.RejectionBasis{ExpectedSeconds: ac.ExpectedLength(), ReferenceMBID: ac.Identity.MBID}
 }
 
-func (s *AcquireTrackAudioService) recordRejections(ctx context.Context, ac *AcquisitionContext) {
+func (s *pipeline) recordRejections(ctx context.Context, ac *AcquisitionContext) {
 	recs := rejectedcandidates.Lasting(ac.Rejections, ac.Track.ID, ac.rejectionBasis())
 	if len(recs) == 0 {
 		return
@@ -43,7 +43,7 @@ func (s *AcquireTrackAudioService) recordRejections(ctx context.Context, ac *Acq
 	}
 }
 
-func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, trackId ids.TrackId, ac *AcquisitionContext) {
+func (s *pipeline) loadPriorRejections(ctx context.Context, trackId ids.TrackId, ac *AcquisitionContext) {
 	prior, err := s.rejections.Active(ctx, trackId, s.now().Add(-priorRejectionWindow))
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.rejection_load_failed",

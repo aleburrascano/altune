@@ -169,7 +169,7 @@ func (s storing) execute(opts ...func(*service.AcquireTrackAudioService)) error 
 
 func (s storing) executeStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) error {
 	s.t.Helper()
-	svc := service.MustNewAcquireTrackAudioService(s.ledger, sourceFor(s.track), s.store, scratchfiles.New(), noVerification(), stages, opts...)
+	svc := mustAcquisitionServices(s.ledger, sourceFor(s.track), s.store, scratchfiles.New(), noVerification(), stages, opts...)
 	return svc.Execute(context.Background(), ports.AcquisitionJob{UserID: s.track.UserId, TrackID: s.track.ID})
 }
 
@@ -240,7 +240,7 @@ func TestStore_AReplaceStagesItsOwnPrefixedRef(t *testing.T) {
 	served := seedReadyTrack(t)
 	ledger, store := served.ledger, newRecordingStore(served.originalRef)
 
-	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := mustAcquisitionServices(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages(), service.WithAcquireStoreKeyPrefix("staging/"))
 	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
@@ -288,7 +288,7 @@ func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store := cancellingStore{objectStore: &objectStore{objects: map[string]string{}}, cancel: cancel}
-	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
+	svc := mustAcquisitionServices(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
@@ -483,7 +483,7 @@ func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(
 	}}, served.originalRef)
 	served.ledger.Seed(twin)
 	store := newRecordingStore(served.originalRef)
-	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := mustAcquisitionServices(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
@@ -517,7 +517,7 @@ func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *tes
 	served := seedReadyTrack(t)
 	store := newRecordingStore(served.originalRef)
 	served.ledger.FailWrites(errors.New("database unavailable"))
-	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := mustAcquisitionServices(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err == nil {
@@ -685,7 +685,7 @@ func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T
 	defer cancel()
 	ledger := cancellingCompleteLedger{Ledger: inmemoryledger.NewLedger(track), cancel: cancel}
 	store := newRecordingStore()
-	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
+	svc := mustAcquisitionServices(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {

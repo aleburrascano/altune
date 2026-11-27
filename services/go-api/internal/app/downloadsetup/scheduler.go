@@ -76,7 +76,13 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 		},
 		opts...,
 	)
-	return download.MustNewBackgroundAcquisitionScheduler(ctx, acquireSvc, d.Config.AcquisitionConcurrency, clock.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
+	replaceSvc := download.NewReplaceService(acquireSvc)
+	return download.MustNewBackgroundAcquisitionScheduler(ctx, acquisitionWorker{acquireSvc, replaceSvc}, d.Config.AcquisitionConcurrency, clock.Now, schedulerPorts(d, acquireSvc, replaceSvc, skips, lookups), schedulerOptions(d)...)
+}
+
+type acquisitionWorker struct {
+	*download.AcquireTrackAudioService
+	*download.ReplaceService
 }
 
 func storeOptions(d Deps) []acquireOption {
@@ -108,7 +114,7 @@ func pipelineOptions(d Deps) []acquireOption {
 	}
 }
 
-func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips *download.VerifySkipCounter, lookups *fingerprintstatus.HealthTracker) download.SchedulerPorts {
+func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, replaceSvc *download.ReplaceService, skips *download.VerifySkipCounter, lookups *fingerprintstatus.HealthTracker) download.SchedulerPorts {
 	wiring := download.SchedulerPorts{
 		Queue:               download.InMemoryQueue(),
 		Upgrades:            download.NoUpgradeLane(),
@@ -124,7 +130,7 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 	}
 	if d.Pool != nil {
 		wiring.Queue = download.QueueOf(download.MustNewPostgresJobQueue(d.Pool, d.Ledger))
-		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.DBMetrics, d.Ledger, acquireSvc)
+		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.DBMetrics, d.Ledger, acquireSvc, replaceSvc)
 		wiring.Notifier = download.MustNewPostgresJobNotifier(d.Pool, clock.Sleep)
 		wiring.Outcomes = download.NewPostgresOutcomeStore(d.Pool)
 	}

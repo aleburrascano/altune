@@ -108,7 +108,7 @@ func seedReadyTrack(t *testing.T) servedTrack {
 	return servedTrack{ledger: ledger, store: store, userID: userID, trackID: trackID, originalRef: originalRef}
 }
 
-func (r servedTrack) service(opts ...func(*service.AcquireTrackAudioService)) *service.AcquireTrackAudioService {
+func (r servedTrack) service(opts ...func(*service.AcquireTrackAudioService)) *acquisitionServices {
 	return r.serviceStaged(noStages(deletingFrom(r.store)), opts...)
 }
 
@@ -120,8 +120,8 @@ func deletingFrom(store audioDeleter) stageMod {
 	return func(s *service.StagePorts) { s.Orphans = service.MustDirectDeleteOrphans(store) }
 }
 
-func (r servedTrack) serviceStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) *service.AcquireTrackAudioService {
-	return service.MustNewAcquireTrackAudioService(r.ledger, service.NewSourceRegistry(freshAudioSource{}), r.store, scratchfiles.New(), noVerification(), stages, opts...)
+func (r servedTrack) serviceStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) *acquisitionServices {
+	return mustAcquisitionServices(r.ledger, service.NewSourceRegistry(freshAudioSource{}), r.store, scratchfiles.New(), noVerification(), stages, opts...)
 }
 
 type stageMod func(*service.StagePorts)

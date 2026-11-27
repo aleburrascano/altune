@@ -60,7 +60,7 @@ func scheduleAndFinishStaged(t *testing.T, source ports.AudioSource, wiring serv
 		length := blindingLightsLength
 		track.CatalogDurationSeconds = &length
 		ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
-		svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
+		svc := mustAcquisitionServices(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
 		progress := &progressStages{}
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestSchedulerEvents(progress))
 		defer scheduler.Shutdown(context.Background())

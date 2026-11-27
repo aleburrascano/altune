@@ -2041,7 +2041,7 @@ func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *te
 }
 
 type replaceFixture struct {
-	svc    *service.AcquireTrackAudioService
+	svc    *acquisitionServices
 	ledger *inmemoryledger.Ledger
 	track  ledgerTrack
 	store  *fakeAudioStore
@@ -2498,7 +2498,7 @@ func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []ports.Catalo
 	return itsOnlyLoveTrack{book: ledger, store: store, ledger: &completionRecordingLedger{LibraryTracks: ledger}, userId: userId, trackId: track.ID, ref: ref}
 }
 
-func (f itsOnlyLoveTrack) service(sources *itsOnlyLoveSources, finder ports.RerecordingFinder, extra ...any) *service.AcquireTrackAudioService {
+func (f itsOnlyLoveTrack) service(sources *itsOnlyLoveSources, finder ports.RerecordingFinder, extra ...any) *acquisitionServices {
 	return newTestAcquireService(f.ledger, service.NewSourceRegistry(sources), f.store,
 		append([]any{
 			withServiceResolver(pinnedRecordingResolver{}),
@@ -2519,10 +2519,10 @@ func TestRerecording_NoConfidentOriginalTakesTheOfficialRerecordingLabelledAsIt(
 	cases := []struct {
 		name          string
 		storedSeconds float64
-		run           func(*service.AcquireTrackAudioService, context.Context, ports.AcquisitionJob) error
+		run           func(*acquisitionServices, context.Context, ports.AcquisitionJob) error
 	}{
-		{"replace of the 292 s live file", 292, (*service.AcquireTrackAudioService).ExecuteReplace},
-		{"acquire", 0, (*service.AcquireTrackAudioService).Execute},
+		{"replace of the 292 s live file", 292, (*acquisitionServices).ExecuteReplace},
+		{"acquire", 0, (*acquisitionServices).Execute},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3034,7 +3034,7 @@ func newTestAcquireService(
 	sources *service.SourceRegistry,
 	audioStore ports.AudioWriter,
 	opts ...any,
-) *service.AcquireTrackAudioService {
+) *acquisitionServices {
 	return newTestAcquireServiceIn(osWorkspace{}, ledger, sources, audioStore, opts...)
 }
 
@@ -3044,7 +3044,7 @@ func newTestAcquireServiceIn(
 	sources *service.SourceRegistry,
 	audioStore ports.AudioWriter,
 	opts ...any,
-) *service.AcquireTrackAudioService {
+) *acquisitionServices {
 	stages := noopStages()
 	stages.Orphans = service.MustDirectDeleteOrphans(audioStore)
 	wiring := noopVerification()
@@ -3059,7 +3059,30 @@ func newTestAcquireServiceIn(
 			panic(fmt.Sprintf("newTestAcquireService: unsupported option %T", opt))
 		}
 	}
-	return service.MustNewAcquireTrackAudioService(ledger, sources, audioStore, workspace, wiring, stages, public...)
+	acquire := service.MustNewAcquireTrackAudioService(ledger, sources, audioStore, workspace, wiring, stages, public...)
+	return &acquisitionServices{AcquireTrackAudioService: acquire, ReplaceService: service.NewReplaceService(acquire)}
+}
+
+func mustAcquisitionServices(
+	ledger ports.LibraryTracks,
+	sources *service.SourceRegistry,
+	audioStore ports.AudioWriter,
+	workspace ports.ScratchFolder,
+	wiring service.VerificationPorts,
+	stages service.StagePorts,
+	opts ...func(*service.AcquireTrackAudioService),
+) *acquisitionServices {
+	acquire := service.MustNewAcquireTrackAudioService(ledger, sources, audioStore, workspace, wiring, stages, opts...)
+	return &acquisitionServices{AcquireTrackAudioService: acquire, ReplaceService: service.NewReplaceService(acquire)}
+}
+
+type acquisitionServices struct {
+	*service.AcquireTrackAudioService
+	*service.ReplaceService
+}
+
+func (s *acquisitionServices) CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
+	return s.AcquireTrackAudioService.CheckInPlace(ctx, track)
 }
 
 type discardingDeleter struct{}

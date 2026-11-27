@@ -9,6 +9,7 @@ type (
 	AcquisitionJob                 = ports.AcquisitionJob
 	AcquireTrackAudioService       = service.AcquireTrackAudioService
 	BackgroundAcquisitionScheduler = service.BackgroundAcquisitionScheduler
+	ReplaceService                 = service.ReplaceService
 	StagePorts                     = service.StagePorts
 	VerificationPorts              = service.VerificationPorts
 	VerifySkipCounter              = service.VerifySkipCounter
@@ -17,6 +18,7 @@ type (
 var (
 	NewReacquireAdmission                 = service.NewReacquireAdmission
 	NewRetryAdmission                     = service.NewRetryAdmission
+	NewReplaceService                     = service.NewReplaceService
 	NewSourceRegistry                     = service.NewSourceRegistry
 	MustDirectDeleteOrphans               = service.MustDirectDeleteOrphans
 	MustNewAcquireTrackAudioService       = service.MustNewAcquireTrackAudioService
