@@ -3,9 +3,9 @@ package favorites_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
-	favoritespkg "altune/go-api/internal/search/internal/core/favorites"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	favoritespkg "altune/go-api/internal/search/internal/service/favorites"
 	"altune/go-api/internal/search/searchtest"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/clock"

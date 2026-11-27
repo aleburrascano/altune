@@ -2,7 +2,7 @@ package deleteduserdata
 
 import (
 	"altune/go-api/internal/playback/internal/core/ports"
-	"altune/go-api/internal/playback/internal/core/queue"
+	"altune/go-api/internal/playback/internal/service/queue"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"

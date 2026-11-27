@@ -190,9 +190,16 @@ func (s *YouTubeAudioSearcher) runSearchPairs(ctx context.Context, queries []str
 	return outcomes
 }
 
+func logDroppedCandidates(ctx context.Context, candidates []ports.AudioCandidate) {
+	for _, c := range candidates {
+		if !c.HasSourceKey() {
+			slog.WarnContext(ctx, "acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
+		}
+	}
+}
+
 func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query string, outcomes []pairOutcome) ([]ports.AudioCandidate, error) {
 	return ports.CollectCandidates(
-		ctx,
 		len(outcomes),
 		func(ei int) ([]ports.AudioCandidate, error) {
 			return outcomes[ei].candidates, outcomes[ei].err
@@ -200,6 +207,7 @@ func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query str
 		func(ei int, candidates []ports.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.engine_search_results",
 				"spec", searchEngines[ei]+query, "candidates", len(candidates))
+			logDroppedCandidates(ctx, candidates)
 		},
 		func(ei int, err error) {
 			slog.WarnContext(ctx, "acquisition.engine_search_failed",
@@ -215,7 +223,6 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 	outcomes := s.runSearchPairs(ctx, queries)
 
 	return ports.CollectCandidates(
-		ctx,
 		len(queries),
 		func(qi int) ([]ports.AudioCandidate, error) {
 			return s.foldEngineOutcomes(ctx, queries[qi], outcomes[qi])

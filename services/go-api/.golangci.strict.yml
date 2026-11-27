@@ -94,6 +94,14 @@ linters:
               desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
             - pkg: github.com/redis
               desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+        core-logging:
+          list-mode: lax
+          files:
+            - "**/internal/**/core/**"
+            - "!$test"
+          deny:
+            - pkg: log/slog
+              desc: core returns data and its caller in service or an adapter logs it, so move the log line out of core
         driver:
           list-mode: lax
           files:

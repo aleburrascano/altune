@@ -1,6 +1,6 @@
 package library
 
-import featured "altune/go-api/internal/library/internal/core/featured"
+import featured "altune/go-api/internal/library/internal/service/featured"
 
 type (
 	FillFeaturedArtistsService = featured.FillFeaturedArtistsService

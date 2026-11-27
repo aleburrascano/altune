@@ -1,7 +1,7 @@
 package details_test
 
 import (
-	"altune/go-api/internal/search/internal/core/details"
+	"altune/go-api/internal/search/internal/service/details"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/logging"
 	"context"

@@ -1,9 +1,9 @@
 package searchtest
 
 import (
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/service/artwork"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/query"
 	"altune/go-api/internal/search/internal/service/vocabulary"

@@ -1,9 +1,9 @@
 package handler
 
 import (
-	audioservice "altune/go-api/internal/library/internal/core/audio"
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	audioservice "altune/go-api/internal/library/internal/service/audio"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"

@@ -3,9 +3,9 @@ package qualitycheck
 import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
-	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/musicbrainzmatch"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"

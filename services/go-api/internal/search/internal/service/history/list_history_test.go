@@ -2,8 +2,8 @@ package history_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/history"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"context"

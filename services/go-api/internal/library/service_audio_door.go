@@ -1,6 +1,6 @@
 package library
 
-import audio "altune/go-api/internal/library/internal/core/audio"
+import audio "altune/go-api/internal/library/internal/service/audio"
 
 type (
 	AudioLinkService   = audio.AudioLinkService

@@ -1,6 +1,6 @@
 package library
 
-import playlist "altune/go-api/internal/library/internal/core/playlist"
+import playlist "altune/go-api/internal/library/internal/service/playlist"
 
 type (
 	PlaylistLifecycleService  = playlist.PlaylistLifecycleService
