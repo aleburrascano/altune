@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"testing"
@@ -14,10 +13,15 @@ import (
 
 const acquireTakes = 2 * time.Second
 
-type slowAcquirer struct{}
+type slowAcquirer struct{ finish chan struct{} }
 
-func (slowAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
-	return clock.Sleep(ctx, acquireTakes)
+func (a slowAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
+	select {
+	case <-a.finish:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (slowAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
@@ -52,14 +56,17 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 
 func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		scheduler := newTestScheduler(slowAcquirer{}, 1, time.Now)
+		acquirer := slowAcquirer{finish: make(chan struct{})}
+		scheduler := newTestScheduler(acquirer, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		track := ids.NewTrackId()
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), track, ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
 		}
+		synctest.Wait()
 
 		time.Sleep(acquireTakes)
+		close(acquirer.finish)
 		synctest.Wait()
 
 		status := scheduler.Status(t.Context())

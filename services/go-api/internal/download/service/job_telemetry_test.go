@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -49,13 +49,18 @@ func scheduleAndFinish(t *testing.T, source ports.AudioSource, opts ...func(*ser
 
 func scheduleAndFinishWith(t *testing.T, source ports.AudioSource, wiring service.VerificationPorts, opts ...func(*service.AcquireTrackAudioService)) finishedJob {
 	t.Helper()
+	return scheduleAndFinishStaged(t, source, wiring, noStages(), opts...)
+}
+
+func scheduleAndFinishStaged(t *testing.T, source ports.AudioSource, wiring service.VerificationPorts, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) finishedJob {
+	t.Helper()
 	var job finishedJob
 	synctest.Test(t, func(t *testing.T) {
 		track := pendingBlindingLights()
 		length := blindingLightsLength
 		track.CatalogDurationSeconds = &length
 		ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
-		svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, noStages(), opts...)
+		svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
 		progress := &progressStages{}
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestSchedulerEvents(progress))
 		defer scheduler.Shutdown(context.Background())
@@ -81,12 +86,11 @@ func scheduleAndFinishWith(t *testing.T, source ports.AudioSource, wiring servic
 type timedSource struct {
 	perURLSource
 	takes map[string]time.Duration
+	clock *clocktest.Manual
 }
 
 func (s timedSource) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
-	if err := clock.Sleep(ctx, s.takes[candidate.URL]); err != nil {
-		return ports.FetchedAudio{}, err
-	}
+	s.clock.Advance(s.takes[candidate.URL])
 	return s.perURLSource.Fetch(ctx, candidate, outDir)
 }
 
@@ -127,7 +131,9 @@ func TestStatus_AJobTimesEveryPipelineStageThatRanAndOnlyThose(t *testing.T) {
 
 func TestStatus_AJobSumsTheTimeOfEveryFetchAndReportsTheFormatAndFileItStored(t *testing.T) {
 	format := ports.SourceFormat{ID: "140", Codec: "mp4a.40.2"}
+	manual := clocktest.NewManual(time.Unix(0, 0))
 	source := timedSource{
+		clock: manual,
 		perURLSource: perURLSource{
 			found:   blindingLightsAt(failingRank1URL, storedRank2URL),
 			formats: map[string]ports.SourceFormat{storedRank2URL: format},
@@ -136,7 +142,10 @@ func TestStatus_AJobSumsTheTimeOfEveryFetchAndReportsTheFormatAndFileItStored(t 
 		takes: map[string]time.Duration{failingRank1URL: 120 * time.Millisecond, storedRank2URL: 30 * time.Millisecond},
 	}
 
-	job := scheduleAndFinish(t, source)
+	job := scheduleAndFinishStaged(t, source, noVerification(), noStages(func(s *service.StagePorts) {
+		s.Now = manual.Now
+		s.DownloadLimit = service.MustLimitedTo(1)
+	}))
 
 	if got := job.record.StageMs["download.full"]; got != 150 {
 		t.Errorf("download.full = %dms, want 150, summed across both candidates' fetches", got)

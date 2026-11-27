@@ -48,12 +48,14 @@ func TestSleep_ANonPositiveDurationDoesNotWait(t *testing.T) {
 }
 
 func TestSleep_ANonPositiveDurationOnACanceledContextReportsIt(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
 
-	if err := clock.Sleep(ctx, 0); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Sleep(0) on a canceled context = %v, want Canceled", err)
-	}
+		if err := clock.Sleep(ctx, 0); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Sleep(0) on a canceled context = %v, want Canceled", err)
+		}
+	})
 }
 
 func TestNewTimer_FiresAfterTheDurationAndStopPreventsIt(t *testing.T) {

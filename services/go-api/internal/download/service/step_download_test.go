@@ -2695,40 +2695,33 @@ func TestDownloadStep_AProbeFailureOnALiveAttemptIsStillASkip(t *testing.T) {
 	assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
 }
 
-type slowVersionLookup struct {
-	stubVersionLookup
-	delay time.Duration
-}
-
-func (s *slowVersionLookup) RecordingByMBID(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error) {
-	if err := clock.Sleep(ctx, s.delay); err != nil {
-		return ports.RecordingFacts{}, false, err
-	}
-	return s.stubVersionLookup.RecordingByMBID(ctx, mbid)
-}
-
 func TestDownloadStep_ConcurrentCandidatesShareOneVersionLookup(t *testing.T) {
-	lookup := &slowVersionLookup{
-		stubVersionLookup: stubVersionLookup{facts: map[string]ports.RecordingFacts{
-			"mb-linked": {MBID: "mb-linked", Title: "Sunglasses at Night"},
-		}},
-		delay: 30 * time.Millisecond,
-	}
-	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
-		withTestIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), withTestLookup(lookup), service.WithVerifyWidth(2))
-	ac := downloadContext("mb-master")
-	for i := range ac.Ranked {
-		ac.Ranked[i].Title = ""
-	}
+	synctest.Test(t, func(t *testing.T) {
+		lookup := &gatedVersionLookup{started: make(chan struct{}), release: make(chan struct{})}
+		step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
+			withTestIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), withTestLookup(lookup), service.WithVerifyWidth(2))
+		ac := downloadContext("mb-master")
+		for i := range ac.Ranked {
+			ac.Ranked[i].Title = ""
+		}
+		done := make(chan error, 1)
+		go func() {
+			_, err := step.Execute(context.Background(), ac, service.AfterSelect{})
+			done <- err
+		}()
+		<-lookup.started
+		synctest.Wait()
+		close(lookup.release)
 
-	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+		if err := <-done; err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
-	if want := []string{"mb-linked"}; !equalStrings(lookup.calls, want) {
-		t.Errorf("lookups = %v, want %v: both candidates share one MusicBrainz call", lookup.calls, want)
-	}
+		if got := lookup.calls.Load(); got != 1 {
+			t.Errorf("lookups = %d, want 1: both candidates share one MusicBrainz call", got)
+		}
+	})
 }
 
 type gatedVersionLookup struct {
