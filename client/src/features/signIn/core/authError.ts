@@ -1,3 +1,5 @@
+import { kindOfStatus } from '@shared/failure';
+
 export type AuthErrorReason =
   | 'network'
   | 'unknown'
@@ -49,13 +51,13 @@ function isTransportAuthError(error: SupabaseAuthErrorLike): boolean {
   return (
     error.name === 'AuthRetryableFetchError' ||
     error.status === 0 ||
-    (typeof error.status === 'number' && error.status >= 500)
+    (typeof error.status === 'number' && kindOfStatus(error.status) === 'server')
   );
 }
 
 function isRateLimitedAuthError(error: SupabaseAuthErrorLike): boolean {
   return (
-    error.status === 429 ||
+    (typeof error.status === 'number' && kindOfStatus(error.status) === 'rate-limited') ||
     (typeof error.code === 'string' && /^over_.*_rate_limit$/.test(error.code))
   );
 }

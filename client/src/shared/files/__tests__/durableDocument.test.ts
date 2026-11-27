@@ -24,7 +24,7 @@ beforeEach(() => {
   dir = store.openDirectory('docs');
   dir.create();
   warn = jest.fn();
-  setLogger({ warn });
+  setLogger({ warn, error: jest.fn() });
 });
 
 afterEach(() => {

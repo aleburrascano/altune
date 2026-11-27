@@ -1,7 +1,7 @@
 import type { ResolvedAudioUrl } from '@shared/apiClient';
 import type { TrackId } from '@shared/catalog';
 import { equalJitterMs } from '@shared/timing';
-import { isRetryable } from '@shared/failure';
+import { fail, isRetryable, ok, type Result } from '@shared/failure';
 import { recordEvent } from '@shared/telemetry';
 
 import {
@@ -91,7 +91,9 @@ function jobFor(
 }
 
 function settledEntry(trackId: TrackId, outcome: Attempt): PinnedEntry {
-  return outcome.ok ? readyEntry(trackId, outcome.uri, outcome.version) : failedEntry(trackId);
+  return outcome.ok
+    ? readyEntry(trackId, outcome.value.uri, outcome.value.version)
+    : failedEntry(trackId);
 }
 
 async function settleDownload(set: Setter, job: DownloadJob): Promise<void> {
@@ -133,8 +135,9 @@ function stillDownloadingAfter(ms: number, isStillDownloading: () => boolean): P
   return new Promise((resolve) => setTimeout(() => resolve(isStillDownloading()), ms));
 }
 
-type FailedAttempt = { ok: false; error: unknown; url: string | undefined };
-type Attempt = { ok: true; uri: string; version: string } | FailedAttempt;
+type DownloadedFile = { uri: string; version: string };
+type FailedAttempt = { error: unknown; url: string | undefined };
+type Attempt = Result<DownloadedFile, FailedAttempt>;
 
 function recordDownloadFailed(trackId: TrackId, willRetry: boolean): void {
   recordEvent({
@@ -165,8 +168,8 @@ type DownloadJob = {
 async function downloadWithRetries(job: DownloadJob, attemptNumber = 1): Promise<Attempt> {
   const outcome = await attemptDownload(job);
   if (outcome.ok || job.stopped()) return outcome;
-  const retryIn = retryDelayMs(outcome.error, attemptNumber, job.random);
-  warnAttemptFailed(job.trackId, outcome, retryIn);
+  const retryIn = retryDelayMs(outcome.error.error, attemptNumber, job.random);
+  warnAttemptFailed(job.trackId, outcome.error, retryIn);
   if (retryIn === null) return outcome;
   if (!(await stillDownloadingAfter(retryIn, job.isStillDownloading))) return outcome;
   return downloadWithRetries(job, attemptNumber + 1);
@@ -181,7 +184,7 @@ async function resolveSignedUrl(job: DownloadJob): Promise<ResolvedAudioUrl> {
 
 async function downloadResolved(trackId: TrackId, resolved: ResolvedAudioUrl): Promise<Attempt> {
   const uri = await downloadPinned(trackId, resolved.url);
-  return { ok: true, uri, version: resolved.version };
+  return ok({ uri, version: resolved.version });
 }
 
 async function attemptDownload(job: DownloadJob): Promise<Attempt> {
@@ -191,6 +194,6 @@ async function attemptDownload(job: DownloadJob): Promise<Attempt> {
     url = resolved.url;
     return await downloadResolved(job.trackId, resolved);
   } catch (error) {
-    return { ok: false, error, url };
+    return fail({ error, url });
   }
 }

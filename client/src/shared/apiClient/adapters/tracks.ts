@@ -1,6 +1,6 @@
 import { randomUuid } from '@shared/id';
 
-import { ContractError } from '@shared/failure';
+import { ContractError, fail, ok, type Result } from '@shared/failure';
 import {
   apiFetch,
   apiSend,
@@ -114,12 +114,18 @@ export function parseTrackResponse(value: unknown, at = 'TrackResponse'): TrackR
   return buildTrackResponse(asRecord(value, at), at, STRICT_NARROWERS);
 }
 
-export function tryParseTrackResponse(value: unknown, at = 'TrackResponse'): TrackResponse | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+export function parseTrackResponseLenient(
+  value: unknown,
+  at = 'TrackResponse',
+): Result<TrackResponse, ContractError> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return fail(new ContractError(at, 'expected an object'));
+  }
   try {
-    return buildTrackResponse(value as Record<string, unknown>, at, LENIENT_NARROWERS);
-  } catch {
-    return null;
+    return ok(buildTrackResponse(value as Record<string, unknown>, at, LENIENT_NARROWERS));
+  } catch (error) {
+    if (error instanceof ContractError) return fail(error);
+    throw error;
   }
 }
 

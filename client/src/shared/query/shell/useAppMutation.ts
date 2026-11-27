@@ -127,7 +127,7 @@ type BaseOptions<TData, TVariables> = {
   queryKey: QueryKey;
   mutationFn: (variables: TVariables) => Promise<TData>;
   invalidate?: (variables: TVariables) => readonly QueryKey[];
-  alertOnError?: (variables: TVariables) => ErrorAlert;
+  alertOnError?: (variables: TVariables, error: Error) => ErrorAlert;
   onSuccess?: (data: TData, variables: TVariables) => void;
 };
 
@@ -161,11 +161,12 @@ function onlyInTheStartingSession<TData, TVariables, TCache>(
 
 function alertAfterRollback<TVariables>(
   action: string,
-  alertOnError: ((variables: TVariables) => ErrorAlert) | undefined,
+  alertOnError: ((variables: TVariables, error: Error) => ErrorAlert) | undefined,
   variables: TVariables,
+  error: Error,
 ): void {
   if (!alertOnError) return;
-  const { title, message } = alertOnError(variables);
+  const { title, message } = alertOnError(variables, error);
   showFailureAlert({ surface: action, title, message });
 }
 
@@ -205,10 +206,10 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
       return optimisticWrite(variables, epoch);
     },
     ...(options.onSuccess ? { onSuccess: onlyInTheStartingSession(options.onSuccess) } : {}),
-    onError: (_error, variables, context) => {
+    onError: (error, variables, context) => {
       if (!takenInThisSession(context)) return;
       rollback(variables, context);
-      alertAfterRollback(options.action, alertOnError, variables);
+      alertAfterRollback(options.action, alertOnError, variables, error);
     },
     onSettled: (_data, _error, variables, context) => {
       if (!takenInThisSession(context)) return undefined;

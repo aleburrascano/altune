@@ -1,6 +1,6 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import { clamp } from '@shared/math';
 import { msToSeconds } from '@features/player/domain/time';
 import { ensurePlayerSetup } from '@features/player/adapters/native/initPlayer';

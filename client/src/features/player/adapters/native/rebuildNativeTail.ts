@@ -7,7 +7,7 @@ import {
   nativeTrackBuilder,
 } from '@features/player/adapters/native/nativeTrack';
 import { currentLoadToken, isStale, type LoadToken } from '@features/player/domain/loadToken';
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import { NATIVE_QUEUE_WINDOW } from '@features/player/domain/presignWindow';
 import {
   identityOrder,

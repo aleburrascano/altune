@@ -10,8 +10,8 @@ import {
 } from '@shared/playback';
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import { artworkPlaceholderUri } from '@features/player/ports/artworkPlaceholder';
-import { classifyPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
-import { recordPresignOutcome } from '@features/player/domain/playbackHealth';
+import { classifyPlaybackFailure, warnPlayback } from '@features/player/core/playbackError';
+import { recordPresignOutcome } from '@features/player/core/playbackHealth';
 import { libraryTrackId } from '@features/player/domain/playerStatus';
 import { MAX_PRESIGN } from '@features/player/domain/presignWindow';
 import { ContractError } from '@shared/failure';

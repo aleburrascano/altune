@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/failure';
+import { ContractError, fail, ok, type Result } from '@shared/failure';
 import {
   asArray,
   asBoolean,
@@ -35,7 +35,7 @@ export function fromWireSource(source: QueueSourceWire | null | undefined): Queu
     const parsed = parsePlaylistId(source.playlist_id ?? '');
     return {
       kind: 'playlist',
-      playlistId: parsed.ok ? parsed.id : NO_PLAYLIST_ID,
+      playlistId: parsed.ok ? parsed.value : NO_PLAYLIST_ID,
       name: source.name ?? '',
     };
   }
@@ -54,8 +54,7 @@ function asAcquisitionStatus(value: unknown, at: string): AcquisitionStatus {
   return status === 'pending' || status === 'ready' ? status : 'failed';
 }
 
-export type QueueStateParseResult =
-  { ok: true; state: QueueStateResponse } | { ok: false; error: ContractError };
+export type QueueStateParseResult = Result<QueueStateResponse, ContractError>;
 
 function asIndex(value: unknown, at: string): number {
   const n = asNumber(value, at);
@@ -131,9 +130,9 @@ function buildQueueState(value: unknown, at: string): QueueStateResponse {
 
 export function parseQueueState(value: unknown): QueueStateParseResult {
   try {
-    return { ok: true, state: buildQueueState(value, 'QueueStateResponse') };
+    return ok(buildQueueState(value, 'QueueStateResponse'));
   } catch (error) {
-    if (error instanceof ContractError) return { ok: false, error };
+    if (error instanceof ContractError) return fail(error);
     throw error;
   }
 }

@@ -1,3 +1,5 @@
+import { HTTP_REDIRECT_STATUS } from '@shared/failure';
+
 const BASE_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
 const MAX_RETRY_AFTER_MS = 5 * 60_000;
@@ -8,7 +10,7 @@ export function reconnectDelayMs(attempt: number, minimumDelayMs: number, jitter
 }
 
 export function isRefusal(status: number): boolean {
-  return status >= 300;
+  return status >= HTTP_REDIRECT_STATUS;
 }
 
 export function retryAfterMs(header: string | null, now: number): number {

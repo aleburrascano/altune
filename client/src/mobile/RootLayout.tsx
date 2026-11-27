@@ -18,6 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installApiBase } from '@shared/apiConfig';
 import { installAuthClient } from '@shared/auth';
 import { installBuild } from '@shared/device';
+import { warn } from '@shared/log';
 import { createQueryClient } from '@shared/query';
 import { appAuthParts, createAuthClient } from '@/mobile/authClient';
 import { StagingBanner } from '@/mobile/frame/StagingBanner';
@@ -106,7 +107,7 @@ installGlobalErrorReporting((onError) => {
   chainWindowErrors(onError);
 }, chainWindowUnhandledRejections(globalWindow));
 reportOtaLaunchFailures().catch((error: unknown) => {
-  console.warn('[telemetry] reading update logs failed', error);
+  warn('[telemetry] reading update logs failed', error);
 });
 
 function ConnectedOfflineReconcile() {

@@ -1,6 +1,6 @@
 import TrackPlayer, { Capability } from 'react-native-track-player';
 
-import { warnPlayback } from '@features/player/domain/playbackError';
+import { warnPlayback } from '@features/player/core/playbackError';
 import { withDeadline } from '@shared/timing';
 
 const PLAYER_SETUP_TIMEOUT_MS = 15_000;

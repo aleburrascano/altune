@@ -50,12 +50,12 @@ import {
   classifyNativePlaybackError,
   redactedPlaybackFailure,
   redactPlaybackErrorMessage,
-} from '@features/player/domain/playbackError';
+} from '@features/player/core/playbackError';
 import { clearPlaybackError, reportPlaybackError } from '@features/player/core/playbackErrorStore';
 import {
   recordAudioRecoveryFailure,
   recordPlaybackFailure,
-} from '@features/player/domain/playbackHealth';
+} from '@features/player/core/playbackHealth';
 import { progressSecondsToMs } from '@features/player/domain/time';
 import {
   reportingQueueFailure,
@@ -191,7 +191,7 @@ async function playPreviousRemotely(): Promise<void> {
 
 function evictCachedIfParsable(trackId: string): void {
   const parsed = parseTrackId(trackId);
-  if (parsed.ok) evictCached(parsed.id);
+  if (parsed.ok) evictCached(parsed.value);
 }
 
 export interface PlaybackServiceDeps {

@@ -1,20 +1,37 @@
 import type { ApiErrorCode } from '@shared/failure/core/apiErrorCodes';
-
-export const HTTP_UNAUTHORIZED = 401;
+import {
+  HTTP_SERVER_ERROR_STATUS,
+  HTTP_TOO_MANY_REQUESTS,
+  HTTP_UNAUTHORIZED,
+} from '@shared/failure/core/httpStatus';
 
 export function isServerFaultStatus(status: number): boolean {
-  return status >= 500;
+  return status >= HTTP_SERVER_ERROR_STATUS;
+}
+
+export interface ApiErrorExtras {
+  readonly rawCode?: string;
+  readonly detail?: string;
+  readonly retryAfterMs?: number;
 }
 
 export class ApiError extends Error {
+  readonly rawCode: string | undefined;
+  readonly detail: string | undefined;
+  readonly retryAfterMs: number | undefined;
+
   constructor(
     public readonly status: number,
     message: string,
     public readonly code?: ApiErrorCode,
     public readonly correlationId?: string,
+    extras: ApiErrorExtras = {},
   ) {
     super(message);
     this.name = 'ApiError';
+    this.rawCode = extras.rawCode;
+    this.detail = extras.detail;
+    this.retryAfterMs = extras.retryAfterMs;
   }
 }
 
@@ -26,6 +43,12 @@ export class ContractError extends Error {
     super(`API contract violation at ${at}: ${detail}`);
     this.name = 'ContractError';
   }
+}
+
+const CONTRACT_ERROR_NAME: ContractError['name'] = 'ContractError';
+
+export function isContractError(err: unknown): boolean {
+  return err instanceof Error && err.name === CONTRACT_ERROR_NAME;
 }
 
 export type NetworkFailure = 'timeout' | 'transport';
@@ -46,6 +69,10 @@ export function correlationIdOf(error: unknown): string | undefined {
   return undefined;
 }
 
+export function isSessionRefusal(error: unknown): boolean {
+  return error instanceof ApiError && error.status === HTTP_UNAUTHORIZED;
+}
+
 export function isSessionFetchFailure(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   return (error as { name?: string }).name === 'AuthRetryableFetchError';
@@ -58,17 +85,21 @@ export function isAbort(error: unknown): boolean {
 
 export function isRetryable(error: unknown): boolean {
   if (error instanceof NetworkError) return true;
-  if (error instanceof ApiError) return error.status === 429 || isServerFaultStatus(error.status);
+  if (error instanceof ApiError)
+    return error.status === HTTP_TOO_MANY_REQUESTS || isServerFaultStatus(error.status);
   return false;
 }
 
-const NETWORK_ERROR_NAME: NetworkError['name'] = 'NetworkError';
+const NATIVE_FETCH_FAILURE_MESSAGES: ReadonlySet<string> = new Set([
+  'Network request failed',
+  'Failed to fetch',
+  'Load failed',
+]);
 
-const UNWRAPPED_TRANSPORT_MESSAGE = /network|fetch|timeout|connection/i;
+function isNativeFetchFailure(err: unknown): boolean {
+  return err instanceof TypeError && NATIVE_FETCH_FAILURE_MESSAGES.has(err.message);
+}
 
 export function isNetworkError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  if (err instanceof ApiError) return false;
-  if (err.name === NETWORK_ERROR_NAME) return true;
-  return UNWRAPPED_TRANSPORT_MESSAGE.test(err.message);
+  return err instanceof NetworkError || isSessionFetchFailure(err) || isNativeFetchFailure(err);
 }

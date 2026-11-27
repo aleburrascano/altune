@@ -264,7 +264,7 @@ describe('DangerZoneCard sign-out failure', () => {
       () => {
         outcome = () => ({ error: unreachableAuthServer });
       },
-      'Could not reach the server — check your connection and try again.',
+      'Check your connection and try again.',
       { failure: 'transport' },
     ],
     [
@@ -272,7 +272,7 @@ describe('DangerZoneCard sign-out failure', () => {
       () => {
         outcome = () => ({ error: refusedSession });
       },
-      'Your session has expired — sign in again and retry.',
+      'Your session has expired. Sign in again, then retry.',
       { status: 401 },
     ],
     [
@@ -280,7 +280,7 @@ describe('DangerZoneCard sign-out failure', () => {
       () => {
         outcome = () => ({ error: brokenAuthServer });
       },
-      'The server had a problem — try again in a few minutes.',
+      'Something went wrong on our end. Please try again.',
       { status: 503 },
     ],
     [
@@ -290,7 +290,7 @@ describe('DangerZoneCard sign-out failure', () => {
           throw new Error('boom');
         };
       },
-      'Something went wrong — try again.',
+      'Something went wrong. Please try again.',
       { failure: 'unknown' },
     ],
   ] as const)(
@@ -460,9 +460,9 @@ describe('DangerZoneCard probe: rows across download usage, outcomes and mutatio
     [
       'a refused session',
       new ApiError(401, 'unauthorized'),
-      'Your session has expired — sign in again and retry.',
+      'Your session has expired. Sign in again, then retry.',
     ],
-    ['an unrecognised error', new Error('boom'), 'Something went wrong — try again.'],
+    ['an unrecognised error', new Error('boom'), 'Something went wrong. Please try again.'],
   ])(
     'marks only the clear-history row Failed with copy for %s and leaves it retryable',
     (_label, error, copy) => {
@@ -495,9 +495,7 @@ describe('DangerZoneCard probe: rows across download usage, outcomes and mutatio
 
     expect(rowOf('settings-sign-out').getByText('Failed')).toBeTruthy();
     expect(
-      rowOf('settings-sign-out').getByText(
-        'The server had a problem — try again in a few minutes.',
-      ),
+      rowOf('settings-sign-out').getByText('Something went wrong on our end. Please try again.'),
     ).toBeTruthy();
     expect(rowOf('settings-clear-search-history').queryByText('Failed')).toBeNull();
     expect(rowOf('settings-remove-downloads').queryByText('Failed')).toBeNull();

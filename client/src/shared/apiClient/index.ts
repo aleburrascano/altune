@@ -11,7 +11,7 @@ export {
   parseTrackResponse,
   reacquireTrack,
   retryAcquisition,
-  tryParseTrackResponse,
+  parseTrackResponseLenient,
 } from '@shared/apiClient/adapters/tracks';
 export { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/adapters/correlationId';
 export type {

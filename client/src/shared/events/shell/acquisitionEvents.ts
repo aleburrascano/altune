@@ -15,7 +15,7 @@ import {
   stageToPhase,
 } from '@shared/acquisition';
 import { offlineDownloadsSupported, repinIfPinned } from '@shared/offline';
-import { tryParseTrackResponse } from '@shared/apiClient';
+import { parseTrackResponseLenient } from '@shared/apiClient';
 import { acquisitionOf, toFailed, toPending, toReady, toTrackStatus } from '@shared/catalog';
 import type { TrackId, TrackResponse } from '@shared/catalog';
 import type { JsonObject } from '@shared/files';
@@ -42,9 +42,10 @@ type AcquisitionEventType =
   | 'track_acquisition_failed'
   | 'track_replace_failed';
 
-function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
-  const payload = typeof data.id === 'string' ? data : { ...data, id: data.track_id };
-  return tryParseTrackResponse(payload);
+function parseAddedTrack(eventData: Record<string, unknown>) {
+  const payload =
+    typeof eventData.id === 'string' ? eventData : { ...eventData, id: eventData.track_id };
+  return parseTrackResponseLenient(payload);
 }
 
 function trackMeta(track: TrackResponse): DownloadMeta {
@@ -90,9 +91,9 @@ function addTrack(cache: EventCache, track: TrackResponse): void {
 }
 
 function handleTrackAddedToLibrary(cache: EventCache, event: ServerEvent): void {
-  const track = parseAddedTrack(event.data);
+  const parsed = parseAddedTrack(event.data);
   invalidateLibraryDerived(cache);
-  if (track) addTrack(cache, track);
+  if (parsed.ok) addTrack(cache, parsed.value);
   else refetchTrackLists(cache);
 }
 

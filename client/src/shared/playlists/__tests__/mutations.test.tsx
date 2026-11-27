@@ -34,6 +34,10 @@ import { runSignOutCleanups } from '@shared/session';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
+const GATEWAY_TIMEOUT_STATUS = 504;
+const COULDNT_ADD_PREFIX = /^Couldn't add the /;
+const COULDNT_REMOVE_PREFIX = /^Couldn't remove the /;
+
 const REFUSED_STATUS = 422;
 
 const EVENTS_ROUTE = 'POST /v1/discovery/events';
@@ -196,7 +200,10 @@ describe('useAddTracksToPlaylist(): onMutate optimistic bump', () => {
     });
 
     expect(queryClient.getQueryData(playlistKeys.list)).toBeUndefined();
-    expect(dialogs.alerts).toContainEqual(['Add failed', expect.any(String)]);
+    expect(dialogs.alerts).toContainEqual([
+      expect.stringMatching(COULDNT_ADD_PREFIX),
+      expect.any(String),
+    ]);
   });
 });
 
@@ -226,7 +233,10 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
     });
 
     expect(dialogs.alerts).toContainEqual(['Note', 'One track was already in Focus.']);
-    expect(dialogs.alerts).not.toContainEqual(['Add failed', expect.any(String)]);
+    expect(dialogs.alerts).not.toContainEqual([
+      expect.stringMatching(COULDNT_ADD_PREFIX),
+      expect.any(String),
+    ]);
   });
 
   it('reports a plural skip count using the playlist name', async () => {
@@ -323,7 +333,10 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       ).rejects.toBeInstanceOf(ContractError);
     });
 
-    expect(dialogs.alerts).toContainEqual(['Add failed', expect.any(String)]);
+    expect(dialogs.alerts).toContainEqual([
+      expect.stringMatching(COULDNT_ADD_PREFIX),
+      expect.any(String),
+    ]);
   });
 
   it('does not alert when every requested track was added', async () => {
@@ -523,11 +536,8 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
   });
 
   it.each<[TrackId[], string]>([
-    [[asTrackId('t1')], 'Could not add the track to the playlist. Please try again.'],
-    [
-      [asTrackId('t1'), asTrackId('t2')],
-      'Could not add the tracks to the playlist. Please try again.',
-    ],
+    [[asTrackId('t1')], "Couldn't add the track to the playlist"],
+    [[asTrackId('t1'), asTrackId('t2')], "Couldn't add the tracks to the playlist"],
   ])(
     'alerts with the copy the exact batch length turns on (trackIds=%j)',
     async (trackIds, message) => {
@@ -544,7 +554,7 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
         ).rejects.toThrow();
       });
 
-      expect(dialogs.alerts).toContainEqual(['Add failed', message]);
+      expect(dialogs.alerts).toContainEqual([message, 'Check your connection and try again.']);
     },
   );
 });
@@ -746,8 +756,8 @@ describe('useRenamePlaylist(): onError rollback', () => {
 
     expect(queryClient.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toEqual(seeded);
     expect(dialogs.alerts).toContainEqual([
-      'Rename failed',
-      'Could not rename the playlist. Please try again.',
+      "Couldn't rename the playlist",
+      'Check your connection and try again.',
     ]);
   });
 
@@ -1111,12 +1121,15 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toBeUndefined();
-    expect(dialogs.alerts).toContainEqual(['Remove failed', expect.any(String)]);
+    expect(dialogs.alerts).toContainEqual([
+      expect.stringMatching(COULDNT_REMOVE_PREFIX),
+      expect.any(String),
+    ]);
   });
 
   it.each<[TrackId[], string]>([
-    [[asTrackId('t1')], 'Could not remove the track. Please try again.'],
-    [[asTrackId('t1'), asTrackId('t2')], 'Could not remove the tracks. Please try again.'],
+    [[asTrackId('t1')], "Couldn't remove the track"],
+    [[asTrackId('t1'), asTrackId('t2')], "Couldn't remove the tracks"],
   ])(
     'alerts with the copy the exact batch length turns on (trackIds=%j)',
     async (trackIds, message) => {
@@ -1131,7 +1144,7 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
         await expect(result.current.mutateAsync(trackIds)).rejects.toThrow();
       });
 
-      expect(dialogs.alerts).toContainEqual(['Remove failed', message]);
+      expect(dialogs.alerts).toContainEqual([message, 'Check your connection and try again.']);
     },
   );
 });
@@ -1309,6 +1322,29 @@ describe('create', () => {
       expect(result.current.isError).toBe(false);
       expect(data.addFailed).toBe(true);
       expect(data.playlist).toEqual(created('p2', 'Chill'));
+      expect(__http.countFor('GET /v1/playlists/p2')).toBe(1);
+      expect(__http.countFor('DELETE /v1/playlists/p2')).toBe(0);
+    });
+
+    it('a server timeout on the add never deletes the playlist, since the add may have landed', async () => {
+      __http.reply('POST /v1/playlists', { status: 201, json: created('p2', 'Chill') });
+      __http.reply('POST /v1/playlists/p2/tracks/batch', {
+        status: GATEWAY_TIMEOUT_STATUS,
+        json: { code: 'request.timeout' },
+      });
+      __http.reply('GET /v1/playlists/p2', {
+        json: { ...created('p2', 'Chill'), total_duration_seconds: 0, tracks: [] },
+      });
+      __http.reply('DELETE /v1/playlists/p2', { status: 204 });
+      const queryClient = freshClient();
+      const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+        wrapper: createWrapper(queryClient),
+      });
+
+      await act(async () => {
+        await result.current.mutateAsync({ name: 'Chill', trackIds: [asTrackId('t1')] });
+      });
+
       expect(__http.countFor('GET /v1/playlists/p2')).toBe(1);
       expect(__http.countFor('DELETE /v1/playlists/p2')).toBe(0);
     });

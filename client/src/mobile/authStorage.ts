@@ -1,5 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
+import { warn as logWarning } from '@shared/log';
+
 export type AuthStorage = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
@@ -10,10 +12,6 @@ const KEYCHAIN_OPTS = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
 
 type Warn = (message: string, error: unknown) => void;
 
-function warnOnConsole(message: string, error: unknown): void {
-  console.warn(message, error);
-}
-
 function readKeychain(key: string, warn: Warn): Promise<string | null> {
   return SecureStore.getItemAsync(key, KEYCHAIN_OPTS).catch((error: unknown) => {
     warn('[auth] secure store read failed', error);
@@ -21,7 +19,7 @@ function readKeychain(key: string, warn: Warn): Promise<string | null> {
   });
 }
 
-export function createAuthStorage(warn: Warn = warnOnConsole): AuthStorage {
+export function createAuthStorage(warn: Warn = logWarning): AuthStorage {
   return {
     getItem: (key: string): Promise<string | null> => readKeychain(key, warn),
     setItem: (key: string, value: string): Promise<void> =>
