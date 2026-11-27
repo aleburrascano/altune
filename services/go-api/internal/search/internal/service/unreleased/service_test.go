@@ -650,6 +650,9 @@ func TestNewUnreleasedService_RefusesAMissingCollaborator(t *testing.T) {
 		"storage": func() (*search.UnreleasedService, error) {
 			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{}, wiringWithout(func(w *unreleased.Wiring) { w.Storage = nil }))
 		},
+		"backend": func() (*search.UnreleasedService, error) {
+			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{}, wiringWithout(func(w *unreleased.Wiring) { w.Backend = nil }))
+		},
 		"jobs": func() (*search.UnreleasedService, error) {
 			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{}, wiringWithout(func(w *unreleased.Wiring) { w.Jobs = nil }))
 		},

@@ -31,13 +31,14 @@ func newUnreleasedServices(ctx context.Context, d connections.Deps, t *providerT
 	if lists != nil {
 		trackers = lists
 	}
-	storage, refreshes, err := unreleasedStorage(ctx, d, s)
+	storage, backend, refreshes, err := unreleasedStorage(ctx, d, s)
 	if err != nil {
 		return unreleasedServices{}, err
 	}
 	lookup, err := unreleased.NewService(genius, artists, d.Unreleased.Tuning, unreleased.Wiring{
 		Trackers: trackers,
 		Storage:  storage,
+		Backend:  backend,
 		Shutdown: d.Shutdown,
 		Jobs:     d.Background,
 		Timer:    clock.NewTimer,
@@ -52,19 +53,19 @@ func newUnreleasedServices(ctx context.Context, d connections.Deps, t *providerT
 	return unreleasedServices{lookup: lookup}, nil
 }
 
-func unreleasedStorage(ctx context.Context, d connections.Deps, s connections.Stores) (unreleased.Storage, bool, error) {
+func unreleasedStorage(ctx context.Context, d connections.Deps, s connections.Stores) (unreleased.Storage, unreleased.Background, bool, error) {
 	if store := unreleasedStore(ctx, d, s); store != nil {
 		storage, err := unreleased.NewStoredStorage(store)
 		if err != nil {
-			return nil, false, fmt.Errorf("build the unreleased store storage: %w", err)
+			return nil, nil, false, fmt.Errorf("build the unreleased store storage: %w", err)
 		}
-		return storage, true, nil
+		return storage, storage, true, nil
 	}
 	storage, err := unreleased.NewCachedStorage(cache.NewRedisUnreleasedCache(s.Redis, s.CacheOption()))
 	if err != nil {
-		return nil, false, fmt.Errorf("build the unreleased cache storage: %w", err)
+		return nil, nil, false, fmt.Errorf("build the unreleased cache storage: %w", err)
 	}
-	return storage, false, nil
+	return storage, unreleased.NoBackground{}, false, nil
 }
 
 func unreleasedStore(ctx context.Context, d connections.Deps, s connections.Stores) ports.UnreleasedStore {

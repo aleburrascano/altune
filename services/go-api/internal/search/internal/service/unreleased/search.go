@@ -17,5 +17,5 @@ func (s *Service) Search(ctx context.Context, query string) ([]ports.UnreleasedH
 	if utf8.RuneCountInString(query) < MinSearchRunes {
 		return []ports.UnreleasedHit{}, nil
 	}
-	return s.storage.search(ctx, query)
+	return s.backend.search(ctx, query)
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Service) RefreshDue(ctx context.Context, now time.Time, limit int) error {
-	due, err := s.storage.due(ctx, now, limit)
+	due, err := s.backend.due(ctx, now, limit)
 	if err != nil {
 		return err
 	}
