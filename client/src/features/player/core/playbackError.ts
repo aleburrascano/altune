@@ -8,7 +8,7 @@ import {
 import type { PlaybackErrorKind } from '@shared/playback';
 import { warn } from '@shared/log';
 
-export function playbackKindOfFailure(kind: FailureKind): PlaybackErrorKind {
+function playbackKindOfFailure(kind: FailureKind): PlaybackErrorKind {
   switch (kind) {
     case 'unauthorized':
       return 'auth';
@@ -34,7 +34,7 @@ function unreachableKind(kind: never): PlaybackErrorKind {
   throw new Error(`unhandled failure kind ${String(kind)}`);
 }
 
-export function playbackKindOfStatus(status: number): PlaybackErrorKind {
+function playbackKindOfStatus(status: number): PlaybackErrorKind {
   return playbackKindOfFailure(kindOfStatus(status));
 }
 
@@ -52,7 +52,7 @@ function isDecodeNativeCode(code: string): boolean {
   return DECODE_NATIVE_CODES.has(code) || DECODE_NATIVE_PREFIXES.some((p) => code.startsWith(p));
 }
 
-export const NATIVE_BAD_HTTP_STATUS_CODE = 'android-io-bad-http-status';
+const NATIVE_BAD_HTTP_STATUS_CODE = 'android-io-bad-http-status';
 
 const HTTP_STATUS_IN_MESSAGE = /\bresponse code:?\s*(\d{3})\b/i;
 

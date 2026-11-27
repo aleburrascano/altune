@@ -34,24 +34,31 @@ const COPY_BY_KIND: Readonly<Record<FailureKind, ErrorCopy>> = {
   unknown: { title: GENERIC_TITLE, body: `Something went wrong. ${RETRY_TAIL}` },
 };
 
+const COPY_BY_CODE: Readonly<Partial<Record<ApiErrorCode, ErrorCopy>>> = {
+  'catalog.track_already_in_playlist': {
+    title: 'Already in this playlist',
+    body: 'That track is already in this playlist.',
+  },
+  'catalog.playlist_full': {
+    title: 'Playlist is full',
+    body: 'Remove a track from this playlist to add another.',
+  },
+  'catalog.too_many_playlists': {
+    title: 'Too many playlists',
+    body: 'Delete a playlist to create another.',
+  },
+  'catalog.library_full': {
+    title: 'Library is full',
+    body: 'Remove a track from your library to add another.',
+  },
+  'discovery.favorites_full': {
+    title: 'Favorites are full',
+    body: 'Remove a favorite to add another.',
+  },
+};
+
 function copyForCode(code: ApiErrorCode): ErrorCopy | undefined {
-  switch (code) {
-    case 'catalog.track_already_in_playlist':
-      return { title: 'Already in this playlist', body: 'That track is already in this playlist.' };
-    case 'catalog.playlist_full':
-      return {
-        title: 'Playlist is full',
-        body: 'Remove a track from this playlist to add another.',
-      };
-    case 'catalog.too_many_playlists':
-      return { title: 'Too many playlists', body: 'Delete a playlist to create another.' };
-    case 'catalog.library_full':
-      return { title: 'Library is full', body: 'Remove a track from your library to add another.' };
-    case 'discovery.favorites_full':
-      return { title: 'Favorites are full', body: 'Remove a favorite to add another.' };
-    default:
-      return undefined;
-  }
+  return COPY_BY_CODE[code];
 }
 
 export function describeError(err: unknown, action?: string): ErrorCopy {
