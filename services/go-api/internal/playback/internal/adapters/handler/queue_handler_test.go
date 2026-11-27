@@ -462,7 +462,7 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 	}
 }
 
-func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
+func TestHandleGet_ResponseIsUncached(t *testing.T) {
 	h := playback.MustNewQueueHandler(playback.MustNewQueueService(&recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
@@ -475,9 +475,6 @@ func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 
 	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
 		t.Errorf("Cache-Control = %q, want %q", got, "private, no-store")
-	}
-	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
 	}
 }
 

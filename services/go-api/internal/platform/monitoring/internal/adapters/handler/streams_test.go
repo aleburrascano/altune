@@ -300,7 +300,7 @@ func TestStreamLogs_AbsentRingIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestStreams_SendEventStreamNoCacheAndNosniffHeaders(t *testing.T) {
+func TestStreams_SendEventStreamNoCacheHeaders(t *testing.T) {
 	fx := newStreamFixture(t)
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
@@ -310,7 +310,7 @@ func TestStreams_SendEventStreamNoCacheAndNosniffHeaders(t *testing.T) {
 
 			streamRouter(fx.deps).ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
 
-			want := map[string]string{"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"}
+			want := map[string]string{"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}
 			for header, value := range want {
 				if got := rec.Header().Get(header); got != value {
 					t.Errorf("%s = %q, want %q", header, got, value)

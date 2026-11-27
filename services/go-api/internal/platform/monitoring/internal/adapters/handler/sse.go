@@ -78,7 +78,6 @@ func setStreamHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
 func streamFrames[T any](newTicker clock.TickerFunc, r *http.Request, w http.ResponseWriter, rc *http.ResponseController, ch <-chan T, every time.Duration) {

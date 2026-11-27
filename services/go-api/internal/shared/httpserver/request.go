@@ -17,6 +17,8 @@ var errTrailingData = errors.New("trailing data after JSON value")
 
 const IdempotencyKeyHeader = "Idempotency-Key"
 
+const CacheControlPrivateNoStore = "private, no-store"
+
 func IdempotencyKey(r *http.Request) *string {
 	key := strings.TrimSpace(r.Header.Get(IdempotencyKeyHeader))
 	if key == "" {

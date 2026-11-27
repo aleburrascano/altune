@@ -252,6 +252,10 @@ func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 	}{
 		{"authed route rejected", http.MethodGet, "/v1/library", "", http.StatusUnauthorized},
 		{"discovery per-user route rejected", http.MethodGet, "/v1/discovery/search-history", "", http.StatusUnauthorized},
+		{"event stream rejected", http.MethodGet, "/v1/events", "", http.StatusUnauthorized},
+		{"audio stream rejected", http.MethodGet, "/v1/tracks/abc/audio", "", http.StatusUnauthorized},
+		{"audio recover rejected", http.MethodPost, "/v1/tracks/abc/audio/recover", "", http.StatusUnauthorized},
+		{"playback rejected", http.MethodGet, "/v1/playback/queue-state", "", http.StatusUnauthorized},
 		{"public route", http.MethodPost, "/v1/public/auth-failures", `{"reason":"invalid_credentials","app_version":"1.2.3"}`, http.StatusNoContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -267,6 +271,37 @@ func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 				t.Errorf("Cache-Control = %q, want no-store", got)
 			}
 		})
+	}
+}
+
+func TestRouter_OneClientsFailedTokensShareOneBudgetAcrossEveryV1Group(t *testing.T) {
+	r := assembledRouter(t, jwksConfig(t), dbtest.Pool(t))
+	const client = "198.51.100.77:4321"
+	attempt := func(path string) int {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.RemoteAddr = client
+		req.Header.Set("Authorization", "Bearer not-a-token")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	const attempts = 200
+	throttled := false
+	for range attempts {
+		if attempt("/v1/library") == http.StatusTooManyRequests {
+			throttled = true
+			break
+		}
+	}
+	if !throttled {
+		t.Fatalf("%d failed tokens on a bounded route never ran out the failure budget", attempts)
+	}
+
+	for _, path := range []string{"/v1/events", "/v1/tracks/abc/audio"} {
+		if got := attempt(path); got != http.StatusTooManyRequests {
+			t.Errorf("GET %s after the client ran out its failure budget = %d, want 429 from the one shared throttle", path, got)
+		}
 	}
 }
 

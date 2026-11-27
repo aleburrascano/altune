@@ -94,7 +94,7 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
 
 	assertStatus(t, rec, http.StatusOK)
-	assertPrivateAudioHeaders(t, rec, "private, no-store")
+	assertAudioCacheControl(t, rec, "private, no-store")
 }
 
 type failingSigner struct {
