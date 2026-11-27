@@ -19,9 +19,9 @@ describe('server events against the go-api wire fixtures', () => {
     const { blocks } = parseChunk('', frame, '');
 
     expect(blocks).toHaveLength(1);
-    const [block] = blocks;
-    expect(isServerEvent(block)).toBe(true);
-    if (!isServerEvent(block)) return;
+    const block = blocks[0];
+    if (block === undefined || !isServerEvent(block))
+      throw new Error(`${type} did not parse as a server event`);
     expect(block.type).toBe(type);
     expect(isServerEventType(block.type)).toBe(true);
     expect(block.data).toEqual(payload);

@@ -39,22 +39,29 @@ func driftLabel(path string) string {
 	return path
 }
 
-func walkDrift(path string, fixture, body any, strict bool) []string {
+type driftMode int
+
+const (
+	ignoreExtraKeys driftMode = iota
+	strictKeys
+)
+
+func walkDrift(path string, fixture, body any, mode driftMode) []string {
 	want, got := jsonKind(fixture), jsonKind(body)
 	if want != got {
 		return []string{driftLabel(path) + ": kind " + want + ", got " + got}
 	}
 	switch f := fixture.(type) {
 	case map[string]any:
-		return objectDrift(path, f, body.(map[string]any), strict)
+		return objectDrift(path, f, body.(map[string]any), mode)
 	case []any:
-		return arrayDrift(path, f, body.([]any), strict)
+		return arrayDrift(path, f, body.([]any), mode)
 	default:
 		return nil
 	}
 }
 
-func objectDrift(path string, fixture, body map[string]any, strict bool) []string {
+func objectDrift(path string, fixture, body map[string]any, mode driftMode) []string {
 	keys := make([]string, 0, len(fixture))
 	for key := range fixture {
 		keys = append(keys, key)
@@ -71,9 +78,9 @@ func objectDrift(path string, fixture, body map[string]any, strict bool) []strin
 			drifts = append(drifts, child+": missing")
 			continue
 		}
-		drifts = append(drifts, walkDrift(child, fixture[key], value, strict)...)
+		drifts = append(drifts, walkDrift(child, fixture[key], value, mode)...)
 	}
-	if strict {
+	if mode == strictKeys {
 		drifts = append(drifts, unexpectedKeys(path, fixture, body)...)
 	}
 	return drifts
@@ -98,25 +105,25 @@ func unexpectedKeys(path string, fixture, body map[string]any) []string {
 	return drifts
 }
 
-func arrayDrift(path string, fixture, body []any, strict bool) []string {
+func arrayDrift(path string, fixture, body []any, mode driftMode) []string {
 	if len(fixture) == 0 {
 		return nil
 	}
 	if len(body) == 0 {
 		return []string{driftLabel(path) + ": empty array"}
 	}
-	return walkDrift(path+"[0]", fixture[0], body[0], strict)
+	return walkDrift(path+"[0]", fixture[0], body[0], mode)
 }
 
 func looseDrift(fixture, body json.RawMessage) []string {
-	return drift(fixture, body, false)
+	return drift(fixture, body, ignoreExtraKeys)
 }
 
 func strictDrift(fixture, body json.RawMessage) []string {
-	return drift(fixture, body, true)
+	return drift(fixture, body, strictKeys)
 }
 
-func drift(fixture, body json.RawMessage, strict bool) []string {
+func drift(fixture, body json.RawMessage, mode driftMode) []string {
 	var f, b any
 	if err := json.Unmarshal(fixture, &f); err != nil {
 		return []string{"fixture: invalid JSON: " + err.Error()}
@@ -124,7 +131,7 @@ func drift(fixture, body json.RawMessage, strict bool) []string {
 	if err := json.Unmarshal(body, &b); err != nil {
 		return []string{"body: invalid JSON: " + err.Error()}
 	}
-	return walkDrift("", f, b, strict)
+	return walkDrift("", f, b, mode)
 }
 
 func AssertMatchesFixture(t testing.TB, path string, body []byte) {

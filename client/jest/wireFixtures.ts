@@ -19,10 +19,3 @@ export function wireFixture(name: string): unknown {
   return JSON.parse(fs.readFileSync(path.join(WIRE_ROOT, `${name}.json`), 'utf8'));
 }
 
-export function wireFixtureNames(): string[] {
-  return fs
-    .readdirSync(WIRE_ROOT)
-    .filter((file) => file.endsWith('.json'))
-    .map((file) => file.slice(0, -'.json'.length))
-    .sort();
-}

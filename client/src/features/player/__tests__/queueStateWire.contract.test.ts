@@ -24,7 +24,7 @@ async function decodedFrom(fixture: string): Promise<QueueStateResponse> {
   __http.reply(`GET ${QUEUE_STATE_PATH}`, { status: 200, json: wireFixture(fixture) });
   const parsed = parseQueueState(await getQueueState());
   if (!parsed.ok) throw parsed.error;
-  return parsed.state;
+  return parsed.value;
 }
 
 describe('GET /v1/playback/queue-state, from the playback_queue_state wire fixtures', () => {
