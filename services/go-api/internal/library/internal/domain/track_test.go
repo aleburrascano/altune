@@ -1404,16 +1404,32 @@ func TestTrack_AccessorsHandOutCopiesSoACallerCannotChangeTheTrack(t *testing.T)
 
 func TestTrack_SnapshotRoundTripsEveryPersistedField(t *testing.T) {
 	t.Parallel()
-	track := studioLabelledTrack(t)
-	if err := track.MarkReady("ref-1", ids.Real); err != nil {
-		t.Fatal(err)
+	artwork, genre, albumArtist, audioRef, failure := "https://img/a.jpg", "Rock", "Bryan Adams", "ref-1", "no match"
+	idempotencyKey, provenance, sourceURL, trackNumber := "key-1", "verified", "https://src/1", 3
+	confidence, explicit, started, duration := 0.9, true, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), 201.5
+	track := librarytest.AmendTrack(studioLabelledTrack(t), func(s *librarytest.TrackSnapshot) {
+		s.DurationSeconds = &duration
+		s.ArtworkURL, s.Genre, s.AlbumArtist, s.AudioRef, s.FailureReason = &artwork, &genre, &albumArtist, &audioRef, &failure
+		s.IdempotencyKey, s.AcquisitionProvenance, s.AudioSourceURL, s.TrackNumber = &idempotencyKey, &provenance, &sourceURL, &trackNumber
+		s.ConfidenceScore, s.CatalogExplicit, s.AcquisitionStartedAt = &confidence, &explicit, &started
+		s.DownloadStatus = library.AcquisitionFailed
+		s.AudioVersion = "v2"
+		s.EvidenceJSON = []byte(`{"grade":"A"}`)
+		s.FeaturedArtists = []library.FeaturedArtist{{Name: "Guest", MBID: "mbid", DeezerID: 9, Role: "feat"}}
+		s.CatalogSources = []library.CatalogSource{{Provider: "itunes", ExternalID: "1", URL: "https://itunes/1"}}
+		s.AudioLengthMismatch = true
+		s.Version = 7
+		s.AcquisitionFence = 4
+	})
+	snapshot := track.Snapshot()
+	fields := reflect.ValueOf(snapshot)
+	for i := range fields.NumField() {
+		if fields.Field(i).IsZero() {
+			t.Fatalf("the test leaves TrackSnapshot.%s zero, so it cannot prove the field round-trips", fields.Type().Field(i).Name)
+		}
 	}
-	if err := track.SetAcquisitionConfidence(0.9, []byte(`{"grade":"A"}`)); err != nil {
-		t.Fatal(err)
-	}
-	track.RecordVersion(7)
 
-	restored := librarytest.RestoreTrack(track.Snapshot())
+	restored := librarytest.RestoreTrack(snapshot)
 
 	if !reflect.DeepEqual(restored.Snapshot(), track.Snapshot()) {
 		t.Errorf("snapshot changed across a restore:\n got %+v\nwant %+v", restored.Snapshot(), track.Snapshot())

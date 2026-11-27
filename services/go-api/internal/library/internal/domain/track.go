@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 )
@@ -319,7 +320,7 @@ func (t *Track) AcquisitionConfidence() float64 {
 }
 
 func (t *Track) AcquisitionEvidence() json.RawMessage {
-	return t.evidenceJSON
+	return slices.Clone(t.evidenceJSON)
 }
 
 func (t *Track) SetDuration(seconds float64) error {
