@@ -2,6 +2,7 @@ package childprocess_test
 
 import (
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"fmt"
@@ -20,18 +21,21 @@ func grandchildScript(pidFile, tail string) string {
 
 func readPID(t *testing.T, pidFile string) int {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if b, err := os.ReadFile(pidFile); err == nil {
-			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(b))); convErr == nil && pid > 0 {
-				t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
-				return pid
-			}
+	var pid int
+	polltest.Until(t, 5*time.Second, "the grandchild PID to be written to "+pidFile, func() bool {
+		b, err := os.ReadFile(pidFile)
+		if err != nil {
+			return false
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("grandchild PID never written to %s", pidFile)
-	return 0
+		parsed, convErr := strconv.Atoi(strings.TrimSpace(string(b)))
+		if convErr != nil || parsed <= 0 {
+			return false
+		}
+		pid = parsed
+		return true
+	})
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	return pid
 }
 
 func processAlive(pid int) bool {
@@ -50,14 +54,9 @@ func processAlive(pid int) bool {
 
 func assertGone(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if !processAlive(pid) {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("grandchild PID %d is still running after the runner returned", pid)
+	polltest.Until(t, 3*time.Second, fmt.Sprintf("grandchild PID %d to be gone after the runner returned", pid), func() bool {
+		return !processAlive(pid)
+	})
 }
 
 func runAsync(timeout time.Duration, script string) <-chan error {
