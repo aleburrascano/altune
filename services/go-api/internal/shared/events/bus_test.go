@@ -499,7 +499,7 @@ func TestEvictIdleUsers_SubscribeQueuedBehindTheEvictionIsNotOrphaned(t *testing
 		ch, cancel := bus.Subscribe(idle)
 		subscribed <- subscription{ch, cancel}
 	}()
-	awaitQueuedOnLock(t, "(*InProcessBus).lockLiveUser")
+	awaitQueuedOnLock(t, "(*InProcessBus).Subscribe")
 	close(releaseUser)
 	<-evicted
 	sub := <-subscribed
