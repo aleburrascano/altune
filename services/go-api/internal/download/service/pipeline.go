@@ -332,6 +332,17 @@ func (ac *AcquisitionContext) refetchesCurrentSource() bool {
 	return ac.Replace.Gate.RefetchesCurrentSource()
 }
 
+func (ac *AcquisitionContext) preserveCurrentAudio(track *ports.TrackSnapshot) {
+	ac.Replace.PreservedRef = deref(track.AudioRef)
+	ac.Track.AudioSourceURL = ""
+	if !ac.refetchesCurrentSource() {
+		ac.Replace.ExcludeKeys = mergeSourceKeys(
+			ac.Replace.ExcludeKeys,
+			sourceKey(deref(track.AudioSourceURL)),
+		)
+	}
+}
+
 func (ac *AcquisitionContext) admitFetched(fetched audioquality.Grade) error {
 	if err := ac.Replace.Gate.AdmitFetched(fetched, ac.SourceFormat, ac.ProbedDuration.Seconds()); err != nil {
 		return fmt.Errorf("admit fetched: %w", err)
