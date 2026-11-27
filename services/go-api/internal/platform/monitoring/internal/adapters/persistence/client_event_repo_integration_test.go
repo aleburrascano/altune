@@ -77,6 +77,34 @@ func TestPostgresClientEventStore_EventsWithoutAnIdAreAllKept(t *testing.T) {
 	}
 }
 
+func TestPostgresClientEventStore_PruneRemovesOnlyRowsOlderThanTheRetention(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Pool(t)
+	store := persistence.NewPostgresClientEventStore(pool)
+	now := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	stale, fresh := newOwner(), newOwner()
+	for owner, at := range map[ids.UserId]time.Time{
+		stale: now.Add(-domain.ClientEventRetention - time.Minute),
+		fresh: now.Add(-domain.ClientEventRetention + time.Minute),
+	} {
+		if err := store.Append(ctx, domain.ClientEvent{UserId: owner, Type: domain.ClientEventScreenView, OccurredAt: at}); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+
+	pruned, err := store.Prune(ctx, now)
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+
+	if countClientEvents(t, pool, stale) != 0 || countClientEvents(t, pool, fresh) != 1 {
+		t.Errorf("rows stale=%d fresh=%d, want 0 and 1", countClientEvents(t, pool, stale), countClientEvents(t, pool, fresh))
+	}
+	if pruned < 1 {
+		t.Errorf("pruned = %d, want at least the stale row", pruned)
+	}
+}
+
 func TestPostgresClientEventStore_ErasesOnlyTheRowsOfDeletedIdentities(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.Pool(t)

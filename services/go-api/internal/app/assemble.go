@@ -76,6 +76,7 @@ func (s *composed) Shutdown(ctx context.Context) []shutdown.Outcome {
 
 func (a *application) attach(ctx context.Context, h handles) {
 	a.pool = h.Pool
+	a.clientEvents = monitoring.NewPostgresClientEventStore(h.Pool)
 	a.probes.DB = h.Pool.Ping
 	a.redisClient = h.Redis
 	if h.Redis != nil {
@@ -103,7 +104,6 @@ func (a *application) compose(ctx context.Context, transport http.RoundTripper) 
 	if err != nil {
 		return nil, err
 	}
-	a.clientEvents = monitoring.NewPostgresClientEventStore(a.pool)
 	clientEventRoutes, err := monitoring.NewClientEventRoutes(a.clientEvents, searchsettings.ClientEvents(a.cfg), clock.Now)
 	if err != nil {
 		return nil, fmt.Errorf("client events: %w", err)

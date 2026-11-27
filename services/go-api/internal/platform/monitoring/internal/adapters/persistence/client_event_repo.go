@@ -68,6 +68,16 @@ func (s *PostgresClientEventStore) Append(ctx context.Context, event domain.Clie
 	return nil
 }
 
+const pruneClientEventsSQL = `DELETE FROM client_events WHERE occurred_at < $1`
+
+func (s *PostgresClientEventStore) Prune(ctx context.Context, now time.Time) (int64, error) {
+	tag, err := s.pool.Exec(ctx, pruneClientEventsSQL, now.UTC().Add(-domain.ClientEventRetention))
+	if err != nil {
+		return 0, database.WrapUnreadable("prune client events", ports.ErrClientEventsUnavailable, err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 const eraseClientEventsOfDeletedIdentitiesSQL = `
 	DELETE FROM client_events e
 	WHERE EXISTS (SELECT 1 FROM auth_user_ids)

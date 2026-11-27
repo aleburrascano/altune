@@ -69,6 +69,50 @@ func TestPruneDiscoveryEvents_BothPrunesAreGivenTheClocksInstantInUTC(t *testing
 	assertAllAtTestNowInUTC(t, pruner.seen, 2)
 }
 
+type fixedPruner struct {
+	rows int64
+	err  error
+}
+
+func (f fixedPruner) Prune(context.Context, time.Time) (int64, error) { return f.rows, f.err }
+
+func TestPruneClientEvents_IsGivenTheClocksInstantInUTC(t *testing.T) {
+	pruner := &timeRecordingPruner{}
+
+	if err := cleanupjobs.PruneClientEvents(pruner, atTestNow)(context.Background()); err != nil {
+		t.Fatalf("run error = %v, want nil", err)
+	}
+
+	assertAllAtTestNowInUTC(t, pruner.seen, 1)
+}
+
+func TestPruneClientEvents_LogsTheCountOnlyWhenRowsWereRemovedAndSurfacesFailure(t *testing.T) {
+	boom := errors.New("boom")
+	cases := []struct {
+		name    string
+		pruner  fixedPruner
+		wantErr bool
+		wantLog string
+	}{
+		{"rows removed", fixedPruner{rows: 4}, false, `level=INFO msg="client events pruned" rows=4` + "\n"},
+		{"nothing removed", fixedPruner{}, false, ""},
+		{"the prune fails", fixedPruner{err: boom}, true, `level=WARN msg="client event retention prune failed" error=boom` + "\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			logged := captureLogs(t, func() { err = cleanupjobs.PruneClientEvents(tc.pruner, atTestNow)(context.Background()) })
+
+			if tc.wantErr != errors.Is(err, boom) {
+				t.Errorf("run error = %v, want the prune's failure surfaced: %v", err, tc.wantErr)
+			}
+			if logged != tc.wantLog {
+				t.Errorf("logged %q, want %q", logged, tc.wantLog)
+			}
+		})
+	}
+}
+
 func TestPruneAcquisitionRows_BothPrunesAreGivenTheClocksInstantInUTC(t *testing.T) {
 	outcomes, rejections := &timeRecordingPruner{}, &timeRecordingPruner{}
 
