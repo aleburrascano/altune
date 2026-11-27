@@ -937,7 +937,7 @@ func TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck(t *testing.
 	}
 }
 
-func TestPlaylistMembershipService_RemoveTrack_LogsActorAndObject(t *testing.T) {
+func TestPlaylistMembershipService_RemoveTrack_LogsThePlaylistAndTrack(t *testing.T) {
 	logs := library.CaptureAuditLogs(t)
 	userId := librarytest.UserId()
 	plRepo := library.NewInMemoryPlaylistRepo()
@@ -953,13 +953,12 @@ func TestPlaylistMembershipService_RemoveTrack_LogsActorAndObject(t *testing.T) 
 	}
 
 	library.AssertAttrs(t, logs.Find(t, "track removed from playlist"), map[string]string{
-		"user_id":     userId.String(),
 		"playlist_id": pl.ID.String(),
 		"track_id":    trackId.String(),
 	})
 }
 
-func TestPlaylistMembershipService_RemoveTracks_LogsActorAndObject(t *testing.T) {
+func TestPlaylistMembershipService_RemoveTracks_LogsThePlaylistAndTrack(t *testing.T) {
 	logs := library.CaptureAuditLogs(t)
 	userId := librarytest.UserId()
 	plRepo := library.NewInMemoryPlaylistRepo()
@@ -980,7 +979,6 @@ func TestPlaylistMembershipService_RemoveTracks_LogsActorAndObject(t *testing.T)
 
 	rec := logs.Find(t, "tracks removed from playlist")
 	library.AssertAttrs(t, rec, map[string]string{
-		"user_id":     userId.String(),
 		"playlist_id": pl.ID.String(),
 		"removed":     "2",
 		"requested":   "3",

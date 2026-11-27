@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -281,7 +282,7 @@ func TestReconcileOrphanedAudio_ListErrorFailsRun(t *testing.T) {
 }
 
 func TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan(t *testing.T) {
-	logs := library.CaptureAuditLogs(t)
+	ring := logging.CaptureRing(t, "info")
 	f := newOrphanFixture()
 	f.orphan(t, orphanRef)
 	f.store.ErrOnDelete = errors.New("storage unavailable")
@@ -290,12 +291,26 @@ func TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan(t *testing.T) {
 		t.Fatalf("sweep = %+v, want one failed delete", got)
 	}
 
-	library.AssertAttrs(t, logs.Find(t, "catalog.orphaned_audio_delete_failed"), map[string]string{
-		"audio_ref": orphanRef,
-		"user_id":   librarytest.UserId().String(),
-		"attempts":  "0",
-		"error":     "storage unavailable",
-	})
+	logged := false
+	for _, r := range ring.Snapshot() {
+		if r.Message != "catalog.orphaned_audio_delete_failed" {
+			continue
+		}
+		logged = true
+		for k, want := range map[string]string{
+			"audio_ref": orphanRef,
+			"user_id":   librarytest.UserId().String(),
+			"attempts":  "0",
+			"error":     "storage unavailable",
+		} {
+			if got := r.Attrs[k]; got != want {
+				t.Errorf("attr %s = %q, want %q", k, got, want)
+			}
+		}
+	}
+	if !logged {
+		t.Fatal("no catalog.orphaned_audio_delete_failed line")
+	}
 	if f.metrics.OrphanedAudioReconcileFailures != 1 {
 		t.Errorf("reconcile-failure metric = %d, want 1 so a stuck orphan is alertable",
 			f.metrics.OrphanedAudioReconcileFailures)

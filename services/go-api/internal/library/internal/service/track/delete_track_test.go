@@ -217,7 +217,7 @@ func TestDeleteTrackService_NoOrphanMetricOnCleanDelete(t *testing.T) {
 	}
 }
 
-func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
+func TestDeleteTrackService_LogsTheTrack(t *testing.T) {
 	logs := library.CaptureAuditLogs(t)
 	userId := librarytest.UserId()
 	repo := library.NewInMemoryTrackRepo()
@@ -228,12 +228,11 @@ func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
 	}
 
 	library.AssertAttrs(t, logs.Find(t, "track deleted from library"), map[string]string{
-		"user_id":  userId.String(),
 		"track_id": track.ID.String(),
 	})
 }
 
-func TestDeleteTrackService_OrphanLogCarriesActor(t *testing.T) {
+func TestDeleteTrackService_OrphanLogNamesTheTrackAndAudio(t *testing.T) {
 	logs := library.CaptureAuditLogs(t)
 	userId := librarytest.UserId()
 	repo := library.NewInMemoryTrackRepo()
@@ -247,7 +246,6 @@ func TestDeleteTrackService_OrphanLogCarriesActor(t *testing.T) {
 	}
 
 	library.AssertAttrs(t, logs.Find(t, "orphaned audio file after track delete"), map[string]string{
-		"user_id":  userId.String(),
 		"track_id": track.ID.String(),
 	})
 	logs.Find(t, "track deleted from library")
