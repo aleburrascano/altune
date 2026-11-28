@@ -1,8 +1,8 @@
 package savedlink
 
 import (
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/filelinks"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const SourceName acqdomain.SourceName = "catalogpin"
+const SourceName domain.SourceName = "catalogpin"
 
 const pinnedProvider = ports.ProviderSoundCloud
 
@@ -63,7 +63,7 @@ func NoPageReader() pageReader { return noPageReader{} }
 
 func (noPageReader) ReadPage(context.Context, string) ([]byte, error) { return nil, ErrNoPageReader }
 
-func (s *Source) Name() acqdomain.SourceName { return SourceName }
+func (s *Source) Name() domain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	candidates := s.pinnedCandidates(ctx, req)

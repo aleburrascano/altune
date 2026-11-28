@@ -1,13 +1,11 @@
 package download
 
-import ports "altune/go-api/internal/download/internal/core/ports"
+import "altune/go-api/internal/download/internal/ports"
 
 var (
 	NoopAudioIdentifier    = ports.NoopAudioIdentifier
 	NoopAudioTagger        = ports.NoopAudioTagger
 	NoopPreviewMatcher     = ports.NoopPreviewMatcher
-	NoopJobNotifier        = ports.NoopJobNotifier
-	NoopOutcomeRecorder    = ports.NoopOutcomeRecorder
 	NoopRecordingLookup    = ports.NoopRecordingLookup
 	NoopRecordingResolver  = ports.NoopRecordingResolver
 	NoopRejectionStore     = ports.NoopRejectionStore

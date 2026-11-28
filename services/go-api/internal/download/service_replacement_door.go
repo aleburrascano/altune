@@ -1,13 +1,10 @@
 package download
 
 import (
-	upgrade "altune/go-api/internal/download/service/replacement"
+	"altune/go-api/internal/download/internal/service"
 )
 
-type UpgradeConfig = upgrade.Config
-
 var (
-	UpgradeInterval       = upgrade.Interval
-	NewReplacementPlanner = upgrade.NewReplacementPlanner
-	InPlaceCheckOf        = upgrade.InPlaceCheckOf
+	UpgradeInterval       = service.PlanInterval
+	NewReplacementPlanner = service.NewReplacementPlanner
 )

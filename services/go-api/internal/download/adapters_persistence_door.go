@@ -5,11 +5,10 @@ import persistence "altune/go-api/internal/download/internal/adapters/persistenc
 type PostgresJobQueue = persistence.PostgresJobQueue
 
 var (
-	NewPostgresCooldownStore   = persistence.NewPostgresCooldownStore
-	NewPostgresDatabase        = persistence.NewDatabase
-	MustNewPostgresJobNotifier = persistence.MustNewPostgresJobNotifier
-	MustNewPostgresJobQueue    = persistence.MustNewPostgresJobQueue
-	NewPostgresOutcomeStore    = persistence.NewPostgresOutcomeStore
-	NewPostgresRejectionStore  = persistence.NewPostgresRejectionStore
-	NewPostgresUpgradeStore    = persistence.NewPostgresUpgradeStore
+	NewPostgresCooldownStore  = persistence.NewPostgresCooldownStore
+	NewPostgresDatabase       = persistence.NewDatabase
+	MustNewPostgresJobQueue   = persistence.MustNewPostgresJobQueue
+	NewPostgresOutcomeStore   = persistence.NewPostgresOutcomeStore
+	NewPostgresRejectionStore = persistence.NewPostgresRejectionStore
+	NewPostgresUpgradeStore   = persistence.NewPostgresUpgradeStore
 )

@@ -1,7 +1,7 @@
 package ffmpegtag
 
 import (
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/logging"
 	"context"

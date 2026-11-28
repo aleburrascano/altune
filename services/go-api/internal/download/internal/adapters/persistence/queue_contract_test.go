@@ -1,9 +1,8 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download"
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/persistence"
+	"altune/go-api/internal/download/internal/contracttest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"testing"
@@ -29,7 +28,7 @@ func TestPostgresJobQueue_Contract(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	acquisitiontest.JobQueueContract(t, func(*testing.T) acquisitiontest.JobQueueUnderTest {
-		return contractPgxJobQueue{PostgresJobQueue: download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool}), pool: pool}
+	contracttest.JobQueueContract(t, func(*testing.T) contracttest.JobQueueUnderTest {
+		return contractPgxJobQueue{PostgresJobQueue: persistence.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool}), pool: pool}
 	})
 }

@@ -1,8 +1,8 @@
 package ytdlp_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
@@ -58,7 +58,7 @@ func missingFfmpeg(t *testing.T) string {
 
 func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
-	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.NoopVerifySkipRecorder(), ytdlp.WithDecodeTimeout(100*time.Millisecond))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), ports.NoopVerifySkipRecorder(), ytdlp.WithDecodeTimeout(100*time.Millisecond))
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *
 
 func TestFfprobeProber_ValidateDecodable_WarnsWhenTheDecoderCannotStart(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
-	p := newProber(t, missingFfmpeg(t), download.NoopVerifySkipRecorder())
+	p := newProber(t, missingFfmpeg(t), ports.NoopVerifySkipRecorder())
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
@@ -96,7 +96,7 @@ func unrunnableFfmpegOutsideTheTempDir(t *testing.T) string {
 func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannotStart(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	binDir := unrunnableFfmpegOutsideTheTempDir(t)
-	p := newProber(t, binDir, download.NoopVerifySkipRecorder())
+	p := newProber(t, binDir, ports.NoopVerifySkipRecorder())
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
@@ -112,7 +112,7 @@ func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannot
 }
 
 func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing.T) {
-	p := newProber(t, refusingFfmpegDir(t, "Invalid data found when processing input"), download.NoopVerifySkipRecorder())
+	p := newProber(t, refusingFfmpegDir(t, "Invalid data found when processing input"), ports.NoopVerifySkipRecorder())
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 
@@ -126,7 +126,7 @@ func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing
 
 func TestFfprobeProber_ValidateDecodable_PropagatesACancelledCaller(t *testing.T) {
 	started := filepath.Join(t.TempDir(), "started")
-	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\ntouch '"+started+"'\nsleep 30\n"), download.NoopVerifySkipRecorder())
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\ntouch '"+started+"'\nsleep 30\n"), ports.NoopVerifySkipRecorder())
 	ctx := cancelOnceFileExists(t, started)
 
 	err := p.ValidateDecodable(ctx, decodedFile)
@@ -166,7 +166,7 @@ func TestFfprobeProber_ValidateDecodable_RecordsADecoderUnavailableSkip(t *testi
 
 func decoderDiagnostic(t *testing.T, stderr string) string {
 	t.Helper()
-	err := newProber(t, refusingFfmpegDir(t, stderr), download.NoopVerifySkipRecorder()).ValidateDecodable(context.Background(), decodedFile)
+	err := newProber(t, refusingFfmpegDir(t, stderr), ports.NoopVerifySkipRecorder()).ValidateDecodable(context.Background(), decodedFile)
 	if err == nil {
 		t.Fatal("ValidateDecodable() = nil, want the decoder's refusal")
 	}

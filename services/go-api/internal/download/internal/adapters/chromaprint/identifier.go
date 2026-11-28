@@ -1,8 +1,8 @@
 package chromaprint
 
 import (
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
@@ -95,7 +95,7 @@ func (i *Identifier) Identify(ctx context.Context, filePath string, fullLengthFo
 		return ports.RecordingMatch{}, err
 	}
 	if fp.Fingerprint == "" || fp.Duration <= 0 {
-		return ports.RecordingMatch{}, fmt.Errorf("%s: %w", filePath, acqdomain.ErrEmptyFingerprint)
+		return ports.RecordingMatch{}, fmt.Errorf("%s: %w", filePath, domain.ErrEmptyFingerprint)
 	}
 	if fullLengthForPreview > 0 {
 		fp.Duration = math.Round(fullLengthForPreview)
@@ -160,7 +160,7 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	case err != nil:
 		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %w", err)
 	case status == http.StatusTooManyRequests:
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d: %w", status, acqdomain.ErrIdentifyThrottled)
+		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d: %w", status, domain.ErrIdentifyThrottled)
 	case status != http.StatusOK:
 		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", status)
 	}

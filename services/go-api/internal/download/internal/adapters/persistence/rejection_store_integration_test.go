@@ -1,9 +1,8 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/persistence"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -37,7 +36,7 @@ func TestPostgresRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 	basis := ports.RejectionBasis{ExpectedSeconds: 322.5, ReferenceMBID: "mbid-1"}
@@ -72,7 +71,7 @@ func TestPostgresRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testi
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -97,7 +96,7 @@ func TestPostgresRejectionStore_AnUpperCaseTrackIdFindsTheRowRecordedFromTheType
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	lower := uuid.NewString()
 
@@ -120,7 +119,7 @@ func TestPostgresRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -164,7 +163,7 @@ func TestPostgresRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *tes
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -192,7 +191,7 @@ func TestPostgresRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 
 	err := store.Record(ctx, []ports.CandidateRejectionRecord{
@@ -207,7 +206,7 @@ func TestPostgresRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 
 	err := store.Record(ctx, []ports.CandidateRejectionRecord{
@@ -222,7 +221,7 @@ func TestPostgresRejectionStore_RecordWithCancelledContextReturnsError(t *testin
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -237,7 +236,7 @@ func TestPostgresRejectionStore_RecordWithCancelledContextReturnsError(t *testin
 func TestPostgresRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	pool.Close()
 
 	err := store.Record(context.Background(), []ports.CandidateRejectionRecord{
@@ -252,7 +251,7 @@ func TestPostgresRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testin
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -280,7 +279,7 @@ func TestPostgresRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *t
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackA := uuid.NewString()
 	trackB := uuid.NewString()
@@ -306,7 +305,7 @@ func TestPostgresRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *te
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 
 	keys, err := activeKeys(store, context.Background(), uuid.NewString(), time.Now().Add(-30*24*time.Hour))
 	if err != nil {
@@ -321,7 +320,7 @@ func TestPostgresRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 	hostile := `https://example.com/watch?v=x'); DROP TABLE acquisition_rejections;-- "Beyoncé" ☃`
@@ -345,7 +344,7 @@ func TestPostgresRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *te
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -359,7 +358,7 @@ func TestPostgresRejectionStore_RecordWithNoRecordsSucceeds(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 
 	if err := store.Record(context.Background(), nil); err != nil {
 		t.Errorf("Record(nil) = %v, want nil", err)
@@ -370,7 +369,7 @@ func TestPostgresRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -394,7 +393,7 @@ func TestPostgresRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresO
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -444,7 +443,7 @@ func TestPostgresRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *test
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -475,7 +474,7 @@ func TestPostgresRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := insertFailedTrack(t, pool).ID.UUID().String()
 
@@ -509,7 +508,7 @@ func TestPostgresRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 	total := storePruneBatch + 5
@@ -538,7 +537,7 @@ func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBa
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -564,7 +563,7 @@ func TestPostgresRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 	basis := ports.RejectionBasis{ExpectedSeconds: 201, ReferenceMBID: "mbid-now"}
@@ -593,7 +592,7 @@ func TestPostgresRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testi
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 	newer := ports.RejectionBasis{ExpectedSeconds: 0, ReferenceMBID: ""}
@@ -622,7 +621,7 @@ func TestPostgresRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	kept := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool).ID.UUID().String()
@@ -665,7 +664,7 @@ func TestPostgresRejectionStore_PruneKeepsARejectionStoredUnderTheUppercaseIDOfA
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	var upper string
@@ -688,7 +687,7 @@ func TestPostgresRejectionStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	notUUID := "not-a-uuid-" + uuid.NewString()
@@ -713,7 +712,7 @@ func TestPostgresRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithThe
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	track := insertFailedTrack(t, pool)
 	trackID := track.ID.UUID().String()
@@ -742,7 +741,7 @@ func TestPostgresRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKe
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool)
@@ -775,7 +774,7 @@ func TestPostgresRejectionStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *tes
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresRejectionStore(pool)
+	store := persistence.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	if _, err := store.Prune(ctx, time.Now()); err != nil {
 		t.Fatalf("draining Prune(...) = %v, want nil", err)

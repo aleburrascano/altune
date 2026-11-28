@@ -1,8 +1,10 @@
 package ytdlp_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/scratchfiles"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/polltest"
@@ -112,29 +114,29 @@ func canaryWith(jar string) error {
 }
 
 func canaryIn(environment, jar string) error {
-	return download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep, download.WithYtDlpEnvironment(environment)).Canary(context.Background(), download.YouTubeCanary)
+	return ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep, ytdlp.WithEnvironment(environment)).Canary(context.Background(), ytdlp.YouTubeCanary)
 }
 
 type runKind struct {
 	name string
-	run  func(t *testing.T, s *download.YouTubeAudioSearcher)
+	run  func(t *testing.T, s *ytdlp.YouTubeAudioSearcher)
 }
 
 var everyRunKind = []runKind{
-	{"search", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+	{"search", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 		_, _ = s.SearchQueries(context.Background(), []string{"artist song"})
 	}},
-	{"download", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+	{"download", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 		_, _ = s.Download(context.Background(), youTubeWatchURL, t.TempDir())
 	}},
-	{"preview", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+	{"preview", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 		_, _ = s.DownloadPreview(context.Background(), youTubeWatchURL, t.TempDir(), 30)
 	}},
-	{"inspect", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-		s.MarkUnplayable(context.Background(), []download.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/artist/track")})
+	{"inspect", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
+		s.MarkUnplayable(context.Background(), []ports.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/artist/track")})
 	}},
-	{"canary", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-		_ = s.Canary(context.Background(), download.YouTubeCanary)
+	{"canary", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
+		_ = s.Canary(context.Background(), ytdlp.YouTubeCanary)
 	}},
 }
 
@@ -144,7 +146,7 @@ func TestCookieJar_EveryKindOfRunKeepsTheCookiesYtDlpRenewed(t *testing.T) {
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpRenewing(t, signedInJar("new"), "exit 0")
 
-			kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
+			kind.run(t, ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 			if got := jarContents(t, jar); got != signedInJar("new") {
 				t.Errorf("live jar after a successful %s = %q, want the renewed cookies", kind.name, got)
@@ -160,7 +162,7 @@ func TestCookieJar_EveryKindOfRunRecordsItsFirstSignInFailure(t *testing.T) {
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpFailing(t, botCheck)
 
-			kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
+			kind.run(t, ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 			records := firstSignInFailures(t, logs)
 			if len(records) != 1 || records[0]["run"] != kind.name {
@@ -623,7 +625,7 @@ func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T)
 
 	go func() { done <- canaryWith(jar) }()
 	waitFor(t, "yt-dlp to start", done, func() bool { _, err := os.Stat(started); return err == nil })
-	swept := download.NewTempWorkspace().SweepAbandoned(context.Background(), time.Now().Add(time.Hour))
+	swept := scratchfiles.New().SweepAbandoned(context.Background(), time.Now().Add(time.Hour))
 	if err := os.WriteFile(proceed, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -639,7 +641,7 @@ func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T)
 }
 
 func signedOutSince(jar string) (time.Time, bool) {
-	return download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).SignedOutSince(context.Background())
+	return ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).SignedOutSince(context.Background())
 }
 
 func signedOutJar(t *testing.T) (jar string, since time.Time) {
@@ -661,7 +663,7 @@ func TestCookieJar_EveryKindOfRunThatHitsTheBotCheckMarksTheJarSignedOutFromThat
 			ytDlpFailing(t, botCheck)
 			before := time.Now()
 
-			kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
+			kind.run(t, ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 			since, signedOut := signedOutSince(jar)
 			if !signedOut || since.Before(before) || since.After(time.Now()) {
@@ -693,22 +695,22 @@ func TestCookieJar_LaterBotChecksKeepTheMomentTheJarWasFirstSignedOut(t *testing
 }
 
 var youTubeRunKinds = []runKind{
-	{"youtube canary", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-		_ = s.Canary(context.Background(), download.YouTubeCanary)
+	{"youtube canary", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
+		_ = s.Canary(context.Background(), ytdlp.YouTubeCanary)
 	}},
-	{"ytmusic canary", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-		_ = s.Canary(context.Background(), download.YTMusicCanary)
+	{"ytmusic canary", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
+		_ = s.Canary(context.Background(), ytdlp.YTMusicCanary)
 	}},
-	{"youtube download", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+	{"youtube download", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 		_, _ = s.Download(context.Background(), youTubeWatchURL, t.TempDir())
 	}},
-	{"mixed-case host download", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+	{"mixed-case host download", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 		_, _ = s.Download(context.Background(), "https://WWW.YouTube.com/watch?v=jNQXAC9IVRw", t.TempDir())
 	}},
-	{"youtu.be download", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+	{"youtu.be download", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 		_, _ = s.Download(context.Background(), "https://youtu.be/jNQXAC9IVRw", t.TempDir())
 	}},
-	{"search", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+	{"search", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 		_, _ = s.SearchQueries(context.Background(), []string{"artist song"})
 	}},
 }
@@ -723,7 +725,7 @@ func TestCookieJar_AYouTubeRunThatSucceedsSignsTheJarBackIn(t *testing.T) {
 				jar, _ := signedOutJar(t)
 				succeed(t)
 
-				kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
+				kind.run(t, ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 				if since, signedOut := signedOutSince(jar); signedOut {
 					t.Errorf("still signed out since %v after a %s that succeeded", since, kind.name)
@@ -735,16 +737,16 @@ func TestCookieJar_AYouTubeRunThatSucceedsSignsTheJarBackIn(t *testing.T) {
 
 func TestCookieJar_ARunThatSucceedsOffYouTubeLeavesTheJarSignedOut(t *testing.T) {
 	for _, kind := range []runKind{
-		{"soundcloud canary", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-			_ = s.Canary(context.Background(), download.SoundCloudCanary)
+		{"soundcloud canary", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
+			_ = s.Canary(context.Background(), ytdlp.SoundCloudCanary)
 		}},
-		{"soundcloud download", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+		{"soundcloud download", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 			_, _ = s.Download(context.Background(), "https://soundcloud.com/artist/track", t.TempDir())
 		}},
-		{"soundcloud inspect", func(t *testing.T, s *download.YouTubeAudioSearcher) {
-			s.MarkUnplayable(context.Background(), []download.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/artist/track")})
+		{"soundcloud inspect", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
+			s.MarkUnplayable(context.Background(), []ports.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/artist/track")})
 		}},
-		{"lookalike host", func(t *testing.T, s *download.YouTubeAudioSearcher) {
+		{"lookalike host", func(t *testing.T, s *ytdlp.YouTubeAudioSearcher) {
 			_, _ = s.Download(context.Background(), "https://notyoutube.com/watch?v=jNQXAC9IVRw", t.TempDir())
 		}},
 	} {
@@ -756,7 +758,7 @@ func TestCookieJar_ARunThatSucceedsOffYouTubeLeavesTheJarSignedOut(t *testing.T)
 				jar, first := signedOutJar(t)
 				succeed(t)
 
-				kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
+				kind.run(t, ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 				if since, signedOut := signedOutSince(jar); !signedOut || !since.Equal(first) {
 					t.Errorf("signed out since %v (%v) after a %s, want still signed out since %v", since, signedOut, kind.name, first)

@@ -1,9 +1,8 @@
 package ytmsearch_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
@@ -63,8 +62,8 @@ func fixtureServer(t *testing.T, requests *[]recordedRequest) *httptest.Server {
 	return srv
 }
 
-func clientFor(srv *httptest.Server, timeout time.Duration) *download.YouTubeMusicSearchClient {
-	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: timeout})
+func clientFor(srv *httptest.Server, timeout time.Duration) *ytmsearch.Client {
+	client, err := ytmsearch.New(ytmsearch.Config{HTTP: &http.Client{}, MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: timeout})
 	if err != nil {
 		panic(fmt.Sprintf("clientFor: a valid test config was refused: %v", err))
 	}
@@ -73,16 +72,16 @@ func clientFor(srv *httptest.Server, timeout time.Duration) *download.YouTubeMus
 
 func TestNewYtmSearch_RefusesWithoutAnHTTPClientOrATimeout(t *testing.T) {
 	tests := map[string]struct {
-		cfg  download.YouTubeMusicSearchConfig
+		cfg  ytmsearch.Config
 		want error
 	}{
-		"no HTTP client": {download.YouTubeMusicSearchConfig{Timeout: time.Second}, ytmsearch.ErrHTTPRequired},
-		"no timeout":     {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}}, ytmsearch.ErrTimeoutRequired},
-		"negative":       {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, Timeout: -time.Second}, ytmsearch.ErrTimeoutRequired},
+		"no HTTP client": {ytmsearch.Config{Timeout: time.Second}, ytmsearch.ErrHTTPRequired},
+		"no timeout":     {ytmsearch.Config{HTTP: &http.Client{}}, ytmsearch.ErrTimeoutRequired},
+		"negative":       {ytmsearch.Config{HTTP: &http.Client{}, Timeout: -time.Second}, ytmsearch.ErrTimeoutRequired},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			client, err := download.NewYtmSearch(tt.cfg)
+			client, err := ytmsearch.New(tt.cfg)
 			if !errors.Is(err, tt.want) || client != nil {
 				t.Errorf("NewYtmSearch = (%v, %v), want (nil, %v)", client, err, tt.want)
 			}
@@ -99,7 +98,7 @@ func TestClientWatch_PostsTheWebRemixNextRequestAndParsesIt(t *testing.T) {
 		t.Fatalf("Watch: %v", err)
 	}
 
-	if got.Type != download.VideoTypeOfficialVideo {
+	if got.Type != ytmsearch.VideoTypeOfficialVideo {
 		t.Errorf("Type = %q, want OMV", got.Type)
 	}
 	if len(requests) != 1 || requests[0].path != "/youtubei/v1/next" {
@@ -269,7 +268,7 @@ func TestClient_AnOutageNamesYtmsearchAsTheUnavailableSource(t *testing.T) {
 
 		for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
 			var unavailable *domain.SourceUnavailableError
-			if !errors.As(err, &unavailable) || unavailable.Source != download.SourceName("ytmsearch") {
+			if !errors.As(err, &unavailable) || unavailable.Source != domain.SourceName("ytmsearch") {
 				t.Errorf("status %d: %s err = %v, want SourceUnavailableError{Source: ytmsearch}", status, name, err)
 			}
 		}
@@ -371,7 +370,7 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 
 	var requests []recordedRequest
 	srv := fixtureServer(t, &requests)
-	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{
+	client, err := ytmsearch.New(ytmsearch.Config{
 		HTTP:      &http.Client{Transport: budget.Transport(http.DefaultTransport)},
 		MusicURL:  srv.URL,
 		OEmbedURL: srv.URL + "/oembed",

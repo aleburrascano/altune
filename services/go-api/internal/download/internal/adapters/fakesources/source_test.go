@@ -1,9 +1,11 @@
 package fakesources_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/adapters/fakesources"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
@@ -30,7 +32,7 @@ var fixtureClip = []byte("one clip of fixture audio")
 func fetchedSize(t *testing.T, seconds float64) int {
 	t.Helper()
 	outDir := t.TempDir()
-	fetched, err := download.NewArtTrackSource(fixtureClip).Fetch(context.Background(), downloadtest.Candidate("", downloadtest.WithDuration(seconds)), outDir)
+	fetched, err := fakesources.NewArtTrackSource(fixtureClip).Fetch(context.Background(), downloadtest.Candidate("", downloadtest.WithDuration(seconds)), outDir)
 	if err != nil {
 		t.Fatalf("Fetch(%v): %v", seconds, err)
 	}
@@ -66,7 +68,7 @@ func TestSource_FetchTilesTheClipToCoverTheDurationWithinBounds(t *testing.T) {
 
 func TestSource_FetchWritesDirectlyInOutDir(t *testing.T) {
 	outDir := t.TempDir()
-	fetched, err := download.NewArtTrackSource(fixtureClip).Fetch(context.Background(), downloadtest.Candidate("", downloadtest.WithDuration(212)), outDir)
+	fetched, err := fakesources.NewArtTrackSource(fixtureClip).Fetch(context.Background(), downloadtest.Candidate("", downloadtest.WithDuration(212)), outDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +90,7 @@ func TestSource_NoBinaryEmbedsAudio(t *testing.T) {
 }
 
 func TestSource_FetchWritesTheClipItWasGiven(t *testing.T) {
-	for _, source := range []download.AudioSource{download.NewArtTrackSource(fixtureClip), download.NewUploadSource(fixtureClip)} {
+	for _, source := range []ports.AudioSource{fakesources.NewArtTrackSource(fixtureClip), fakesources.NewUploadSource(fixtureClip)} {
 		fetched, err := source.Fetch(context.Background(), downloadtest.Candidate(""), t.TempDir())
 		if err != nil {
 			t.Fatal(err)
@@ -107,7 +109,7 @@ func TestSource_FetchRefusesCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	outDir := t.TempDir()
-	if _, err := download.NewArtTrackSource(fixtureClip).Fetch(ctx, downloadtest.Candidate(""), outDir); err == nil {
+	if _, err := fakesources.NewArtTrackSource(fixtureClip).Fetch(ctx, downloadtest.Candidate(""), outDir); err == nil {
 		t.Fatal("fetch on a cancelled context must fail")
 	}
 	if entries, _ := os.ReadDir(outDir); len(entries) != 0 {
@@ -115,15 +117,15 @@ func TestSource_FetchRefusesCancelledContext(t *testing.T) {
 	}
 }
 
-type answeringSongs []download.YouTubeMusicSong
+type answeringSongs []ytmsearch.Song
 
-func (a answeringSongs) SearchSongs(context.Context, string) ([]download.YouTubeMusicSong, error) {
+func (a answeringSongs) SearchSongs(context.Context, string) ([]ytmsearch.Song, error) {
 	return a, nil
 }
 
-func prodArtTrack(t *testing.T, req download.FindRequest, song download.YouTubeMusicSong) download.AudioCandidate {
+func prodArtTrack(t *testing.T, req ports.FindRequest, song ytmsearch.Song) ports.AudioCandidate {
 	t.Helper()
-	return findOne(t, download.NewYtmSearchSource(answeringSongs{song}, nil), req)
+	return findOne(t, ytmsearch.NewSource(answeringSongs{song}, nil), req)
 }
 
 func fakeYtDlpPrinting(t *testing.T, entry map[string]any) {
@@ -144,10 +146,10 @@ func fakeYtDlpPrinting(t *testing.T, entry map[string]any) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func prodUpload(t *testing.T, req download.FindRequest, entry map[string]any) download.AudioCandidate {
+func prodUpload(t *testing.T, req ports.FindRequest, entry map[string]any) ports.AudioCandidate {
 	t.Helper()
 	fakeYtDlpPrinting(t, entry)
-	source := download.NewYtDlpSource(download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
+	source := ytdlp.NewSource(ytdlp.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
 	found, err := source.Find(context.Background(), req)
 	if err != nil || len(found) == 0 {
 		t.Fatalf("yt-dlp source found %v err %v, want a candidate", found, err)
@@ -156,11 +158,11 @@ func prodUpload(t *testing.T, req download.FindRequest, entry map[string]any) do
 }
 
 func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
-	req := download.FindRequest{Title: "Song", Artist: "Artist", Album: "Album", Duration: 179.6}
+	req := ports.FindRequest{Title: "Song", Artist: "Artist", Album: "Album", Duration: 179.6}
 
-	art := findOne(t, download.NewArtTrackSource(fixtureClip), req)
-	wantArt := prodArtTrack(t, req, download.YouTubeMusicSong{VideoID: "dQw4w9WgXcQ", Type: download.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}, Album: "Album", DurationSeconds: 180})
-	wantArt.URL = download.ArtTrackURL
+	art := findOne(t, fakesources.NewArtTrackSource(fixtureClip), req)
+	wantArt := prodArtTrack(t, req, ytmsearch.Song{VideoID: "dQw4w9WgXcQ", Type: ytmsearch.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}, Album: "Album", DurationSeconds: 180})
+	wantArt.URL = fakesources.ArtTrackURL
 	if !reflect.DeepEqual(art, wantArt) {
 		t.Fatalf("art track %+v, want %+v", art, wantArt)
 	}
@@ -168,7 +170,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 		t.Fatalf("art track %+v must be a resolved art_track with no channel", art)
 	}
 
-	upload := findOne(t, download.NewUploadSource(fixtureClip), req)
+	upload := findOne(t, fakesources.NewUploadSource(fixtureClip), req)
 	wantUpload := prodUpload(t, req, map[string]any{"title": "Song", "duration": 180, "webpage_url": uploadURL, "channel": uploadChannel})
 	if !reflect.DeepEqual(upload, wantUpload) {
 		t.Fatalf("upload %+v, want %+v", upload, wantUpload)
@@ -176,15 +178,15 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	if upload.Kind != ports.KindUpload || upload.IsResolved() || upload.Channel == "" || upload.Channel == req.Artist {
 		t.Fatalf("upload %+v must be an unresolved upload from a neutral channel", upload)
 	}
-	if download.NewArtTrackSource(fixtureClip).Name() == download.NewUploadSource(fixtureClip).Name() || art.URL == upload.URL {
+	if fakesources.NewArtTrackSource(fixtureClip).Name() == fakesources.NewUploadSource(fixtureClip).Name() || art.URL == upload.URL {
 		t.Fatal("the two fixture sources must differ in name and URL")
 	}
 }
 
 func TestFind_UnknownDurationBecomesTheDefaultLength(t *testing.T) {
 	for _, in := range []float64{0, -3, math.NaN(), math.Inf(1)} {
-		req := download.FindRequest{Title: "Song", Artist: "Artist", Duration: in}
-		for _, source := range []download.AudioSource{download.NewArtTrackSource(fixtureClip), download.NewUploadSource(fixtureClip)} {
+		req := ports.FindRequest{Title: "Song", Artist: "Artist", Duration: in}
+		for _, source := range []ports.AudioSource{fakesources.NewArtTrackSource(fixtureClip), fakesources.NewUploadSource(fixtureClip)} {
 			if got := findOne(t, source, req).Duration; got != unknownLengthSeconds {
 				t.Errorf("%s: duration %v became %v, want %d", source.Name(), in, got, unknownLengthSeconds)
 			}
@@ -192,7 +194,7 @@ func TestFind_UnknownDurationBecomesTheDefaultLength(t *testing.T) {
 	}
 }
 
-func findOne(t *testing.T, s download.AudioSource, req download.FindRequest) download.AudioCandidate {
+func findOne(t *testing.T, s ports.AudioSource, req ports.FindRequest) ports.AudioCandidate {
 	t.Helper()
 	found, err := s.Find(context.Background(), req)
 	if err != nil || len(found) != 1 {

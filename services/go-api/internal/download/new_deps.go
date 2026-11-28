@@ -2,7 +2,7 @@ package download
 
 import (
 	"altune/go-api/internal/download/internal/adapters/persistence"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"

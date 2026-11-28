@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"

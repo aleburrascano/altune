@@ -2,7 +2,7 @@ package id3_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/id3"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"context"
 	"errors"
 	"os"

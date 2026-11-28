@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/app/bridges/downloadfromlibrary/upgradestatetest"
 	"altune/go-api/internal/download"
-	librarydoor "altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
@@ -15,6 +14,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	librarydoor "altune/go-api/internal/library"
 
 	"github.com/google/uuid"
 )

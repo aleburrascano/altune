@@ -1,12 +1,12 @@
 package ytdlp
 
 import (
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"context"
 )
 
-const SourceName acqdomain.SourceName = "ytdlp"
+const SourceName domain.SourceName = "ytdlp"
 
 var (
 	_ ports.AudioSource    = (*Source)(nil)
@@ -21,7 +21,7 @@ func NewSource(searcher *YouTubeAudioSearcher) *Source {
 	return &Source{searcher: searcher}
 }
 
-func (s *Source) Name() acqdomain.SourceName { return SourceName }
+func (s *Source) Name() domain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	candidates, err := s.searcher.SearchQueries(ctx, searchQueries(req))

@@ -1,8 +1,8 @@
 package ytdlp
 
 import (
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/clock"
@@ -161,7 +161,7 @@ func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, paren
 	if s.Available() && !ports.RunTimedOut(parent, run) && !sharedytdlp.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
-	return &acqdomain.SourceUnavailableError{Source: SourceName, Err: err}
+	return &domain.SourceUnavailableError{Source: SourceName, Err: err}
 }
 
 var errSearchPanicked = errors.New("yt-dlp search panicked")

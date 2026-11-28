@@ -1,7 +1,6 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
@@ -34,7 +33,7 @@ func TestPostgresJobNotifier_LogsWhenItCannotListen(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		download.MustNewPostgresJobNotifier(pool, clock.Sleep).Listen(ctx, make(chan struct{}, 1))
+		persistence.MustNewPostgresJobNotifier(pool, clock.Sleep).Listen(ctx, make(chan struct{}, 1))
 		close(done)
 	}()
 

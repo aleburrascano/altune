@@ -1,14 +1,11 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download"
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/persistence"
-	"altune/go-api/internal/download/internal/core/audioquality"
-	"altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/contracttest"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/dbtest"
-	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	sharedids "altune/go-api/internal/shared/ids"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -90,7 +89,7 @@ func sourceURL(id string) *string {
 func evidenceOf(g string) string { return fmt.Sprintf(`{"grade":%q}`, g) }
 
 func selectionOf(limit int) ports.UpgradeSelection {
-	return ports.UpgradeSelection{Limit: limit, Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 10, Upgradable: acquisitiontest.Rules{}.Upgradable()}
+	return ports.UpgradeSelection{Limit: limit, Generation: domain.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 10, Upgradable: contracttest.Rules{}.Upgradable()}
 }
 
 func candidatesAmong(t *testing.T, store *persistence.PostgresUpgradeStore, selection ports.UpgradeSelection, mine ...sharedids.TrackId) []sharedids.TrackId {
@@ -113,7 +112,7 @@ func TestPostgresUpgradeStore_CandidatesAreWorstGradeFirstAndNeverTheGradeA(t *t
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	b := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("B"), sourceURL: sourceURL("bbbb")})
 	f := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("ffff")})
@@ -133,7 +132,7 @@ func TestPostgresUpgradeStore_ATrackWithNoGradeIsPickedAsGradeD(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	ungraded := insertUpgradableTrack(t, pool, readyTrackSpec{sourceURL: sourceURL("none")})
 
@@ -148,7 +147,7 @@ func TestPostgresUpgradeStore_AUserUploadIsNeverACandidate(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	noSource := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: nil})
 	empty := ""
@@ -172,10 +171,10 @@ func TestPostgresUpgradeStore_UnverifiedUserUploadsAreCandidatesOnlyWhenAsked(t 
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	unverified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
-	verified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: fmt.Sprintf(`{"grade":"D","in_place_generation":%d}`, audioquality.PipelineGeneration)})
+	verified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: fmt.Sprintf(`{"grade":"D","in_place_generation":%d}`, domain.PipelineGeneration)})
 	graded := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A_user")})
 
 	if got := candidatesAmong(t, store, selectionOf(10), unverified, verified, graded); len(got) != 0 {
@@ -191,7 +190,7 @@ func TestPostgresUpgradeStore_AGradeAUserTrackIsNeverACandidate(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	aUser := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A_user"), sourceURL: sourceURL("mine")})
 
@@ -204,7 +203,7 @@ func TestPostgresUpgradeStore_NoteInPlaceFailureCountsAndMakesTheTrackWaitItsTur
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
 
 	first, err := store.NoteInPlaceFailure(context.Background(), id)
@@ -228,7 +227,7 @@ func TestPostgresUpgradeStore_AFileThatIsNotReadyIsNeverACandidate(t *testing.T)
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	failed := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("gone")})
 	if _, err := pool.Exec(context.Background(), `UPDATE tracks SET acquisition_status = 'failed' WHERE id = $1`, failed.UUID()); err != nil {
@@ -244,10 +243,10 @@ func TestPostgresUpgradeStore_ATrackGivenUpOnWaitsForTheNextGeneration(t *testin
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("stuck")})
 
-	if err := store.GiveUp(context.Background(), id, audioquality.PipelineGeneration, "the extended mix exists only on a promo channel"); err != nil {
+	if err := store.GiveUp(context.Background(), id, domain.PipelineGeneration, "the extended mix exists only on a promo channel"); err != nil {
 		t.Fatalf("GiveUp: %v", err)
 	}
 
@@ -255,7 +254,7 @@ func TestPostgresUpgradeStore_ATrackGivenUpOnWaitsForTheNextGeneration(t *testin
 		t.Errorf("candidates in the same generation = %v, want none", got)
 	}
 	next := selectionOf(10)
-	next.Generation = audioquality.PipelineGeneration + 1
+	next.Generation = domain.PipelineGeneration + 1
 	if got := candidatesAmong(t, store, next, id); !slices.Equal(got, []sharedids.TrackId{id}) {
 		t.Errorf("candidates after the generation bump = %v, want the track again", got)
 	}
@@ -273,7 +272,7 @@ func TestPostgresUpgradeStore_ATrackTriedRecentlyWaitsBeforeItsNextTry(t *testin
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	tried := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("tried")})
 	fresh := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("fresh")})
 
@@ -290,10 +289,10 @@ func TestPostgresUpgradeStore_NoCandidatesWhileTheUpgradeQueueIsFull(t *testing.
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	queued := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("queued")})
 	waiting := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("waiting")})
-	if err := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool}).Enqueue(context.Background(), queued, ports.JobKindUpgrade, 0); err != nil {
+	if err := persistence.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool}).Enqueue(context.Background(), queued, ports.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	full := selectionOf(10)
@@ -308,7 +307,7 @@ func TestPostgresUpgradeStore_NoteAttemptCountsTriesAndRemembersTheRejectedSourc
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("current")})
 	ctx := context.Background()
 
@@ -345,7 +344,7 @@ func TestPostgresUpgradeStore_RejectedSourceKeysKeepTheNewestTwentyFive(t *testi
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("current")})
 
 	for i := range 27 {
@@ -372,7 +371,7 @@ func TestPostgresUpgradeStore_ATrackGradedBestAvailableIsNeverACandidate(t *test
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	bestAvailable := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
 	unchecked := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("best_available", 0), sourceURL: sourceURL("leak2")})
@@ -390,11 +389,11 @@ func TestPostgresUpgradeStore_AGradeATrackIsACandidateOnlyWhenNotYetJudgedThisGe
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	unjudged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", 0), sourceURL: sourceURL("old")})
-	staleJudgement := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", audioquality.PipelineGeneration-1), sourceURL: sourceURL("stale")})
-	judged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", audioquality.PipelineGeneration), sourceURL: sourceURL("fresh")})
+	staleJudgement := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", domain.PipelineGeneration-1), sourceURL: sourceURL("stale")})
+	judged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", domain.PipelineGeneration), sourceURL: sourceURL("fresh")})
 
 	if got := candidatesAmong(t, store, selectionOf(10), unjudged, staleJudgement, judged); len(got) != 0 {
 		t.Errorf("candidates = %v, want no grade A unless the in-place check is asked for", got)
@@ -409,7 +408,7 @@ func TestUpgradeStore_Candidates_LowBitrateRescue(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	muxed := insertUpgradableTrack(t, pool, readyTrackSpec{
 		evidence: `{"grade":"A","source_format_id":"18","source_kbps":96}`, sourceURL: sourceURL("muxd"),
@@ -432,7 +431,7 @@ func TestPostgresUpgradeStore_StateOfATrackWithNoBookkeepingIsEmpty(t *testing.T
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{sourceURL: sourceURL("fresh")})
 
 	state, err := store.State(context.Background(), id)
@@ -446,7 +445,7 @@ func TestPostgresUpgradeStore_SettleAcquisitionAppendsRejectedKeysOnceAndResetsO
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","upgrade_tries":3}`, sourceURL: sourceURL("settle")})
 
@@ -477,7 +476,7 @@ func TestPostgresUpgradeStore_SettleAcquisitionKeepsTheNewestTwentyFive(t *testi
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{sourceURL: sourceURL("cap")})
 
 	var keys []string
@@ -498,7 +497,7 @@ func TestPostgresUpgradeStore_ABookkeepingWriteForATrackThatIsGoneChangesNothing
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	gone := sharedids.TrackIdFromUUID(uuid.New())
 
 	if err := store.GiveUp(context.Background(), gone, 1, "gone"); err != nil {
@@ -514,7 +513,7 @@ func TestPostgresUpgradeStore_BookkeepingWritesRacingATrackDeleteNeverDeadlock(t
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 	ctx := context.Background()
 
 	ops := []struct {
@@ -580,7 +579,7 @@ func TestPostgresUpgradeStore_SettleAcquisitionRefusesAStaleFenceAndWritesNothin
 	}
 
 	err := store.SettleAcquisition(ctx, id, 4, []string{"yt:stale"}, ports.ResetEvidence)
-	if !errors.Is(err, download.ErrLeaseLost) {
+	if !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("SettleAcquisition with fence 4 = %v, want ErrLeaseLost", err)
 	}
 	if _, keys := upgradeStateOf(t, pool, id); len(keys) != 0 {
@@ -659,7 +658,7 @@ func insertRow(t *testing.T, pool *pgxpool.Pool, row domain.UpgradeRow) sharedid
 }
 
 func eligibleBaseline() domain.UpgradeRow {
-	return domain.UpgradeRow{Ready: true, HasAudio: true, SourceURL: "https://www.youtube.com/watch?v=base", Grade: audioquality.C}
+	return domain.UpgradeRow{Ready: true, HasAudio: true, SourceURL: "https://www.youtube.com/watch?v=base", Grade: domain.C}
 }
 
 func rowsAroundTheBaseline() map[string]domain.UpgradeRow {
@@ -673,25 +672,25 @@ func rowsAroundTheBaseline() map[string]domain.UpgradeRow {
 		"no source url in place": func(r *domain.UpgradeRow) { r.SourceURL = ""; r.InPlaceGeneration = 1 },
 		"job queued":             func(r *domain.UpgradeRow) { r.JobQueued = true },
 		"ungraded":               func(r *domain.UpgradeRow) { r.Grade = "" },
-		"grade F":                func(r *domain.UpgradeRow) { r.Grade = audioquality.F },
-		"grade B":                func(r *domain.UpgradeRow) { r.Grade = audioquality.B },
-		"grade A":                func(r *domain.UpgradeRow) { r.Grade = audioquality.A },
+		"grade F":                func(r *domain.UpgradeRow) { r.Grade = domain.F },
+		"grade B":                func(r *domain.UpgradeRow) { r.Grade = domain.B },
+		"grade A":                func(r *domain.UpgradeRow) { r.Grade = domain.A },
 		"grade A judged": func(r *domain.UpgradeRow) {
-			r.Grade = audioquality.A
-			r.InPlaceGeneration = audioquality.PipelineGeneration
+			r.Grade = domain.A
+			r.InPlaceGeneration = domain.PipelineGeneration
 		},
-		"grade A muxed":            func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "18"; r.SourceKbps = 96 },
-		"grade A muxed high kbps":  func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "18"; r.SourceKbps = 130 },
-		"no source url judged now": func(r *domain.UpgradeRow) { r.SourceURL = ""; r.InPlaceGeneration = audioquality.PipelineGeneration },
-		"grade A low kbps":         func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "140"; r.SourceKbps = 64 },
-		"grade A at the floor":     func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "140"; r.SourceKbps = 112 },
-		"grade A high kbps":        func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "140"; r.SourceKbps = 130 },
-		"grade A unknown kbps":     func(r *domain.UpgradeRow) { r.Grade = audioquality.A; r.SourceFormatID = "140" },
-		"grade A user":             func(r *domain.UpgradeRow) { r.Grade = audioquality.AUser },
-		"grade A user in place":    func(r *domain.UpgradeRow) { r.Grade = audioquality.AUser; r.SourceURL = ""; r.InPlaceGeneration = 1 },
-		"best available grade":     func(r *domain.UpgradeRow) { r.Grade = audioquality.BestAvailable },
-		"given up this generation": func(r *domain.UpgradeRow) { r.BestAvailableGeneration = audioquality.PipelineGeneration },
-		"given up last generation": func(r *domain.UpgradeRow) { r.BestAvailableGeneration = audioquality.PipelineGeneration - 1 },
+		"grade A muxed":            func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "18"; r.SourceKbps = 96 },
+		"grade A muxed high kbps":  func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "18"; r.SourceKbps = 130 },
+		"no source url judged now": func(r *domain.UpgradeRow) { r.SourceURL = ""; r.InPlaceGeneration = domain.PipelineGeneration },
+		"grade A low kbps":         func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "140"; r.SourceKbps = 64 },
+		"grade A at the floor":     func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "140"; r.SourceKbps = 112 },
+		"grade A high kbps":        func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "140"; r.SourceKbps = 130 },
+		"grade A unknown kbps":     func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "140" },
+		"grade A user":             func(r *domain.UpgradeRow) { r.Grade = domain.AUser },
+		"grade A user in place":    func(r *domain.UpgradeRow) { r.Grade = domain.AUser; r.SourceURL = ""; r.InPlaceGeneration = 1 },
+		"best available grade":     func(r *domain.UpgradeRow) { r.Grade = domain.BestAvailable },
+		"given up this generation": func(r *domain.UpgradeRow) { r.BestAvailableGeneration = domain.PipelineGeneration },
+		"given up last generation": func(r *domain.UpgradeRow) { r.BestAvailableGeneration = domain.PipelineGeneration - 1 },
 		"tried a day ago":          func(r *domain.UpgradeRow) { tried := long; r.UpgradeTriedAt = &tried },
 		"tried a minute ago":       func(r *domain.UpgradeRow) { tried := recent; r.UpgradeTriedAt = &tried },
 	}
@@ -708,7 +707,7 @@ func TestPostgresUpgradeStore_CandidatesAgreeWithTheGoSpecification(t *testing.T
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	rows := rowsAroundTheBaseline()
 	idOf := make(map[string]sharedids.TrackId, len(rows))
@@ -721,11 +720,11 @@ func TestPostgresUpgradeStore_CandidatesAgreeWithTheGoSpecification(t *testing.T
 	}
 
 	selections := map[string]ports.UpgradeSelection{
-		"defaults":           {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000},
-		"in place and floor": {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, CheckInPlace: true, LowBitrateFloorKbps: 112},
-		"floor only":         {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, LowBitrateFloorKbps: 112},
-		"long retry wait":    {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: 72 * time.Hour, MaxQueued: 1_000_000, CheckInPlace: true},
-		"no queue room":      {Upgradable: acquisitiontest.Rules{}.Upgradable(), Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 0, CheckInPlace: true},
+		"defaults":           {Upgradable: contracttest.Rules{}.Upgradable(), Generation: domain.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000},
+		"in place and floor": {Upgradable: contracttest.Rules{}.Upgradable(), Generation: domain.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, CheckInPlace: true, LowBitrateFloorKbps: 112},
+		"floor only":         {Upgradable: contracttest.Rules{}.Upgradable(), Generation: domain.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 1_000_000, LowBitrateFloorKbps: 112},
+		"long retry wait":    {Upgradable: contracttest.Rules{}.Upgradable(), Generation: domain.PipelineGeneration, RetryAfter: 72 * time.Hour, MaxQueued: 1_000_000, CheckInPlace: true},
+		"no queue room":      {Upgradable: contracttest.Rules{}.Upgradable(), Generation: domain.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 0, CheckInPlace: true},
 	}
 	for selectionName, selection := range selections {
 		t.Run(selectionName, func(t *testing.T) {
@@ -750,15 +749,15 @@ func TestPostgresUpgradeStore_CandidatesFollowTheGradeOrderOfTheGradeList(t *tes
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	var want, mine []sharedids.TrackId
-	for _, grade := range audioquality.WorstFirst() {
+	for _, grade := range domain.WorstFirst() {
 		row := eligibleBaseline()
 		row.Grade = grade
 		id := insertRow(t, pool, row)
 		mine = append(mine, id)
-		if domain.UpgradeEligible(row, domain.UpgradeRules{Generation: audioquality.PipelineGeneration, MaxQueued: 1, Now: time.Now()}) {
+		if domain.UpgradeEligible(row, domain.UpgradeRules{Generation: domain.PipelineGeneration, MaxQueued: 1, Now: time.Now()}) {
 			want = append(want, id)
 		}
 	}

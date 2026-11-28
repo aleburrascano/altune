@@ -1,7 +1,7 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
+	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/shared/jsoncontract"
 	"encoding/json"
 	"net/http"
@@ -9,10 +9,10 @@ import (
 )
 
 func TestWire_TheAcquisitionRoutesAnswerAcceptedWithoutABodyTheClientReads(t *testing.T) {
-	retryRepo := inmemoryledger.NewLedger()
+	retryRepo := memory.NewLedger()
 	retryTrack := failedTrack(retryTestUserId)
 	retryRepo.Seed(retryTrack)
-	reacquireRepo := inmemoryledger.NewLedger()
+	reacquireRepo := memory.NewLedger()
 	reacquireTrack := readyTrack(reacquireTestUserId)
 	reacquireRepo.Seed(reacquireTrack)
 

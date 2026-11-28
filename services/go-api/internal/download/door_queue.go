@@ -1,8 +1,8 @@
 package download
 
 import (
-	domain "altune/go-api/internal/download/internal/core/domain"
-	ports "altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 )
 
 const (

@@ -1,5 +1,5 @@
 package download
 
-import ranking "altune/go-api/internal/download/internal/core/candidateranking"
+import "altune/go-api/internal/download/internal/service"
 
-var UnrequestedQualifiers = ranking.UnrequestedQualifiers
+var UnrequestedQualifiers = service.UnrequestedQualifiers

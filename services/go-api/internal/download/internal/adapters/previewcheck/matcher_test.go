@@ -1,9 +1,8 @@
 package previewcheck_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/previewcheck"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -59,8 +58,8 @@ func deezerServing(t *testing.T, trackBody func(server string) string) *httptest
 	return server
 }
 
-func matcherFor(server *httptest.Server, prints previewcheck.RawFingerprint) download.PreviewMatcher {
-	return download.NewPreviewMatcher(download.MustNewDeezerPreview(server.Client(), server.URL, prints, clock.Sleep, time.Now), prints, download.DefaultMatchMaxBitErrorRate)
+func matcherFor(server *httptest.Server, prints previewcheck.RawFingerprint) ports.PreviewMatcher {
+	return previewcheck.NewMatcher(previewcheck.MustNew(server.Client(), server.URL, prints, clock.Sleep, time.Now), prints, previewcheck.DefaultMatchMaxBitErrorRate)
 }
 
 func previewTrackBody(server string) string {
