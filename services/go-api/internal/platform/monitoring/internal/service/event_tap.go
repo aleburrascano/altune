@@ -15,11 +15,11 @@ import (
 const tapChanSize = 256
 
 type TapEvent struct {
-	Type      string    `json:"type"`
-	Timestamp time.Time `json:"timestamp"`
-	User      string    `json:"user,omitempty"`
-	Subject   string    `json:"subject,omitempty"`
-	CorrID    string    `json:"corr_id,omitempty"`
+	Type      string
+	Timestamp time.Time
+	User      string
+	Subject   string
+	CorrID    string
 }
 
 type EventTap struct {

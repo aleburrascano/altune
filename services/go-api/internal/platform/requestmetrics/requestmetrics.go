@@ -2,16 +2,16 @@ package requestmetrics
 
 import (
 	"altune/go-api/internal/platform/requestmetrics/internal/adapters/observer"
-	"altune/go-api/internal/platform/requestmetrics/internal/domain"
+	"altune/go-api/internal/platform/requestmetrics/internal/service"
 )
 
 type (
-	Registry = domain.Registry
-	Snapshot = domain.Snapshot
+	Registry = service.Registry
+	Snapshot = service.Snapshot
 )
 
 var Observer = observer.New
 
-func NewRegistry() *Registry {
-	return domain.New()
+func New() *Registry {
+	return service.New()
 }

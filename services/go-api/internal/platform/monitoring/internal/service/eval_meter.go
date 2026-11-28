@@ -18,10 +18,10 @@ const (
 )
 
 type EvalMeterQueryResult struct {
-	Query    string `json:"query"`
-	Expect   string `json:"expect"`
-	Passed   bool   `json:"passed"`
-	Position int    `json:"position"`
+	Query    string
+	Expect   string
+	Passed   bool
+	Position int
 }
 
 type EvalMeterResult struct {
@@ -120,15 +120,15 @@ const (
 )
 
 type MeterStatus struct {
-	Enabled  bool                   `json:"enabled"`
-	Paused   bool                   `json:"paused"`
-	State    State                  `json:"state"`
-	Score    *float64               `json:"score,omitempty"`
-	Baseline *float64               `json:"baseline,omitempty"`
-	Errored  int                    `json:"errored,omitempty"`
-	LastRun  *time.Time             `json:"last_run,omitempty"`
-	Error    string                 `json:"error,omitempty"`
-	Queries  []EvalMeterQueryResult `json:"queries,omitempty"`
+	Enabled  bool
+	Paused   bool
+	State    State
+	Score    *float64
+	Baseline *float64
+	Errored  int
+	LastRun  *time.Time
+	Error    string
+	Queries  []EvalMeterQueryResult
 }
 
 func (m *EvalMeter) Status() MeterStatus {

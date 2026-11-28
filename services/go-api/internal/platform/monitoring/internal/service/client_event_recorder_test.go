@@ -3,7 +3,6 @@ package service_test
 import (
 	"altune/go-api/internal/platform/monitoring/internal/domain"
 	"altune/go-api/internal/platform/monitoring/internal/service"
-	"altune/go-api/internal/shared/apierror"
 	"context"
 	"errors"
 	"testing"
@@ -64,9 +63,9 @@ func TestRecorder_AnInvalidEventIsRefusedAndNeverStored(t *testing.T) {
 
 	err := recorder.Record(context.Background(), domain.ClientEvent{Type: domain.ClientEventClientError})
 
-	var coded *apierror.CodedError
-	if !errors.As(err, &coded) || coded.Code() != apierror.CodeDiscoveryInvalidEvent {
-		t.Fatalf("err = %v, want the invalid-event code", err)
+	var invalid *domain.InvalidClientEventError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want an invalid-event error", err)
 	}
 	if len(store.appended) != 0 {
 		t.Errorf("appended = %+v, want nothing stored", store.appended)

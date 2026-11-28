@@ -1,7 +1,7 @@
-package domain_test
+package service_test
 
 import (
-	"altune/go-api/internal/platform/requestmetrics/internal/domain"
+	"altune/go-api/internal/platform/requestmetrics/internal/service"
 	"strconv"
 	"sync"
 	"testing"
@@ -10,9 +10,9 @@ import (
 
 var bucketLabels = []string{"1", "5", "10", "25", "50", "100", "250", "500", "1000", "2500", "5000", "+Inf"}
 
-func observedOnce(t *testing.T, d time.Duration, status int) domain.RouteLatency {
+func observedOnce(t *testing.T, d time.Duration, status int) service.RouteLatency {
 	t.Helper()
-	reg := domain.New()
+	reg := service.New()
 	reg.Observe("/r", d, status)
 	got, ok := reg.Snapshot().Routes["/r"]
 	if !ok {
@@ -21,7 +21,7 @@ func observedOnce(t *testing.T, d time.Duration, status int) domain.RouteLatency
 	return got
 }
 
-func filledBucket(t *testing.T, got domain.RouteLatency) string {
+func filledBucket(t *testing.T, got service.RouteLatency) string {
 	t.Helper()
 	filled := ""
 	for _, b := range got.Buckets {
@@ -85,7 +85,7 @@ func TestRegistry_EveryBoundIsInclusive(t *testing.T) {
 }
 
 func TestRegistry_TalliesStatusClasses(t *testing.T) {
-	cases := map[int]domain.StatusClasses{
+	cases := map[int]service.StatusClasses{
 		200: {Count2xx: 1},
 		204: {Count2xx: 1},
 		299: {Count2xx: 1},
@@ -112,7 +112,7 @@ func TestRegistry_TalliesStatusClasses(t *testing.T) {
 }
 
 func TestRegistry_CountsSumAndBuckets(t *testing.T) {
-	reg := domain.New()
+	reg := service.New()
 	reg.Observe("/r", 3*time.Millisecond, 200)
 	reg.Observe("/r", 7*time.Millisecond, 200)
 
@@ -134,7 +134,7 @@ func TestRegistry_NegativeDurationCountsAsZero(t *testing.T) {
 }
 
 func TestRegistry_EmptyRouteFoldsToUnmatched(t *testing.T) {
-	reg := domain.New()
+	reg := service.New()
 	reg.Observe("", time.Millisecond, 404)
 
 	snap := reg.Snapshot()
@@ -147,7 +147,7 @@ func TestRegistry_EmptyRouteFoldsToUnmatched(t *testing.T) {
 }
 
 func TestRegistry_FreshSnapshotHoldsOnlyTheEmptyReservedRoutes(t *testing.T) {
-	snap := domain.New().Snapshot()
+	snap := service.New().Snapshot()
 
 	if len(snap.Routes) != 2 || snap.Routes["unmatched"].Count != 0 || snap.Routes["overflow"].Count != 0 {
 		t.Fatalf("fresh snapshot = %+v, want only empty unmatched and overflow", snap.Routes)
@@ -159,7 +159,7 @@ func TestRegistry_FreshSnapshotHoldsOnlyTheEmptyReservedRoutes(t *testing.T) {
 
 func TestRegistry_FoldsRoutesPastTheCapIntoOverflow(t *testing.T) {
 	const maxRoutes, observed = 256, 1024
-	reg := domain.New()
+	reg := service.New()
 	for i := range observed {
 		reg.Observe("/r/"+strconv.Itoa(i), time.Millisecond, 200)
 	}
@@ -178,7 +178,7 @@ func TestRegistry_FoldsRoutesPastTheCapIntoOverflow(t *testing.T) {
 }
 
 func TestRegistry_ConcurrentObservationsLoseNoUpdate(t *testing.T) {
-	reg := domain.New()
+	reg := service.New()
 	const goroutines, perG = 32, 500
 	statuses := [...]int{200, 404, 500}
 	var wg sync.WaitGroup
@@ -204,7 +204,7 @@ func TestRegistry_ConcurrentObservationsLoseNoUpdate(t *testing.T) {
 }
 
 func TestRegistry_ObserveOnAKnownRouteAllocatesNothing(t *testing.T) {
-	reg := domain.New()
+	reg := service.New()
 	reg.Observe("/v1/tracks/{trackId}", time.Millisecond, 200)
 
 	allocs := testing.AllocsPerRun(1000, func() {
@@ -217,7 +217,7 @@ func TestRegistry_ObserveOnAKnownRouteAllocatesNothing(t *testing.T) {
 }
 
 func BenchmarkRegistryObserve(b *testing.B) {
-	reg := domain.New()
+	reg := service.New()
 	reg.Observe("/v1/tracks/{trackId}", time.Millisecond, 200)
 	b.ReportAllocs()
 	for b.Loop() {

@@ -76,7 +76,7 @@ func (h *ClientEventHandler) handleRecord(w http.ResponseWriter, r *http.Request
 		Payload:          req.Payload,
 	}
 	if err := h.recorder.Record(r.Context(), event); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		httpserver.HandleServiceError(w, r, mapClientEventError(err))
 		return
 	}
 

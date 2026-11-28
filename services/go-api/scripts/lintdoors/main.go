@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each import of a test-support package from production code, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); a flattened module is a feature module (internal/<module>) or a platform module (internal/platform/<module>), never one under shared, whose root holds exactly one non-test .go file, named after the module (library.go for library, outbound.go for platform/outbound): for it only a use by production code of another module counts, so a name used only by _test.go files, by test-support packages or by the module's own test door is listed too and moves to <module>test or is unexported; a module on the older layout, with more root files, keeps the broader rule above; --summary prints, per module, its door size and how much of it is used outside; side doors are checked by go-arch-lint (.go-arch-lint.doors.yml)"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [--shape] [<go-api dir>]\n  --shape checks the shape of every feature and platform module against the template (README.md of go-api, rules 1, 2, 5, 7, 10, 13, 18, 20 and 21) and prints each violation with the README section to read; every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each import of a test-support package from production code, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); a flattened module is a feature module (internal/<module>) or a platform module (internal/platform/<module>), never one under shared, whose root holds exactly one non-test .go file, named after the module (library.go for library, outbound.go for platform/outbound): for it only a use by production code of another module counts, so a name used only by _test.go files, by test-support packages or by the module's own test door is listed too and moves to <module>test or is unexported; a module on the older layout, with more root files, keeps the broader rule above; --summary prints, per module, its door size and how much of it is used outside; side doors are checked by go-arch-lint (.go-arch-lint.doors.yml)"
 
 const sharedGroup = "shared"
 
@@ -62,9 +62,12 @@ func say(w io.Writer, format string, a ...any) {
 func run(args []string, stdout, stderr io.Writer) int {
 	summary := false
 	exports := false
+	shape := false
 	root := "."
 	for _, arg := range args {
 		switch {
+		case arg == "--shape":
+			shape = true
 		case arg == "--summary":
 			summary = true
 		case arg == "--exports":
@@ -75,6 +78,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		default:
 			root = arg
 		}
+	}
+	if shape {
+		return runShape(root, stdout, stderr)
 	}
 	s, err := scanTree(root)
 	if err != nil {

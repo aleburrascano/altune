@@ -1,4 +1,4 @@
-package domain
+package service
 
 import (
 	"altune/go-api/internal/shared/telemetry"

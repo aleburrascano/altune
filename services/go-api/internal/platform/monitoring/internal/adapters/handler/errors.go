@@ -1,6 +1,18 @@
 package handler
 
-import apierror "altune/go-api/internal/shared/apierror"
+import (
+	"altune/go-api/internal/platform/monitoring/internal/domain"
+	apierror "altune/go-api/internal/shared/apierror"
+	"errors"
+)
+
+func mapClientEventError(err error) error {
+	var invalid *domain.InvalidClientEventError
+	if errors.As(err, &invalid) {
+		return apierror.NewError(apierror.CodeDiscoveryInvalidEvent, invalid.Reason)
+	}
+	return err
+}
 
 var (
 	errPrincipalRequired         = apierror.NewError(apierror.CodeObservePrincipalRequired, "overseer principal required")

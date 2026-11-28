@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/ids"
 	"encoding/json"
 	"fmt"
@@ -82,10 +81,6 @@ const (
 	MaxClientEventPayloadBytes = 8 << 10
 	MaxClientEventPayloadKeys  = 32
 )
-
-func NewInvalidClientEventError(msg string) *apierror.CodedError {
-	return apierror.NewError(apierror.CodeDiscoveryInvalidEvent, msg)
-}
 
 func (e ClientEvent) Validate() error {
 	if e.EventId == "" {

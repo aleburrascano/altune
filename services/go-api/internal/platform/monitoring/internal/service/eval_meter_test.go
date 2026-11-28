@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -30,17 +29,7 @@ func returning(res service.EvalMeterResult, err error) service.EvalMeterRunner {
 
 func wireState(t *testing.T, m *service.EvalMeter) string {
 	t.Helper()
-	raw, err := json.Marshal(m.Status())
-	if err != nil {
-		t.Fatalf("marshal status: %v", err)
-	}
-	var body struct {
-		State string `json:"state"`
-	}
-	if err := json.Unmarshal(raw, &body); err != nil {
-		t.Fatalf("decode %s: %v", raw, err)
-	}
-	return body.State
+	return string(m.Status().State)
 }
 
 func meterAfterOneRun(t *testing.T, res service.EvalMeterResult, err error) *service.EvalMeter {

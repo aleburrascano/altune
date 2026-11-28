@@ -53,7 +53,7 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *application {
 	return &application{
 		cfg:     cfg,
 		logRing: logRing,
-		latency: requestmetrics.NewRegistry(),
+		latency: requestmetrics.New(),
 		metrics: telemetry.NewRegistry(),
 		jobs:    jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker},
 	}

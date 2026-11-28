@@ -4,7 +4,17 @@ import (
 	"altune/go-api/internal/platform/outbound/internal/adapters/egress"
 	"altune/go-api/internal/platform/outbound/internal/adapters/youtubemusic"
 	"altune/go-api/internal/platform/outbound/internal/adapters/ytdlp"
+	"fmt"
+	"net/http"
 )
+
+func New(onRetry func(host string)) (http.RoundTripper, error) {
+	live, err := egress.NewLiveTransport(onRetry)
+	if err != nil {
+		return nil, fmt.Errorf("outbound: %w", err)
+	}
+	return live, nil
+}
 
 type (
 	BadPayloadError            = egress.BadPayloadError
@@ -35,7 +45,6 @@ var (
 	NewClient           = egress.NewClient
 	NewGuardedTransport = egress.NewGuardedTransport
 	NewHeadRequest      = egress.NewHeadRequest
-	NewLiveTransport    = egress.NewLiveTransport
 	NewTransport        = egress.NewTransport
 	PostBytesCapped     = egress.PostBytesCapped
 	PostBytesCappedOK   = egress.PostBytesCappedOK

@@ -39,9 +39,9 @@ func Live(s Sources) monitoring.LiveMetrics {
 	m := FeatureMetrics(s.Metrics, s.Latency)
 	m["db_pool"] = poolStats(s.PoolStats)
 	m["redis_pool"] = redis.ReadPoolStats(s.Redis)
-	m["leader"] = s.Leader
+	m["leader"] = leaderWire(s.Leader)
 	m["event_bus"] = eventBusStats{Dropped: s.EventBus.Dropped()}
-	m["alert_monitor"] = s.AlertMonitor.Status()
+	m["alert_monitor"] = alertMonitorWire(s.AlertMonitor.Status())
 	m["event_tap"] = eventTapStats{TapDropped: s.EventTap.Dropped(), FeedDropped: s.EventFeed.Dropped()}
 	m["background_tasks_dropped"] = s.Background.Dropped()
 	return m
