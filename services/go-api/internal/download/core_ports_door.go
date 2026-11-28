@@ -10,7 +10,6 @@ type (
 	CatalogSource        = ports.CatalogSource
 	FetchedAudio         = ports.FetchedAudio
 	JobRecord            = ports.JobRecord
-	PreviewMatcher       = ports.PreviewMatcher
 	RecordingMatch       = ports.RecordingMatch
 	TrackLedgerPort      = ports.LibraryTracks
 	TrackSnapshot        = ports.TrackSnapshot
@@ -33,7 +32,6 @@ type (
 	Completion     = ports.Completion
 	FindRequest    = ports.FindRequest
 	OrphanedAudio  = ports.OrphanedAudio
-	ProviderRef    = ports.ProviderRef
 )
 
 const (

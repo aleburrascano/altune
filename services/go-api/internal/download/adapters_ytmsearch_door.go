@@ -10,10 +10,9 @@ type (
 )
 
 var (
-	NewYtmSearch       = ytmsearch.New
-	NewYtmSearchFor    = ytmsearch.ForClient
-	NewYtmSearchSource = ytmsearch.NewSource
-	ParseYtmSongs      = ytmsearch.ParseSongs
+	NewYtmSearch    = ytmsearch.New
+	NewYtmSearchFor = ytmsearch.ForClient
+	ParseYtmSongs   = ytmsearch.ParseSongs
 )
 
 const (
