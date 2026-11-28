@@ -48,7 +48,7 @@ describe('which route an event type goes to', () => {
   );
 
   it('knows no type outside the two lists, so a new type must pick a route', () => {
-    const submittable = wireFixture('discovery_event_types_client_submittable') as string[];
+    const submittable = wireFixture('search_event_types_client_submittable') as string[];
 
     expect([...SEARCH_TYPES, ...OPERATIONAL_TYPES].sort()).toEqual([...submittable].sort());
   });

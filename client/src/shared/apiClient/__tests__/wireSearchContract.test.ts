@@ -34,9 +34,9 @@ beforeEach(() => {
   signedInWith();
 });
 
-describe('wire fixture discovery_search decodes through searchDiscovery', () => {
+describe('wire fixture search_search decodes through searchDiscovery', () => {
   it('keeps every result, section, provider and the paging the server sent', async () => {
-    const fixture = wireFixture('discovery_search') as Wire & { results: unknown[] };
+    const fixture = wireFixture('search_search') as Wire & { results: unknown[] };
     __http.reply('GET /v1/discovery/search', { status: 200, json: fixture });
 
     const decoded = await searchDiscovery({ q: 'kendrick' });
@@ -52,9 +52,9 @@ describe('wire fixture discovery_search decodes through searchDiscovery', () => 
   });
 });
 
-describe('wire fixture discovery_suggest decodes through suggestDiscovery', () => {
+describe('wire fixture search_suggest decodes through suggestDiscovery', () => {
   it('keeps each suggestion', async () => {
-    const fixture = wireFixture('discovery_suggest') as { suggestions: unknown[] };
+    const fixture = wireFixture('search_suggest') as { suggestions: unknown[] };
     __http.reply('GET /v1/discovery/suggest', { status: 200, json: fixture });
 
     const decoded = await suggestDiscovery({ q: 'kend' });
@@ -64,9 +64,9 @@ describe('wire fixture discovery_suggest decodes through suggestDiscovery', () =
   });
 });
 
-describe('wire fixture discovery_search_history decodes through listSearchHistory', () => {
+describe('wire fixture search_search_history decodes through listSearchHistory', () => {
   it('keeps each entry and the total', async () => {
-    const fixture = wire('discovery_search_history');
+    const fixture = wire('search_search_history');
     __http.reply('GET /v1/discovery/search-history', { status: 200, json: fixture });
 
     const decoded = await listSearchHistory();
@@ -77,21 +77,21 @@ describe('wire fixture discovery_search_history decodes through listSearchHistor
   });
 });
 
-describe('request fixture req_discovery_search_history matches what recordSearchHistory sends', () => {
+describe('request fixture req_search_search_history matches what recordSearchHistory sends', () => {
   it('sends exactly the keys the server request carries', async () => {
     __http.reply('POST /v1/discovery/search-history', { status: 204 });
 
     await recordSearchHistory('kendrick lamar');
 
     expect(keysOf(JSON.parse(__http.last().body))).toEqual(
-      keysOf(wireFixture('req_discovery_search_history')),
+      keysOf(wireFixture('req_search_search_history')),
     );
   });
 });
 
 describe('wire fixtures for favorites decode through the favorites adapter', () => {
   it('listFavorites keeps every entry with its subtitle and image', async () => {
-    const fixture = wire('discovery_favorites');
+    const fixture = wire('search_favorites');
     __http.reply('GET /v1/discovery/favorites', { status: 200, json: fixture });
 
     const decoded = await listFavorites();
@@ -102,9 +102,9 @@ describe('wire fixtures for favorites decode through the favorites adapter', () 
   });
 
   it('addFavorite decodes the PUT answer and sends the keys of the request fixture', async () => {
-    const answer = wireFixture('discovery_favorite_put') as { title: string };
+    const answer = wireFixture('search_favorite_put') as { title: string };
     __http.reply('PUT /v1/discovery/favorites', { status: 200, json: answer });
-    const request = wireFixture('req_discovery_favorite') as {
+    const request = wireFixture('req_search_favorite') as {
       kind: 'album';
       title: string;
       subtitle: string;
@@ -119,7 +119,7 @@ describe('wire fixtures for favorites decode through the favorites adapter', () 
 
   it('removeFavorite sends the keys of the request fixture', async () => {
     __http.reply('DELETE /v1/discovery/favorites', { status: 204 });
-    const request = wireFixture('req_discovery_favorite') as {
+    const request = wireFixture('req_search_favorite') as {
       kind: 'album';
       title: string;
       subtitle: string;
@@ -134,7 +134,7 @@ describe('wire fixtures for favorites decode through the favorites adapter', () 
 
 describe('wire fixtures for content endpoints decode through the enrichment adapter', () => {
   it('getAlbumTracks keeps every track', async () => {
-    const fixture = wire('discovery_album_tracks');
+    const fixture = wire('search_album_tracks');
     __http.reply('GET /v1/discovery/albums/deezer/d1/tracks', { status: 200, json: fixture });
 
     const decoded = await getAlbumTracks({ provider: 'deezer', externalId: 'd1' });
@@ -145,7 +145,7 @@ describe('wire fixtures for content endpoints decode through the enrichment adap
   });
 
   it('getRelatedTracks keeps every track', async () => {
-    const fixture = wire('discovery_related_tracks');
+    const fixture = wire('search_related_tracks');
     __http.reply('GET /v1/discovery/tracks/soundcloud/1/related', { status: 200, json: fixture });
 
     const decoded = await getRelatedTracks('soundcloud', '1');
@@ -155,7 +155,7 @@ describe('wire fixtures for content endpoints decode through the enrichment adap
   });
 
   it('getArtistContent keeps the top tracks and the albums', async () => {
-    const fixture = wireFixture('discovery_artist_content') as {
+    const fixture = wireFixture('search_artist_content') as {
       top_tracks: { items: unknown[] };
       albums: { items: unknown[] };
     };
@@ -172,7 +172,7 @@ describe('wire fixtures for content endpoints decode through the enrichment adap
 
 describe('wire fixtures for enrichment decode through the enrichment adapter', () => {
   it('getEnrichment keeps the year, genres and artwork', async () => {
-    const fixture = wireFixture('discovery_enrichment') as { year: number; genres: string[] };
+    const fixture = wireFixture('search_enrichment') as { year: number; genres: string[] };
     __http.reply('GET /v1/discovery/enrichment', { status: 200, json: fixture });
 
     const decoded = await getEnrichment({ kind: 'album', title: 'DAMN.' });
@@ -182,7 +182,7 @@ describe('wire fixtures for enrichment decode through the enrichment adapter', (
   });
 
   it('getDeezerEnrichment keeps the label and genres', async () => {
-    const fixture = wireFixture('discovery_enrichment_deezer') as { label: string };
+    const fixture = wireFixture('search_enrichment_deezer') as { label: string };
     __http.reply('GET /v1/discovery/enrichment/deezer', { status: 200, json: fixture });
 
     const decoded = await getDeezerEnrichment({ kind: 'album', title: 'DAMN.' });
@@ -192,7 +192,7 @@ describe('wire fixtures for enrichment decode through the enrichment adapter', (
   });
 
   it('getLyrics keeps the plain text, the synced lines and the writers', async () => {
-    const fixture = wireFixture('discovery_lyrics') as { plain: string };
+    const fixture = wireFixture('search_lyrics') as { plain: string };
     __http.reply('GET /v1/discovery/lyrics', { status: 200, json: fixture });
 
     const decoded = await getLyrics({ title: 'N.Y. State of Mind' });
@@ -205,7 +205,7 @@ describe('wire fixtures for enrichment decode through the enrichment adapter', (
 
 describe('wire fixtures for unreleased decode through the enrichment adapter', () => {
   it('getUnreleasedTracks drops no row the server sent', async () => {
-    const fixture = wire('discovery_artist_unreleased');
+    const fixture = wire('search_artist_unreleased');
     __http.reply('GET /v1/discovery/artists/deezer/1/unreleased', { status: 200, json: fixture });
 
     const decoded = await getUnreleasedTracks('deezer', '1', { name: 'Playboi Carti' });
@@ -215,7 +215,7 @@ describe('wire fixtures for unreleased decode through the enrichment adapter', (
   });
 
   it('searchUnreleasedTracks drops no hit the server sent', async () => {
-    const fixture = wire('discovery_unreleased_search');
+    const fixture = wire('search_unreleased_search');
     __http.reply('GET /v1/discovery/unreleased/search', { status: 200, json: fixture });
 
     const decoded = await searchUnreleasedTracks('cancun');

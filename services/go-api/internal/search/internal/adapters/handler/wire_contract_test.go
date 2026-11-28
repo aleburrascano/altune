@@ -62,7 +62,7 @@ func TestWire_DiscoverySearch(t *testing.T) {
 	}}
 	router := buildDiscoveryRouter(t, provider, &fakeSearchHistoryRepo{}, nil, nil)
 
-	wireGet(t, router, "/discovery/search?q=kendrick", "discovery_search")
+	wireGet(t, router, "/discovery/search?q=kendrick", "search_search")
 }
 
 func TestWire_DiscoverySuggest(t *testing.T) {
@@ -71,17 +71,17 @@ func TestWire_DiscoverySuggest(t *testing.T) {
 	}}
 	router := buildSuggestRouter(t, vocab)
 
-	wireGet(t, router, "/discovery/suggest?q=kend", "discovery_suggest")
+	wireGet(t, router, "/discovery/suggest?q=kend", "search_suggest")
 }
 
 func TestWire_DiscoverySearchHistory(t *testing.T) {
 	repo := &fakeSearchHistoryRepo{}
 	router := buildDiscoveryRouter(t, nil, repo, nil, nil)
 
-	wireSend(t, router, http.MethodPost, "/discovery/search-history", "req_discovery_search_history",
+	wireSend(t, router, http.MethodPost, "/discovery/search-history", "req_search_search_history",
 		map[string]any{"query": "kendrick lamar"}, http.StatusNoContent)
 	repo.entries = []*domain.SearchHistoryEntry{{Query: "Kendrick Lamar", QueryNorm: "kendrick lamar", ExecutedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}}
-	wireGet(t, router, "/discovery/search-history", "discovery_search_history")
+	wireGet(t, router, "/discovery/search-history", "search_search_history")
 	discAssertStatus(t, discServe(t, router, http.MethodDelete, "/discovery/search-history", nil), http.StatusNoContent)
 }
 
@@ -92,9 +92,9 @@ func TestWire_DiscoveryFavorites(t *testing.T) {
 	router := wireRouter(t, handler.DiscoveryServices{Favorites: searchtest.NewFavorites(t, repo)})
 	request := map[string]any{"kind": "album", "title": "DAMN.", "subtitle": "Kendrick Lamar", "image_url": "https://img.example/damn.jpg"}
 
-	wireGet(t, router, "/discovery/favorites", "discovery_favorites")
-	rec := wireSend(t, router, http.MethodPut, "/discovery/favorites", "req_discovery_favorite", request, http.StatusOK)
-	jsoncontract.AssertWire(t, "discovery_favorite_put", rec.Body.Bytes())
+	wireGet(t, router, "/discovery/favorites", "search_favorites")
+	rec := wireSend(t, router, http.MethodPut, "/discovery/favorites", "req_search_favorite", request, http.StatusOK)
+	jsoncontract.AssertWire(t, "search_favorite_put", rec.Body.Bytes())
 	discAssertStatus(t, discServe(t, router, http.MethodDelete, "/discovery/favorites", discJsonBody(t, request)), http.StatusNoContent)
 }
 
@@ -102,7 +102,7 @@ func TestWire_DiscoveryEnrichment(t *testing.T) {
 	svc := mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{}))
 	router := wireRouter(t, handler.DiscoveryServices{Enrich: svc})
 
-	wireGet(t, router, "/discovery/enrichment?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", "discovery_enrichment")
+	wireGet(t, router, "/discovery/enrichment?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", "search_enrichment")
 }
 
 func TestWire_DiscoveryDeezerEnrichment(t *testing.T) {
@@ -115,7 +115,7 @@ func TestWire_DiscoveryDeezerEnrichment(t *testing.T) {
 	svc := searchtest.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, search.NoNameKeyedCache[domain.DeezerEnrichment]{})
 	router := wireRouter(t, handler.DiscoveryServices{Enrichers: handler.DetailEnrichers{Deezer: svc}})
 
-	wireGet(t, router, "/discovery/enrichment/deezer?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", "discovery_enrichment_deezer")
+	wireGet(t, router, "/discovery/enrichment/deezer?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", "search_enrichment_deezer")
 }
 
 func TestWire_DiscoveryLyrics(t *testing.T) {
@@ -127,7 +127,7 @@ func TestWire_DiscoveryLyrics(t *testing.T) {
 	svc := searchtest.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, search.NoNameKeyedCache[domain.DeezerLyrics]{})
 	router := wireRouter(t, handler.DiscoveryServices{Enrichers: handler.DetailEnrichers{Lyrics: svc}})
 
-	wireGet(t, router, "/discovery/lyrics?title=N.Y.+State+of+Mind&subtitle=Nas", "discovery_lyrics")
+	wireGet(t, router, "/discovery/lyrics?title=N.Y.+State+of+Mind&subtitle=Nas", "search_lyrics")
 }
 
 func TestWire_DiscoveryAlbumTracks(t *testing.T) {
@@ -138,7 +138,7 @@ func TestWire_DiscoveryAlbumTracks(t *testing.T) {
 	svc := searchtest.NewAlbumTracks(t, map[search.ProviderName]ports.AlbumContentProvider{search.ProviderDeezer: provider})
 	router := wireRouter(t, handler.DiscoveryServices{Album: svc})
 
-	wireGet(t, router, "/discovery/albums/deezer/d1/tracks", "discovery_album_tracks")
+	wireGet(t, router, "/discovery/albums/deezer/d1/tracks", "search_album_tracks")
 }
 
 func TestWire_DiscoveryRelatedTracks(t *testing.T) {
@@ -148,7 +148,7 @@ func TestWire_DiscoveryRelatedTracks(t *testing.T) {
 	svc := searchtest.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{"soundcloud": provider})
 	router := wireRouter(t, handler.DiscoveryServices{Related: svc})
 
-	wireGet(t, router, "/discovery/tracks/soundcloud/1/related", "discovery_related_tracks")
+	wireGet(t, router, "/discovery/tracks/soundcloud/1/related", "search_related_tracks")
 }
 
 func TestWire_DiscoveryArtistContent(t *testing.T) {
@@ -159,7 +159,7 @@ func TestWire_DiscoveryArtistContent(t *testing.T) {
 	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: provider})
 	router := wireRouter(t, handler.DiscoveryServices{Artist: svc})
 
-	wireGet(t, router, "/discovery/artists/deezer/1/content", "discovery_artist_content")
+	wireGet(t, router, "/discovery/artists/deezer/1/content", "search_artist_content")
 }
 
 func TestWire_DiscoveryUnreleased(t *testing.T) {
@@ -171,12 +171,12 @@ func TestWire_DiscoveryUnreleased(t *testing.T) {
 		MediaByID: map[int]bool{2: true},
 	}
 	router := unreleasedRouter(t, genius, nil)
-	wireGet(t, router, "/discovery/artists/deezer/1/unreleased?name=Playboi+Carti", "discovery_artist_unreleased")
+	wireGet(t, router, "/discovery/artists/deezer/1/unreleased?name=Playboi+Carti", "search_artist_unreleased")
 
 	store := &searchtest.UnreleasedStore{Hits: []ports.UnreleasedHit{
 		{Artist: ports.UnreleasedArtistKey{Provider: search.ProviderDeezer, ExternalID: "42"}, ArtistName: "Playboi Carti", Song: domain.UnreleasedSong{GeniusID: 1, Title: "Cancun", Quality: "lossless"}},
 	}}
-	wireGet(t, unreleasedSearchRouter(t, store), "/discovery/unreleased/search?q=cancun", "discovery_unreleased_search")
+	wireGet(t, unreleasedSearchRouter(t, store), "/discovery/unreleased/search?q=cancun", "search_unreleased_search")
 }
 
 func interactionTypeNames(accept func(domain.InteractionType) bool) []string {
@@ -203,8 +203,8 @@ func TestWire_DiscoveryEventTypes(t *testing.T) {
 	all := interactionTypeNames(func(domain.InteractionType) bool { return true })
 	submittable := interactionTypeNames(domain.InteractionType.ClientSubmittable)
 
-	jsoncontract.AssertWireExact(t, "discovery_event_types", marshalWire(t, all))
-	jsoncontract.AssertWireExact(t, "discovery_event_types_client_submittable", marshalWire(t, submittable))
+	jsoncontract.AssertWireExact(t, "search_event_types", marshalWire(t, all))
+	jsoncontract.AssertWireExact(t, "search_event_types_client_submittable", marshalWire(t, submittable))
 }
 
 func TestWire_DiscoveryEventRequest(t *testing.T) {
@@ -218,7 +218,7 @@ func TestWire_DiscoveryEventRequest(t *testing.T) {
 		"payload":            map[string]any{"session_id": "s-1", "dwell_ms": 1500},
 	}
 
-	wireSend(t, router, http.MethodPost, "/discovery/events", "req_discovery_events", request, http.StatusNoContent)
+	wireSend(t, router, http.MethodPost, "/discovery/events", "req_search_events", request, http.StatusNoContent)
 	if len(store.events) != 1 {
 		t.Fatalf("recorded events = %d, want 1", len(store.events))
 	}
@@ -244,5 +244,5 @@ func TestWire_DiscoveryEventPayloadTypes(t *testing.T) {
 		sort.Strings(accepted[key])
 	}
 
-	jsoncontract.AssertWireExact(t, "discovery_event_payload_types", marshalWire(t, accepted))
+	jsoncontract.AssertWireExact(t, "search_event_payload_types", marshalWire(t, accepted))
 }
