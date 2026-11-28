@@ -41,7 +41,7 @@ func postTrack(t *testing.T, addTrack *service.AddTrackService, userId ids.UserI
 
 func listTracksBody(t *testing.T, repo *memory.TrackRepo, userId ids.UserId) string {
 	t.Helper()
-	status, body := serveAs(dtoTrackRoutes(service.MustNewAddTrackService(repo, events.NoopPublisher(), &memory.Scheduler{}, time.Now, ids.Real), repo), userId, http.MethodGet, "")
+	status, body := serveAs(dtoTrackRoutes(service.MustNewAddTrackService(repo, handler.NewWireEvents(events.NoopPublisher()), &memory.Scheduler{}, time.Now, ids.Real), repo), userId, http.MethodGet, "")
 	if status != http.StatusOK {
 		t.Fatalf("GET /tracks status = %d, body %s", status, body)
 	}

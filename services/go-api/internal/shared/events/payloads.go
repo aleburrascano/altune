@@ -15,7 +15,7 @@ type Subjected interface {
 
 type TrackAddedToLibrary struct {
 	TrackID string
-	Track   any
+	Track   json.RawMessage
 }
 
 func (TrackAddedToLibrary) EventType() EventType { return TypeTrackAddedToLibrary }
@@ -23,12 +23,8 @@ func (TrackAddedToLibrary) EventType() EventType { return TypeTrackAddedToLibrar
 func (p TrackAddedToLibrary) Subject() string { return p.TrackID }
 
 func (p TrackAddedToLibrary) MarshalJSON() ([]byte, error) {
-	raw, err := json.Marshal(p.Track)
-	if err != nil {
-		return nil, fmt.Errorf("marshal track: %w", err)
-	}
 	fields := map[string]json.RawMessage{}
-	if err := json.Unmarshal(raw, &fields); err != nil {
+	if err := json.Unmarshal(p.Track, &fields); err != nil {
 		return nil, fmt.Errorf("unmarshal track fields: %w", err)
 	}
 	id, err := json.Marshal(p.TrackID)

@@ -77,7 +77,7 @@ func trackRoutesWith(repo *memory.TrackRepo, deps trackDeps, opts ...func(*handl
 
 func mountTracks(router chi.Router, repo *memory.TrackRepo, deps trackDeps, now func() time.Time, opts ...func(*handler.TrackHandler)) {
 	tracks := handler.MustNewTrackHandler(
-		service.MustNewAddTrackService(repo, events.NoopPublisher(), deps.addScheduler(), time.Now, ids.Real),
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(events.NoopPublisher()), deps.addScheduler(), time.Now, ids.Real),
 		service.NewListTracksService(repo),
 		service.NewGetTrackStatusService(repo),
 		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),
@@ -278,7 +278,7 @@ func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (domain
 func postgresTrackRoutes(pool *pgxpool.Pool) chi.Router {
 	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	tracks := handler.MustNewTrackHandler(
-		service.MustNewAddTrackService(repo, events.NoopPublisher(), &memory.Scheduler{}, time.Now, ids.Real),
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(events.NoopPublisher()), &memory.Scheduler{}, time.Now, ids.Real),
 		service.NewListTracksService(repo),
 		service.NewGetTrackStatusService(repo),
 		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),
@@ -347,7 +347,7 @@ func (r *failingTrackRepo) Delete(context.Context, domain.TrackId, ids.UserId) (
 func failingRepoRoutes(err error) chi.Router {
 	repo := &failingTrackRepo{TrackRepo: memory.NewTrackRepo(), err: err}
 	tracks := handler.MustNewTrackHandler(
-		service.MustNewAddTrackService(repo, events.NoopPublisher(), &memory.Scheduler{}, time.Now, ids.Real),
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(events.NoopPublisher()), &memory.Scheduler{}, time.Now, ids.Real),
 		service.NewListTracksService(repo),
 		service.NewGetTrackStatusService(repo),
 		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),

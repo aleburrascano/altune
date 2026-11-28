@@ -2,12 +2,18 @@ package ports
 
 import (
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"io"
 	"strings"
 	"time"
 )
+
+type TrackEvents interface {
+	events.Publisher
+	TrackAdded(ctx context.Context, userId ids.UserId, track *domain.Track)
+}
 
 type AcquisitionScheduler interface {
 	Schedule(ctx context.Context, userId ids.UserId, trackId domain.TrackId, sourceURL string) error

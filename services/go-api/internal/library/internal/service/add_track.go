@@ -41,13 +41,13 @@ type AddTrackOutput struct {
 
 type AddTrackService struct {
 	trackRepo ports.TrackAddUpdater
-	events    events.Publisher
+	events    ports.TrackEvents
 	scheduler ports.AcquisitionScheduler
 	now       func() time.Time
 	source    ids.Source
 }
 
-func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) (*AddTrackService, error) {
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher ports.TrackEvents, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) (*AddTrackService, error) {
 	switch {
 	case trackRepo == nil:
 		return nil, fmt.Errorf("NewAddTrackService: the track repository: %w", domain.ErrTrackCollaboratorRequired)
@@ -63,7 +63,7 @@ func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publis
 	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now, source: source}, nil
 }
 
-func MustNewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) *AddTrackService {
+func MustNewAddTrackService(trackRepo ports.TrackAddUpdater, publisher ports.TrackEvents, scheduler ports.AcquisitionScheduler, now func() time.Time, source ids.Source) *AddTrackService {
 	s, err := NewAddTrackService(trackRepo, publisher, scheduler, now, source)
 	if err != nil {
 		panic(err)
@@ -123,7 +123,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	slog.InfoContext(ctx, "track added to library",
 		logging.KeyTrackID, track.ID().String(),
 	)
-	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: track.ID().String(), Track: track})
+	s.events.TrackAdded(ctx, userId, track)
 	sourceURL := ""
 	if input.SourceURL != nil {
 		sourceURL = *input.SourceURL
