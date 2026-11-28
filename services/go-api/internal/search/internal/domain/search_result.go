@@ -124,11 +124,11 @@ func copyExtras(src map[string]any) map[string]any {
 }
 
 type CollapsedArtistSummary struct {
-	Title    string         `json:"title"`
-	Subtitle string         `json:"subtitle"`
-	ImageURL string         `json:"image_url,omitempty"`
-	Sources  []ProviderLink `json:"sources"`
-	Extras   map[string]any `json:"extras"`
+	Title    string
+	Subtitle string
+	ImageURL string
+	Sources  []ProviderLink
+	Extras   map[string]any
 }
 
 func NewProviderResult(kind ResultKind, title, subtitle, imageURL string, source ProviderLink, extras map[string]any) SearchResult {
