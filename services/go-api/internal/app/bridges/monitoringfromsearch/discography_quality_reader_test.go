@@ -3,6 +3,7 @@ package monitoringfromsearch_test
 import (
 	"altune/go-api/internal/app/bridges/monitoringfromsearch"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/monitoringtest"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -35,7 +36,7 @@ func (s *recordingQualityStore) SuspectRate(_ context.Context, since time.Time) 
 
 func TestDiscographyQualityReader_AsksTheStoreForTheSameWindowGroupingAndLimit(t *testing.T) {
 	since := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-	for _, groupBy := range []monitoring.DiscographyGroupBy{monitoring.GroupByArtist, monitoring.GroupByProvider, monitoring.GroupByContaminationBand} {
+	for _, groupBy := range []monitoring.DiscographyGroupBy{monitoringtest.GroupByArtist, monitoringtest.GroupByProvider, monitoringtest.GroupByContaminationBand} {
 		t.Run(string(groupBy), func(t *testing.T) {
 			store := &recordingQualityStore{}
 
@@ -57,7 +58,7 @@ func TestDiscographyQualityReader_CarriesEveryCaseField(t *testing.T) {
 		{ArtistRef: "spotify:b"},
 	}}
 
-	got, err := monitoringfromsearch.NewDiscographyQualityReader(store).DiscographyQuality(t.Context(), seen, monitoring.GroupByArtist, 10)
+	got, err := monitoringfromsearch.NewDiscographyQualityReader(store).DiscographyQuality(t.Context(), seen, monitoringtest.GroupByArtist, 10)
 
 	want := []monitoring.DiscographyCase{
 		{ArtistRef: "spotify:a", Releases: 4, SingleProvider: 1, SingleProviderNoID: 2, ProviderCounts: map[string]int{"spotify": 4}, LastSeen: seen},
@@ -81,7 +82,7 @@ func TestDiscographyQualityReader_AGroupingDiscoveryLacksFailsWithoutAskingTheSt
 func TestDiscographyQualityReader_StoreErrorsKeepTheirIdentity(t *testing.T) {
 	reader := monitoringfromsearch.NewDiscographyQualityReader(&recordingQualityStore{casesErr: context.DeadlineExceeded, rateErr: context.DeadlineExceeded})
 
-	cases, casesErr := reader.DiscographyQuality(t.Context(), time.Now(), monitoring.GroupByArtist, 10)
+	cases, casesErr := reader.DiscographyQuality(t.Context(), time.Now(), monitoringtest.GroupByArtist, 10)
 	_, rateErr := reader.SuspectRate(t.Context(), time.Now())
 
 	if cases != nil || !errors.Is(casesErr, context.DeadlineExceeded) || !errors.Is(rateErr, context.DeadlineExceeded) {

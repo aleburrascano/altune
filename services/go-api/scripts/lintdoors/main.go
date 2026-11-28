@@ -14,9 +14,11 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each import of a test-support package from production code, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); a flattened module is a feature module (internal/<module>, not one under a grouping directory such as platform or shared) whose root holds exactly one non-test .go file, named after the module (library.go for library): for it only a use by production code of another module counts, so a name used only by _test.go files, by test-support packages or by the module's own test door is listed too and moves to <module>test or is unexported; a module on the older layout, with more root files, keeps the broader rule above; --summary prints, per module, its door size and how much of it is used outside; side doors are checked by go-arch-lint (.go-arch-lint.doors.yml)"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each import of a test-support package from production code, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); a flattened module is a feature module (internal/<module>) or a platform module (internal/platform/<module>), never one under shared, whose root holds exactly one non-test .go file, named after the module (library.go for library, outbound.go for platform/outbound): for it only a use by production code of another module counts, so a name used only by _test.go files, by test-support packages or by the module's own test door is listed too and moves to <module>test or is unexported; a module on the older layout, with more root files, keeps the broader rule above; --summary prints, per module, its door size and how much of it is used outside; side doors are checked by go-arch-lint (.go-arch-lint.doors.yml)"
 
-var groups = map[string]bool{"platform": true, "shared": true}
+const sharedGroup = "shared"
+
+var groups = map[string]bool{"platform": true, sharedGroup: true}
 
 const (
 	kindTestSupport = iota
@@ -391,7 +393,7 @@ func (s *scan) addUnusedExports() error {
 }
 
 func isFlattened(dir, module string) (bool, error) {
-	if strings.Contains(module, "/") {
+	if strings.HasPrefix(module, sharedGroup+"/") {
 		return false, nil
 	}
 	entries, err := os.ReadDir(dir)

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/core/domain"
+	"altune/go-api/internal/platform/monitoring/internal/domain"
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
@@ -11,8 +11,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -54,22 +52,6 @@ func NewClientEventHandler(recorder ClientEventRecorder, sink ClientEventSink, l
 		sink:     sink,
 		limiter:  requestuser.LimitPerUser(rate, now, errClientEventsRateLimited, nil),
 	}
-}
-
-func (h *ClientEventHandler) Routes() chi.Router {
-	r := chi.NewRouter()
-	r.With(h.limiter, httpserver.MaxBodySize(maxClientEventBodyBytes)).Post("/events", h.handleRecord)
-	return r
-}
-
-type clientEventRequest struct {
-	Type             string         `json:"type"`
-	EventID          string         `json:"event_id"`
-	CorrelationID    string         `json:"correlation_id"`
-	ClientOccurredAt string         `json:"client_occurred_at"`
-	Payload          map[string]any `json:"payload"`
-	IgnoredSearchID  string         `json:"search_id"`
-	IgnoredQueryNorm string         `json:"query_norm"`
 }
 
 func (h *ClientEventHandler) handleRecord(w http.ResponseWriter, r *http.Request) {

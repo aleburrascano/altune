@@ -1,7 +1,7 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/handler"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
@@ -23,7 +23,7 @@ func gatedAs(principalID string, caller *ids.UserId) (*httptest.ResponseRecorder
 		req = req.WithContext(requestuser.ContextWithUserID(req.Context(), *caller))
 	}
 	rec := httptest.NewRecorder()
-	monitoring.Gate(principalID)(next).ServeHTTP(rec, req)
+	handler.Gate(principalID)(next).ServeHTTP(rec, req)
 	return rec, reached
 }
 

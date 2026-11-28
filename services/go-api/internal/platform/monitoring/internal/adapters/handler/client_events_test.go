@@ -2,7 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/adapters/handler"
-	"altune/go-api/internal/platform/monitoring/internal/core/domain"
+	"altune/go-api/internal/platform/monitoring/internal/domain"
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"

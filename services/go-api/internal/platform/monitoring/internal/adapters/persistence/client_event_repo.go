@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/core/domain"
-	"altune/go-api/internal/platform/monitoring/internal/core/ports"
+	"altune/go-api/internal/platform/monitoring/internal/domain"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -63,7 +63,7 @@ func (s *PostgresClientEventStore) Append(ctx context.Context, event domain.Clie
 	if _, err := s.pool.Exec(ctx, appendClientEventSQL,
 		event.UserId.UUID(), string(event.Type), eventID, correlationID, clientOccurredAt, string(payloadJSON), event.OccurredAt.UTC(),
 	); err != nil {
-		return database.WrapUnreadable("append client event", ports.ErrClientEventsUnavailable, err)
+		return database.WrapUnreadable("append client event", domain.ErrClientEventsUnavailable, err)
 	}
 	return nil
 }
@@ -73,7 +73,7 @@ const pruneClientEventsSQL = `DELETE FROM client_events WHERE occurred_at < $1`
 func (s *PostgresClientEventStore) Prune(ctx context.Context, now time.Time) (int64, error) {
 	tag, err := s.pool.Exec(ctx, pruneClientEventsSQL, now.UTC().Add(-domain.ClientEventRetention))
 	if err != nil {
-		return 0, database.WrapUnreadable("prune client events", ports.ErrClientEventsUnavailable, err)
+		return 0, database.WrapUnreadable("prune client events", domain.ErrClientEventsUnavailable, err)
 	}
 	return tag.RowsAffected(), nil
 }
@@ -87,7 +87,7 @@ const eraseClientEventsOfDeletedIdentitiesSQL = `
 func (s *PostgresClientEventStore) EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error) {
 	tag, err := s.pool.Exec(ctx, eraseClientEventsOfDeletedIdentitiesSQL, ids.SystemUserId().UUID())
 	if err != nil {
-		return 0, database.WrapUnreadable("erase client events of deleted identities", ports.ErrClientEventsUnavailable, err)
+		return 0, database.WrapUnreadable("erase client events of deleted identities", domain.ErrClientEventsUnavailable, err)
 	}
 	return tag.RowsAffected(), nil
 }

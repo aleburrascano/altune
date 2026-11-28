@@ -234,22 +234,54 @@ func TestExportsKeepTestOnlyNamesOnAModuleWithMoreThanItsDoorFile(t *testing.T) 
 	}
 }
 
-func TestExportsKeepTestOnlyNamesOnAOneFileModuleUnderAGroupingDirectory(t *testing.T) {
+func TestExportsOnAFlattenedPlatformModuleCountOnlyProductionCallersOutsideIt(t *testing.T) {
+	dir := flatTree(t)
+	writeFile(t, dir, "internal/platform/clock/clock.go", "package clock\n\nfunc Now() {}\n\nfunc Sleep() {}\n")
+	writeFile(t, dir, "internal/other/o_test.go", "package other\n\nimport \"example/api/internal/platform/clock\"\n\nvar _ = clock.Now\n")
+	writeFile(t, dir, "internal/other/other.go", "package other\n\nimport \"example/api/internal/platform/clock\"\n\nvar _ = clock.Sleep\n")
+
+	code, out, _ := lint(t, "--exports", dir)
+
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1:\n%s", code, out)
+	}
+	if !strings.Contains(out, "Now is exported by module platform/clock but no production code outside it uses it") {
+		t.Fatalf("Now is used only by a test and must be listed:\n%s", out)
+	}
+	if strings.Contains(out, "Sleep is exported") {
+		t.Fatalf("Sleep has a production caller and must not be listed:\n%s", out)
+	}
+}
+
+func TestExportsKeepTestOnlyNamesOnAPlatformModuleWithMoreThanItsDoorFile(t *testing.T) {
 	dir := flatTree(t)
 	writeFile(t, dir, "internal/platform/clock/clock.go", "package clock\n\nfunc Now() {}\n")
+	writeFile(t, dir, "internal/platform/clock/second.go", "package clock\n")
 	writeFile(t, dir, "internal/other/o_test.go", "package other\n\nimport \"example/api/internal/platform/clock\"\n\nvar _ = clock.Now\n")
 
 	_, out, _ := lint(t, "--exports", dir)
 
 	if strings.Contains(out, "Now is exported") {
-		t.Fatalf("the production-only rule is for feature modules, a platform module keeps the older rule:\n%s", out)
+		t.Fatalf("a platform module with a second root file keeps the older rule, where a test use counts:\n%s", out)
+	}
+}
+
+func TestExportsKeepTestOnlyNamesOnAOneFileModuleUnderShared(t *testing.T) {
+	dir := flatTree(t)
+	writeFile(t, dir, "internal/shared/clock/clock.go", "package clock\n\nfunc Now() {}\n")
+	writeFile(t, dir, "internal/other/o_test.go", "package other\n\nimport \"example/api/internal/shared/clock\"\n\nvar _ = clock.Now\n")
+
+	_, out, _ := lint(t, "--exports", dir)
+
+	if strings.Contains(out, "Now is exported") {
+		t.Fatalf("the production-only rule is for feature and platform modules, a shared package keeps the older rule:\n%s", out)
 	}
 }
 
 func TestUsageStatesTheFlattenedModuleScope(t *testing.T) {
 	_, _, stderr := lint(t, "--nope")
 
-	if !strings.Contains(stderr, "flattened module is a feature module") {
+	if !strings.Contains(stderr, "flattened module is a feature module (internal/<module>) or a platform module (internal/platform/<module>), never one under shared") {
 		t.Fatalf("usage does not state the scope of the production-only rule:\n%s", stderr)
 	}
 }

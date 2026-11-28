@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/alerts"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/platform/requestmetrics/requestmetricstest"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
 	"strings"
@@ -12,12 +13,12 @@ import (
 )
 
 type traffic struct {
-	routes map[string]requestmetrics.RouteLatency
+	routes map[string]requestmetricstest.RouteLatency
 }
 
 func (tr *traffic) serve(route string, ok, serverErrors uint64) {
 	if tr.routes == nil {
-		tr.routes = map[string]requestmetrics.RouteLatency{}
+		tr.routes = map[string]requestmetricstest.RouteLatency{}
 	}
 	r := tr.routes[route]
 	r.Count += ok + serverErrors
@@ -27,7 +28,7 @@ func (tr *traffic) serve(route string, ok, serverErrors uint64) {
 }
 
 func (tr *traffic) snapshot() requestmetrics.Snapshot {
-	routes := make(map[string]requestmetrics.RouteLatency, len(tr.routes))
+	routes := make(map[string]requestmetricstest.RouteLatency, len(tr.routes))
 	for k, v := range tr.routes {
 		routes[k] = v
 	}

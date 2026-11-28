@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -25,9 +26,19 @@ func (a *application) mountRoutes(
 	playbackRoutes playback.Routes,
 	discovery *search.Module,
 	clientEventRoutes http.Handler,
-) *chi.Mux {
+) (*chi.Mux, error) {
 	r := a.newRouter(apiWriteTimeout)
 	discoveryRoutes := discovery.Routes()
+	events, err := eventstream.New(eventstream.Deps{
+		Now:           clock.Now,
+		NewTicker:     clock.NewTicker,
+		Bus:           a.eventBus,
+		MaxConnsTotal: a.cfg.SSEMaxConns,
+		Shutdown:      a.lifecycleDone,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("event stream: %w", err)
+	}
 
 	requireAuth := authMiddleware(verifier, a.metrics)
 
@@ -56,11 +67,11 @@ func (a *application) mountRoutes(
 			cat.libraryRoutes.LongLived(r)
 			playbackRoutes.LongLived(r)
 			discoveryRoutes.LongLived(r)
-			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
+			events.LongLived(r)
 		},
 	})
 
-	return r
+	return r, nil
 }
 
 func (a *application) newRouter(writeTimeout time.Duration) *chi.Mux {

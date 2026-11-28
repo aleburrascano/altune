@@ -74,7 +74,7 @@ entities:
         seen: [live]
         read: true
         by_key: true
-        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/shared/youtubemusicapi, outside the adapter folder the audit scans, so the read cannot be seen here
+        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/platform/outbound/internal/adapters/youtubemusic, outside the adapter folder the audit scans, so the read cannot be seen here
       - path: contents.tabbedSearchResultsRenderer.tabs[].tabRenderer.content.sectionListRenderer.contents[].itemSectionRenderer.contents[].musicResponsiveListItemRenderer.badges[].musicInlineBadgeRenderer.accessibilityData
         type: object
         seen: [live]
@@ -95,13 +95,13 @@ entities:
         seen: [live]
         read: true
         by_key: true
-        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/shared/youtubemusicapi, outside the adapter folder the audit scans, so the read cannot be seen here
+        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/platform/outbound/internal/adapters/youtubemusic, outside the adapter folder the audit scans, so the read cannot be seen here
       - path: contents.tabbedSearchResultsRenderer.tabs[].tabRenderer.content.sectionListRenderer.contents[].itemSectionRenderer.contents[].musicResponsiveListItemRenderer.badges[].musicInlineBadgeRenderer.icon.iconType
         type: string
         seen: [live]
         read: true
         by_key: true
-        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/shared/youtubemusicapi, outside the adapter folder the audit scans, so the read cannot be seen here
+        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/platform/outbound/internal/adapters/youtubemusic, outside the adapter folder the audit scans, so the read cannot be seen here
       - path: contents.tabbedSearchResultsRenderer.tabs[].tabRenderer.content.sectionListRenderer.contents[].itemSectionRenderer.contents[].musicResponsiveListItemRenderer.badges[].musicInlineBadgeRenderer.trackingParams
         type: string
         seen: [live]
@@ -4444,7 +4444,7 @@ entities:
         seen: [live]
         read: true
         by_key: true
-        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/shared/youtubemusicapi, outside the adapter folder the audit scans, so the read cannot be seen here
+        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/platform/outbound/internal/adapters/youtubemusic, outside the adapter folder the audit scans, so the read cannot be seen here
       - path: contents.tabbedSearchResultsRenderer.tabs[].tabRenderer.content.sectionListRenderer.contents[].musicShelfRenderer.contents[].musicResponsiveListItemRenderer.badges[].musicInlineBadgeRenderer.accessibilityData
         type: object
         seen: [live]
@@ -4465,13 +4465,13 @@ entities:
         seen: [live]
         read: true
         by_key: true
-        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/shared/youtubemusicapi, outside the adapter folder the audit scans, so the read cannot be seen here
+        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/platform/outbound/internal/adapters/youtubemusic, outside the adapter folder the audit scans, so the read cannot be seen here
       - path: contents.tabbedSearchResultsRenderer.tabs[].tabRenderer.content.sectionListRenderer.contents[].musicShelfRenderer.contents[].musicResponsiveListItemRenderer.badges[].musicInlineBadgeRenderer.icon.iconType
         type: string
         seen: [live]
         read: true
         by_key: true
-        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/shared/youtubemusicapi, outside the adapter folder the audit scans, so the read cannot be seen here
+        unused: the row's inline explicit badge (iconType MUSIC_EXPLICIT_BADGE); ytminnertube.HasExplicitBadge reads it, but that code lives in internal/platform/outbound/internal/adapters/youtubemusic, outside the adapter folder the audit scans, so the read cannot be seen here
       - path: contents.tabbedSearchResultsRenderer.tabs[].tabRenderer.content.sectionListRenderer.contents[].musicShelfRenderer.contents[].musicResponsiveListItemRenderer.badges[].musicInlineBadgeRenderer.trackingParams
         type: string
         seen: [live]

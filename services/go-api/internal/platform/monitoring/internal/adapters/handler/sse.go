@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/shell/eventwatch"
+	"altune/go-api/internal/platform/monitoring/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
@@ -112,7 +112,7 @@ func forwardValue[T any](w http.ResponseWriter, rc *http.ResponseController, v T
 
 func dataFrame[T any](v T) (string, bool) {
 	var out any = v
-	if ev, isTapEvent := out.(eventwatch.TapEvent); isTapEvent {
+	if ev, isTapEvent := out.(service.TapEvent); isTapEvent {
 		out = projectTapEvent(ev)
 	}
 	payload, err := json.Marshal(out)

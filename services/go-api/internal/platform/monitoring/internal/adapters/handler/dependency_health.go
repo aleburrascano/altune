@@ -16,29 +16,6 @@ const (
 	DepDown          DepStatus = "down"
 )
 
-type DependencyHealth struct {
-	DB     DepStatus        `json:"db"`
-	Redis  DepStatus        `json:"redis"`
-	Auth   DepStatus        `json:"auth"`
-	Detail DependencyDetail `json:"detail"`
-}
-
-type DependencyDetail struct {
-	DBLatencyMs    int64     `json:"db_latency_ms"`
-	DBError        string    `json:"db_error,omitempty"`
-	RedisLatencyMs int64     `json:"redis_latency_ms"`
-	RedisError     string    `json:"redis_error,omitempty"`
-	AuthLatencyMs  int64     `json:"auth_latency_ms"`
-	AuthError      string    `json:"auth_error,omitempty"`
-	CheckedAt      time.Time `json:"checked_at"`
-}
-
-type healthResponse struct {
-	DependencyHealth
-	Goroutines int    `json:"goroutines"`
-	HeapMB     uint64 `json:"heap_mb"`
-}
-
 func (d DependencyHealth) Healthy() bool {
 	return d.DB != DepDown && d.Redis != DepDown && d.Auth != DepDown
 }

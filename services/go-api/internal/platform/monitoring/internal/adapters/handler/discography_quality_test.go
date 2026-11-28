@@ -1,7 +1,8 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/handler"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -17,22 +18,22 @@ import (
 )
 
 type stubQualityReader struct {
-	cases      []monitoring.DiscographyCase
+	cases      []ports.DiscographyCase
 	casesErr   error
 	suspectErr error
 }
 
-func (s stubQualityReader) DiscographyQuality(context.Context, time.Time, monitoring.DiscographyGroupBy, int) ([]monitoring.DiscographyCase, error) {
+func (s stubQualityReader) DiscographyQuality(context.Context, time.Time, ports.DiscographyGroupBy, int) ([]ports.DiscographyCase, error) {
 	return s.cases, s.casesErr
 }
 
-func (s stubQualityReader) SuspectRate(context.Context, time.Time) (monitoring.DiscographySuspectRate, error) {
-	return monitoring.DiscographySuspectRate{Rate: 0.5}, s.suspectErr
+func (s stubQualityReader) SuspectRate(context.Context, time.Time) (ports.DiscographySuspectRate, error) {
+	return ports.DiscographySuspectRate{Rate: 0.5}, s.suspectErr
 }
 
 func query(r stubQualityReader) *httptest.ResponseRecorder {
 	router := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{Discography: r}).Register(router)
+	handler.NewObserveHandler(clock.Now, clock.NewTicker, handler.Deps{Discography: r}).Register(router)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/quality/discography", nil))
 	return rec

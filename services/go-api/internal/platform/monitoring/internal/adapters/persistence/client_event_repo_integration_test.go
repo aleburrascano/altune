@@ -2,7 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/adapters/persistence"
-	"altune/go-api/internal/platform/monitoring/internal/core/domain"
+	"altune/go-api/internal/platform/monitoring/internal/domain"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"

@@ -109,7 +109,10 @@ func (a *application) compose(ctx context.Context, transport http.RoundTripper) 
 	if err != nil {
 		return nil, fmt.Errorf("client events: %w", err)
 	}
-	r := a.mountRoutes(verifier, f.catalog, f.playback.Routes(), f.discovery, clientEventRoutes)
+	r, err := a.mountRoutes(verifier, f.catalog, f.playback.Routes(), f.discovery, clientEventRoutes)
+	if err != nil {
+		return nil, err
+	}
 	if err := a.startAlertMonitor(ctx); err != nil {
 		return nil, err
 	}

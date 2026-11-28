@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/monitoringtest"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
@@ -74,7 +75,7 @@ func (r *fixtureTrackRepo) AudioRefInUse(_ context.Context, _ string, _ library.
 
 func eventTap(t *testing.T) *monitoring.EventTap {
 	t.Helper()
-	return monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	return monitoringtest.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 }
 
 func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup.SourceOrder) *download.BackgroundAcquisitionScheduler {

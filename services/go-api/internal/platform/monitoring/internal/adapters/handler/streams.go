@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/shell/eventwatch"
+	"altune/go-api/internal/platform/monitoring/internal/service"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
@@ -10,15 +10,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
-	"time"
-
-	"github.com/go-chi/chi/v5"
 )
-
-func (h *Handler) registerStreams(r chi.Router) {
-	r.With(auditStreamOpen).Get("/events/stream", h.streamEvents)
-	r.With(auditStreamOpen).Get("/logs/stream", h.streamLogs)
-}
 
 func auditStreamOpen(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +38,7 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	ch, cancel, err := h.deps.Events.Subscribe()
 	if err != nil {
-		rejectSubscription(w, r, "events", err, eventwatch.ErrTooManySubscribers)
+		rejectSubscription(w, r, "events", err, service.ErrTooManySubscribers)
 		return
 	}
 	defer cancel()
@@ -75,15 +67,7 @@ func (h *Handler) streamLogs(w http.ResponseWriter, r *http.Request) {
 	streamSSE(h.now, h.newTicker, w, r.WithContext(ctx), ch, h.streams)
 }
 
-type tapEventDTO struct {
-	Type      string    `json:"type"`
-	Timestamp time.Time `json:"timestamp"`
-	User      string    `json:"user,omitempty"`
-	Subject   string    `json:"subject,omitempty"`
-	CorrID    string    `json:"corr_id,omitempty"`
-}
-
-func projectTapEvent(ev eventwatch.TapEvent) tapEventDTO {
+func projectTapEvent(ev service.TapEvent) tapEventDTO {
 	return tapEventDTO{
 		Type:      ev.Type,
 		Timestamp: ev.Timestamp,

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/core/ports"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
@@ -16,14 +16,6 @@ const maxQualityWindowDays = 365
 const qualityLatestN = 200
 
 const defaultQualityTimeout = 5 * time.Second
-
-type discographyQualityResponse struct {
-	WindowDays   int                  `json:"window_days"`
-	GroupBy      string               `json:"group_by"`
-	Cases        []discographyCaseDTO `json:"cases"`
-	SuspectRate  float64              `json:"suspect_rate"`
-	LastSampleAt time.Time            `json:"last_sample_at"`
-}
 
 func emptyDiscographyQualityResponse(windowDays int, groupBy ports.DiscographyGroupBy) discographyQualityResponse {
 	return discographyQualityResponse{

@@ -1,7 +1,7 @@
 package notifier
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/core/domain"
+	"altune/go-api/internal/platform/monitoring/internal/domain"
 	"altune/go-api/internal/platform/outbound"
 	"bytes"
 	"context"

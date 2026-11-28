@@ -6,9 +6,9 @@ import (
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
 	"fmt"
 	"log/slog"
@@ -49,8 +49,8 @@ func budgetedYTMSearchClient(ctx context.Context, d SourceDeps) (*ytmsearch.Clie
 
 func innerTubeClient(ctx context.Context, d SourceDeps) *http.Client {
 	cfg := d.Config
-	settings := youtubemusicapi.Settings{MinInterval: cfg.YtmInnerTubeMinInterval, Cooldown: cfg.YtmInnerTubeCooldown}
-	budget, err := youtubemusicapi.NewBudget(d.Redis, settings, clock.Now, clock.Sleep)
+	settings := outbound.YouTubeMusicBudgetSettings{MinInterval: cfg.YtmInnerTubeMinInterval, Cooldown: cfg.YtmInnerTubeCooldown}
+	budget, err := outbound.NewYouTubeMusicBudget(d.Redis, settings, clock.Now, clock.Sleep)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing through the shared outbound pacer only")
 		return d.NewClient(ytmSearchTimeout, d.Transport)

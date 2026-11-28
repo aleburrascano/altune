@@ -1,19 +1,10 @@
 package handler
 
 import (
-	"altune/go-api/internal/platform/monitoring/service/searchqualitycheck"
+	"altune/go-api/internal/platform/monitoring/internal/service"
 	"altune/go-api/internal/shared/httpserver"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
-
-func (h *Handler) registerReads(r chi.Router) {
-	r.Get("/metrics/live", h.serveMetricsLive)
-	r.Get("/eval", h.serveEval)
-	r.Get("/acquisition", h.serveAcquisition)
-	r.Get("/quality/discography", h.serveDiscographyQuality)
-}
 
 func (h *Handler) serveAcquisition(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteJSON(w, http.StatusOK, readAcquisitionStatus(r.Context(), h.deps.Acquisition))
@@ -21,7 +12,7 @@ func (h *Handler) serveAcquisition(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) serveEval(w http.ResponseWriter, _ *http.Request) {
 	if h.deps.Eval == nil {
-		httpserver.WriteJSON(w, http.StatusOK, searchqualitycheck.Status{Enabled: false, State: searchqualitycheck.StateDisabled})
+		httpserver.WriteJSON(w, http.StatusOK, service.MeterStatus{Enabled: false, State: service.StateDisabled})
 		return
 	}
 	httpserver.WriteJSON(w, http.StatusOK, h.deps.Eval.Status())
