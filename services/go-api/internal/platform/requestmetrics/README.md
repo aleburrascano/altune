@@ -2,7 +2,7 @@
 
 ## Must not
 
-- Serve a route or tag a type for JSON: `Snapshot` has no json tags, and `app/livemetrics` maps it to the `/observe/metrics/live` wire shape.
+- Serve a route or tag a type for JSON: `Snapshot` has no json tags, and `monitoring` maps it to the `/observe/metrics/live` wire shape, reading it through the `monitoringfromrequestmetrics` bridge.
 - Keep a global registry: `app` creates the one `Registry` and passes it in.
 
 ## Shape

@@ -68,6 +68,14 @@ func TestShapeRefusesWhatTheTemplateForbids(t *testing.T) {
 			sectionRoot, func(t *testing.T, dir string) { removeAll(t, dir, "internal/platform/small/internal") },
 			"has no internal/ folder",
 		},
+		"rule 23: a package folder in app": {
+			sectionApp, func(t *testing.T, dir string) { writeFile(t, dir, "internal/app/jobs/jobs.go", "package jobs\n") },
+			"move the folder jobs",
+		},
+		"rule 23: an unlisted file in app": {
+			sectionApp, func(t *testing.T, dir string) { writeFile(t, dir, "internal/app/alerting.go", "package app\n") },
+			"move alerting.go",
+		},
 		"rule 2: a second door file": {
 			sectionDoor, func(t *testing.T, dir string) { writeFile(t, dir, "internal/lib/lib_door.go", "package lib\n") },
 			"second door file lib_door.go",
@@ -356,10 +364,26 @@ func TestShapeAcceptsWhatTheTemplateAllows(t *testing.T) {
 	}
 }
 
-func TestShapeLeavesSharedAndAppOutOfTheModuleRules(t *testing.T) {
+func TestShapeLetsAppHoldItsListedFilesTestsAndBridges(t *testing.T) {
+	dir := shapeTree(t)
+	for _, f := range []string{"config.go", "jobs.go", "shutdown.go", "server.go", "library_wiring.go", "search_wiring.go", "download_wiring.go", "playback_wiring.go", "platform_wiring.go", "export_test.go", "jobs_test.go"} {
+		writeFile(t, dir, "internal/app/"+f, "package app\n")
+	}
+	writeFile(t, dir, "internal/app/README.md", "`app` wires the server.\n")
+	writeFile(t, dir, "internal/app/CLAUDE.md", "@README.md\n")
+	writeFile(t, dir, "internal/app/testdata/contract/x.json", "{}")
+	writeFile(t, dir, "internal/app/bridges/libfromlib/b.go", "package libfromlib\n")
+
+	code, out := shape(t, dir)
+
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0; output:\n%s", code, out)
+	}
+}
+
+func TestShapeLeavesSharedOutOfTheModuleRules(t *testing.T) {
 	dir := shapeTree(t)
 	writeFile(t, dir, "internal/shared/clock/extra.go", "package clock\n")
-	writeFile(t, dir, "internal/app/jobs/jobs.go", "package jobs\n")
 
 	code, out := shape(t, dir)
 

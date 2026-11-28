@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/platform/monitoring/internal/domain"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
 	"net/http"
@@ -8,17 +9,17 @@ import (
 	"time"
 )
 
-type DepStatus string
-
-const (
-	DepUp            DepStatus = "ok"
-	DepNotConfigured DepStatus = "not_configured"
-	DepDown          DepStatus = "down"
+type (
+	DepStatus        = domain.DepStatus
+	DependencyDetail = domain.DependencyDetail
+	DependencyHealth = domain.DependencyHealth
 )
 
-func (d DependencyHealth) Healthy() bool {
-	return d.DB != DepDown && d.Redis != DepDown && d.Auth != DepDown
-}
+const (
+	DepUp            = domain.DepUp
+	DepNotConfigured = domain.DepNotConfigured
+	DepDown          = domain.DepDown
+)
 
 const (
 	defaultProbeTimeout = 5 * time.Second
@@ -32,9 +33,9 @@ func (h *Handler) serveHealth(w http.ResponseWriter, r *http.Request) {
 	runtime.ReadMemStats(&ms)
 	dependencies := h.runProbe(r.Context())
 	httpserver.WriteJSON(w, healthStatusCode(dependencies), healthResponse{
-		DependencyHealth: dependencies,
-		Goroutines:       runtime.NumGoroutine(),
-		HeapMB:           ms.HeapAlloc / bytesPerMB,
+		dependencyHealthDTO: dependencyHealthWire(dependencies),
+		Goroutines:          runtime.NumGoroutine(),
+		HeapMB:              ms.HeapAlloc / bytesPerMB,
 	})
 }
 

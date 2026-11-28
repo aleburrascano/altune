@@ -1,1 +1,0 @@
-`jobs` owns the API server's background jobs: their names, which an operator may switch off or be alerted on, their kill switches and health, and running them on a ticker on every instance or only while this instance holds the background leader lock.

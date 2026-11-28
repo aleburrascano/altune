@@ -74,14 +74,14 @@ type acquisitionStatusDTO struct {
 	Recent             []acquisitionJobDTO `json:"recent"`
 }
 
-type DependencyHealth struct {
-	DB     DepStatus        `json:"db"`
-	Redis  DepStatus        `json:"redis"`
-	Auth   DepStatus        `json:"auth"`
-	Detail DependencyDetail `json:"detail"`
+type dependencyHealthDTO struct {
+	DB     DepStatus           `json:"db"`
+	Redis  DepStatus           `json:"redis"`
+	Auth   DepStatus           `json:"auth"`
+	Detail dependencyDetailDTO `json:"detail"`
 }
 
-type DependencyDetail struct {
+type dependencyDetailDTO struct {
 	DBLatencyMs    int64     `json:"db_latency_ms"`
 	DBError        string    `json:"db_error,omitempty"`
 	RedisLatencyMs int64     `json:"redis_latency_ms"`
@@ -91,8 +91,70 @@ type DependencyDetail struct {
 	CheckedAt      time.Time `json:"checked_at"`
 }
 
+func dependencyHealthWire(d DependencyHealth) dependencyHealthDTO {
+	return dependencyHealthDTO{
+		DB: d.DB, Redis: d.Redis, Auth: d.Auth,
+		Detail: dependencyDetailDTO{
+			DBLatencyMs: d.Detail.DBLatencyMs, DBError: d.Detail.DBError,
+			RedisLatencyMs: d.Detail.RedisLatencyMs, RedisError: d.Detail.RedisError,
+			AuthLatencyMs: d.Detail.AuthLatencyMs, AuthError: d.Detail.AuthError,
+			CheckedAt: d.Detail.CheckedAt,
+		},
+	}
+}
+
+type eventBusStats struct {
+	Dropped uint64 `json:"dropped_total"`
+}
+
+type eventTapStats struct {
+	TapDropped  uint64 `json:"tap_dropped_total"`
+	FeedDropped uint64 `json:"feed_dropped_total"`
+}
+
+type leaderStats struct {
+	Attempts  int64 `json:"acquire_attempts_total"`
+	Wins      int64 `json:"acquire_wins_total"`
+	Contended int64 `json:"acquire_contended_total"`
+	Failures  int64 `json:"acquire_failures_total"`
+	TermEnds  int64 `json:"term_ends_total"`
+	HoldsLost int64 `json:"holds_lost_total"`
+}
+
+type alertMonitorStats struct {
+	LastPass            time.Time `json:"last_pass"`
+	LastNotifyOK        bool      `json:"last_notify_ok"`
+	ConsecutiveFailures int64     `json:"consecutive_failures"`
+	ContainedPanics     uint64    `json:"contained_panics"`
+	NopNotifier         bool      `json:"nop_notifier"`
+	LastNotifyOKAt      time.Time `json:"last_notify_ok_at"`
+	LastNotifyErrorAt   time.Time `json:"last_notify_error_at"`
+}
+
+type bucketCountStats struct {
+	LeMs  string `json:"le_ms"`
+	Count uint64 `json:"count"`
+}
+
+type statusClassStats struct {
+	Count2xx uint64 `json:"2xx"`
+	Count4xx uint64 `json:"4xx"`
+	Count5xx uint64 `json:"5xx"`
+}
+
+type routeLatencyStats struct {
+	Count   uint64             `json:"count"`
+	SumMs   uint64             `json:"sum_ms"`
+	Buckets []bucketCountStats `json:"buckets"`
+	Status  statusClassStats   `json:"status"`
+}
+
+type latencyStats struct {
+	Routes map[string]routeLatencyStats `json:"routes"`
+}
+
 type healthResponse struct {
-	DependencyHealth
+	dependencyHealthDTO
 	Goroutines int    `json:"goroutines"`
 	HeapMB     uint64 `json:"heap_mb"`
 }

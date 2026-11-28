@@ -204,8 +204,8 @@ func (m *Module) YouTubeSignedOutSince(ctx context.Context) (time.Time, bool) {
 	return m.signedOutSince(ctx)
 }
 
-func (m *Module) Retention() (outcomes, rejections ports.RetentionPruner) {
-	return m.outcomes, m.rejections
+func (m *Module) PruneAcquisitionRows(ctx context.Context) error {
+	return service.PruneAcquisitionRows(m.outcomes, m.rejections, clock.Now)(ctx)
 }
 
 func New(ctx context.Context, d Deps) (*Module, error) {

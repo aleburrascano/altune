@@ -8,31 +8,35 @@ import (
 	"altune/go-api/internal/platform/monitoring/internal/ports"
 	"altune/go-api/internal/platform/monitoring/internal/service"
 	"altune/go-api/internal/shared/clock"
+	"context"
 	"fmt"
 	"net/http"
 )
 
 type (
-	Alert                    = domain.Alert
-	AlertStatus              = service.AlertStatus
 	Condition                = domain.Condition
+	AlertSources             = service.AlertSources
 	AcquisitionJob           = ports.AcquisitionJob
 	AcquisitionReader        = ports.AcquisitionReader
 	AcquisitionTools         = ports.AcquisitionTools
 	AlertNotifier            = ports.AlertNotifier
 	ClientEventStore         = ports.ClientEventStore
+	CoverageEvents           = ports.CoverageEvents
 	DiscographyCase          = ports.DiscographyCase
 	DiscographyGroupBy       = ports.DiscographyGroupBy
 	DiscographyQualityReader = ports.DiscographyQualityReader
 	DiscographySuspectRate   = ports.DiscographySuspectRate
 	DownloadStatusReport     = ports.DownloadStatusReport
-	DepStatus                = handler.DepStatus
-	DependencyDetail         = handler.DependencyDetail
 	DependencyHealth         = handler.DependencyHealth
 	Deps                     = handler.Deps
 	Handler                  = handler.Handler
-	LiveMetrics              = handler.LiveMetrics
-	NopNotifier              = notifier.NopNotifier
+	JobHealthReader          = ports.JobHealthReader
+	JobState                 = domain.JobState
+	LatencyBucket            = domain.LatencyBucket
+	LeaderCounters           = domain.LeaderCounters
+	LeaderReader             = ports.LeaderReader
+	LiveSources              = handler.LiveSources
+	NotifierSettings         = notifier.Settings
 	AlertMonitor             = service.AlertMonitor
 	EvalMeter                = service.EvalMeter
 	EvalMeterQueryResult     = service.EvalMeterQueryResult
@@ -40,26 +44,38 @@ type (
 	EvalMeterRunner          = service.EvalMeterRunner
 	EventFeed                = service.EventFeed
 	EventTap                 = service.EventTap
+	Probes                   = service.Probes
+	RequestLatency           = domain.RequestLatency
+	RequestLatencyReader     = ports.RequestLatencyReader
+	RouteLatency             = domain.RouteLatency
+	SnapshotReader           = ports.SnapshotReader
+	SourceSessions           = ports.SourceSessions
+	StatusClasses            = domain.StatusClasses
 )
 
 const (
-	DepDown           = handler.DepDown
-	DepNotConfigured  = handler.DepNotConfigured
-	DepUp             = handler.DepUp
-	EvalMeterInterval = service.EvalMeterInterval
-	SeverityWatch     = domain.SeverityWatch
+	DefaultProbeTimeout = service.DefaultProbeTimeout
+	EvalMeterInterval   = service.EvalMeterInterval
 )
 
 var (
-	Gate                        = handler.Gate
-	NewAlertMonitor             = service.NewAlertMonitor
-	NewEmailNotifier            = notifier.NewEmailNotifier
-	NewEvalMeter                = service.NewEvalMeter
-	NewEventFeed                = service.NewEventFeed
-	NewEventTap                 = service.NewEventTap
-	NewPostgresClientEventStore = persistence.NewPostgresClientEventStore
-	NewWebhookNotifier          = notifier.NewWebhookNotifier
+	AlertConditions                      = service.AlertConditions
+	CheckDependencies                    = service.CheckDependencies
+	EraseClientEventsOfDeletedIdentities = service.EraseClientEventsOfDeletedIdentities
+	Gate                                 = handler.Gate
+	NewAlertMonitor                      = service.NewAlertMonitor
+	NewEvalMeter                         = service.NewEvalMeter
+	NewEventFeed                         = service.NewEventFeed
+	NewEventTap                          = service.NewEventTap
+	NewHealthEndpoint                    = handler.NewEndpoint
+	NewLiveMetrics                       = handler.NewLiveMetrics
+	NewPostgresClientEventStore          = persistence.NewPostgresClientEventStore
+	PruneClientEvents                    = service.PruneClientEvents
 )
+
+func NewAlertNotifier(ctx context.Context, s NotifierSettings) AlertNotifier {
+	return notifier.Select(ctx, s)
+}
 
 func New(now clock.Func, newTicker clock.TickerFunc, d Deps) *Handler {
 	return handler.NewObserveHandler(now, newTicker, d)

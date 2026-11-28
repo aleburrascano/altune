@@ -1,1 +1,0 @@
-`router` owns the pipeline every API request passes through: correlation id, tracing, request latency, write and request deadlines, logging, panic recovery, the body limit, CORS, and the headers every /v1 response carries.

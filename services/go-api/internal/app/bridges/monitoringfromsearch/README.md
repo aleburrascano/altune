@@ -1,1 +1,1 @@
-`monitoringfromsearch` implements observe's ports from the discovery feature, translating types only: the discography quality reader and the eval meter's runner.
+`monitoringfromsearch` implements monitoring's ports from the search feature, translating types only: the discography quality reader, the eval meter's runner, the coverage events the alert conditions read, and the provider call snapshot.

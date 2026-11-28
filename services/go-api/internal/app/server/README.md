@@ -1,1 +1,0 @@
-`server` builds the HTTP server the API listens with: its read, header and idle timeouts. Requests do not inherit the process's lifecycle context, so a shutdown signal never cancels a request that is still in flight. The server drains them instead.

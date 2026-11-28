@@ -2,7 +2,6 @@ package journey
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/app/providertransport"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/config"
@@ -44,7 +43,7 @@ func RankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.
 		return nil, fmt.Errorf("new tracker: %w", err)
 	}
 	metrics := telemetry.NewRegistry()
-	transport, err := providertransport.New(metrics)
+	transport, err := app.NewProviderTransport(metrics)
 	if err != nil {
 		return nil, fmt.Errorf("new: %w", err)
 	}
