@@ -5,11 +5,11 @@ import (
 	"altune/go-api/internal/app/bridges/downloadfromsearch"
 	"altune/go-api/internal/app/bridges/libraryfromsearch"
 	"altune/go-api/internal/app/bridges/searchfromlibrary"
-	"altune/go-api/internal/app/downloadsetup"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 type catalogWiring struct {
@@ -26,26 +27,7 @@ type catalogWiring struct {
 	orphanedAudio     *library.PostgresOrphanedAudioRepository
 	setTrackNumberSvc *library.SetTrackNumberService
 	libraryRoutes     library.Routes
-	retryH            *download.RetryHandler
-	reacquireH        *download.ReacquireHandler
-	acquisitionOn     bool
-	ytDlpSearcher     *download.YouTubeAudioSearcher
-	ytDlpAvailable    bool
-	ytmCanary         *download.YouTubeMusicSearchClient
-	scheduler         *download.BackgroundAcquisitionScheduler
-}
-
-type audioSourcesStaging struct {
-	audioStore     library.AudioStore
-	audioLinks     library.AudioLinkSigner
-	trackRepo      *library.PostgresTrackRepository
-	ledger         download.TrackLedgerPort
-	scheduler      library.AcquisitionScheduler
-	acquisitionOn  bool
-	background     *download.BackgroundAcquisitionScheduler
-	ytDlpSearcher  *download.YouTubeAudioSearcher
-	ytDlpAvailable bool
-	ytmCanary      *download.YouTubeMusicSearchClient
+	download          *download.Module
 }
 
 func (a *application) wireCatalog(
@@ -54,29 +36,58 @@ func (a *application) wireCatalog(
 	tap *monitoring.EventTap,
 	disc *search.Module,
 ) (catalogWiring, error) {
-	download.SweepStaleTempDirs(ctx, download.NewTempWorkspace(), clock.Now)
-
-	audio, err := a.wireAudioSources(ctx, transport, tap, disc)
+	backend, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
+	if err != nil {
+		return catalogWiring{}, fmt.Errorf("call failed: %w", err)
+	}
+	dbMetrics := library.NewDBCallMetrics(a.metrics)
+	trackRepo := library.NewPostgresTrackRepository(a.pool, dbMetrics)
+	downloads, err := a.wireDownload(ctx, transport, tap, disc, backend.AudioStore, trackRepo, dbMetrics)
 	if err != nil {
 		return catalogWiring{}, err
 	}
-	dbMetrics := library.NewDBCallMetrics(a.metrics)
+	scheduler := library.NoopAcquisitionScheduler()
+	if downloads.On() {
+		scheduler = downloads.Scheduler()
+	}
+	module, err := a.wireLibrary(tap, disc, scheduler, backend.AudioStore, backend.Links, dbMetrics)
+	if err != nil {
+		return catalogWiring{}, err
+	}
+	return catalogWiring{
+		trackRepo:         trackRepo,
+		audioStore:        backend.AudioStore,
+		orphanedAudio:     module.OrphanedAudio,
+		setTrackNumberSvc: module.SetTrackNumber,
+		libraryRoutes:     module.Routes(),
+		download:          downloads,
+	}, nil
+}
+
+func (a *application) wireLibrary(
+	tap *monitoring.EventTap,
+	disc *search.Module,
+	scheduler library.AcquisitionScheduler,
+	audioStore library.AudioStore,
+	audioLinks library.AudioLinkSigner,
+	dbMetrics library.DBCallMetrics,
+) (*library.Module, error) {
 	module, err := library.New(library.Deps{
 		DB:              a.pool,
 		DBMetrics:       dbMetrics,
 		Events:          tap,
-		Scheduler:       audio.scheduler,
-		AudioStore:      audio.audioStore,
-		AudioLinks:      audio.audioLinks,
+		Scheduler:       scheduler,
+		AudioStore:      audioStore,
+		AudioLinks:      audioLinks,
 		AudioMetrics:    library.NewAudioStoreMetrics(a.metrics),
 		Featured:        featuredBridge(disc),
 		StreamRecovery:  a.jobs.Switch(jobs.StreamRecovery),
 		PrefetchEnabled: a.cfg.AudioPrefetchEnabled,
 	})
 	if err != nil {
-		return catalogWiring{}, fmt.Errorf("build the library: %w", err)
+		return nil, fmt.Errorf("build the library: %w", err)
 	}
-	return a.wireCatalogHandlers(audio, module), nil
+	return module, nil
 }
 
 func featuredBridge(disc *search.Module) library.FeaturedArtistResolver {
@@ -86,95 +97,43 @@ func featuredBridge(disc *search.Module) library.FeaturedArtistResolver {
 	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(disc.FeaturedArtists))
 }
 
-func (a *application) wireAudioSources(
+func (a *application) wireDownload(
 	ctx context.Context,
 	transport http.RoundTripper,
 	tap *monitoring.EventTap,
 	disc *search.Module,
-) (audioSourcesStaging, error) {
-	backend, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
-	if err != nil {
-		return audioSourcesStaging{}, fmt.Errorf("call failed: %w", err)
-	}
-	audioStore := backend.AudioStore
-	dbMetrics := library.NewDBCallMetrics(a.metrics)
-	trackRepo := library.NewPostgresTrackRepository(a.pool, dbMetrics)
-	sources, tools, err := a.liveTiers(ctx, transport, audioStore)
-	if err != nil {
-		return audioSourcesStaging{}, err
-	}
-	ytmCanary, err := downloadsetup.CanaryYTMClient(ctx, a.cfg, a.redisClient, transport)
-	if err != nil {
-		return audioSourcesStaging{}, fmt.Errorf("build the ytmusic canary client: %w", err)
-	}
-	staging := audioSourcesStaging{
-		audioStore:     audioStore,
-		audioLinks:     backend.Links,
-		trackRepo:      trackRepo,
-		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, download.NewPostgresUpgradeStore(a.pool), ids.Real),
-		scheduler:      library.NoopAcquisitionScheduler(),
-		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
-		ytDlpAvailable: tools.YtDlp,
-		ytmCanary:      ytmCanary,
-	}
-	if len(sources.All()) == 0 || audioStore == nil {
-		return staging, nil
-	}
-	deps, err := a.schedulerDeps(transport, tap, disc, staging, sources, tools)
-	if err != nil {
-		return audioSourcesStaging{}, err
-	}
-	staging.background = downloadsetup.NewScheduler(ctx, deps)
-	staging.scheduler = staging.background
-	staging.acquisitionOn = true
-	return staging, nil
-}
-
-func (a *application) liveTiers(ctx context.Context, transport http.RoundTripper, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
-	if audioStore == nil {
-		return downloadsetup.SourceOrder{}, download.Verification{}, nil
-	}
-	r0, r1, err := downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient, transport)
-	if err != nil {
-		return r0, r1, fmt.Errorf("enabled sources: %w", err)
-	}
-	return r0, r1, nil
-}
-
-func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Module, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
+	audioStore library.AudioStore,
+	trackRepo *library.PostgresTrackRepository,
+	dbMetrics library.DBCallMetrics,
+) (*download.Module, error) {
 	recording, err := downloadfromsearch.RecordingOptions(disc)
 	if err != nil {
-		return downloadsetup.Deps{}, fmt.Errorf("wire recording resolver: %w", err)
+		return nil, fmt.Errorf("wire recording resolver: %w", err)
 	}
-	return downloadsetup.Deps{
-		Config: a.cfg, Pool: a.pool, DBMetrics: library.NewDBCallMetrics(a.metrics), Transport: transport, Events: tap, Recording: recording, Ledger: staging.ledger, AudioStore: staging.audioStore,
-		Sources: sources, Verification: tools,
-	}, nil
+	module, err := download.New(ctx, download.Deps{
+		Config:            a.cfg,
+		Transport:         transport,
+		Database:          download.NewDatabase(a.pool),
+		Redis:             a.redisClient,
+		Events:            tap,
+		NewClient:         newOutboundClient,
+		Library:           downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, ids.Real),
+		InPlaceVerdicts:   downloadfromlibrary.NewInPlaceVerdicts(trackRepo),
+		AudioStore:        audioStore,
+		StoredAudio:       downloadfromlibrary.NewStoredAudioReader(audioStore),
+		Orphans:           downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(a.pool, dbMetrics)),
+		RecordingResolver: recording.Resolver,
+		RecordingLookup:   recording.Lookup,
+		Rerecordings:      recording.Rerecordings,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build download: %w", err)
+	}
+	return module, nil
 }
 
-func (a *application) wireCatalogHandlers(audio audioSourcesStaging, module *library.Module) catalogWiring {
-	var retryH *download.RetryHandler
-	var reacquireH *download.ReacquireHandler
-	if audio.acquisitionOn {
-		cooldowns := download.NewPostgresCooldownStore(a.pool)
-		retryH = download.NewRetryHandler(audio.ledger, audio.scheduler, download.NewRetryAdmission(cooldowns))
-		reacquireH = download.NewReacquireHandler(audio.ledger, audio.background, download.NewReacquireAdmission(cooldowns))
-	}
-
-	return catalogWiring{
-		trackRepo:         audio.trackRepo,
-		audioStore:        audio.audioStore,
-		orphanedAudio:     module.OrphanedAudio,
-		setTrackNumberSvc: module.SetTrackNumber,
-		libraryRoutes:     module.Routes(),
-		retryH:            retryH,
-		reacquireH:        reacquireH,
-		acquisitionOn:     audio.acquisitionOn,
-		ytDlpSearcher:     audio.ytDlpSearcher,
-		ytDlpAvailable:    audio.ytDlpAvailable,
-		ytmCanary:         audio.ytmCanary,
-		scheduler:         audio.background,
-	}
+func newOutboundClient(timeout time.Duration, transport http.RoundTripper) *http.Client {
+	return outbound.MustNewClient(timeout, transport)
 }
 
 func newOwnershipEnrichment(cat catalogWiring, bg *background.Tracker) (*search.OwnershipEnrichmentService, error) {

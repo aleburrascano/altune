@@ -35,6 +35,10 @@ func (db *Database) UpgradeStore() *PostgresUpgradeStore {
 	return NewPostgresUpgradeStore(db.pgxPool())
 }
 
+func (db *Database) Cooldowns() *PostgresCooldownStore {
+	return NewPostgresCooldownStore(db.pgxPool())
+}
+
 func (db *Database) JobQueue(requeuer ports.QueueTracks) *PostgresJobQueue {
 	return MustNewPostgresJobQueue(db.pgxPool(), requeuer)
 }

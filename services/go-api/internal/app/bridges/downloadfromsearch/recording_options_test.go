@@ -7,15 +7,12 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/random"
 	"context"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -103,39 +100,15 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Module, catalogMBID *string)
 	if err != nil {
 		t.Fatalf("RecordingOptions: %v", err)
 	}
-	svc := download.MustNewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), discardingStore{}, download.NewTempWorkspace(),
-		download.VerificationPorts{
-			Identifier:      download.NoopAudioIdentifier(),
-			RecordingLookup: recording.Lookup,
-			Rerecordings:    recording.Rerecordings,
-			Previews:        download.NoopPreviewMatcher(),
-			Recordings:      recording.Resolver,
-		}, download.StagePorts{
-			Prober:        downloadtest.SilentAudioProber(),
-			Tagger:        download.NoopAudioTagger(),
-			Rejections:    download.NoopRejectionStore(),
-			StoredAudio:   download.NoopStoredAudioReader(),
-			Orphans:       download.MustDirectDeleteOrphans(deletedNothing{}),
-			Skips:         download.NoopVerifySkipRecorder(),
-			Events:        events.NoopPublisher(),
-			DownloadLimit: download.Unlimited(),
-			Observer:      download.NoObserver(),
-			Sleep:         clock.Sleep,
-			Now:           time.Now,
-			Unit:          random.Real,
-		})
-
-	_ = svc.Execute(context.Background(), download.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	_ = downloadtest.AcquireWithNoSource(context.Background(), ledger,
+		downloadtest.RecordingPorts{Lookup: recording.Lookup, Rerecordings: recording.Rerecordings, Resolver: recording.Resolver},
+		track.UserId, track.ID)
 
 	got, err := ledger.Get(context.Background(), track.ID, track.UserId)
 	if err != nil || got == nil || got.Status != download.TrackFailed {
 		t.Fatalf("after a run with no audio source the track is %+v, %v; want it failed", got, err)
 	}
 }
-
-type deletedNothing struct{}
-
-func (deletedNothing) Delete(context.Context, string) error { return nil }
 
 func TestRecordingOptions_WithSearchAndMusicBrainzTheRunAnchorsTheISRCAndLooksForARerecordingOfTheSearchHit(t *testing.T) {
 	provider := &countingProvider{}
@@ -185,9 +158,3 @@ func TestRecordingOptions_WithoutSearchMusicBrainzIsNeverAsked(t *testing.T) {
 		t.Errorf("MusicBrainz was asked %q, want nothing: without discovery search there are no recording options", asked)
 	}
 }
-
-type discardingStore struct{}
-
-func (discardingStore) Exists(context.Context, string) (bool, error) { return false, nil }
-func (discardingStore) Store(context.Context, string, string) error  { return nil }
-func (discardingStore) Delete(context.Context, string) error         { return nil }

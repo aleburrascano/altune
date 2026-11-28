@@ -268,6 +268,9 @@ func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID id
 			return fmt.Errorf("lock upgrade state: %w", err)
 		}
 		merged := ports.AppendRejectedSourceKeys(existing, rejectedSourceKeys)
+		if merged == nil {
+			merged = []string{}
+		}
 		if _, err := tx.Exec(ctx, settleUpgradeStateSQL, trackID.UUID(), merged, evidence == ports.ResetEvidence); err != nil {
 			return fmt.Errorf("settle upgrade state: %w", err)
 		}

@@ -39,6 +39,7 @@ func (a *application) mountRoutes(
 	if err != nil {
 		return nil, fmt.Errorf("event stream: %w", err)
 	}
+	downloadRoutes := cat.download.Routes()
 
 	requireAuth := authMiddleware(verifier, a.metrics)
 
@@ -52,10 +53,7 @@ func (a *application) mountRoutes(
 				r.Use(requireAuth)
 
 				cat.libraryRoutes.Bounded(r)
-				if cat.acquisitionOn {
-					r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
-					r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
-				}
+				downloadRoutes.Bounded(r)
 				playbackRoutes.Bounded(r)
 				discoveryRoutes.Bounded(r)
 				r.Mount("/telemetry", clientEventRoutes)
@@ -65,6 +63,7 @@ func (a *application) mountRoutes(
 			r.Use(requireAuth)
 
 			cat.libraryRoutes.LongLived(r)
+			downloadRoutes.LongLived(r)
 			playbackRoutes.LongLived(r)
 			discoveryRoutes.LongLived(r)
 			events.LongLived(r)
