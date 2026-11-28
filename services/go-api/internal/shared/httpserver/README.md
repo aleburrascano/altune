@@ -1,4 +1,4 @@
-`httpserver` owns how HTTP requests are limited, logged, recovered and answered with errors.
+Infrastructure: `httpserver` owns how HTTP requests are limited, logged, recovered and answered with errors.
 
 ## One error writer
 
@@ -9,7 +9,7 @@ The answer is RFC 9457 `application/problem+json`, with `type` (`urn:altune:prob
 A handler never picks a status. The boundary reads `err`'s chain and takes the first of these that matches:
 
 1. **The client went away:** the error is a cancellation and the request was cancelled too. The answer is 499 with no body.
-2. **A coded error:** a `shared/domain` coded error is in the chain. Its code's kind sets the status (`kindStatus` in errors.go), and its message is the detail.
+2. **A coded error:** a `shared/apierror` coded error is in the chain. Its code's kind sets the status (`kindStatus` in errors.go), and its message is the detail.
 3. **Out of time:** the error is a deadline and the request's own deadline has passed. The answer is 504 `request.timeout`.
 4. **Anything else** is 500 `internal`. Its detail never carries the cause.
 

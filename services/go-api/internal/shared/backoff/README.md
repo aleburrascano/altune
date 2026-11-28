@@ -1,4 +1,4 @@
-`backoff` owns how long to wait before the next attempt of anything that retries: exponential from a base, bounded, with a jitter shape the caller names.
+Infrastructure: `backoff` owns how long to wait before the next attempt of anything that retries: exponential from a base, bounded, with a jitter shape the caller names.
 
 A `Policy` is built only by `MustCapped(base, cap, opts...)` or `MustUncapped(base, opts...)`, which panic at startup on a base or cap that is not positive, a cap below the base, a factor below 2 or a spread outside [0, 1]. `WithFactor(n)` sets the growth per attempt (2 when unset). `WithSpread(f)` picks symmetric jitter.
 

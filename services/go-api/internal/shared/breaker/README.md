@@ -1,4 +1,6 @@
-`breaker` owns the circuit-breaker protocol that discovery's provider calls and playback's now-playing enrichment share. One breaker guards one dependency; a caller that guards several keeps one `Breaker` per key.
+Infrastructure: `breaker` owns the circuit-breaker protocol that search's provider calls and playback's now-playing enrichment share.
+
+One breaker guards one dependency; a caller that guards several keeps one `Breaker` per key.
 
 `Allow(ctx)` returns an `Admission` and whether the call may go. Settle every admitted call exactly once: `Success`, `Failure`, or `Release` when the outcome says nothing about the dependency's health (the caller cancelled, the request was bad). `Failure` and `Success` take the admission so the breaker can tell a call admitted before a trip from one admitted after it.
 

@@ -1,4 +1,4 @@
-# collabcheck
+Infrastructure (repo tooling): `collabcheck` owns the type-aware check that fails a nil-checked or `With*`-injected collaborator, run by `cmd/collabcheck` from `scripts/precheck.sh`.
 
 `collabcheck` is the type-aware check for lexicon 3715 lines 23 and 24. It is a `go/analysis` pass, run as `go run ./cmd/collabcheck ./...` from `services/go-api`, and it is the proof that a directory is at zero in place of the coarse counting script `scripts/ci/count-collaborator-options.sh`. It does not see fields set only by constructors that return an interface, nor a nil check written as a `switch` case or on a copy of the field.
 
