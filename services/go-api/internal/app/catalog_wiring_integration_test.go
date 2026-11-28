@@ -14,7 +14,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"fmt"
@@ -115,7 +115,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 func awaitReady(t *testing.T, repo *library.PostgresTrackRepository, track *library.Track, userID ids.UserId) library.Track {
 	t.Helper()
 	var got *library.Track
-	polltest.Within(10*time.Second, func() bool {
+	timingtest.Within(10*time.Second, func() bool {
 		var err error
 		got, err = repo.GetByID(context.Background(), track.ID(), userID)
 		if err != nil {
@@ -196,7 +196,7 @@ func TestCatalogAcquisition_RecordsTheOutcomeThroughThePostgresStore(t *testing.
 		t.Fatalf("schedule: %v", err)
 	}
 
-	polltest.Until(t, 5*time.Second, fmt.Sprintf("an acquisition_outcomes row for track %s (download.New must record outcomes in the Postgres store)", track.ID()), func() bool {
+	timingtest.Until(t, 5*time.Second, fmt.Sprintf("an acquisition_outcomes row for track %s (download.New must record outcomes in the Postgres store)", track.ID()), func() bool {
 		return countAcquisitionOutcomeRows(t, pool, track.ID().String()) == 1
 	})
 }
@@ -273,7 +273,7 @@ func TestCatalogAcquisition_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *
 	want := upgradeJobState{Kind: "acquire", Queued: false, Leased: false, Claims: 1, UpgradeTries: 1}
 	const settleWithin = 15 * time.Second
 	var got upgradeJobState
-	if !polltest.Within(settleWithin, func() bool {
+	if !timingtest.Within(settleWithin, func() bool {
 		got = readUpgradeJobState(t, pool, trackID)
 		return got == want
 	}) {

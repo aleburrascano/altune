@@ -1,0 +1,333 @@
+package music_test
+
+import (
+	"altune/go-api/internal/shared/music"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+func TestNormalizeForMatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "lowercase",
+			input: "RADIOHEAD",
+			want:  "radiohead",
+		},
+		{
+			name:  "unicode diacritics stripped",
+			input: "café",
+			want:  "cafe",
+		},
+		{
+			name:  "precomposed diacritics stripped",
+			input: "café",
+			want:  "cafe",
+		},
+		{
+			name:  "brackets stripped - parentheses",
+			input: "Song (Deluxe Edition)",
+			want:  "song",
+		},
+		{
+			name:  "brackets stripped - square",
+			input: "Song [Remaster]",
+			want:  "song",
+		},
+		{
+			name:  "feat dot normalized",
+			input: "Song feat. Artist",
+			want:  "song feat artist",
+		},
+		{
+			name:  "ft no longer normalized to feat",
+			input: "Song ft. Artist",
+			want:  "song ft artist",
+		},
+		{
+			name:  "featuring no longer normalized to feat",
+			input: "Song featuring Artist",
+			want:  "song featuring artist",
+		},
+		{
+			name:  "leading article the kept",
+			input: "The Beatles",
+			want:  "the beatles",
+		},
+		{
+			name:  "ampersand to and",
+			input: "Simon & Garfunkel",
+			want:  "simon and garfunkel",
+		},
+		{
+			name:  "punctuation stripped",
+			input: "rock'n'roll!",
+			want:  "rocknroll",
+		},
+		{
+			name:  "whitespace collapsed",
+			input: "  lots   of    spaces  ",
+			want:  "lots of spaces",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "combined normalization keeps leading article",
+			input: "The Café (Remastered) feat. DJ & MC",
+			want:  "the cafe feat dj and mc",
+		},
+		{
+			name:  "leading article la kept",
+			input: "La Bamba",
+			want:  "la bamba",
+		},
+		{
+			name:  "leading article le kept",
+			input: "Le Freak",
+			want:  "le freak",
+		},
+		{
+			name:  "apostrophes stripped",
+			input: "don't stop",
+			want:  "dont stop",
+		},
+		{
+			name:  "periods stripped",
+			input: "Dr. Dre",
+			want:  "dr dre",
+		},
+		{
+			name:  "commas stripped",
+			input: "Crosby, Stills, Nash",
+			want:  "crosby stills nash",
+		},
+		{
+			name:  "zero-width space dropped not split",
+			input: "Instru\u200bmental",
+			want:  "instrumental",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := music.NormalizeForMatch(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeForMatch(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeForMatchNonLatin(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "japanese kanji preserved (was empty)",
+			input: "坂本龍一",
+			want:  "坂本龍一",
+		},
+		{
+			name:  "japanese mixed kanji-katakana preserved",
+			input: "宇多田ヒカル",
+			want:  "宇多田ヒカル",
+		},
+		{
+			name:  "korean hangul preserved",
+			input: "뉴진스",
+			want:  "뉴진스",
+		},
+		{
+			name:  "cyrillic preserved",
+			input: "Молчат Дома",
+			want:  "молчат дома",
+		},
+		{
+			name:  "non-decomposable latin letter preserved",
+			input: "Sæglópur",
+			want:  "sæglopur",
+		},
+		{
+			name:  "cjk with latin and symbols",
+			input: "m-flo loves 坂本龍一",
+			want:  "m flo loves 坂本龍一",
+		},
+		{
+			name:  "symbols still stripped",
+			input: "¥$",
+			want:  "",
+		},
+		{
+			name:  "hyphen still becomes space",
+			input: "blink-182",
+			want:  "blink 182",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := music.NormalizeForMatch(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeForMatch(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		title    string
+		subtitle string
+		want     string
+	}{
+		{
+			name:     "title and subtitle joined by the separator",
+			title:    "Humble",
+			subtitle: "Kendrick Lamar",
+			want:     "humble" + music.KeySeparator + "kendrick lamar",
+		},
+		{
+			name:     "padding around either part is dropped",
+			title:    "  Humble\t",
+			subtitle: "\n Kendrick Lamar  ",
+			want:     "humble" + music.KeySeparator + "kendrick lamar",
+		},
+		{
+			name:     "an empty subtitle keeps its position",
+			title:    "Kendrick Lamar",
+			subtitle: "",
+			want:     "kendrick lamar" + music.KeySeparator,
+		},
+		{
+			name:     "both parts are normalized, not just concatenated",
+			title:    "DAMN. (Deluxe Edition)",
+			subtitle: "Kendrick Lamár",
+			want:     "damn" + music.KeySeparator + "kendrick lamar",
+		},
+		{
+			name:     "a separator in the input cannot forge one",
+			title:    "Humble" + music.KeySeparator + "Kendrick",
+			subtitle: "Lamar",
+			want:     "humble kendrick" + music.KeySeparator + "lamar",
+		},
+		{
+			name:     "a name that normalizes away has no key",
+			title:    "!!!",
+			subtitle: "???",
+			want:     "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := music.MatchKey(tt.title, tt.subtitle)
+			if got != tt.want {
+				t.Errorf("NameKey(%q, %q) = %q, want %q", tt.title, tt.subtitle, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNameKeyDistinguishesSplitsOfTheSameWords(t *testing.T) {
+	untitledArtist := music.MatchKey("Blue Moon", "")
+	titleAndArtist := music.MatchKey("Blue", "Moon")
+	if untitledArtist == titleAndArtist {
+		t.Errorf("distinct title/subtitle splits must not share a key, both = %q", untitledArtist)
+	}
+}
+
+func TestNormalizeForIdentityStripsEveryASCIISymbolAsTheOldRegexDid(t *testing.T) {
+	oldASCIIOnlyRe := regexp.MustCompile(`[^\w\s]`)
+	for asciiByte := 0; asciiByte < 128; asciiByte++ {
+		symbol := string(rune(asciiByte))
+		if strings.ContainsAny(symbol, "&'.,") {
+			continue
+		}
+		in := "x" + symbol + "y"
+		want := strings.Join(strings.Fields(oldASCIIOnlyRe.ReplaceAllString(strings.ToLower(in), " ")), " ")
+		if got := music.NormalizeForIdentity(in); got != want {
+			t.Errorf("NormalizeForIdentity(%q) = %q, old regex = %q", in, got, want)
+		}
+	}
+}
+
+func TestNormalizeForIdentityDropsZeroWidthSpace(t *testing.T) {
+	if got := music.NormalizeForIdentity("Instru\u200bmental"); got != "instrumental" {
+		t.Errorf("NormalizeForIdentity with zero-width space = %q, want %q", got, "instrumental")
+	}
+}
+
+func TestFoldName_UnifiesUnicodeForms(t *testing.T) {
+	cases := []struct{ name, a, b string }{
+		{"NFC vs NFD e-acute", "Beyoncé", "Beyoncé"},
+		{"fullwidth vs ASCII", "ＲＯＳＡＬＩＡ", "ROSALIA"},
+		{"ligature vs letters", "ﬁve", "five"},
+		{"no-break space vs space", "Daft Punk", "daft punk"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if music.FoldName(c.a) != music.FoldName(c.b) {
+				t.Errorf("FoldName(%q) = %q, FoldName(%q) = %q, want equal", c.a, music.FoldName(c.a), c.b, music.FoldName(c.b))
+			}
+		})
+	}
+}
+
+func TestFoldName_UnchangedForAlreadyNormalInput(t *testing.T) {
+	legacy := func(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
+	inputs := []string{
+		"Guest One", "  Daft   Punk ", "Beyoncé", "Sigur Rós",
+		"坂本龍一", "Björk", "AC/DC", "Ty Dolla $ign",
+	}
+	for _, s := range inputs {
+		if got, want := music.FoldName(s), legacy(s); got != want {
+			t.Errorf("FoldName(%q) = %q, want legacy fold %q", s, got, want)
+		}
+	}
+}
+
+func TestFoldName_KeepsDiacriticsAndPunctuation(t *testing.T) {
+	if music.FoldName("Beyoncé") == music.FoldName("Beyonce") {
+		t.Error("FoldName must not strip diacritics")
+	}
+	if got := music.FoldName("AC/DC"); got != "ac/dc" {
+		t.Errorf("FoldName(AC/DC) = %q, want ac/dc", got)
+	}
+}
+
+func TestNFKC(t *testing.T) {
+	if got := music.NFKC("ﬁ"); got != "fi" {
+		t.Errorf("NFKC(ligature) = %q, want fi", got)
+	}
+	if got := music.NFKC(""); got != "" {
+		t.Errorf("NFKC(\"\") = %q, want empty", got)
+	}
+}
+
+func TestNFKCFoldsFullwidthLetters(t *testing.T) {
+	if got := music.NFKC("ｆｕｌｌ"); got != "full" {
+		t.Errorf("NFKC(fullwidth) = %q, want full", got)
+	}
+}
+
+func TestNFKCKeepsCaseAndPunctuation(t *testing.T) {
+	if got := music.NFKC("Slowed + Reverb"); got != "Slowed + Reverb" {
+		t.Errorf("NFKC(\"Slowed + Reverb\") = %q, want it unchanged", got)
+	}
+}
+
+func TestTransliterate_TurnsAnyScriptIntoPlainLetters(t *testing.T) {
+	for in, want := range map[string]string{"Straße": "Strasse", "Новый": "Novyi", "Beyoncé": "Beyonce"} {
+		if got := music.Transliterate(in); got != want {
+			t.Errorf("Transliterate(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

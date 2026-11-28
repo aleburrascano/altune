@@ -4,9 +4,8 @@ import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library/librarytest"
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"errors"
@@ -196,7 +195,7 @@ func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	err := ledger.Complete(context.Background(), track.ID(), userId, 0, download.Completion{
 		AudioRef:   "ref-1",
 		Duration:   trackLength(t, 215.5),
-		Provenance: downloadprovenance.ProvenanceVerified,
+		Provenance: music.ProvenanceVerified,
 		SourceURL:  "https://example.test/a",
 		Confidence: 0.9,
 		Evidence:   json.RawMessage(`{"k":1}`),
@@ -214,7 +213,7 @@ func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	if got.DurationSeconds() == nil || *got.DurationSeconds() != 215.5 {
 		t.Fatalf("duration not set: %v", got.DurationSeconds())
 	}
-	if got.AcquisitionProvenance() == nil || *got.AcquisitionProvenance() != string(downloadprovenance.ProvenanceVerified) {
+	if got.AcquisitionProvenance() == nil || *got.AcquisitionProvenance() != string(music.ProvenanceVerified) {
 		t.Fatalf("provenance not set: %v", got.AcquisitionProvenance())
 	}
 	if got.AudioSourceURL() == nil || *got.AudioSourceURL() != "https://example.test/a" {
@@ -1130,9 +1129,9 @@ func TestTrackLedger_AnIllegalReplaceWithARelabelWritesNoLabels(t *testing.T) {
 	}
 }
 
-func trackLength(t *testing.T, seconds float64) tracklength.TrackLength {
+func trackLength(t *testing.T, seconds float64) music.TrackLength {
 	t.Helper()
-	length, err := tracklength.TrackLengthOf(seconds)
+	length, err := music.TrackLengthOf(seconds)
 	if err != nil {
 		t.Fatalf("TrackLengthOf(%v) = %v", seconds, err)
 	}

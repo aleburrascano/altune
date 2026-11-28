@@ -13,7 +13,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"fmt"
@@ -94,7 +94,7 @@ func captureLogs(t *testing.T) *logging.Capture {
 
 func waitForAtLeast(t *testing.T, c *atomic.Int32, want int32) {
 	t.Helper()
-	if !polltest.Within(2*time.Second, func() bool { return c.Load() >= want }) {
+	if !timingtest.Within(2*time.Second, func() bool { return c.Load() >= want }) {
 		t.Fatalf("counter never reached %d (got %d)", want, c.Load())
 	}
 }

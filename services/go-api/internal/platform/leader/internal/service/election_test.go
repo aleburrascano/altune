@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"log/slog"
@@ -784,7 +784,7 @@ func terminateLockHolder(t *testing.T, admin *pgxpool.Pool) {
 	if err != nil || !killed {
 		t.Fatalf("could not terminate the lock-holding session (killed=%v): %v", killed, err)
 	}
-	polltest.Until(t, 2*time.Second, "the advisory lock to be released after its session was terminated", func() bool {
+	timingtest.Until(t, 2*time.Second, "the advisory lock to be released after its session was terminated", func() bool {
 		var held bool
 		err := admin.QueryRow(context.Background(), `
 			select exists(select 1 from pg_locks

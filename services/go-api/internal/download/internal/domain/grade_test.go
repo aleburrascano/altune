@@ -2,7 +2,7 @@ package domain_test
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/downloadprovenance"
+	"altune/go-api/internal/shared/music"
 	"slices"
 	"testing"
 )
@@ -11,21 +11,21 @@ func TestOf(t *testing.T) {
 	cases := []struct {
 		name        string
 		fingerprint domain.FingerprintResult
-		provenance  downloadprovenance.AcquisitionProvenance
+		provenance  music.AcquisitionProvenance
 		kind        domain.SourceKind
 		want        domain.Grade
 	}{
-		{"fingerprint matches an art track", domain.FingerprintMatches, downloadprovenance.ProvenanceVerified, domain.ArtTrack, domain.GradeA},
-		{"fingerprint matches an official video", domain.FingerprintMatches, downloadprovenance.ProvenanceVerified, domain.OfficialVideo, domain.GradeA},
-		{"fingerprint matches a label upload", domain.FingerprintMatches, downloadprovenance.ProvenanceVerified, domain.LabelUpload, domain.GradeA},
-		{"fingerprint matches a fan upload", domain.FingerprintMatches, downloadprovenance.ProvenanceVerified, domain.FanUpload, domain.GradeB},
-		{"fingerprint matches the user's own upload", domain.FingerprintMatches, downloadprovenance.ProvenanceVerified, domain.UserUpload, domain.GradeB},
-		{"fingerprint approximates an art track", domain.FingerprintApproximates, downloadprovenance.ProvenanceVerified, domain.ArtTrack, domain.GradeB},
-		{"length only", domain.FingerprintSilent, downloadprovenance.ProvenanceCorroborated, domain.ArtTrack, domain.GradeC},
-		{"best effort", domain.FingerprintSilent, downloadprovenance.ProvenanceBestEffort, domain.ArtTrack, domain.GradeD},
-		{"no evidence", domain.FingerprintSilent, downloadprovenance.ProvenanceBestEffort, "", domain.GradeD},
-		{"fingerprint finds a different song but proves nothing", domain.FingerprintUnsupported, downloadprovenance.ProvenanceCorroborated, domain.ArtTrack, domain.GradeD},
-		{"fingerprint proves another version or song", domain.FingerprintContradicts, downloadprovenance.ProvenanceVerified, domain.ArtTrack, domain.GradeF},
+		{"fingerprint matches an art track", domain.FingerprintMatches, music.ProvenanceVerified, domain.ArtTrack, domain.GradeA},
+		{"fingerprint matches an official video", domain.FingerprintMatches, music.ProvenanceVerified, domain.OfficialVideo, domain.GradeA},
+		{"fingerprint matches a label upload", domain.FingerprintMatches, music.ProvenanceVerified, domain.LabelUpload, domain.GradeA},
+		{"fingerprint matches a fan upload", domain.FingerprintMatches, music.ProvenanceVerified, domain.FanUpload, domain.GradeB},
+		{"fingerprint matches the user's own upload", domain.FingerprintMatches, music.ProvenanceVerified, domain.UserUpload, domain.GradeB},
+		{"fingerprint approximates an art track", domain.FingerprintApproximates, music.ProvenanceVerified, domain.ArtTrack, domain.GradeB},
+		{"length only", domain.FingerprintSilent, music.ProvenanceCorroborated, domain.ArtTrack, domain.GradeC},
+		{"best effort", domain.FingerprintSilent, music.ProvenanceBestEffort, domain.ArtTrack, domain.GradeD},
+		{"no evidence", domain.FingerprintSilent, music.ProvenanceBestEffort, "", domain.GradeD},
+		{"fingerprint finds a different song but proves nothing", domain.FingerprintUnsupported, music.ProvenanceCorroborated, domain.ArtTrack, domain.GradeD},
+		{"fingerprint proves another version or song", domain.FingerprintContradicts, music.ProvenanceVerified, domain.ArtTrack, domain.GradeF},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

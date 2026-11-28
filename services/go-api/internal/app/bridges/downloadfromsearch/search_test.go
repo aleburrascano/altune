@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"reflect"
@@ -67,7 +67,7 @@ func TestSearchRecordings_CarriesEveryFactOfATrackHit(t *testing.T) {
 
 	got, err := downloadfromsearch.NewSearch(searcher).SearchRecordings(context.Background(), "q", 10)
 
-	want := []songfields.RecordingIdentity{hit.RecordingIdentity()}
+	want := []music.RecordingIdentity{hit.RecordingIdentity()}
 	if len(got) != 1 || got[0].Album != "Glee" || got[0].Year != 1997 || got[0].ReleaseMBID != "release-mbid" ||
 		got[0].UPC != "123456789012" || got[0].Explicit == nil || !*got[0].Explicit || got[0].DurationSeconds != 236 {
 		t.Errorf("recordings %+v, want album, year, release, barcode, explicit and length to arrive", got)
@@ -130,7 +130,7 @@ func TestSearchRecordings_KeysSourcesByAcquisitionsProviderConstants(t *testing.
 		t.Fatalf("NewRecordingResolver: %v", err)
 	}
 
-	identity, err := resolver.Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist"})
+	identity, err := resolver.Resolve(context.Background(), music.RecordingIdentity{Title: "Song", Artist: "Artist"})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

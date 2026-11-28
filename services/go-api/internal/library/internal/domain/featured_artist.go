@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"fmt"
 	"strconv"
 	"strings"
@@ -87,7 +87,7 @@ func FeaturedArtistForQuery(name, mbid string, deezerID int64) FeaturedArtist {
 }
 
 func (f FeaturedArtist) NormalizedName() string {
-	return textnorm.FoldName(f.Name)
+	return music.FoldName(f.Name)
 }
 
 func (f FeaturedArtist) LegacyIdentityKey() string {

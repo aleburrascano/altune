@@ -3,7 +3,7 @@ package domain_test
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"math"
 	"testing"
 )
@@ -13,7 +13,7 @@ func track(title, subtitle string) domain.SearchResult {
 }
 
 func scoreOf(query string, candidates []domain.SearchResult, target domain.SearchResult) float64 {
-	return domain.NewScorer(textnorm.NormalizeForMatch(query), candidates).Score(target)
+	return domain.NewScorer(music.NormalizeForMatch(query), candidates).Score(target)
 }
 
 func assertScore(t *testing.T, got, want float64) {

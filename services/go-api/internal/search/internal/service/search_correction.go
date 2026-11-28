@@ -3,7 +3,7 @@ package service
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"log/slog"
 	"time"
@@ -22,8 +22,8 @@ func (s *SearchService) tryCorrection(ctx context.Context, query *domain.SearchQ
 	if result == nil {
 		return "", "", nil, nil
 	}
-	corrNorm := textnorm.NormalizeForMatch(result.Corrected)
-	if corrNorm == textnorm.NormalizeForMatch(query.Raw) {
+	corrNorm := music.NormalizeForMatch(result.Corrected)
+	if corrNorm == music.NormalizeForMatch(query.Raw) {
 		return "", "", nil, nil
 	}
 

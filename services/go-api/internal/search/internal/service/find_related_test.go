@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -212,8 +212,8 @@ func TestFindRelated_DedupAgainstOrganic(t *testing.T) {
 
 	for _, g := range got {
 		for _, item := range g.Items {
-			if textnorm.NormalizeForMatch(item.Title) == textnorm.NormalizeForMatch("Main Track") &&
-				textnorm.NormalizeForMatch(item.Subtitle) == textnorm.NormalizeForMatch("Artist") {
+			if music.NormalizeForMatch(item.Title) == music.NormalizeForMatch("Main Track") &&
+				music.NormalizeForMatch(item.Subtitle) == music.NormalizeForMatch("Artist") {
 				t.Error("organic result should be deduped from related items")
 			}
 		}

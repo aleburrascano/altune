@@ -3,7 +3,7 @@ package service
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 )
 
@@ -14,7 +14,7 @@ type providerAnswers struct {
 }
 
 func newProviderAnswers(cache ports.ProviderResultCache, searchQuery string, kinds domain.ResultKindSet) providerAnswers {
-	queryNorm := textnorm.NormalizeForMatch(searchQuery)
+	queryNorm := music.NormalizeForMatch(searchQuery)
 	if queryNorm == "" {
 		return providerAnswers{cache: cache}
 	}

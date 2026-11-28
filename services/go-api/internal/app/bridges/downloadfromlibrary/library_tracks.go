@@ -6,8 +6,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/tracklength"
 	"context"
 	"errors"
 	"fmt"
@@ -176,7 +176,7 @@ func complete(ctx context.Context, track *library.Track, c download.Completion, 
 	return nil
 }
 
-func setMeasuredDuration(track *library.Track, length tracklength.TrackLength) error {
+func setMeasuredDuration(track *library.Track, length music.TrackLength) error {
 	if !length.Known() {
 		return nil
 	}
@@ -209,7 +209,7 @@ func relabel(ctx context.Context, track *library.Track, given *download.TrackLab
 	return nil
 }
 
-func recordLengthCheck(ctx context.Context, track *library.Track, measured tracklength.TrackLength) {
+func recordLengthCheck(ctx context.Context, track *library.Track, measured music.TrackLength) {
 	if track.RecordAudioLength(measured) && track.AudioLengthMismatch() {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
 			logging.KeyTrackID, track.ID().String(), "catalog_seconds", *track.CatalogDurationSeconds(), "audio_seconds", measured.Seconds())

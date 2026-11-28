@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/platform/outbound/internal/adapters/retry"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/retrysafe"
+	"altune/go-api/internal/shared/resilience"
 	"bytes"
 	"context"
 	"errors"
@@ -418,7 +418,7 @@ func TestTransport_RetriesNoBodyGet(t *testing.T) {
 
 func TestTransport_ResendsAReplayableBodyOnRetry(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
-	req, err := http.NewRequestWithContext(retrysafe.Mark(context.Background()), http.MethodPost, "https://unlisted.example.com/x", bytes.NewReader([]byte("payload")))
+	req, err := http.NewRequestWithContext(resilience.MarkRetrySafe(context.Background()), http.MethodPost, "https://unlisted.example.com/x", bytes.NewReader([]byte("payload")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +465,7 @@ func TestTransport_APostUnmarkedIsSentOnceAfterATransportError(t *testing.T) {
 func TestTransport_APostMarkedIsRetriedOnA503(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
-	got := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), postReq(t, retrysafe.Mark(context.Background()), http.MethodPost))
+	got := statusOf(t, recordingDelays(t, f, &[]time.Duration{}), postReq(t, resilience.MarkRetrySafe(context.Background()), http.MethodPost))
 
 	if got != 200 || f.calls != 2 {
 		t.Errorf("status = %d after %d calls, want 200 after 2", got, f.calls)
@@ -496,7 +496,7 @@ func TestTransport_APatchUnmarkedIsSentOnce(t *testing.T) {
 
 func TestTransport_RetryRefusesUnreplayableBody(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
-	req, err := http.NewRequestWithContext(retrysafe.Mark(context.Background()), http.MethodPost, "https://unlisted.example.com/x", io.NopCloser(strings.NewReader("payload")))
+	req, err := http.NewRequestWithContext(resilience.MarkRetrySafe(context.Background()), http.MethodPost, "https://unlisted.example.com/x", io.NopCloser(strings.NewReader("payload")))
 	if err != nil {
 		t.Fatal(err)
 	}

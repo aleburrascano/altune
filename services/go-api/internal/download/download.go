@@ -19,7 +19,6 @@ import (
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
@@ -345,7 +344,7 @@ func (m *Module) startAcquisition(ctx context.Context, d Deps, tools domain.Veri
 		},
 		service.StagePorts{
 			Prober:        prober,
-			Tagger:        ffmpegtag.NewTagger(binpath.Resolve("ffmpeg", cfg.FFmpegLocation), id3.NewTagger()),
+			Tagger:        ffmpegtag.NewTagger(ytdlp.ResolveBinary("ffmpeg", cfg.FFmpegLocation), id3.NewTagger()),
 			Rejections:    d.Database.Rejections(),
 			StoredAudio:   storedAudio,
 			Orphans:       d.Orphans,
@@ -400,7 +399,7 @@ func fingerprinting(ctx context.Context, d Deps, tools *domain.Verification) (*s
 
 func upgradePreviewMatcher(d Deps) ports.PreviewMatcher {
 	cfg := d.Config
-	printer := previewcheck.NewFpcalcPrinter(binpath.Resolve("fpcalc", cfg.FFmpegLocation))
+	printer := previewcheck.NewFpcalcPrinter(ytdlp.ResolveBinary("fpcalc", cfg.FFmpegLocation))
 	previews := previewcheck.MustNew(d.NewClient(cfg.AcquisitionDeezerPreviewTimeout, d.Transport), previewcheck.BaseURL, printer, clock.Sleep, clock.Now)
 	return previewcheck.NewMatcher(previews, printer, previewcheck.DefaultMatchMaxBitErrorRate)
 }

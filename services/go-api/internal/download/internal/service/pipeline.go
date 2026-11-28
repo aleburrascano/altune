@@ -5,20 +5,17 @@ import (
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/songfields"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"time"
-
-	sharedtracklength "altune/go-api/internal/shared/tracklength"
 )
 
 type (
@@ -261,7 +258,7 @@ type AcquisitionContext struct {
 	TempPath          string
 	TempDir           string
 	AudioRef          string
-	ProbedDuration    sharedtracklength.TrackLength
+	ProbedDuration    music.TrackLength
 	DurationVerified  bool
 	IdentityVerified  bool
 	Verdict           AudioVerdict
@@ -403,29 +400,29 @@ func (ac *AcquisitionContext) stillJudgedOnTheSameBasis(recorded *domain.Rejecti
 	return SameRecording(recorded.ExpectedSeconds, current)
 }
 
-func (ac *AcquisitionContext) Provenance() downloadprovenance.AcquisitionProvenance {
+func (ac *AcquisitionContext) Provenance() music.AcquisitionProvenance {
 	switch {
 	case ac.BestEffort:
-		return downloadprovenance.ProvenanceBestEffort
+		return music.ProvenanceBestEffort
 	case ac.IdentityVerified:
-		return downloadprovenance.ProvenanceVerified
+		return music.ProvenanceVerified
 	case ac.DurationVerified && ac.lengths().Corroborated():
-		return downloadprovenance.ProvenanceCorroborated
+		return music.ProvenanceCorroborated
 	default:
-		return downloadprovenance.ProvenanceBestEffort
+		return music.ProvenanceBestEffort
 	}
 }
 
-func (ac *AcquisitionContext) StoredLength() sharedtracklength.TrackLength {
+func (ac *AcquisitionContext) StoredLength() music.TrackLength {
 	if ac.ProbedDuration.Known() {
 		return ac.ProbedDuration
 	}
 	if ac.Selected == nil {
-		return sharedtracklength.TrackLength{}
+		return music.TrackLength{}
 	}
-	reported, err := sharedtracklength.TrackLengthOf(ac.Selected.Duration)
+	reported, err := music.TrackLengthOf(ac.Selected.Duration)
 	if err != nil {
-		return sharedtracklength.TrackLength{}
+		return music.TrackLength{}
 	}
 	return reported
 }
@@ -450,20 +447,20 @@ type TrackRef struct {
 	AudioSourceURL string
 }
 
-func (t TrackRef) RecordingIdentity() songfields.RecordingIdentity {
-	identity := songfields.RecordingIdentity{
+func (t TrackRef) RecordingIdentity() music.RecordingIdentity {
+	identity := music.RecordingIdentity{
 		Title:           t.Title,
 		Artist:          t.Artist,
 		Album:           t.Album,
 		Year:            t.Year,
 		ISRC:            t.ISRC,
 		RecordingMBID:   t.CatalogMBID,
-		Position:        songfields.TrackPosition{Track: t.TrackNumber},
+		Position:        music.TrackPosition{Track: t.TrackNumber},
 		Explicit:        t.CatalogExplicit,
 		DurationSeconds: t.CatalogDuration,
 	}
 	for _, src := range t.CatalogSources {
-		identity.Sources = append(identity.Sources, songfields.ProviderRef{Provider: src.Provider, ExternalID: src.ExternalID, URL: src.URL})
+		identity.Sources = append(identity.Sources, music.ProviderRef{Provider: src.Provider, ExternalID: src.ExternalID, URL: src.URL})
 	}
 	return identity
 }

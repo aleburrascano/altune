@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"net/url"
 )
 
@@ -148,8 +148,8 @@ func NewProviderResult(kind ResultKind, title, subtitle, imageURL string, source
 
 func ResultSignature(r SearchResult) string {
 	return r.Kind.String() + "|" +
-		textnorm.NormalizeForMatch(r.Title) + "|" +
-		textnorm.NormalizeForMatch(r.Subtitle)
+		music.NormalizeForMatch(r.Title) + "|" +
+		music.NormalizeForMatch(r.Subtitle)
 }
 
 func SignatureOf(r SearchResult) string {

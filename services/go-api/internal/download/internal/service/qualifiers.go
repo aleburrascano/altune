@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"slices"
 	"strings"
 )
@@ -23,17 +23,17 @@ var presentationMarkers = [][]string{
 }
 
 func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto, qualifiers []string) {
-	titleTokens := titlemarkers.Tokens(trackTitle)
-	artistTokens := titlemarkers.Tokens(trackArtist)
-	for _, entry := range titlemarkers.Matches(titlemarkers.Tokens(titlemarkers.StripFeatureCredits(candidateTitle))) {
+	titleTokens := music.TitleTokens(trackTitle)
+	artistTokens := music.TitleTokens(trackArtist)
+	for _, entry := range music.MatchVersionPhrases(music.TitleTokens(music.StripFeatureCredits(candidateTitle))) {
 		if entry.Benign() || entry.In(titleTokens) || entry.In(artistTokens) {
 			continue
 		}
 		if entry.Veto {
-			veto = titlemarkers.AppendLabel(veto, entry.Label)
+			veto = music.AppendVersionLabel(veto, entry.Label)
 			continue
 		}
-		qualifiers = titlemarkers.AppendLabel(qualifiers, entry.Label)
+		qualifiers = music.AppendVersionLabel(qualifiers, entry.Label)
 	}
 	return veto, qualifiers
 }
@@ -67,15 +67,15 @@ func qualifierDistance(trackTitle, candidateTitle string) int {
 }
 
 func distanceLabels(title string) []string {
-	labels := titlemarkers.RecordingLabels(title)
-	tokens := titlemarkers.Tokens(titlemarkers.StripFeatureCredits(title))
+	labels := music.RecordingLabels(title)
+	tokens := music.TitleTokens(music.StripFeatureCredits(title))
 	for rest := tokens; len(rest) > 0; {
 		marker := presentationMarkerAt(rest)
 		if marker == nil {
 			rest = rest[1:]
 			continue
 		}
-		labels = titlemarkers.AppendLabel(labels, strings.Join(marker, " "))
+		labels = music.AppendVersionLabel(labels, strings.Join(marker, " "))
 		rest = rest[len(marker):]
 	}
 	return labels
@@ -91,9 +91,9 @@ func presentationMarkerAt(tokens []string) []string {
 }
 
 func carriesUnrequestedRerecording(wantedTitle, candidateTitle string) bool {
-	if _, wanted := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(wantedTitle)); wanted {
+	if _, wanted := music.StripRerecordingPhrases(music.TitleTokens(wantedTitle)); wanted {
 		return false
 	}
-	_, carried := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(candidateTitle))
+	_, carried := music.StripRerecordingPhrases(music.TitleTokens(candidateTitle))
 	return carried
 }

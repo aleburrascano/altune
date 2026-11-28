@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -116,7 +116,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 
 	albumSet := make(map[string]bool, len(albumTitles))
 	for _, t := range albumTitles {
-		albumSet[textnorm.NormalizeForMatch(t)] = true
+		albumSet[music.NormalizeForMatch(t)] = true
 	}
 
 	var bestArtist discogsSearchResult
@@ -128,7 +128,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		}
 		overlap := 0
 		for _, rel := range releases {
-			if albumSet[textnorm.NormalizeForMatch(rel.Title)] {
+			if albumSet[music.NormalizeForMatch(rel.Title)] {
 				overlap++
 			}
 		}

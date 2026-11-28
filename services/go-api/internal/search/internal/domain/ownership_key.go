@@ -1,8 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/songfields"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"regexp"
 	"strings"
 )
@@ -15,11 +14,11 @@ var (
 const isrcKeyPrefix = "isrc:"
 
 func OwnershipKey(title, artist string) string {
-	return titleKey(title) + "|" + textnorm.NormalizeForMatch(artist)
+	return titleKey(title) + "|" + music.NormalizeForMatch(artist)
 }
 
 func OwnershipISRCKey(isrc string) string {
-	canonical := songfields.CanonicalISRC(isrc)
+	canonical := music.CanonicalISRC(isrc)
 	if canonical == "" {
 		return ""
 	}
@@ -35,7 +34,7 @@ func titleKey(title string) string {
 			kept = append(kept, suffix)
 		}
 	}
-	return textnorm.NormalizeForIdentity(strings.Join(kept, " "))
+	return music.NormalizeForIdentity(strings.Join(kept, " "))
 }
 
 func keepUnlessDecoration(segment string) string {
@@ -46,6 +45,6 @@ func keepUnlessDecoration(segment string) string {
 }
 
 func isDecoration(segment string) bool {
-	words := textnorm.NormalizeForIdentity(strings.Trim(segment, " ()[]{}-\u2013\u2014"))
-	return songfields.IsEditionLabel(words) || songfields.IsReleaseMarker(words)
+	words := music.NormalizeForIdentity(strings.Trim(segment, " ()[]{}-\u2013\u2014"))
+	return music.IsEditionLabel(words) || music.IsReleaseMarker(words)
 }

@@ -5,9 +5,9 @@ import (
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"context"
 	"errors"
@@ -256,7 +256,7 @@ func (a *ArtworkFiller) lookupDurableIdentity(ctx context.Context, result *domai
 }
 
 func (a *ArtworkFiller) lookupMBIDIndex(ctx context.Context, result domain.SearchResult) string {
-	mbid, ok := a.mbidIndex.LookupMBID(ctx, result.Kind, textnorm.NameKey(result.Title, result.Subtitle))
+	mbid, ok := a.mbidIndex.LookupMBID(ctx, result.Kind, music.MatchKey(result.Title, result.Subtitle))
 	if !ok {
 		return ""
 	}

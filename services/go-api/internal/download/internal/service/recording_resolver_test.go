@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"log/slog"
@@ -73,10 +73,10 @@ func TestNewRecordingResolver_RefusesEachMissingPort(t *testing.T) {
 }
 
 type stubSearcher struct {
-	results []songfields.RecordingIdentity
+	results []music.RecordingIdentity
 }
 
-func (s stubSearcher) SearchRecordings(context.Context, string, int) ([]songfields.RecordingIdentity, error) {
+func (s stubSearcher) SearchRecordings(context.Context, string, int) ([]music.RecordingIdentity, error) {
 	return s.results, nil
 }
 
@@ -93,12 +93,12 @@ func (s *stubISRCLookup) RecordingsByISRC(context.Context, string) ([]domain.ISR
 
 type failingSearcher struct{}
 
-func (failingSearcher) SearchRecordings(context.Context, string, int) ([]songfields.RecordingIdentity, error) {
+func (failingSearcher) SearchRecordings(context.Context, string, int) ([]music.RecordingIdentity, error) {
 	return nil, errors.New("search down")
 }
 
 func drinkingInLA() stubSearcher {
-	return stubSearcher{results: []songfields.RecordingIdentity{{
+	return stubSearcher{results: []music.RecordingIdentity{{
 		Title:           "Drinking in L.A.",
 		Artist:          "Bran Van 3000",
 		ISRC:            "CAA509814003",
@@ -107,7 +107,7 @@ func drinkingInLA() stubSearcher {
 	}}}
 }
 
-var drinkingQuery = songfields.RecordingIdentity{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003"}
+var drinkingQuery = music.RecordingIdentity{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003"}
 
 func TestResolve_ISRCRecordingReplacesMismatchedSearchMBID(t *testing.T) {
 	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
@@ -609,10 +609,10 @@ func TestResolve_ISRCAnchoredAfterSearchFailureReferencesTheISRCRecording(t *tes
 }
 
 func TestResolve_AnotherVersionIsNotTheSavedSong(t *testing.T) {
-	acoustic := songfields.RecordingIdentity{Title: "Take On Me (2017 Acoustic)", Artist: "a-ha", ISRC: "DEUM71724939", RecordingMBID: "acoustic-mbid"}
-	studio := songfields.RecordingIdentity{Title: "Take on Me", Artist: "a-ha", ISRC: "USWB19901214", RecordingMBID: "studio-mbid"}
-	takeOnMe := songfields.RecordingIdentity{Title: "Take on Me", Artist: "a-ha"}
-	resolve := func(results ...songfields.RecordingIdentity) domain.RecordingIdentity {
+	acoustic := music.RecordingIdentity{Title: "Take On Me (2017 Acoustic)", Artist: "a-ha", ISRC: "DEUM71724939", RecordingMBID: "acoustic-mbid"}
+	studio := music.RecordingIdentity{Title: "Take on Me", Artist: "a-ha", ISRC: "USWB19901214", RecordingMBID: "studio-mbid"}
+	takeOnMe := music.RecordingIdentity{Title: "Take on Me", Artist: "a-ha"}
+	resolve := func(results ...music.RecordingIdentity) domain.RecordingIdentity {
 		t.Helper()
 		identity, err := newResolver(t, stubSearcher{results: results}, lookups{}).Resolve(context.Background(), takeOnMe)
 		if err != nil {
@@ -671,15 +671,15 @@ var (
 		MBID: cureLiveMBID, Title: "Boys Don\u2019t Cry", Artists: []string{"The Cure"}, Duration: 187,
 		Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
 	}
-	pinnedCureQuery = songfields.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure", DurationSeconds: 157.07, RecordingMBID: cureStudioMBID}
+	pinnedCureQuery = music.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure", DurationSeconds: 157.07, RecordingMBID: cureStudioMBID}
 )
 
 func searchRanking(mbid string, duration float64, sources ...domain.ProviderRef) stubSearcher {
-	refs := make([]songfields.ProviderRef, len(sources))
+	refs := make([]music.ProviderRef, len(sources))
 	for i, src := range sources {
-		refs[i] = songfields.ProviderRef{Provider: string(src.Provider), ExternalID: src.ExternalID, URL: src.URL}
+		refs[i] = music.ProviderRef{Provider: string(src.Provider), ExternalID: src.ExternalID, URL: src.URL}
 	}
-	return stubSearcher{results: []songfields.RecordingIdentity{{
+	return stubSearcher{results: []music.RecordingIdentity{{
 		Title: "Boys Don't Cry", Artist: "The Cure",
 		RecordingMBID: mbid, DurationSeconds: duration, Sources: refs,
 	}}}
@@ -1041,10 +1041,10 @@ func TestResolve_PinnedReferenceIsNotDoubtedByAWrongCatalogLength(t *testing.T) 
 }
 
 func TestResolve_AnArtistOfSymbolsAloneMatchesTheTitleWhoeverIsCredited(t *testing.T) {
-	search := stubSearcher{results: []songfields.RecordingIdentity{{Title: "Me and Giuliani Down by the School Yard", Artist: "Chk Chk Chk", RecordingMBID: "chk-mbid"}}}
+	search := stubSearcher{results: []music.RecordingIdentity{{Title: "Me and Giuliani Down by the School Yard", Artist: "Chk Chk Chk", RecordingMBID: "chk-mbid"}}}
 
 	identity, err := newResolver(t, search, lookups{}).Resolve(context.Background(),
-		songfields.RecordingIdentity{Title: "Me and Giuliani Down by the School Yard", Artist: "!!!"})
+		music.RecordingIdentity{Title: "Me and Giuliani Down by the School Yard", Artist: "!!!"})
 
 	if err != nil || identity.MBID != "chk-mbid" {
 		t.Errorf("identity %+v, err %v; want the title match, since the artist normalizes to nothing", identity, err)
@@ -1052,13 +1052,13 @@ func TestResolve_AnArtistOfSymbolsAloneMatchesTheTitleWhoeverIsCredited(t *testi
 }
 
 func TestResolve_AQueryWithoutAnISRCNeverMatchesAHitThatAlsoLacksOne(t *testing.T) {
-	search := stubSearcher{results: []songfields.RecordingIdentity{
+	search := stubSearcher{results: []music.RecordingIdentity{
 		{Title: "Another Song", Artist: "Someone Else", RecordingMBID: "wrong-mbid"},
 		{Title: "Drinking in L.A.", Artist: "Bran Van 3000", RecordingMBID: "right-mbid"},
 	}}
 
 	identity, err := newResolver(t, search, lookups{}).Resolve(context.Background(),
-		songfields.RecordingIdentity{Title: "Drinking in L.A.", Artist: "Bran Van 3000"})
+		music.RecordingIdentity{Title: "Drinking in L.A.", Artist: "Bran Van 3000"})
 
 	if err != nil || identity.MBID != "right-mbid" {
 		t.Errorf("identity %+v, err %v; want the title and artist match, not the first hit that has no ISRC", identity, err)
@@ -1069,7 +1069,7 @@ func TestResolve_DropsASearchedSourceWithNoExternalID(t *testing.T) {
 	keep := domain.ProviderRef{Provider: domain.ProviderDeezer, ExternalID: "3135556"}
 	resolver := newResolver(t, searchRanking(cureStudioMBID, 157, domain.ProviderRef{Provider: domain.ProviderYouTube}, keep), lookups{})
 
-	identity, err := resolver.Resolve(context.Background(), songfields.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure"})
+	identity, err := resolver.Resolve(context.Background(), music.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure"})
 
 	if err != nil || !slices.Equal(identity.Sources, []domain.ProviderRef{keep}) {
 		t.Errorf("sources %+v, err %v; want only the source that names its external id", identity.Sources, err)
@@ -1077,11 +1077,11 @@ func TestResolve_DropsASearchedSourceWithNoExternalID(t *testing.T) {
 }
 
 func TestResolve_TheAlbumOfTheSavedTrackPicksBetweenEqualTitleAndArtistHits(t *testing.T) {
-	single := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Circles", RecordingMBID: "single-mbid"}
-	album := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", RecordingMBID: "album-mbid"}
-	want := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"}
+	single := music.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Circles", RecordingMBID: "single-mbid"}
+	album := music.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", RecordingMBID: "album-mbid"}
+	want := music.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"}
 
-	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{single, album}}, lookups{}).Resolve(context.Background(), want)
+	got, err := newResolver(t, stubSearcher{results: []music.RecordingIdentity{single, album}}, lookups{}).Resolve(context.Background(), want)
 
 	if err != nil || got.MBID != "album-mbid" {
 		t.Errorf("identity %+v, err %v; want the album recording, not the first equal hit", got, err)
@@ -1090,11 +1090,11 @@ func TestResolve_TheAlbumOfTheSavedTrackPicksBetweenEqualTitleAndArtistHits(t *t
 
 func TestResolve_TheExplicitFlagOfTheSavedTrackPicksBetweenEqualTitleAndArtistHits(t *testing.T) {
 	yes, no := true, false
-	clean := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &no, RecordingMBID: "clean-mbid"}
-	explicit := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &yes, RecordingMBID: "explicit-mbid"}
+	clean := music.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &no, RecordingMBID: "clean-mbid"}
+	explicit := music.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &yes, RecordingMBID: "explicit-mbid"}
 
-	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{clean, explicit}}, lookups{}).
-		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &yes})
+	got, err := newResolver(t, stubSearcher{results: []music.RecordingIdentity{clean, explicit}}, lookups{}).
+		Resolve(context.Background(), music.RecordingIdentity{Title: "Song", Artist: "Artist", Explicit: &yes})
 
 	if err != nil || got.MBID != "explicit-mbid" {
 		t.Errorf("identity %+v, err %v; want the explicit recording, not the first equal hit", got, err)
@@ -1102,11 +1102,11 @@ func TestResolve_TheExplicitFlagOfTheSavedTrackPicksBetweenEqualTitleAndArtistHi
 }
 
 func TestResolve_TheTrackNumberOfTheSavedTrackPicksBetweenEqualHitsWhateverTheDisc(t *testing.T) {
-	other := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Position: songfields.TrackPosition{Disc: 1, Track: 9}, RecordingMBID: "track-9"}
-	right := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Position: songfields.TrackPosition{Disc: 1, Track: 3}, RecordingMBID: "track-3"}
+	other := music.RecordingIdentity{Title: "Song", Artist: "Artist", Position: music.TrackPosition{Disc: 1, Track: 9}, RecordingMBID: "track-9"}
+	right := music.RecordingIdentity{Title: "Song", Artist: "Artist", Position: music.TrackPosition{Disc: 1, Track: 3}, RecordingMBID: "track-3"}
 
-	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{other, right}}, lookups{}).
-		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Position: songfields.TrackPosition{Track: 3}})
+	got, err := newResolver(t, stubSearcher{results: []music.RecordingIdentity{other, right}}, lookups{}).
+		Resolve(context.Background(), music.RecordingIdentity{Title: "Song", Artist: "Artist", Position: music.TrackPosition{Track: 3}})
 
 	if err != nil || got.MBID != "track-3" {
 		t.Errorf("identity %+v, err %v; want the hit on track 3 though the saved track has no disc", got, err)
@@ -1114,11 +1114,11 @@ func TestResolve_TheTrackNumberOfTheSavedTrackPicksBetweenEqualHitsWhateverTheDi
 }
 
 func TestResolve_ASavedTrackThatKnowsNothingExtraTakesTheFirstEqualHit(t *testing.T) {
-	first := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "A", RecordingMBID: "first-mbid"}
-	second := songfields.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "B", RecordingMBID: "second-mbid"}
+	first := music.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "A", RecordingMBID: "first-mbid"}
+	second := music.RecordingIdentity{Title: "Song", Artist: "Artist", Album: "B", RecordingMBID: "second-mbid"}
 
-	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{first, second}}, lookups{}).
-		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Song", Artist: "Artist"})
+	got, err := newResolver(t, stubSearcher{results: []music.RecordingIdentity{first, second}}, lookups{}).
+		Resolve(context.Background(), music.RecordingIdentity{Title: "Song", Artist: "Artist"})
 
 	if err != nil || got.MBID != "first-mbid" {
 		t.Errorf("identity %+v, err %v; want the first hit when nothing else tells them apart", got, err)
@@ -1126,11 +1126,11 @@ func TestResolve_ASavedTrackThatKnowsNothingExtraTakesTheFirstEqualHit(t *testin
 }
 
 func TestResolve_TheISRCStillBeatsAnAlbumMatch(t *testing.T) {
-	byISRC := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Other", ISRC: "USUM71915000", RecordingMBID: "isrc-mbid"}
-	byAlbum := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", RecordingMBID: "album-mbid"}
+	byISRC := music.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Other", ISRC: "USUM71915000", RecordingMBID: "isrc-mbid"}
+	byAlbum := music.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", RecordingMBID: "album-mbid"}
 
-	got, err := newResolver(t, stubSearcher{results: []songfields.RecordingIdentity{byAlbum, byISRC}}, lookups{}).
-		Resolve(context.Background(), songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "USUM71915000"})
+	got, err := newResolver(t, stubSearcher{results: []music.RecordingIdentity{byAlbum, byISRC}}, lookups{}).
+		Resolve(context.Background(), music.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "USUM71915000"})
 
 	if err != nil || got.MBID != "isrc-mbid" {
 		t.Errorf("identity %+v, err %v; want the ISRC match to win over an album match", got, err)

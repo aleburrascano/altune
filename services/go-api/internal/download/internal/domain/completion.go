@@ -1,17 +1,16 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/downloadprovenance"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"encoding/json"
 )
 
 type Completion struct {
 	AudioRef           string
 	ReplaceAudio       bool
-	Duration           tracklength.TrackLength
+	Duration           music.TrackLength
 	ISRC               string
-	Provenance         downloadprovenance.AcquisitionProvenance
+	Provenance         music.AcquisitionProvenance
 	RejectedSourceKeys []string
 	SourceURL          string
 	Confidence         float64

@@ -1,12 +1,12 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"strings"
 )
 
 func CreditKey(name string) string {
-	return textnorm.NormalizeForIdentity(strings.ReplaceAll(name, "$", "s"))
+	return music.NormalizeForIdentity(strings.ReplaceAll(name, "$", "s"))
 }
 
 func Credits(credited []string, artist string) bool {

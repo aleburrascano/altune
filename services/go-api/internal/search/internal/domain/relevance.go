@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"strings"
 )
 
@@ -78,8 +78,8 @@ func candidatesContaining(queryWords map[string]bool, candidates []SearchResult)
 }
 
 func wholeNameSimilarity(r SearchResult, queryNorm string) float64 {
-	titleOnly := textnorm.TokenSortRatio(queryNorm, textnorm.NormalizeForMatch(r.Title))
-	withArtist := textnorm.TokenSortRatio(queryNorm, haystackOf(r))
+	titleOnly := music.TokenSortRatio(queryNorm, music.NormalizeForMatch(r.Title))
+	withArtist := music.TokenSortRatio(queryNorm, haystackOf(r))
 	return max(titleOnly, withArtist) / 100
 }
 
@@ -93,11 +93,11 @@ func bestTokenSimilarity(token string, candidates []string) float64 {
 
 func tokenSimilarity(a, b string) float64 {
 	longest := max(len([]rune(a)), len([]rune(b)), 1)
-	return 1 - float64(textnorm.LevenshteinDistance(a, b))/float64(longest)
+	return 1 - float64(music.LevenshteinDistance(a, b))/float64(longest)
 }
 
 func haystackOf(r SearchResult) string {
-	return textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
+	return music.NormalizeForMatch(r.Subtitle + " " + r.Title)
 }
 
 func wordSet(s string) map[string]bool {

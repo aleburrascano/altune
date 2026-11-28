@@ -2,9 +2,9 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/backoff"
-	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -28,7 +28,7 @@ const (
 	jobRetrySpread = 0.2
 )
 
-var jobRetryBackoff = backoff.MustUncapped(jobRetryBase, backoff.WithFactor(jobRetryFactor), backoff.WithSpread(jobRetrySpread))
+var jobRetryBackoff = resilience.MustUncappedBackoff(jobRetryBase, resilience.WithBackoffFactor(jobRetryFactor), resilience.WithBackoffSpread(jobRetrySpread))
 
 func retryBackoff(attempts int, unit random.Unit) time.Duration {
 	return jobRetryBackoff.DelayAt(min(attempts, MaxAcquisitionAttempts), unit())
@@ -59,43 +59,43 @@ func FailureCodeOf(err error) string {
 	return string(failureCode(err))
 }
 
-func failureCode(err error) downloadfailure.FailureCode {
+func failureCode(err error) music.FailureCode {
 	if errors.Is(err, ErrAcquisitionTimedOut) {
-		return downloadfailure.FailureSourceUnavailable
+		return music.FailureSourceUnavailable
 	}
 	if isCancellation(err) {
-		return downloadfailure.FailureAcquisitionCancelled
+		return music.FailureAcquisitionCancelled
 	}
 	if domain.IsSourceUnavailable(err) {
-		return downloadfailure.FailureSourceUnavailable
+		return music.FailureSourceUnavailable
 	}
 	if errors.Is(err, domain.ErrSearchDegraded) {
-		return downloadfailure.FailureAcquisitionFailed
+		return music.FailureAcquisitionFailed
 	}
 	if errors.Is(err, ErrNoConfidentMatch) {
-		return downloadfailure.FailureNoConfidentMatch
+		return music.FailureNoConfidentMatch
 	}
 	var stepErr *StepError
 	if !errors.As(err, &stepErr) {
-		return downloadfailure.FailureAcquisitionFailed
+		return music.FailureAcquisitionFailed
 	}
 	if code, ok := reasonForStep(stepErr.Step); ok {
 		return code
 	}
-	return downloadfailure.FailureAcquisitionFailed
+	return music.FailureAcquisitionFailed
 }
 
 func foundNoSource(err error) bool {
 	switch failureCode(err) {
-	case downloadfailure.FailureNoMatchFound, downloadfailure.FailureNoConfidentMatch, downloadfailure.FailureDownloadFailed:
+	case music.FailureNoMatchFound, music.FailureNoConfidentMatch, music.FailureDownloadFailed:
 		return true
-	case downloadfailure.FailureSourceUnavailable,
-		downloadfailure.FailureStorageFailed,
-		downloadfailure.FailureAcquisitionCancelled,
-		downloadfailure.FailureAcquisitionFailed,
-		downloadfailure.FailureYtdlpError,
-		downloadfailure.FailureAcquisitionInterrupted,
-		downloadfailure.FailureAcquisitionRefused:
+	case music.FailureSourceUnavailable,
+		music.FailureStorageFailed,
+		music.FailureAcquisitionCancelled,
+		music.FailureAcquisitionFailed,
+		music.FailureYtdlpError,
+		music.FailureAcquisitionInterrupted,
+		music.FailureAcquisitionRefused:
 		return false
 	}
 	return false
@@ -103,16 +103,16 @@ func foundNoSource(err error) bool {
 
 func noSourceHasIt(err error) bool {
 	switch failureCode(err) {
-	case downloadfailure.FailureNoMatchFound, downloadfailure.FailureNoConfidentMatch:
+	case music.FailureNoMatchFound, music.FailureNoConfidentMatch:
 		return true
-	case downloadfailure.FailureSourceUnavailable,
-		downloadfailure.FailureDownloadFailed,
-		downloadfailure.FailureStorageFailed,
-		downloadfailure.FailureAcquisitionCancelled,
-		downloadfailure.FailureAcquisitionFailed,
-		downloadfailure.FailureYtdlpError,
-		downloadfailure.FailureAcquisitionInterrupted,
-		downloadfailure.FailureAcquisitionRefused:
+	case music.FailureSourceUnavailable,
+		music.FailureDownloadFailed,
+		music.FailureStorageFailed,
+		music.FailureAcquisitionCancelled,
+		music.FailureAcquisitionFailed,
+		music.FailureYtdlpError,
+		music.FailureAcquisitionInterrupted,
+		music.FailureAcquisitionRefused:
 		return false
 	}
 	return false
@@ -131,14 +131,14 @@ func withCancellation(ctx context.Context, err error) error {
 	return fmt.Errorf("%w (%w)", err, ctxErr)
 }
 
-func reasonForStep(step StepName) (downloadfailure.FailureCode, bool) {
+func reasonForStep(step StepName) (music.FailureCode, bool) {
 	switch step {
 	case stepNameSearch, stepNameSelect:
-		return downloadfailure.FailureNoMatchFound, true
+		return music.FailureNoMatchFound, true
 	case StepNameDownload:
-		return downloadfailure.FailureDownloadFailed, true
+		return music.FailureDownloadFailed, true
 	case stepNameStore:
-		return downloadfailure.FailureStorageFailed, true
+		return music.FailureStorageFailed, true
 	case stepNameTag, stepNameUpdateTrack, stepNamePipeline:
 		return "", false
 	}

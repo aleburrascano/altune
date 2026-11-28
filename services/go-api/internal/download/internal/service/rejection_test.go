@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -187,8 +187,8 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	_ = acquireService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}).
 		Execute(context.Background(), domain.AcquisitionJob{UserID: song.UserId, TrackID: song.ID})
 
-	if code := persistedCode(t, ledger, song.ID); code != downloadfailure.FailureNoMatchFound {
-		t.Fatalf("failure code = %q, want %q", code, downloadfailure.FailureNoMatchFound)
+	if code := persistedCode(t, ledger, song.ID); code != music.FailureNoMatchFound {
+		t.Fatalf("failure code = %q, want %q", code, music.FailureNoMatchFound)
 	}
 	if got, _ := ledger.Track(song.ID); !strings.Contains(got.FailureReason, "1 identity") {
 		t.Errorf("failure reason should carry the per-candidate breakdown, got %q", got.FailureReason)

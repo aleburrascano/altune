@@ -7,11 +7,9 @@ import (
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/downloadfailure"
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
-	"altune/go-api/internal/shared/songfields"
 	"context"
 	"encoding/json"
 	"errors"
@@ -378,8 +376,8 @@ func TestDownloadStep_CancelledMidLoop_ReportsCancellationAndStops(t *testing.T)
 			if err == nil {
 				t.Fatal("expected an error from a cancelled download")
 			}
-			if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(downloadfailure.FailureAcquisitionCancelled) {
-				t.Errorf("failureReason = %q, want %q", got, downloadfailure.FailureAcquisitionCancelled)
+			if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(music.FailureAcquisitionCancelled) {
+				t.Errorf("failureReason = %q, want %q", got, music.FailureAcquisitionCancelled)
 			}
 			if got := int(fetcher.calls.Load()); got > tt.wantMax {
 				t.Errorf("attempted %d candidates after cancellation, want <= %d (the one window already in flight)", got, tt.wantMax)
@@ -399,8 +397,8 @@ func TestDownloadStep_CancelledOnLastCandidate_ReportsCancellation(t *testing.T)
 	if err == nil {
 		t.Fatal("expected an error from a cancelled download")
 	}
-	if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(downloadfailure.FailureAcquisitionCancelled) {
-		t.Errorf("failureReason = %q, want %q", got, downloadfailure.FailureAcquisitionCancelled)
+	if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(music.FailureAcquisitionCancelled) {
+		t.Errorf("failureReason = %q, want %q", got, music.FailureAcquisitionCancelled)
 	}
 }
 
@@ -415,8 +413,8 @@ func TestDownloadStep_DeadlineExpiredBeforeStart_ReportsCancellation(t *testing.
 	if err == nil {
 		t.Fatal("expected an error from an expired deadline")
 	}
-	if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(downloadfailure.FailureAcquisitionCancelled) {
-		t.Errorf("failureReason = %q, want %q", got, downloadfailure.FailureAcquisitionCancelled)
+	if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(music.FailureAcquisitionCancelled) {
+		t.Errorf("failureReason = %q, want %q", got, music.FailureAcquisitionCancelled)
 	}
 	if fetcher.calls.Load() != 0 {
 		t.Errorf("attempted %d candidates with an expired deadline, want 0", fetcher.calls.Load())
@@ -435,8 +433,8 @@ func TestDownloadStep_GenuineFailure_KeepsDownloadReasonAndTriesAll(t *testing.T
 	if err == nil {
 		t.Fatal("expected a download error")
 	}
-	if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(downloadfailure.FailureDownloadFailed) {
-		t.Errorf("failureReason = %q, want %q", got, downloadfailure.FailureDownloadFailed)
+	if got := service.FailureCodeOf(&service.StepError{Step: "download", Err: err}); got != string(music.FailureDownloadFailed) {
+		t.Errorf("failureReason = %q, want %q", got, music.FailureDownloadFailed)
 	}
 	if fetcher.calls.Load() != 2 {
 		t.Errorf("attempted %d candidates, want 2 (whole list under a live context)", fetcher.calls.Load())
@@ -580,8 +578,8 @@ func TestDownloadStep_WidthOne_EarlierUnavailableSurvivesADifferentLastFailure(t
 
 	_, err := newTestDownloadStep(fetcher, service.WithVerifyWidth(1)).Execute(context.Background(), ac, service.AfterSelect{})
 
-	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != downloadfailure.FailureSourceUnavailable {
-		t.Fatalf("failure code = %s, want %s", code, downloadfailure.FailureSourceUnavailable)
+	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != music.FailureSourceUnavailable {
+		t.Fatalf("failure code = %s, want %s", code, music.FailureSourceUnavailable)
 	}
 }
 
@@ -1195,7 +1193,7 @@ func TestDownloadStep_NeverRejectsAudioTheFingerprintCannotLink(t *testing.T) {
 	if ac.IdentityVerified {
 		t.Error("accepting without evidence must not claim verification")
 	}
-	if ac.Provenance() != downloadprovenance.ProvenanceBestEffort {
+	if ac.Provenance() != music.ProvenanceBestEffort {
 		t.Errorf("provenance = %q, want best_effort", ac.Provenance())
 	}
 }
@@ -1216,7 +1214,7 @@ func TestDownloadStep_UnknownAudioIsAccepted(t *testing.T) {
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
-	if ac.Provenance() != downloadprovenance.ProvenanceBestEffort {
+	if ac.Provenance() != music.ProvenanceBestEffort {
 		t.Errorf("provenance = %q, want best_effort", ac.Provenance())
 	}
 }
@@ -1303,7 +1301,7 @@ func TestDownloadStep_WidthOne_LiveOnlyLinksRejectedThenCleanCandidateVerified(t
 	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != service.RejectFingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
 		t.Errorf("rejections = %+v, want one fingerprint rejection as contradicted: the live link and the live title agree", ac.Rejections)
 	}
-	if ac.Provenance() != downloadprovenance.ProvenanceVerified || ac.Verdict.Kind != service.VerdictHard {
+	if ac.Provenance() != music.ProvenanceVerified || ac.Verdict.Kind != service.VerdictHard {
 		t.Errorf("provenance = %v, verdict = %v, want verified and hard", ac.Provenance(), ac.Verdict.Kind)
 	}
 }
@@ -1828,7 +1826,7 @@ func TestDownloadStep_WalksPastUnknownFingerprintToALaterHardMatch(t *testing.T)
 			if ac.Selected == nil || ac.Selected.URL != "hard" {
 				t.Fatalf("selected = %+v, want the hard match", ac.Selected)
 			}
-			if got := ac.Provenance(); got != downloadprovenance.ProvenanceVerified {
+			if got := ac.Provenance(); got != music.ProvenanceVerified {
 				t.Errorf("provenance = %q, want verified", got)
 			}
 			if _, err := os.Stat(fetcher.dirOf("unknown")); !os.IsNotExist(err) {
@@ -1865,7 +1863,7 @@ func TestDownloadStep_CleanHoldBeatsAHigherRankedOtherVersionHold(t *testing.T) 
 	if ac.Selected == nil || ac.Selected.URL != "clean" {
 		t.Fatalf("selected = %+v, want the clean hold", ac.Selected)
 	}
-	if !ac.BestEffort || ac.Provenance() != downloadprovenance.ProvenanceBestEffort {
+	if !ac.BestEffort || ac.Provenance() != music.ProvenanceBestEffort {
 		t.Errorf("a held selection must be best_effort, got BestEffort=%v provenance=%q", ac.BestEffort, ac.Provenance())
 	}
 	if _, err := os.Stat(fetcher.dirOf("edit")); !os.IsNotExist(err) {
@@ -2110,8 +2108,8 @@ func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 
 	_, err := newTestDownloadStep(fetcher, service.WithCandidateTimeout(20*time.Millisecond)).Execute(ctx, ac, service.AfterSelect{})
 
-	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != downloadfailure.FailureSourceUnavailable {
-		t.Fatalf("failure code = %s, want %s (err=%v)", code, downloadfailure.FailureSourceUnavailable, err)
+	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != music.FailureSourceUnavailable {
+		t.Fatalf("failure code = %s, want %s (err=%v)", code, music.FailureSourceUnavailable, err)
 	}
 	if !service.WillRetry(domain.AcquisitionJob{Attempt: 1}, err) {
 		t.Fatalf("willRetry = false for %v", err)
@@ -2130,8 +2128,8 @@ func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 
 			_, err := newTestDownloadStep(fetcher, service.WithVerifyWidth(width)).Execute(context.Background(), ac, service.AfterSelect{})
 
-			if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != downloadfailure.FailureSourceUnavailable {
-				t.Fatalf("failure code = %s, want %s", code, downloadfailure.FailureSourceUnavailable)
+			if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != music.FailureSourceUnavailable {
+				t.Fatalf("failure code = %s, want %s", code, music.FailureSourceUnavailable)
 			}
 			want := width
 			if got := fetcher.calls["ytdlp"]; got != want {
@@ -2349,7 +2347,7 @@ func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
 			if ac.Verdict.Kind != tt.wantVerdict {
 				t.Errorf("verdict = %q, want %q", ac.Verdict.Kind, tt.wantVerdict)
 			}
-			if got := ac.Provenance() == downloadprovenance.ProvenanceVerified; got != tt.wantVerified {
+			if got := ac.Provenance() == music.ProvenanceVerified; got != tt.wantVerified {
 				t.Errorf("verified = %v, want %v", got, tt.wantVerified)
 			}
 		})
@@ -2360,10 +2358,10 @@ func TestDownloadStep_ASoftVerdictIsAcceptedButNotIdentityVerified(t *testing.T)
 	tests := []struct {
 		name        string
 		catalog     float64
-		wantProvens downloadprovenance.AcquisitionProvenance
+		wantProvens music.AcquisitionProvenance
 	}{
-		{"a corroborated length is corroborated", 180, downloadprovenance.ProvenanceCorroborated},
-		{"an uncorroborated length is best effort", 0, downloadprovenance.ProvenanceBestEffort},
+		{"a corroborated length is corroborated", 180, music.ProvenanceCorroborated},
+		{"an uncorroborated length is best effort", 0, music.ProvenanceBestEffort},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2973,7 +2971,7 @@ func TestDownloadStep_WhenEveryCandidateIsMuxedTheFirstAcceptedFileIsStored(t *t
 func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReaders(t *testing.T) {
 	const isrc, mbid = "USAAA2400001", "standing-in-the-dark-live"
 	resolver := service.NewRecordedResolver(
-		[]songfields.RecordingIdentity{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, RecordingMBID: mbid, DurationSeconds: 197}},
+		[]music.RecordingIdentity{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, RecordingMBID: mbid, DurationSeconds: 197}},
 		[]domain.ISRCRecording{{MBID: mbid, Duration: 197}}, nil)
 	ac := &service.AcquisitionContext{
 		Track:   service.TrackRef{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, CatalogDuration: 300},

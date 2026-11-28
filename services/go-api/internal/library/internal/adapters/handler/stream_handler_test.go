@@ -10,8 +10,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
-	"altune/go-api/internal/shared/slowclienttest"
+	"altune/go-api/internal/shared/timingtest"
 	"bytes"
 	"context"
 	"errors"
@@ -396,13 +395,13 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 	r.Use(httpserver.RequestLogger(clock.Now))
 	r.Use(asBearer)
 	handler.MustNewStreamHandler(service.NewStreamTrackService(repo, store, ports.NoopAcquisitionScheduler(), &librarytest.Metrics{}, service.AlwaysEnabled, clock.Now), time.Now, opts...).Routes(r)
-	srv := slowclienttest.NewServer(t, r)
+	srv := timingtest.NewSmallBufferServer(t, r)
 
 	path := "/tracks/" + track.ID().UUID().String() + "/audio"
 	auth := http.Header{"Authorization": {"Bearer " + librarytest.UserId().String()}}
 	get := func() *http.Response {
-		conn, br := slowclienttest.Get(t, srv, path, auth)
-		resp := slowclienttest.ReadResponse(t, conn, br)
+		conn, br := timingtest.SendGet(t, srv, path, auth)
+		resp := timingtest.ReadResponse(t, conn, br)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}
@@ -429,7 +428,7 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
-	polltest.Until(t, 10*time.Second, "the handler to still be streaming past the route deadline", srv.runningPastDeadline)
+	timingtest.Until(t, 10*time.Second, "the handler to still be streaming past the route deadline", srv.runningPastDeadline)
 
 	got := 0
 	buf := make([]byte, 32<<10)
@@ -451,7 +450,7 @@ func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
-	polltest.Until(t, 10*time.Second, "the server to give up on the client that stopped reading", srv.handled)
+	timingtest.Until(t, 10*time.Second, "the server to give up on the client that stopped reading", srv.handled)
 	body, err := io.ReadAll(resp.Body)
 	if err == nil && len(body) == audioSize {
 		t.Fatalf("stalled client still received the whole %d-byte body: no idle write deadline", audioSize)

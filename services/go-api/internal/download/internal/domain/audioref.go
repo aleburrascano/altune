@@ -2,7 +2,7 @@ package domain
 
 import (
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"crypto/sha256"
 	"encoding/hex"
 	"path"
@@ -54,7 +54,7 @@ func build(names AudioRefParts, tempPath string, segment func(string) string) st
 }
 
 func normalizePathComponent(s string) string {
-	normalized := sanitizePathComponent(textnorm.NormalizeForIdentity(s))
+	normalized := sanitizePathComponent(music.NormalizeForIdentity(s))
 	if normalized != "Unknown" || strings.TrimSpace(s) == "" {
 		return normalized
 	}

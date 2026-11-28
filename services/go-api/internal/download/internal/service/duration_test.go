@@ -4,8 +4,7 @@ import (
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadprovenance"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"math"
 	"testing"
 )
@@ -21,7 +20,7 @@ func TestProvenance_DisagreementIsNeverCorroborated(t *testing.T) {
 	ac := contextWithLengths(232, 276)
 	ac.DurationVerified = true
 
-	if got := ac.Provenance(); got != downloadprovenance.ProvenanceBestEffort {
+	if got := ac.Provenance(); got != music.ProvenanceBestEffort {
 		t.Errorf("Provenance() = %q, want best_effort — a length that passed a window it disagrees with proves nothing", got)
 	}
 }
@@ -30,7 +29,7 @@ func TestProvenance_AVerifiedAgreeingLengthIsCorroborated(t *testing.T) {
 	ac := contextWithLengths(262, 263)
 	ac.DurationVerified = true
 
-	if got := ac.Provenance(); got != downloadprovenance.ProvenanceCorroborated {
+	if got := ac.Provenance(); got != music.ProvenanceCorroborated {
 		t.Errorf("Provenance() = %q, want corroborated when the saved and resolved lengths agree", got)
 	}
 }
@@ -39,14 +38,14 @@ func TestProvenance_OneLengthSourceIsNotCorroborated(t *testing.T) {
 	ac := contextWithLengths(0, 181)
 	ac.DurationVerified = true
 
-	if got := ac.Provenance(); got != downloadprovenance.ProvenanceBestEffort {
+	if got := ac.Provenance(); got != music.ProvenanceBestEffort {
 		t.Errorf("Provenance() = %q, want best_effort - the MB length alone checked against itself proves nothing", got)
 	}
 }
 
-func lengthOfSeconds(t *testing.T, seconds float64) tracklength.TrackLength {
+func lengthOfSeconds(t *testing.T, seconds float64) music.TrackLength {
 	t.Helper()
-	length, err := tracklength.TrackLengthOf(seconds)
+	length, err := music.TrackLengthOf(seconds)
 	if err != nil {
 		t.Fatalf("TrackLengthOf(%v) = %v", seconds, err)
 	}

@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/parallel"
-	"altune/go-api/internal/shared/songfields"
 	"context"
 	"fmt"
 	"log/slog"
@@ -127,7 +127,7 @@ func libraryMatchesLookup(userId ids.UserId, result domain.SearchResult) related
 		relationship: domain.RelationshipLibraryMatches,
 		relatedTo:    result.Title,
 		owner:        userId,
-		subject:      result.Album + "\x00" + songfields.NameKey(result.Subtitle),
+		subject:      result.Album + "\x00" + music.PlainNameKey(result.Subtitle),
 		panicLog:     relatedPanicLog{event: "related.library_lookup_panic", key: "album", value: result.Album},
 	}
 }

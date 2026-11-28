@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"math"
 	"regexp"
 	"slices"
@@ -98,10 +98,10 @@ func pickedArtistName(eligible []Entity) string {
 var creditSeparatorRe = regexp.MustCompile(`(?i)\s*(?:&|,|\s+x\s+|\b(?:featuring|feat|ft)\b\.?)\s*`)
 
 func matchName(s string) string {
-	if norm := textnorm.NormalizeForMatch(s); norm != "" {
+	if norm := music.NormalizeForMatch(s); norm != "" {
 		return norm
 	}
-	return textnorm.FoldName(s)
+	return music.FoldName(s)
 }
 
 func creditNames(credit string) []string {

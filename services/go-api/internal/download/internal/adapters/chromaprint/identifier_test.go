@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/chromaprint"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/retrysafe"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"encoding/json"
 	"errors"
@@ -70,7 +70,7 @@ func TestIdentify_MarksTheLookupPostRetrySafeSoTheTransportMayRetryIt(t *testing
 	defer srv.Close()
 	var marked bool
 	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		marked = retrysafe.Marked(r.Context())
+		marked = resilience.IsRetrySafe(r.Context())
 		return http.DefaultTransport.RoundTrip(r)
 	})}
 	id, err := chromaprint.NewIdentifier(context.Background(), fakeFpcalcDir(t, 100), "real-key", client, chromaprint.WithEndpoint(srv.URL))

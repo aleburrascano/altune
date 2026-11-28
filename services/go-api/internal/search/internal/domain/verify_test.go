@@ -3,7 +3,7 @@ package domain_test
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"fmt"
 	"testing"
 )
@@ -181,7 +181,7 @@ func TestFilterGroupsByMBAnchor_mixedPageKeepsOnlyOverlappingReleases(t *testing
 		t.Fatalf("kept %d releases, want the 4 overlapping", len(got[0].Releases))
 	}
 	for _, r := range got[0].Releases {
-		if !mb[textnorm.NormalizeForMatch(r.Title)] {
+		if !mb[music.NormalizeForMatch(r.Title)] {
 			t.Errorf("kept non-MB release %q", r.Title)
 		}
 	}

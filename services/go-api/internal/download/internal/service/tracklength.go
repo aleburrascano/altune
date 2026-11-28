@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 )
 
 type LengthPolicy struct {
@@ -82,7 +82,7 @@ func (p LengthPolicy) accepts(actual float64) bool {
 }
 
 func SameRecording(expectedSeconds, actualSeconds float64) bool {
-	expected, expectedErr := tracklength.TrackLengthOf(expectedSeconds)
-	actual, actualErr := tracklength.TrackLengthOf(actualSeconds)
+	expected, expectedErr := music.TrackLengthOf(expectedSeconds)
+	actual, actualErr := music.TrackLengthOf(actualSeconds)
 	return expectedErr == nil && actualErr == nil && expected.SameRecording(actual)
 }

@@ -10,9 +10,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
-	"altune/go-api/internal/shared/songfields"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
 	"errors"
@@ -141,7 +140,7 @@ func seededTrack(newIDs ids.Source, kase Case) domain.TrackSnapshot {
 }
 
 func catalogField(s string) string {
-	return strings.Join(strings.Fields(textnorm.NFKC(s)), " ")
+	return strings.Join(strings.Fields(music.NFKC(s)), " ")
 }
 
 func optional(s string) *string {
@@ -183,10 +182,10 @@ func pinnedFactsFor(res *Resolution) *domain.RecordingFacts {
 	return &facts
 }
 
-func searchHitsFor(res *Resolution) []songfields.RecordingIdentity {
-	hits := make([]songfields.RecordingIdentity, 0, len(res.Search))
+func searchHitsFor(res *Resolution) []music.RecordingIdentity {
+	hits := make([]music.RecordingIdentity, 0, len(res.Search))
 	for _, hit := range res.Search {
-		hits = append(hits, songfields.RecordingIdentity{
+		hits = append(hits, music.RecordingIdentity{
 			Title:           hit.Title,
 			Artist:          hit.Artist,
 			Album:           hit.Album,

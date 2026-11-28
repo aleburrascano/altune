@@ -2,8 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"math"
 	"slices"
 	"strings"
@@ -55,7 +54,7 @@ func EvaluateTitle(t TitleTarget, c TitleCandidate) TitleDecision {
 	if !domain.Credits(c.Artists, t.Artist) {
 		return TitleDecision{TitleReject, "artist not credited"}
 	}
-	if want, got := titlemarkers.Labels(t.Title), titlemarkers.Labels(c.Title); !slices.Equal(want, got) {
+	if want, got := music.VersionLabels(t.Title), music.VersionLabels(c.Title); !slices.Equal(want, got) {
 		return TitleDecision{TitleReject, "different version: want " + labelList(want) + ", got " + labelList(got)}
 	}
 	if c.Kind == TitleUpload {
@@ -64,7 +63,7 @@ func EvaluateTitle(t TitleTarget, c TitleCandidate) TitleDecision {
 	switch {
 	case t.Length > 0 && c.Length > 0 && !lengthsAgree(t.Length, c.Length):
 		return TitleDecision{TitleReject, "length disagrees with the catalog length"}
-	case t.Length <= 0 && albumKnown(t) && textnorm.NormalizeForMatch(c.Album) == "":
+	case t.Length <= 0 && albumKnown(t) && music.NormalizeForMatch(c.Album) == "":
 		return TitleDecision{TitleVerify, "no catalog length and unknown album: cannot confirm the cut"}
 	case t.Length <= 0 && albumKnown(t) && !sameAlbum(t.Album, c.Album):
 		return TitleDecision{TitleReject, "no catalog length and another album: cannot confirm the cut"}
@@ -123,22 +122,22 @@ func lengthsAgree(want, got float64) bool {
 }
 
 func titleIdentity(title string) string {
-	tokens := titlemarkers.Tokens(domain.CreditBrackets.ReplaceAllString(titlemarkers.StripFeatureCredits(title), ""))
-	return strings.Join(titlemarkers.StripVersionPhrases(tokens), " ")
+	tokens := music.TitleTokens(domain.CreditBrackets.ReplaceAllString(music.StripFeatureCredits(title), ""))
+	return strings.Join(music.StripVersionPhrases(tokens), " ")
 }
 
 func exactTitle(want, got string) bool {
-	return textnorm.NormalizeForIdentity(want) == textnorm.NormalizeForIdentity(got)
+	return music.NormalizeForIdentity(want) == music.NormalizeForIdentity(got)
 }
 
 func albumKnown(t TitleTarget) bool {
-	album := textnorm.NormalizeForMatch(t.Album)
-	return album != "" && album != textnorm.NormalizeForMatch(t.Title)
+	album := music.NormalizeForMatch(t.Album)
+	return album != "" && album != music.NormalizeForMatch(t.Title)
 }
 
 func sameAlbum(want, got string) bool {
-	w := textnorm.NormalizeForMatch(want)
-	return w != "" && w == textnorm.NormalizeForMatch(got)
+	w := music.NormalizeForMatch(want)
+	return w != "" && w == music.NormalizeForMatch(got)
 }
 
 func labelList(labels []string) string {

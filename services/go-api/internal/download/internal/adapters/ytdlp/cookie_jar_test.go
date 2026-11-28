@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -593,7 +593,7 @@ const waitLimit = 5 * time.Second
 
 func waitFor(t *testing.T, what string, done <-chan error, ready func() bool) {
 	t.Helper()
-	polltest.Until(t, waitLimit, what, func() bool {
+	timingtest.Until(t, waitLimit, what, func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("the run returned %v before %s", err, what)

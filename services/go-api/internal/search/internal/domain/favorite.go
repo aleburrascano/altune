@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"time"
 )
 
@@ -16,9 +16,9 @@ type Favorite struct {
 
 func FavoriteKey(kind ResultKind, title, subtitle string) string {
 	if kind == ResultKindArtist {
-		return textnorm.NormalizeForMatch(title)
+		return music.NormalizeForMatch(title)
 	}
-	return textnorm.NormalizeForMatch(subtitle) + "|" + textnorm.NormalizeForMatch(title)
+	return music.NormalizeForMatch(subtitle) + "|" + music.NormalizeForMatch(title)
 }
 
 func FavoriteKeyOf(r SearchResult) string {
@@ -27,7 +27,7 @@ func FavoriteKeyOf(r SearchResult) string {
 
 func ArtistKeyOf(r SearchResult) string {
 	if r.Kind == ResultKindArtist {
-		return textnorm.NormalizeForMatch(r.Title)
+		return music.NormalizeForMatch(r.Title)
 	}
-	return textnorm.NormalizeForMatch(r.Subtitle)
+	return music.NormalizeForMatch(r.Subtitle)
 }

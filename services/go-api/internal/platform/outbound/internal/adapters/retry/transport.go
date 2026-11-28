@@ -2,10 +2,10 @@ package retry
 
 import (
 	"altune/go-api/internal/platform/outbound/internal/adapters/pacing"
-	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -176,7 +176,7 @@ const (
 	backoffSpread = 0.2
 )
 
-var retryBackoff = backoff.MustCapped(backoffBase, backoffBase<<(maxAttempts-2), backoff.WithSpread(backoffSpread))
+var retryBackoff = resilience.MustCappedBackoff(backoffBase, backoffBase<<(maxAttempts-2), resilience.WithBackoffSpread(backoffSpread))
 
 func (t *Transport) backoff(attempt int) time.Duration {
 	return retryBackoff.DelayAt(attempt, t.jitter())

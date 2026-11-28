@@ -3,7 +3,7 @@ package pacing
 import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
-	"altune/go-api/internal/shared/queuetimeout"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -72,7 +72,7 @@ var boundedQueueHosts = map[string]bool{
 	"itunes.apple.com": true,
 }
 
-var errQueueTimeout = fmt.Errorf("%w: %w", queuetimeout.Err, context.DeadlineExceeded)
+var errQueueTimeout = fmt.Errorf("%w: %w", resilience.ErrQueueTimeout, context.DeadlineExceeded)
 
 type hostLimiter struct {
 	mu           sync.Mutex
@@ -201,7 +201,7 @@ func (l *hostLimiter) Burst() int { return l.limiter.Burst() }
 
 func newHostLimiter(lim rate.Limit, burst int, boundedQueue bool, now clock.Func, sleep clock.Sleeper) *hostLimiter {
 	interval := time.Duration(float64(time.Second) / float64(lim))
-	return &hostLimiter{limiter: rate.NewLimiter(lim, burst), now: now, sleep: sleep, boundedQueue: boundedQueue, maxWait: min(queueDepth*interval, queuetimeout.MaxWait)}
+	return &hostLimiter{limiter: rate.NewLimiter(lim, burst), now: now, sleep: sleep, boundedQueue: boundedQueue, maxWait: min(queueDepth*interval, resilience.MaxQueueWait)}
 }
 
 func providerBurst(host string) int {

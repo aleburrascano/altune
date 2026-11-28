@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/playback/playbacktest"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -67,7 +67,7 @@ func TestQueueRateLimit_TheConfiguredIntervalRefillsTheBurst(t *testing.T) {
 
 	first, throttled := putQueueState(t, h, token), putQueueState(t, h, token)
 	refilled := http.StatusTooManyRequests
-	polltest.Until(t, time.Second, "the configured interval, well under the 2s default, to refill the burst", func() bool {
+	timingtest.Until(t, time.Second, "the configured interval, well under the 2s default, to refill the burst", func() bool {
 		refilled = putQueueState(t, h, token)
 		return refilled != http.StatusTooManyRequests
 	})
@@ -88,7 +88,7 @@ func TestPlayback_TheErasureSweepReapsErasedQueueStates(t *testing.T) {
 		}
 		return false
 	}
-	if !polltest.Within(time.Minute, reaped) {
+	if !timingtest.Within(time.Minute, reaped) {
 		t.Fatalf("no erasure run tried to reap erased queue states within a minute of leading a database with no tables:\n%s", run.logs.String())
 	}
 }

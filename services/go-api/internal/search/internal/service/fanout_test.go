@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"fmt"
@@ -438,7 +438,7 @@ func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 		inspect(t, svc, ctx)
 	}()
 
-	polltest.Until(t, 2*time.Second, "the half-open probe to be admitted", func() bool {
+	timingtest.Until(t, 2*time.Second, "the half-open probe to be admitted", func() bool {
 		return cb.Snapshot(domain.ProviderDeezer).Probing
 	})
 	cancel()

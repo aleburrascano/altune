@@ -1,7 +1,7 @@
 package storage_test
 
 import (
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"errors"
 	"os"
 	"path/filepath"
@@ -37,7 +37,7 @@ func releaseStalledReader(t *testing.T, path string) {
 
 func openFifoWriter(path string, wait time.Duration) (*os.File, bool) {
 	var writer *os.File
-	opened := polltest.Within(wait, func() bool {
+	opened := timingtest.Within(wait, func() bool {
 		w, err := os.OpenFile(path, os.O_WRONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			return false
@@ -63,7 +63,7 @@ func lateReaderClosed(t *testing.T, path string) bool {
 		t.Fatalf("the late open never reached %s", path)
 	}
 	defer w.Close()
-	return polltest.Within(stallHangGuard, func() bool {
+	return timingtest.Within(stallHangGuard, func() bool {
 		_, err := w.Write([]byte{0})
 		return errors.Is(err, syscall.EPIPE)
 	})

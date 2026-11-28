@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"log/slog"
 	"path/filepath"
@@ -456,7 +456,7 @@ func holdUserLockWithStaleActivity(bus *events.InProcessBus, clock *gatedClock, 
 
 func awaitQueuedOnLock(t *testing.T, function string) {
 	t.Helper()
-	polltest.Until(t, 5*time.Second, "a goroutine in "+function+" to queue on the user lock", func() bool {
+	timingtest.Until(t, 5*time.Second, "a goroutine in "+function+" to queue on the user lock", func() bool {
 		buf := make([]byte, 1<<20)
 		dump := string(buf[:runtime.Stack(buf, true)])
 		for _, g := range strings.Split(dump, "\n\n") {

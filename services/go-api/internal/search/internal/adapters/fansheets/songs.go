@@ -2,8 +2,7 @@ package fansheets
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"slices"
 	"strings"
 	"unicode"
@@ -18,7 +17,7 @@ func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong
 			released = append(released, row)
 			continue
 		}
-		base, label := titlemarkers.BaseTitle(row.title)
+		base, label := music.BaseTitle(row.title)
 		key := trackerKey(artistName, base)
 		at, seen := byKey[key]
 		if !seen {
@@ -41,7 +40,7 @@ func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong
 }
 
 func addReleasedRow(songs []domain.UnreleasedSong, byKey map[string]int, artistName string, row trackerRow) []domain.UnreleasedSong {
-	base, _ := titlemarkers.BaseTitle(row.title)
+	base, _ := music.BaseTitle(row.title)
 	key := trackerKey(artistName, base)
 	hasMedia := len(row.links) > 0
 	at, dup := byKey[key]
@@ -78,7 +77,7 @@ func trackerKey(artistName, title string) string {
 func slug(s string) string {
 	var b strings.Builder
 	pendingDash := false
-	for _, r := range textnorm.NormalizeForIdentity(s) {
+	for _, r := range music.NormalizeForIdentity(s) {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			if pendingDash && b.Len() > 0 {
 				b.WriteByte('-')

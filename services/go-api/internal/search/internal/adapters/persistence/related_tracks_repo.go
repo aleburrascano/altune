@@ -3,7 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"fmt"
 
@@ -71,7 +71,7 @@ func keepArtistMatches(candidates []albumCandidate, artist string, limit int) []
 			break
 		}
 		owner := c.albumArtist
-		if songfields.NameKey(owner) == "" {
+		if music.PlainNameKey(owner) == "" {
 			owner = c.match.Artist
 		}
 		if len(wanted) == 0 || creditsOverlap(wanted, creditKeys(owner)) {
@@ -83,8 +83,8 @@ func keepArtistMatches(candidates []albumCandidate, artist string, limit int) []
 
 func creditKeys(credit string) map[string]bool {
 	keys := map[string]bool{}
-	for _, part := range append(songfields.SplitCredit(credit), credit) {
-		if key := songfields.NameKey(part); key != "" {
+	for _, part := range append(music.SplitCredit(credit), credit) {
+		if key := music.PlainNameKey(part); key != "" {
 			keys[key] = true
 		}
 	}

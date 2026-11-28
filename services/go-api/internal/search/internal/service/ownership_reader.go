@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"fmt"
 	"log/slog"
@@ -25,7 +25,7 @@ func (r ownershipReader) OwnedByTitleArtist(ctx context.Context, userId ids.User
 	}
 	owned := make(map[string]ports.OwnedTrack, len(tracks))
 	for _, track := range tracks {
-		track.ISRC = songfields.CanonicalISRC(track.ISRC)
+		track.ISRC = music.CanonicalISRC(track.ISRC)
 		claim(ctx, owned, domain.OwnershipISRCKey(track.ISRC), track)
 		claim(ctx, owned, domain.OwnershipKey(track.Title, track.Artist), track)
 	}

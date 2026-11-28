@@ -7,9 +7,9 @@ import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,8 +75,8 @@ func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.
 	if err == nil || !strings.Contains(err.Error(), "track not found for update") {
 		t.Fatalf("Execute = %v, want the update step's track-not-found failure", err)
 	}
-	if code := persistedCode(t, ledger, track.ID); code != downloadfailure.FailureAcquisitionFailed {
-		t.Errorf("persisted failure code = %q, want %q: failure_reason is stored and shown to the client", code, downloadfailure.FailureAcquisitionFailed)
+	if code := persistedCode(t, ledger, track.ID); code != music.FailureAcquisitionFailed {
+		t.Errorf("persisted failure code = %q, want %q: failure_reason is stored and shown to the client", code, music.FailureAcquisitionFailed)
 	}
 }
 

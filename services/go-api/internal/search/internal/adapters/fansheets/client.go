@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -57,7 +57,7 @@ func (c *Client) ArtistSongs(ctx context.Context, artistName string) ([]domain.U
 	if err != nil {
 		return nil, fmt.Errorf("tracker hub: %w", err)
 	}
-	sheetID, ok := index[textnorm.NormalizeForIdentity(artistName)]
+	sheetID, ok := index[music.NormalizeForIdentity(artistName)]
 	if !ok {
 		return []domain.UnreleasedSong{}, nil
 	}

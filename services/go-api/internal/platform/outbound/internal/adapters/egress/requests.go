@@ -1,7 +1,7 @@
 package egress
 
 import (
-	"altune/go-api/internal/shared/retrysafe"
+	"altune/go-api/internal/shared/resilience"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -73,7 +73,7 @@ func NewHeadRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*htt
 }
 
 func newPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...ReqOption) (*http.Request, error) {
-	return newRequest(retrysafe.Mark(ctx), http.MethodPost, rawURL, body, opts)
+	return newRequest(resilience.MarkRetrySafe(ctx), http.MethodPost, rawURL, body, opts)
 }
 
 func Send(client *http.Client, req *http.Request) (*http.Response, error) {

@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"strings"
@@ -79,8 +79,8 @@ func TestSearchStep_CancelledMidSearch_ReportsCancellation(t *testing.T) {
 			if failedStep(t, err).Step != "search" {
 				t.Errorf("failed step = %v, want search", err)
 			}
-			if got := service.FailureCodeOf(err); got != string(downloadfailure.FailureAcquisitionCancelled) {
-				t.Errorf("FailureCodeOf = %q, want %q", got, downloadfailure.FailureAcquisitionCancelled)
+			if got := service.FailureCodeOf(err); got != string(music.FailureAcquisitionCancelled) {
+				t.Errorf("FailureCodeOf = %q, want %q", got, music.FailureAcquisitionCancelled)
 			}
 		})
 	}
@@ -191,7 +191,7 @@ func throttled() *searchSource {
 func TestSearchStep_OutageWithAllExcluded_IsTransient(t *testing.T) {
 	err := searchWithAllExcluded(t, throttled())
 
-	if !domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(downloadfailure.FailureSourceUnavailable) {
+	if !domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(music.FailureSourceUnavailable) {
 		t.Fatalf("err = %v, want a transient source-unavailable failure", err)
 	}
 }
@@ -199,7 +199,7 @@ func TestSearchStep_OutageWithAllExcluded_IsTransient(t *testing.T) {
 func TestSearchStep_PlainSourceErrorWithAllExcluded_StaysPermanent(t *testing.T) {
 	err := searchWithAllExcluded(t, &searchSource{name: "down", err: errors.New("exit 1")})
 
-	if domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(downloadfailure.FailureNoMatchFound) {
+	if domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(music.FailureNoMatchFound) {
 		t.Fatalf("err = %v, want a permanent no-match failure", err)
 	}
 }

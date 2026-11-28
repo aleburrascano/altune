@@ -10,7 +10,7 @@ import (
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/ids/idstest"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1476,7 +1476,7 @@ func TestLoadDir_RejectsATrackLengthNoCatalogWouldHold(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			c.ID, c.Class, c.Candidates = "x", "OK", []qualitycheck.Candidate{{URL: "u"}}
-			if err := validate(t, []qualitycheck.Case{c}); !errors.Is(err, tracklength.ErrImplausibleTrackLength) {
+			if err := validate(t, []qualitycheck.Case{c}); !errors.Is(err, music.ErrImplausibleTrackLength) {
 				t.Fatalf("LoadDir = %v, want the kernel's implausible track length error", err)
 			}
 		})

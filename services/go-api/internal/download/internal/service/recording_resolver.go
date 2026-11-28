@@ -4,9 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/songfields"
-	"altune/go-api/internal/shared/textnorm"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -69,7 +67,7 @@ func (r *MusicBrainzResolver) RecordingByMBID(ctx context.Context, mbid string) 
 	return r.lookup.RecordingByMBID(ctx, mbid)
 }
 
-func (r *MusicBrainzResolver) Resolve(ctx context.Context, q songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
+func (r *MusicBrainzResolver) Resolve(ctx context.Context, q music.RecordingIdentity) (domain.RecordingIdentity, error) {
 	if q.RecordingMBID != "" {
 		return r.resolvePinned(ctx, q), nil
 	}
@@ -81,7 +79,7 @@ func (r *MusicBrainzResolver) Resolve(ctx context.Context, q songfields.Recordin
 	return anchored, nil
 }
 
-func (r *MusicBrainzResolver) resolvePinned(ctx context.Context, q songfields.RecordingIdentity) domain.RecordingIdentity {
+func (r *MusicBrainzResolver) resolvePinned(ctx context.Context, q music.RecordingIdentity) domain.RecordingIdentity {
 	identity := r.pinnedIdentity(ctx, q.RecordingMBID)
 	searched, err := r.resolveFromSearch(ctx, q)
 	if err != nil {
@@ -124,7 +122,7 @@ func (r *MusicBrainzResolver) pinnedFacts(ctx context.Context, pin string) (doma
 	return facts, found
 }
 
-func (r *MusicBrainzResolver) anchorToISRC(ctx context.Context, q songfields.RecordingIdentity, identity domain.RecordingIdentity) domain.RecordingIdentity {
+func (r *MusicBrainzResolver) anchorToISRC(ctx context.Context, q music.RecordingIdentity, identity domain.RecordingIdentity) domain.RecordingIdentity {
 	lengthDisagrees := durationDisagrees(q.DurationSeconds, identity.Duration)
 	identity.ReferenceDoubted = lengthDisagrees
 	recordings := r.isrcRecordings(ctx, q.ISRC)
@@ -143,7 +141,7 @@ func (r *MusicBrainzResolver) anchorToISRC(ctx context.Context, q songfields.Rec
 	return withReferenceSet(identity, identity.MBID, recordings)
 }
 
-func (r *MusicBrainzResolver) anchorToMismatchedISRC(ctx context.Context, q songfields.RecordingIdentity, identity domain.RecordingIdentity, recordings []domain.ISRCRecording) domain.RecordingIdentity {
+func (r *MusicBrainzResolver) anchorToMismatchedISRC(ctx context.Context, q music.RecordingIdentity, identity domain.RecordingIdentity, recordings []domain.ISRCRecording) domain.RecordingIdentity {
 	identity.ReferenceDoubted = identity.ReferenceDoubted || identity.MBID != ""
 
 	chosen, ok := closestRecording(recordings, expectedLength(q.DurationSeconds, identity.Duration))
@@ -254,7 +252,7 @@ func closestRecording(recordings []domain.ISRCRecording, want float64) (domain.I
 	return best, best.MBID != ""
 }
 
-func (r *MusicBrainzResolver) resolveFromSearch(ctx context.Context, q songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
+func (r *MusicBrainzResolver) resolveFromSearch(ctx context.Context, q music.RecordingIdentity) (domain.RecordingIdentity, error) {
 	if q.Title == "" || q.Artist == "" {
 		return domain.RecordingIdentity{}, nil
 	}
@@ -269,7 +267,7 @@ func (r *MusicBrainzResolver) resolveFromSearch(ctx context.Context, q songfield
 	return toIdentity(best), nil
 }
 
-func (r *MusicBrainzResolver) searchTracks(ctx context.Context, q songfields.RecordingIdentity) ([]songfields.RecordingIdentity, error) {
+func (r *MusicBrainzResolver) searchTracks(ctx context.Context, q music.RecordingIdentity) ([]music.RecordingIdentity, error) {
 	results, err := r.search.SearchRecordings(ctx, q.Artist+" "+q.Title, resolveLimit)
 	if err != nil {
 		return nil, fmt.Errorf("resolve recording: %w", err)
@@ -277,32 +275,32 @@ func (r *MusicBrainzResolver) searchTracks(ctx context.Context, q songfields.Rec
 	return results, nil
 }
 
-func pickByISRC(results []songfields.RecordingIdentity, isrc string) (songfields.RecordingIdentity, bool) {
+func pickByISRC(results []music.RecordingIdentity, isrc string) (music.RecordingIdentity, bool) {
 	if isrc == "" {
-		return songfields.RecordingIdentity{}, false
+		return music.RecordingIdentity{}, false
 	}
 	for _, res := range results {
 		if strings.EqualFold(res.ISRC, isrc) {
 			return res, true
 		}
 	}
-	return songfields.RecordingIdentity{}, false
+	return music.RecordingIdentity{}, false
 }
 
-func pickRecording(results []songfields.RecordingIdentity, q songfields.RecordingIdentity) (songfields.RecordingIdentity, bool) {
+func pickRecording(results []music.RecordingIdentity, q music.RecordingIdentity) (music.RecordingIdentity, bool) {
 	if res, ok := pickByISRC(results, q.ISRC); ok {
 		return res, true
 	}
-	wantTitle := textnorm.NormalizeForMatch(q.Title)
-	wantArtist := textnorm.NormalizeForMatch(q.Artist)
-	wantLabels := titlemarkers.RecordingLabels(q.Title)
-	var best songfields.RecordingIdentity
+	wantTitle := music.NormalizeForMatch(q.Title)
+	wantArtist := music.NormalizeForMatch(q.Artist)
+	wantLabels := music.RecordingLabels(q.Title)
+	var best music.RecordingIdentity
 	bestAgreement := -1
 	for _, res := range results {
-		if textnorm.NormalizeForMatch(res.Title) != wantTitle || !slices.Equal(titlemarkers.RecordingLabels(res.Title), wantLabels) {
+		if music.NormalizeForMatch(res.Title) != wantTitle || !slices.Equal(music.RecordingLabels(res.Title), wantLabels) {
 			continue
 		}
-		if wantArtist != "" && textnorm.NormalizeForMatch(res.Artist) != wantArtist {
+		if wantArtist != "" && music.NormalizeForMatch(res.Artist) != wantArtist {
 			continue
 		}
 		if agreed := agreement(res, q); agreed > bestAgreement {
@@ -312,9 +310,9 @@ func pickRecording(results []songfields.RecordingIdentity, q songfields.Recordin
 	return best, bestAgreement >= 0
 }
 
-func agreement(res, q songfields.RecordingIdentity) int {
+func agreement(res, q music.RecordingIdentity) int {
 	score := 0
-	if album := textnorm.NormalizeForMatch(q.Album); album != "" && textnorm.NormalizeForMatch(res.Album) == album {
+	if album := music.NormalizeForMatch(q.Album); album != "" && music.NormalizeForMatch(res.Album) == album {
 		score += 4
 	}
 	if q.Explicit != nil && res.Explicit != nil && *q.Explicit == *res.Explicit {
@@ -329,7 +327,7 @@ func agreement(res, q songfields.RecordingIdentity) int {
 	return score
 }
 
-func toIdentity(res songfields.RecordingIdentity) domain.RecordingIdentity {
+func toIdentity(res music.RecordingIdentity) domain.RecordingIdentity {
 	identity := domain.RecordingIdentity{
 		ISRC:     res.ISRC,
 		MBID:     res.RecordingMBID,

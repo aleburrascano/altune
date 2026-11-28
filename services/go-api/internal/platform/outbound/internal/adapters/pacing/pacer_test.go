@@ -3,7 +3,7 @@ package pacing_test
 import (
 	"altune/go-api/internal/platform/outbound/internal/adapters/pacing"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/queuetimeout"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"io/fs"
@@ -141,7 +141,7 @@ func waitTogether(t *testing.T, p *pacing.Pacer, host string, callers int) []pac
 
 func assertQueueTimeout(t *testing.T, err error) {
 	t.Helper()
-	if !errors.Is(err, queuetimeout.Err) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, resilience.ErrQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want a queue timeout that is also a DeadlineExceeded", err)
 	}
 }
@@ -222,7 +222,7 @@ func TestPacer_ARetryWaitIsNeverShedByTheQueueCap(t *testing.T) {
 
 		for i, err := range errs {
 			if err != nil {
-				t.Errorf("retry caller %d: err = %v, want it to wait its turn past the %v cap", i, err, queuetimeout.MaxWait)
+				t.Errorf("retry caller %d: err = %v, want it to wait its turn past the %v cap", i, err, resilience.MaxQueueWait)
 			}
 		}
 	})
@@ -252,7 +252,7 @@ func TestPacer_AnUnboundedHostsShortDeadlineIsNeverClassifiedAsAQueueTimeout(t *
 
 		err := waitOn(ctx, t, p, "krakenfiles.com").err
 
-		if err == nil || errors.Is(err, queuetimeout.Err) {
+		if err == nil || errors.Is(err, resilience.ErrQueueTimeout) {
 			t.Fatalf("err = %v, want a plain failure the breaker still counts", err)
 		}
 	})
@@ -317,8 +317,8 @@ func TestPacer_TheQueueCapNeverPromisesMoreThanTheLongestWaitAClientAllows(t *te
 			assertQueueTimeout(t, r.err)
 		}
 		slices.Sort(admittedAt)
-		if want := []time.Duration{4 * time.Second, queuetimeout.MaxWait}; !slices.Equal(admittedAt, want) {
-			t.Errorf("admitted after %v, want %v: one request per 4s, none queued past %v", admittedAt, want, queuetimeout.MaxWait)
+		if want := []time.Duration{4 * time.Second, resilience.MaxQueueWait}; !slices.Equal(admittedAt, want) {
+			t.Errorf("admitted after %v, want %v: one request per 4s, none queued past %v", admittedAt, want, resilience.MaxQueueWait)
 		}
 	})
 }
@@ -391,7 +391,7 @@ func TestPacer_AnExpiredCallerIsADeadlineErrorNotAQueueTimeout(t *testing.T) {
 
 	err := waitOn(ctx, t, newPacer(t), "musicbrainz.org").err
 
-	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, queuetimeout.Err) {
+	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, resilience.ErrQueueTimeout) {
 		t.Fatalf("err = %v, want a plain DeadlineExceeded", err)
 	}
 }
@@ -405,7 +405,7 @@ func TestPacer_ACancelledWaitIsCanceledNotAQueueTimeoutAndFreesItsSlot(t *testin
 
 		r := waitOn(ctx, t, p, "musicbrainz.org")
 
-		if !errors.Is(r.err, context.Canceled) || errors.Is(r.err, queuetimeout.Err) || r.elapsed != time.Second/2 {
+		if !errors.Is(r.err, context.Canceled) || errors.Is(r.err, resilience.ErrQueueTimeout) || r.elapsed != time.Second/2 {
 			t.Fatalf("err = %v after %v, want Canceled after 500ms", r.err, r.elapsed)
 		}
 		if next := waitOn(context.Background(), t, p, "musicbrainz.org"); next.err != nil || next.elapsed != time.Second/2 {

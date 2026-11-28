@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"fmt"
 	"log/slog"
@@ -48,7 +48,7 @@ func NewCachedStorage(cache ports.UnreleasedCache) (Storage, error) {
 }
 
 func (c cachedStorage) list(ctx context.Context, s *UnreleasedService, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
-	nameKey := textnorm.NormalizeForIdentity(artistName)
+	nameKey := music.NormalizeForIdentity(artistName)
 	if songs, ok := c.cache.Get(ctx, provider, externalID, nameKey); ok {
 		return songs, nil
 	}
@@ -67,7 +67,7 @@ func (c cachedStorage) list(ctx context.Context, s *UnreleasedService, provider 
 }
 
 func (c cachedStorage) lookup(ctx context.Context, s *UnreleasedService, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
-	nameKey := textnorm.NormalizeForIdentity(artistName)
+	nameKey := music.NormalizeForIdentity(artistName)
 	if songs, ok := c.cache.Get(ctx, provider, externalID, nameKey); ok {
 		return Lookup{Songs: songs}, nil
 	}
@@ -99,7 +99,7 @@ func (StoredStorage) list(ctx context.Context, s *UnreleasedService, provider do
 func (st StoredStorage) lookup(ctx context.Context, s *UnreleasedService, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
 	key := ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}
 	songs, version, built := st.storedSongsOrNotBuilt(ctx, key, artistName, known)
-	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, textnorm.NormalizeForIdentity(artistName))
+	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, music.NormalizeForIdentity(artistName))
 	if built && version >= CurrentBuildVersion {
 		return Lookup{Songs: nonNil(songs)}, nil
 	}

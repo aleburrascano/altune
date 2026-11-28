@@ -2,7 +2,7 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"fmt"
@@ -135,7 +135,7 @@ func TestIsTransient_RealPostgresFailures(t *testing.T) {
 			go func() {
 				defer close(finished)
 				defer cancel()
-				polltest.Within(10*time.Second, func() bool {
+				timingtest.Within(10*time.Second, func() bool {
 					if cancellable.Err() != nil {
 						return true
 					}

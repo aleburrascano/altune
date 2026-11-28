@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="usage: scripts/unexport-door.sh <module>   e.g. search, or shared/backoff
+usage="usage: scripts/unexport-door.sh <module>   e.g. search, or shared/resilience
   unexports every root identifier of internal/<module> that lintdoors --exports reports as unused outside the module, with gopls rename (references and tests follow), and exits 1 listing any name gopls refused"
 
 [ "$#" -eq 1 ] || { echo "$usage" >&2; exit 2; }
@@ -32,7 +32,7 @@ trap 'rm -f "$tool"' EXIT
 go build -o "$tool" ./scripts/lintdoors || { echo "unexport-door: lintdoors does not build" >&2; exit 2; }
 modules=$("$tool" --summary . | grep -oE '^[a-z0-9/_-]+:' | tr -d ':') || true
 if ! grep -qxF "$module" <<<"$modules"; then
-  echo "unexport-door: $module is not a module; give one such as search or shared/backoff (modules: $(tr '\n' ' ' <<<"$modules"))" >&2
+  echo "unexport-door: $module is not a module; give one such as search or shared/resilience (modules: $(tr '\n' ' ' <<<"$modules"))" >&2
   exit 2
 fi
 status=0

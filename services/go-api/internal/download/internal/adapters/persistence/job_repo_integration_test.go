@@ -11,8 +11,8 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/random/randomtest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"fmt"
@@ -631,7 +631,7 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 
 func awaitPanicBackoff(t *testing.T, pool *pgxpool.Pool, acq *panickingAcquirer, id ids.TrackId) {
 	t.Helper()
-	polltest.Until(t, 5*time.Second, "the panicked job to be run once and pushed out by its backoff", func() bool {
+	timingtest.Until(t, 5*time.Second, "the panicked job to be run once and pushed out by its backoff", func() bool {
 		at := scheduledAvailableAt(t, pool, id)
 		return acq.runs.Load() > 0 && at != nil && time.Until(*at) > 10*time.Second
 	})
@@ -1117,7 +1117,7 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 		scheduler.Shutdown(context.Background())
 	})
 
-	polltest.Until(t, 5*time.Second, "the capped panic to take the job out of the queue", func() bool {
+	timingtest.Until(t, 5*time.Second, "the capped panic to take the job out of the queue", func() bool {
 		return scheduledAvailableAt(t, pool, track.ID) == nil
 	})
 

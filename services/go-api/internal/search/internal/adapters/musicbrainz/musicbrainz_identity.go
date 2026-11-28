@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -13,7 +13,7 @@ import (
 )
 
 func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error) {
-	nameNorm := textnorm.NormalizeForMatch(name)
+	nameNorm := music.NormalizeForMatch(name)
 	if id, ok := a.identityMemo.Get(nameNorm); ok {
 		return id, nil
 	}
@@ -26,7 +26,7 @@ func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name str
 	var first *mbArtistItem
 	candidateCount := 0
 	for i := range artists {
-		if textnorm.NormalizeForMatch(artists[i].Name) == nameNorm {
+		if music.NormalizeForMatch(artists[i].Name) == nameNorm {
 			candidateCount++
 			if first == nil {
 				first = &artists[i]

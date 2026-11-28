@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -59,7 +59,7 @@ func validateSourceHost(host string) error {
 }
 
 func canonicalSourceHost(host string) string {
-	host = textnorm.NFKC(host)
+	host = music.NFKC(host)
 	host = strings.ReplaceAll(host, "。", ".")
 	return strings.TrimSuffix(strings.ToLower(host), ".")
 }

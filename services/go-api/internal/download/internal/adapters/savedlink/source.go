@@ -3,8 +3,8 @@ package savedlink
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
-	"altune/go-api/internal/shared/filelinks"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -81,7 +81,7 @@ func (s *Source) pinnedCandidates(ctx context.Context, req domain.FindRequest) [
 func (s *Source) fileHostCandidates(ctx context.Context, req domain.FindRequest) []domain.AudioCandidate {
 	var files []domain.AudioCandidate
 	for _, pin := range req.CatalogSources {
-		if !filelinks.IsProvider(pin.Provider) {
+		if !music.IsFileHost(pin.Provider) {
 			continue
 		}
 		download, ok := s.fileURL(ctx, pin)
@@ -95,10 +95,10 @@ func (s *Source) fileHostCandidates(ctx context.Context, req domain.FindRequest)
 }
 
 func (s *Source) fileURL(ctx context.Context, pin domain.CatalogSource) (string, bool) {
-	if download, ok := filelinks.DownloadURL(pin.Provider, pin.ExternalID); ok {
+	if download, ok := music.FileHostDownloadURL(pin.Provider, pin.ExternalID); ok {
 		return download, true
 	}
-	page, ok := filelinks.FileOnPage(pin.Provider, pin.ExternalID)
+	page, ok := music.FileHostPageFile(pin.Provider, pin.ExternalID)
 	if !ok {
 		return "", false
 	}

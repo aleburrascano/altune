@@ -1,10 +1,10 @@
 package chromaprint
 
 import (
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
 	"context"
 	"encoding/json"
@@ -58,7 +58,7 @@ func NewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Clie
 	bounded := *client
 	bounded.Timeout = lookupTimeout
 	id := &Identifier{
-		fpcalc:   binpath.Resolve("fpcalc", binDir),
+		fpcalc:   ytdlp.ResolveBinary("fpcalc", binDir),
 		apiKey:   key,
 		endpoint: defaultEndpoint,
 		client:   &bounded,
@@ -81,7 +81,7 @@ func (i *Identifier) Available() bool {
 	if i.apiKey == "" {
 		return false
 	}
-	return binpath.Runnable(i.fpcalc)
+	return ytdlp.BinaryRunnable(i.fpcalc)
 }
 
 type fingerprint struct {

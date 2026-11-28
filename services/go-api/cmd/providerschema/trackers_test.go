@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerfields"
+	"altune/go-api/cmd/providerschema/internal/providerfields"
 	"context"
 	"errors"
 	"net/http"

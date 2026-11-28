@@ -2,7 +2,7 @@ package cache
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 )
 
 const trigramRunes = 3
@@ -34,7 +34,7 @@ func NewQuery(norm string) Query {
 func (q Query) Trigrams() []string { return q.trigrams }
 
 func (q Query) Score(candidate string, sharedTrigrams int) (float64, bool) {
-	dist := textnorm.LevenshteinDistance(q.norm, candidate)
+	dist := music.LevenshteinDistance(q.norm, candidate)
 	if dist > domain.MaxEditDistance(q.norm) {
 		return 0, false
 	}
@@ -42,7 +42,7 @@ func (q Query) Score(candidate string, sharedTrigrams int) (float64, bool) {
 }
 
 func (q Query) ScorePhonetic(candidate string, sharedTrigrams int) float64 {
-	return q.combine(candidate, sharedTrigrams, textnorm.LevenshteinDistance(q.norm, candidate), 1)
+	return q.combine(candidate, sharedTrigrams, music.LevenshteinDistance(q.norm, candidate), 1)
 }
 
 func (q Query) combine(candidate string, sharedTrigrams, dist int, phonetic float64) float64 {

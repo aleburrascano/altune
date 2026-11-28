@@ -9,12 +9,11 @@ import (
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
-	"altune/go-api/internal/shared/songfields"
 	"context"
 	"encoding/json"
 	"errors"
@@ -54,8 +53,8 @@ func (p *ctxRecordingPublisher) publishedOnLiveCtx(eventType events.EventType) b
 	return p.onLive[eventType]
 }
 
-func failureCodeOf(err error) downloadfailure.FailureCode {
-	return downloadfailure.FailureCode(service.FailureCodeOf(err))
+func failureCodeOf(err error) music.FailureCode {
+	return music.FailureCode(service.FailureCodeOf(err))
 }
 
 func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetachedContext(t *testing.T) {
@@ -82,8 +81,8 @@ func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetached
 	if settled.Status != domain.TrackFailed {
 		t.Errorf("status = %v, want %v (failed)", settled.Status, domain.TrackFailed)
 	}
-	if got := settled.FailureReason; got != string(downloadfailure.FailureAcquisitionCancelled) {
-		t.Errorf("persisted failure_reason = %q, want %q", got, downloadfailure.FailureAcquisitionCancelled)
+	if got := settled.FailureReason; got != string(music.FailureAcquisitionCancelled) {
+		t.Errorf("persisted failure_reason = %q, want %q", got, music.FailureAcquisitionCancelled)
 	}
 	if !pub.publishedOnLiveCtx(events.TypeTrackAcquisitionFailed) {
 		t.Errorf("%q was not published on a live context", events.TypeTrackAcquisitionFailed)
@@ -331,7 +330,7 @@ func TestExecute_FailureReasonResolvesToSpecificMessage(t *testing.T) {
 				return
 			}
 			const want = "Couldn't find this track"
-			if got := downloadfailure.FailureMessage(&updated.FailureReason); got != want {
+			if got := music.FailureMessage(&updated.FailureReason); got != want {
 				t.Errorf("FailureMessage(%q) = %q, want %q", updated.FailureReason, got, want)
 			}
 		})
@@ -345,10 +344,10 @@ func inPlaceMatch(recordings ...domain.LinkedRecording) domain.RecordingMatch {
 type stubResolver struct {
 	identity domain.RecordingIdentity
 	err      error
-	queries  []songfields.RecordingIdentity
+	queries  []music.RecordingIdentity
 }
 
-func (r *stubResolver) Resolve(_ context.Context, q songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
+func (r *stubResolver) Resolve(_ context.Context, q music.RecordingIdentity) (domain.RecordingIdentity, error) {
 	r.queries = append(r.queries, q)
 	return r.identity, r.err
 }
@@ -416,7 +415,7 @@ func TestResolveIdentity_PassesTrackMetadataToResolver(t *testing.T) {
 		t.Fatalf("resolver calls = %d, want 1", len(stub.queries))
 	}
 	got := stub.queries[0]
-	want := songfields.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "X"}
+	want := music.RecordingIdentity{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "X"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("query = %+v, want %+v", got, want)
 	}
@@ -713,8 +712,8 @@ func TestExecute_CancelledMidSearch_PersistsCancellation(t *testing.T) {
 
 	_ = svc.Execute(ctx, domain.AcquisitionJob{UserID: userId, TrackID: track.ID})
 
-	if got := committedTrack(t, ledger, track.ID).FailureReason; got != string(downloadfailure.FailureAcquisitionCancelled) {
-		t.Errorf("persisted failure_reason = %q, want %q", got, downloadfailure.FailureAcquisitionCancelled)
+	if got := committedTrack(t, ledger, track.ID).FailureReason; got != string(music.FailureAcquisitionCancelled) {
+		t.Errorf("persisted failure_reason = %q, want %q", got, music.FailureAcquisitionCancelled)
 	}
 }
 
@@ -754,14 +753,14 @@ func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	ledger := memory.NewLedger()
 	track := seedTrackInRepo(t, ledger, userId, func(tr *ledgerTrack) {
-		makeFailed(tr, string(downloadfailure.FailureAcquisitionInterrupted))
+		makeFailed(tr, string(music.FailureAcquisitionInterrupted))
 	})
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	svc.RefuseQueued(context.Background(), domain.AcquisitionJob{UserID: userId, TrackID: track.ID})
 
 	got := storedTrack(t, ledger, track)
-	if got.FailureReason != string(downloadfailure.FailureAcquisitionInterrupted) {
+	if got.FailureReason != string(music.FailureAcquisitionInterrupted) {
 		t.Errorf("FailureReason = %v, want the first failure's reason kept", got.FailureReason)
 	}
 }
@@ -802,10 +801,10 @@ func TestResolveIdentity_QueryCarriesEveryFactTheLibraryKnowsOfTheTrack(t *testi
 
 	service.ResolveIdentity(context.Background(), stub, ac)
 
-	want := songfields.RecordingIdentity{
+	want := music.RecordingIdentity{
 		Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding", ISRC: "USUM71915000",
-		Year: 2019, Position: songfields.TrackPosition{Track: 3}, DurationSeconds: 215, Explicit: &explicit, RecordingMBID: "mbid-1",
-		Sources: []songfields.ProviderRef{{Provider: "deezer", ExternalID: "42", URL: "https://deezer.example/42"}},
+		Year: 2019, Position: music.TrackPosition{Track: 3}, DurationSeconds: 215, Explicit: &explicit, RecordingMBID: "mbid-1",
+		Sources: []music.ProviderRef{{Provider: "deezer", ExternalID: "42", URL: "https://deezer.example/42"}},
 	}
 	if len(stub.queries) != 1 || !reflect.DeepEqual(stub.queries[0], want) {
 		t.Errorf("queries = %+v, want one carrying %+v", stub.queries, want)
@@ -1083,8 +1082,8 @@ func TestExecute_TransientFailureOnTheLastAttempt_SettlesFailedAsSourceUnavailab
 	if stored.Status != domain.TrackFailed {
 		t.Fatalf("status = %v, want failed", stored.Status)
 	}
-	if got := stored.FailureReason; got != string(downloadfailure.FailureSourceUnavailable) {
-		t.Errorf("failure reason = %q, want %q", got, downloadfailure.FailureSourceUnavailable)
+	if got := stored.FailureReason; got != string(music.FailureSourceUnavailable) {
+		t.Errorf("failure reason = %q, want %q", got, music.FailureSourceUnavailable)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
 		t.Errorf("failed publishes = %d, want 1", got)
@@ -1100,8 +1099,8 @@ func TestExecute_PermanentFailureOnTheFirstAttempt_SettlesFailedAsNoMatch(t *tes
 	if stored.Status != domain.TrackFailed {
 		t.Fatalf("status = %v, want failed", stored.Status)
 	}
-	if got := stored.FailureReason; !strings.HasPrefix(got, string(downloadfailure.FailureNoMatchFound)) {
-		t.Errorf("failure reason = %q, want prefix %q", got, downloadfailure.FailureNoMatchFound)
+	if got := stored.FailureReason; !strings.HasPrefix(got, string(music.FailureNoMatchFound)) {
+		t.Errorf("failure reason = %q, want prefix %q", got, music.FailureNoMatchFound)
 	}
 }
 
@@ -1630,7 +1629,7 @@ func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAnd
 
 	err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: userId, TrackID: trackId})
 
-	if service.FailureCodeOf(err) != string(downloadfailure.FailureSourceUnavailable) {
+	if service.FailureCodeOf(err) != string(music.FailureSourceUnavailable) {
 		t.Errorf("failure code = %q (%v), want source_unavailable: a source was down and the only candidate left was the current file", service.FailureCodeOf(err), err)
 	}
 	if recorded := rejections.Recorded(); len(recorded) != 0 {
@@ -2113,8 +2112,8 @@ func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *te
 	if stored.Status != domain.TrackFailed {
 		t.Fatalf("status = %v, want failed", stored.Status)
 	}
-	if got := stored.FailureReason; got != string(downloadfailure.FailureSourceUnavailable) {
-		t.Errorf("failure reason = %q, want %q", got, downloadfailure.FailureSourceUnavailable)
+	if got := stored.FailureReason; got != string(music.FailureSourceUnavailable) {
+		t.Errorf("failure reason = %q, want %q", got, music.FailureSourceUnavailable)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
 		t.Errorf("failed publishes = %d, want 1", got)
@@ -2505,7 +2504,7 @@ func findsGoldenRerecording() *stubRerecordingFinder {
 
 type pinnedRecordingResolver struct{}
 
-func (pinnedRecordingResolver) Resolve(_ context.Context, q songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
+func (pinnedRecordingResolver) Resolve(_ context.Context, q music.RecordingIdentity) (domain.RecordingIdentity, error) {
 	return domain.RecordingIdentity{MBID: q.RecordingMBID, MBIDs: []string{q.RecordingMBID}}, nil
 }
 
@@ -2679,14 +2678,14 @@ func TestRerecording_AFailedRerecordingTierKeepsTheOriginalFailure(t *testing.T)
 		name      string
 		sources   *itsOnlyLoveSources
 		finder    *stubRerecordingFinder
-		wantCode  downloadfailure.FailureCode
+		wantCode  music.FailureCode
 		wantAsked int
 	}{
-		{"the finder errors", &itsOnlyLoveSources{}, &stubRerecordingFinder{err: errors.New("musicbrainz 503")}, downloadfailure.FailureNoConfidentMatch, 1},
-		{"the finder finds nothing", &itsOnlyLoveSources{}, &stubRerecordingFinder{}, downloadfailure.FailureNoConfidentMatch, 1},
-		{"the re-recording pass fails too", &itsOnlyLoveSources{rerecordingBroken: true}, findsGoldenRerecording(), downloadfailure.FailureNoConfidentMatch, 1},
-		{"the original is found but its download fails", &itsOnlyLoveSources{originalOnTopic: true, originalFetchFails: true}, findsGoldenRerecording(), downloadfailure.FailureDownloadFailed, 0},
-		{"a source outage", &itsOnlyLoveSources{originalOutage: true}, findsGoldenRerecording(), downloadfailure.FailureSourceUnavailable, 0},
+		{"the finder errors", &itsOnlyLoveSources{}, &stubRerecordingFinder{err: errors.New("musicbrainz 503")}, music.FailureNoConfidentMatch, 1},
+		{"the finder finds nothing", &itsOnlyLoveSources{}, &stubRerecordingFinder{}, music.FailureNoConfidentMatch, 1},
+		{"the re-recording pass fails too", &itsOnlyLoveSources{rerecordingBroken: true}, findsGoldenRerecording(), music.FailureNoConfidentMatch, 1},
+		{"the original is found but its download fails", &itsOnlyLoveSources{originalOnTopic: true, originalFetchFails: true}, findsGoldenRerecording(), music.FailureDownloadFailed, 0},
+		{"a source outage", &itsOnlyLoveSources{originalOutage: true}, findsGoldenRerecording(), music.FailureSourceUnavailable, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2718,7 +2717,7 @@ func TestRerecording_AReplaceOfAFittingOriginalTakesNoRerecording(t *testing.T) 
 
 	err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
-	if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
+	if got := failureCodeOf(err); got != music.FailureNoConfidentMatch {
 		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
 	}
 	if len(finder.queries) != 0 {
@@ -2750,7 +2749,7 @@ func TestRerecording_AReplaceOfAFileWhoseLengthIsUnknownTakesNoRerecording(t *te
 
 			err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
-			if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
+			if got := failureCodeOf(err); got != music.FailureNoConfidentMatch {
 				t.Errorf("failure code = %q (%v), want no_confident_match from the search, not an earlier failure", got, err)
 			}
 			if len(finder.queries) != 0 {
@@ -2933,7 +2932,7 @@ func TestRerecording_AReplaceWhoseRerecordingDownloadFailsLeavesTheTrackAsItWas(
 	for run := 1; run <= 2; run++ {
 		err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
-		if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
+		if got := failureCodeOf(err); got != music.FailureNoConfidentMatch {
 			t.Errorf("run %d: failure code = %q (%v), want no_confident_match", run, got, err)
 		}
 		row := golden.row()
@@ -2975,7 +2974,7 @@ func TestRerecording_AnOriginalWhoseSoundCloudPinFailsToDownloadNeverAsksForARer
 
 	err := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
-	if got := failureCodeOf(err); got != downloadfailure.FailureDownloadFailed {
+	if got := failureCodeOf(err); got != music.FailureDownloadFailed {
 		t.Errorf("failure code = %q (%v), want the original's download_failed kept", got, err)
 	}
 	if len(finder.queries) != 0 {
@@ -2996,7 +2995,7 @@ func TestRerecording_ALabelNamingTheTrackItselfRunsNoSecondPass(t *testing.T) {
 
 	err := golden.service(sources, findsGoldenRerecording()).Execute(context.Background(), domain.AcquisitionJob{UserID: golden.userId, TrackID: golden.trackId, Attempt: service.MaxAcquisitionAttempts})
 
-	if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
+	if got := failureCodeOf(err); got != music.FailureNoConfidentMatch {
 		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
 	}
 	for _, req := range sources.requests {
@@ -3090,7 +3089,7 @@ func TestRerecording_ASecondPassThatRunsOutOfTimeFailsAsATimeout(t *testing.T) {
 		if !reached {
 			t.Fatalf("requests = %+v, want the deadline to land in the re-recording pass", sources.requests)
 		}
-		if got := failureCodeOf(err); got != downloadfailure.FailureAcquisitionCancelled && got != downloadfailure.FailureSourceUnavailable {
+		if got := failureCodeOf(err); got != music.FailureAcquisitionCancelled && got != music.FailureSourceUnavailable {
 			t.Errorf("failure code = %q (%v), want a timeout, not the original's no_confident_match", got, err)
 		}
 		if row := golden.row(); row.AudioRef == nil || *row.AudioRef != golden.ref || row.Title != "It's Only Love" {

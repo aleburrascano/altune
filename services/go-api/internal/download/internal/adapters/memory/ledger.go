@@ -3,8 +3,8 @@ package memory
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,7 +24,7 @@ type LedgerTrack struct {
 	domain.TrackSnapshot
 	ClaimNumber   domain.ClaimNumber
 	FailureReason string
-	Provenance    downloadprovenance.AcquisitionProvenance
+	Provenance    music.AcquisitionProvenance
 	Confidence    float64
 }
 

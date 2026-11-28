@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"math"
 	"slices"
 	"strings"
@@ -62,9 +62,9 @@ func maxViewCount(candidates []domain.AudioCandidate) int64 {
 }
 
 func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
-	candidate := textnorm.NormalizeForMatch(candidateTitle)
-	combined := textnorm.TokenSortRatio(textnorm.NormalizeForMatch(trackArtist+" "+trackTitle), candidate)
-	titleOnly := textnorm.TokenSortRatio(textnorm.NormalizeForMatch(trackTitle), candidate)
+	candidate := music.NormalizeForMatch(candidateTitle)
+	combined := music.TokenSortRatio(music.NormalizeForMatch(trackArtist+" "+trackTitle), candidate)
+	titleOnly := music.TokenSortRatio(music.NormalizeForMatch(trackTitle), candidate)
 	return math.Max(combined, titleOnly*titleOnlyPenalty)
 }
 

@@ -1,3 +1,0 @@
-Contracts: `retrysafe` owns the one mark a caller puts on a request context to say that sending it again is harmless, so the outbound retry transport may repeat it.
-
-A POST that only reads, or that the upstream dedupes, is marked; an unmarked POST is sent once. It lives in `shared` because features set the mark and `platform/outbound` reads it, and a feature never imports a platform module.

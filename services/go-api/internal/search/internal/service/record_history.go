@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"fmt"
 	"log/slog"
@@ -77,7 +77,7 @@ func (s *RecordSearchHistoryService) RecordSubmitted(ctx context.Context, userId
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
-	queryNorm := textnorm.NormalizeForMatch(domain.SearchText(query.Raw))
+	queryNorm := music.NormalizeForMatch(domain.SearchText(query.Raw))
 	s.Record(ctx, userId, query, queryNorm, s.now())
 	return nil
 }

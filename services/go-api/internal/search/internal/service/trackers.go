@@ -3,7 +3,7 @@ package service
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"log/slog"
@@ -112,7 +112,7 @@ func withDemoVersion(song, demo domain.UnreleasedSong) domain.UnreleasedSong {
 	if len(versions) == 0 {
 		versions = []domain.UnreleasedVersion{{Title: song.Title, Quality: song.Quality, AudioLinks: song.AudioLinks, OpenURL: song.OpenURL, OpenHost: song.OpenHost}}
 	}
-	_, label := titlemarkers.BaseTitle(demo.Title)
+	_, label := music.BaseTitle(demo.Title)
 	versions = append(versions, domain.UnreleasedVersion{Title: demo.Title, Label: label, Quality: demo.Quality, AudioLinks: demo.AudioLinks, OpenURL: demo.OpenURL, OpenHost: demo.OpenHost})
 	song.Versions = versions
 	song.ApplyBestVersion()

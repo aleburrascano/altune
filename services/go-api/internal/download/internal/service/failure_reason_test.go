@@ -8,8 +8,8 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -54,14 +54,14 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	tests := []struct {
 		step     interface{ Name() service.StepName }
 		wantName string
-		wantCode downloadfailure.FailureCode
+		wantCode music.FailureCode
 	}{
-		{service.NewSearchStep(nil), "search", downloadfailure.FailureNoMatchFound},
-		{service.NewSelectStep(), "select", downloadfailure.FailureNoMatchFound},
-		{mustNewDownloadStep(&fileWritingSearcher{}, scratchfiles.New(), memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited()), "download", downloadfailure.FailureDownloadFailed},
-		{mustNewTagStep(memory.NoopAudioTagger()), "tag", downloadfailure.FailureAcquisitionFailed},
-		{mustNewStoreStep(newFakeAudioStore(), scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}), downloadtest.SilentAudioRefLookup()), "store", downloadfailure.FailureStorageFailed},
-		{service.NewUpdateTrackStep(nil, evidence.NewCodec(), ids.UserId{}, ids.TrackId{}), "update_track", downloadfailure.FailureAcquisitionFailed},
+		{service.NewSearchStep(nil), "search", music.FailureNoMatchFound},
+		{service.NewSelectStep(), "select", music.FailureNoMatchFound},
+		{mustNewDownloadStep(&fileWritingSearcher{}, scratchfiles.New(), memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited()), "download", music.FailureDownloadFailed},
+		{mustNewTagStep(memory.NoopAudioTagger()), "tag", music.FailureAcquisitionFailed},
+		{mustNewStoreStep(newFakeAudioStore(), scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}), downloadtest.SilentAudioRefLookup()), "store", music.FailureStorageFailed},
+		{service.NewUpdateTrackStep(nil, evidence.NewCodec(), ids.UserId{}, ids.TrackId{}), "update_track", music.FailureAcquisitionFailed},
 	}
 
 	for _, tt := range tests {
@@ -123,13 +123,13 @@ func acquireService(ledger *memory.Ledger, registry *service.SourceRegistry, sto
 	return &acquisitionServices{AcquireTrackAudioService: acquire, ReplaceService: service.NewReplaceService(acquire)}
 }
 
-func persistedCode(t *testing.T, ledger *memory.Ledger, id ids.TrackId) downloadfailure.FailureCode {
+func persistedCode(t *testing.T, ledger *memory.Ledger, id ids.TrackId) music.FailureCode {
 	t.Helper()
 	got, ok := ledger.Track(id)
 	if !ok || got.Status != domain.TrackFailed {
 		t.Fatalf("track = %+v, want it failed", got)
 	}
-	code, _ := downloadfailure.SplitFailureReason(got.FailureReason)
+	code, _ := music.SplitFailureReason(got.FailureReason)
 	return code
 }
 
@@ -137,7 +137,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 	tests := []struct {
 		name      string
 		searchErr error
-		want      downloadfailure.FailureCode
+		want      music.FailureCode
 	}{
 		{
 			name: "every source throttled",
@@ -145,16 +145,16 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 				Source: "ytdlp",
 				Err:    errors.New("yt-dlp search: exit status 1 (stderr: HTTP Error 429: Too Many Requests)"),
 			},
-			want: downloadfailure.FailureSourceUnavailable,
+			want: music.FailureSourceUnavailable,
 		},
 		{
 			name:      "the source answered and had nothing",
 			searchErr: errors.New("yt-dlp search: 3 lines, 0 parsable"),
-			want:      downloadfailure.FailureNoMatchFound,
+			want:      music.FailureNoMatchFound,
 		},
 		{
 			name: "the source found nothing",
-			want: downloadfailure.FailureNoMatchFound,
+			want: music.FailureNoMatchFound,
 		},
 	}
 
@@ -183,11 +183,11 @@ func TestExecute_AStoreThatFailsWithTheContextLiveKeepsTheStorageReason(t *testi
 
 	err := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: userID, TrackID: trackID})
 
-	if got := service.FailureCodeOf(err); got != string(downloadfailure.FailureStorageFailed) {
-		t.Errorf("FailureCodeOf(%v) = %q, want %q", err, got, downloadfailure.FailureStorageFailed)
+	if got := service.FailureCodeOf(err); got != string(music.FailureStorageFailed) {
+		t.Errorf("FailureCodeOf(%v) = %q, want %q", err, got, music.FailureStorageFailed)
 	}
-	if code := persistedCode(t, ledger, trackID); code != downloadfailure.FailureStorageFailed {
-		t.Errorf("persisted failure code = %q, want %q", code, downloadfailure.FailureStorageFailed)
+	if code := persistedCode(t, ledger, trackID); code != music.FailureStorageFailed {
+		t.Errorf("persisted failure code = %q, want %q", code, music.FailureStorageFailed)
 	}
 }
 
@@ -207,12 +207,12 @@ func TestFailureReason_EveryCodeIsKnownToCatalog(t *testing.T) {
 		errs = append(errs, &service.StepError{Step: step, Err: errors.New("boom")})
 	}
 	for _, err := range errs {
-		code := downloadfailure.FailureCode(service.FailureCodeOf(err))
+		code := music.FailureCode(service.FailureCodeOf(err))
 		if !code.Known() {
 			t.Errorf("FailureCodeOf(%q) = %q, not a catalog failure code", err, code)
 		}
-		reason := downloadfailure.JoinFailureReason(code, "all 1 candidate rejected (1 identity)")
-		if got, want := downloadfailure.FailureMessage(&reason), downloadfailure.FailureMessage(new(string(code))); got != want {
+		reason := music.JoinFailureReason(code, "all 1 candidate rejected (1 identity)")
+		if got, want := music.FailureMessage(&reason), music.FailureMessage(new(string(code))); got != want {
 			t.Errorf("summary suffix changed message for %q: %q, want %q", code, got, want)
 		}
 	}
@@ -222,8 +222,8 @@ func TestFailureReason_WrappedContextErrorIsCancellationForEveryStep(t *testing.
 	for _, step := range []service.StepName{"search", "select", "download", "tag", "store", "update_track"} {
 		for _, ctxErr := range []error{context.Canceled, context.DeadlineExceeded} {
 			err := &service.StepError{Step: step, Err: errors.Join(errors.New("adapter failed"), ctxErr)}
-			if got := service.FailureCodeOf(err); got != string(downloadfailure.FailureAcquisitionCancelled) {
-				t.Errorf("FailureCodeOf(%s, %v) = %q, want %q", step, ctxErr, got, downloadfailure.FailureAcquisitionCancelled)
+			if got := service.FailureCodeOf(err); got != string(music.FailureAcquisitionCancelled) {
+				t.Errorf("FailureCodeOf(%s, %v) = %q, want %q", step, ctxErr, got, music.FailureAcquisitionCancelled)
 			}
 		}
 	}
@@ -237,10 +237,10 @@ func TestFailureReason_DownloadStepWrappingNoConfidentMatch(t *testing.T) {
 	if got != "no_confident_match" {
 		t.Errorf("FailureCodeOf = %q, want no_confident_match", got)
 	}
-	if msg := downloadfailure.FailureMessage(&got); msg != "Couldn't find this track" {
+	if msg := music.FailureMessage(&got); msg != "Couldn't find this track" {
 		t.Errorf("FailureMessage = %q, want %q", msg, "Couldn't find this track")
 	}
-	if !downloadfailure.FailureNoConfidentMatch.Known() {
+	if !music.FailureNoConfidentMatch.Known() {
 		t.Error("FailureNoConfidentMatch is not Known()")
 	}
 }
@@ -273,7 +273,7 @@ func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
 
 	execErr := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
-	if got := service.FailureCodeOf(execErr); got != string(downloadfailure.FailureSourceUnavailable) {
+	if got := service.FailureCodeOf(execErr); got != string(music.FailureSourceUnavailable) {
 		t.Errorf("failure code = %q, want source_unavailable: the first tier was down, not empty", got)
 	}
 }
@@ -285,10 +285,10 @@ func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
 
 	execErr := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
-	if got := service.FailureCodeOf(execErr); got != string(downloadfailure.FailureAcquisitionFailed) {
+	if got := service.FailureCodeOf(execErr); got != string(music.FailureAcquisitionFailed) {
 		t.Errorf("failure code = %q, want acquisition_failed", got)
 	}
-	if code := persistedCode(t, ledger, track.ID); code != downloadfailure.FailureAcquisitionFailed {
+	if code := persistedCode(t, ledger, track.ID); code != music.FailureAcquisitionFailed {
 		t.Errorf("persisted failure code = %q, want acquisition_failed", code)
 	}
 }
@@ -321,7 +321,7 @@ func TestScheduler_ABrokenSearchIsSettledWithoutARetry(t *testing.T) {
 		if outcome.released {
 			t.Errorf("outcome = %+v, want a degraded search settled, not retried", outcome)
 		}
-		if code := persistedCode(t, ledger, track.ID); code != downloadfailure.FailureAcquisitionFailed {
+		if code := persistedCode(t, ledger, track.ID); code != music.FailureAcquisitionFailed {
 			t.Errorf("persisted failure code = %q, want acquisition_failed", code)
 		}
 	})

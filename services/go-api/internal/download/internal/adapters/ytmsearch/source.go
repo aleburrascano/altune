@@ -3,7 +3,7 @@ package ytmsearch
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"fmt"
 	"log/slog"
@@ -98,7 +98,7 @@ func better(song, best Song, req domain.FindRequest) bool {
 }
 
 func onCatalogAlbum(song Song, req domain.FindRequest) bool {
-	return req.Album != "" && textnorm.NormalizeForMatch(song.Album) == textnorm.NormalizeForMatch(req.Album)
+	return req.Album != "" && music.NormalizeForMatch(song.Album) == music.NormalizeForMatch(req.Album)
 }
 
 func lengthGap(song Song, savedLength float64) float64 {
@@ -114,5 +114,5 @@ func matches(song Song, req domain.FindRequest) bool {
 func CreditsArtist(artists []string, artist string) bool { return domain.Credits(artists, artist) }
 
 func comparableTitle(title string) string {
-	return textnorm.NormalizeForIdentity(domain.CreditBrackets.ReplaceAllString(title, ""))
+	return music.NormalizeForIdentity(domain.CreditBrackets.ReplaceAllString(title, ""))
 }

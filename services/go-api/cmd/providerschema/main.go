@@ -1,8 +1,8 @@
 package main
 
 import (
+	"altune/go-api/cmd/providerschema/internal/providerfields"
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/providerfields"
 	"cmp"
 	"context"
 	"encoding/json"

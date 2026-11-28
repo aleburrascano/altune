@@ -26,10 +26,10 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/queuetimeout"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/resilience"
 	"altune/go-api/internal/shared/telemetry"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"fmt"
@@ -175,8 +175,8 @@ func (d Deps) validate() error {
 	if len(missing) > 0 {
 		return fmt.Errorf("%w %s", errDepsMissing, strings.Join(missing, ", "))
 	}
-	if d.ProviderTimeout <= queuetimeout.MaxWait {
-		return fmt.Errorf("%w %v must exceed the longest rate-limit queue wait %v", errProviderTimeoutLow, d.ProviderTimeout, queuetimeout.MaxWait)
+	if d.ProviderTimeout <= resilience.MaxQueueWait {
+		return fmt.Errorf("%w %v must exceed the longest rate-limit queue wait %v", errProviderTimeoutLow, d.ProviderTimeout, resilience.MaxQueueWait)
 	}
 	return nil
 }
@@ -235,7 +235,7 @@ func identityStoreOf(d Deps) ports.IdentityStore {
 func newVocabularyStore(redis *goredis.Client, cacheOps *telemetry.LabeledCounter) (ports.SpellingHintsStore, error) {
 	store, err := cache.NewVocabularyStore(
 		redis,
-		textnorm.NormalizeForMatch,
+		music.NormalizeForMatch,
 		domain.MetaphoneKey,
 		cache.WithVocabSignal(cache.NewSignal(cacheOps, clock.Now)),
 	)
