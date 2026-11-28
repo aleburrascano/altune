@@ -194,13 +194,13 @@ func TestShapeRefusesWhatTheTemplateForbids(t *testing.T) {
 			sectionGlobals, func(t *testing.T, dir string) {
 				writeFile(t, dir, "internal/lib/internal/service/state.go", "package service\n\nvar current = 1\n\nfunc Bump() { current++ }\n")
 			},
-			"package-level var current is changed at runtime",
+			"package-level var current is assigned or written to in code",
 		},
 		"rule 18: a package-level map written to": {
 			sectionGlobals, func(t *testing.T, dir string) {
 				writeFile(t, dir, "internal/lib/internal/service/cache.go", "package service\n\nvar seen = map[string]bool{}\n\nfunc Mark(k string) { seen[k] = true }\n")
 			},
-			"package-level var seen is changed at runtime",
+			"package-level var seen is assigned or written to in code",
 		},
 		"rule 18: a package-level sync.Once": {
 			sectionGlobals, func(t *testing.T, dir string) {
@@ -213,7 +213,27 @@ func TestShapeRefusesWhatTheTemplateForbids(t *testing.T) {
 				writeFile(t, dir, "internal/lib/internal/service/a.go", "package service\n\nvar level = 1\n")
 				writeFile(t, dir, "internal/lib/internal/service/b.go", "package service\n\nfunc Raise() { level = 2 }\n")
 			},
-			"package-level var level is changed at runtime",
+			"package-level var level is assigned or written to in code",
+		},
+		"rule 18: a package-level var written from another package of the module": {
+			sectionGlobals, func(t *testing.T, dir string) {
+				writeFile(t, dir, "internal/lib/internal/service/limits.go", "package service\n\nvar Limit = 1\n\nvar Cache = map[string]int{}\n")
+				writeFile(t, dir, "internal/lib/lib.go", "package lib\n\nimport \"example/api/internal/lib/internal/service\"\n\nfunc New() { service.Limit = 5; service.Cache[\"k\"] = 1 }\n")
+			},
+			"package-level var Limit is assigned or written to in code",
+		},
+		"rule 18: a package-level var written through an aliased import": {
+			sectionGlobals, func(t *testing.T, dir string) {
+				writeFile(t, dir, "internal/lib/internal/service/limits.go", "package service\n\nvar Limit = 1\n")
+				writeFile(t, dir, "internal/lib/lib.go", "package lib\n\nimport svc \"example/api/internal/lib/internal/service\"\n\nfunc New() { svc.Limit++ }\n")
+			},
+			"package-level var Limit is assigned or written to in code",
+		},
+		"rule 18: a package-level var changed inside a package-level func literal": {
+			sectionGlobals, func(t *testing.T, dir string) {
+				writeFile(t, dir, "internal/lib/internal/service/hits.go", "package service\n\nvar hits int\n\nvar Bump = func() { hits++ }\n")
+			},
+			"package-level var hits is assigned or written to in code",
 		},
 		"rule 20: a util package": {
 			sectionNames, func(t *testing.T, dir string) { writeFile(t, dir, "internal/shared/util/u.go", "package util\n") },

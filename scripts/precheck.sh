@@ -377,7 +377,7 @@ if touches '^services/go-api/'; then
         if touches "^$m/(.*\.go|architecture\.json|migrations/.*\.sql)\$"; then
           check "go-api table owners: only the owning module writes a table, every written table has an owner (lintarch)" $m go run ./scripts/lintarch .
         fi
-        if touches "^$m/(.*\.go|README\.md|internal/.*/README\.md)\$"; then
+        if touches "^$m/(.*\.go\$|README\.md\$|internal/)"; then
           check "go-api module shape: root, door, layers, file map, setters, globals, names and README line 1 (lintdoors --shape)" $m go run ./scripts/lintdoors --shape .
         fi
         if touches "^$m/go\.(mod|sum)\$"; then

@@ -30,7 +30,7 @@ A module has only the layers it uses. A module with no tables has no `persistenc
 
 ### Rule 1: one shape per module
 
-The module's root holds only `<module>.go`, `README.md`, `CLAUDE.md`, `internal/`, an optional `<module>test/` and the door's own test, `<module>_test.go`. Go's `internal/` makes the rest unimportable from outside. `<module>test/` is for code outside the module that imports it in tests; one that nothing outside imports folds into `internal/`.
+The module's root holds only `<module>.go`, `README.md`, `CLAUDE.md`, `internal/`, an optional `<module>test/` and the door's own test, `<module>_test.go`. Go's `internal/` makes the rest unimportable from outside. `<module>test/` is for code outside the module that imports it in tests.
 
 Enforced by `lintdoors --shape`, which fails on any other file or folder at the root, and on a module with no `internal/`.
 
@@ -58,17 +58,17 @@ Enforced by `lintdoors --shape`.
 
 ### Rule 10: one file map
 
-- `domain/errors.go`: every error of the module. It exists when `domain/` does.
-- `ports/ports.go`: every interface the module needs from outside. It exists when `ports/` does.
-- `adapters/handler/errors.go`: domain errors mapped to `apierror` codes. It exists when `handler/` does.
-- `adapters/handler/routes.go`: every route the module mounts. It exists when the handler imports `chi`.
-- `adapters/handler/dto.go`: every wire shape. It exists when the handler has any json-tagged type.
+- `domain/errors.go`: the module's errors. It must exist when `domain/` does.
+- `ports/ports.go`: the interfaces the module needs from outside. It must exist when `ports/` does.
+- `adapters/handler/errors.go`: domain errors mapped to `apierror` codes. It must exist when `handler/` does.
+- `adapters/handler/routes.go`: the routes the module mounts. It must exist when the handler imports `chi`.
+- `adapters/handler/dto.go`: the wire shapes. It must exist when the handler has any json-tagged type.
 - `adapters/persistence/<table>_repo.go`, with `adapters/memory/<table>_repo.go` beside it.
 - `<module>.go`: the door.
 
-Routes, wire shapes and error mapping live nowhere else. A `json:` tag is allowed only in an adapter (the handler's `dto.go`, a cache or other storage adapter for a stored shape, a provider adapter for the reply it decodes), never in `domain/`, `service/`, `ports/`, the door or `<module>test/`. A type another module turns into JSON has no tags in `domain/`: the module that serializes it maps it to its own DTO. `apierror` is imported only by `adapters/handler`.
+Two more things are checked. A `json:` tag is allowed only in an adapter (in the handler only in `dto.go`; in a cache or other storage adapter for a stored shape; in a provider adapter for the reply it decodes), never in `domain/`, `service/`, `ports/`, the door or `<module>test/`. A type another module turns into JSON has no tags in `domain/`: the module that serializes it maps it to its own DTO. And `apierror` is imported only under `adapters/handler`.
 
-Enforced by `lintdoors --shape`.
+Enforced by `lintdoors --shape`. It checks that the files exist and the two rules above. It does not read what a file holds, so keeping errors, interfaces and routes in their own files is the convention a reviewer holds.
 
 ### Rule 13: complete at construction
 
@@ -90,9 +90,9 @@ Enforced by `wrapcheck` in `.golangci.strict.yml`.
 
 ### Rule 18: no package-level mutable state
 
-No package-level `var` that code assigns, appends to, writes through, deletes from or counts after startup, and none that holds a lock, a `sync.Once` or an atomic. State lives in what `New` builds. A table that is only read, and a `var` that a test alone reassigns, are fine.
+No package-level `var` that non-test code assigns, increments, indexes into on the left of an assignment, or passes to `delete` or `clear`, whether from its own package, from another package of the module through an import, or inside a function literal. And none whose declared type or initializer names a `sync` or `atomic` type. State lives in what `New` builds. A table that is only read, and a `var` that a test alone reassigns, are fine.
 
-Enforced by `lintdoors --shape`. `gochecknoglobals` does not fit: it flags every package-level `var` (263 findings across the modules, nearly all read-only lookup tables and function aliases) and cannot tell them from state that changes.
+Enforced by `lintdoors --shape`. It does not see a change made through a method call (`registry.Register(...)`) or a lock hidden inside a struct a constructor returns. `gochecknoglobals` does not fit: it flags every package-level `var` (263 findings across the modules, nearly all read-only lookup tables and function aliases) and cannot tell them from state that changes.
 
 ### Rule 20: package names are one plain word
 

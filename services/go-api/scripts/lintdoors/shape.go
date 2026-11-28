@@ -401,24 +401,50 @@ func (s *shapeScan) checkGlobals(dir string) error {
 	if err != nil {
 		return fmt.Errorf("walk dir: %w", err)
 	}
-	for _, files := range byDir {
-		if err := s.checkPackageGlobals(files); err != nil {
+	pkgs := map[string]*parsedPackage{}
+	for pkgDir, paths := range byDir {
+		pkg, err := parsePackage(paths)
+		if err != nil {
 			return err
+		}
+		pkgs[filepath.Clean(pkgDir)] = pkg
+	}
+	changed := map[string]map[string]bool{}
+	for pkgDir := range pkgs {
+		changed[pkgDir] = map[string]bool{}
+	}
+	for pkgDir, pkg := range pkgs {
+		for _, f := range pkg.files {
+			s.collectChanged(f, pkgDir, pkgs, changed)
+		}
+	}
+	for pkgDir, pkg := range pkgs {
+		for _, v := range pkg.vars {
+			switch {
+			case holdsSyncState(v.spec):
+				s.add(v.file, v.line, sectionGlobals, "package-level %s holds runtime state (a lock, a once or an atomic); state lives in what New builds", v.name)
+			case changed[pkgDir][v.name]:
+				s.add(v.file, v.line, sectionGlobals, "package-level var %s is assigned or written to in code; state lives in what New builds", v.name)
+			}
 		}
 	}
 	return nil
 }
 
-func (s *shapeScan) checkPackageGlobals(paths []string) error {
-	var vars []pkgVar
-	var files []*ast.File
+type parsedPackage struct {
+	files []*ast.File
+	vars  []pkgVar
+}
+
+func parsePackage(paths []string) (*parsedPackage, error) {
+	pkg := &parsedPackage{}
 	for _, p := range paths {
 		fset := token.NewFileSet()
 		f, err := parser.ParseFile(fset, p, nil, 0)
 		if err != nil {
-			return fmt.Errorf("parse %s: %w", p, err)
+			return nil, fmt.Errorf("parse %s: %w", p, err)
 		}
-		files = append(files, f)
+		pkg.files = append(pkg.files, f)
 		for _, decl := range f.Decls {
 			gd, ok := decl.(*ast.GenDecl)
 			if !ok || gd.Tok != token.VAR {
@@ -428,87 +454,86 @@ func (s *shapeScan) checkPackageGlobals(paths []string) error {
 				vs := spec.(*ast.ValueSpec)
 				for _, id := range vs.Names {
 					if id.Name != "_" {
-						vars = append(vars, pkgVar{name: id.Name, spec: vs, ident: id, file: p, line: fset.Position(id.Pos()).Line})
+						pkg.vars = append(pkg.vars, pkgVar{name: id.Name, spec: vs, ident: id, file: p, line: fset.Position(id.Pos()).Line})
 					}
 				}
 			}
 		}
 	}
-	changed := map[string]bool{}
-	for _, f := range files {
-		collectChanged(f, vars, changed)
-	}
-	for _, v := range vars {
-		switch {
-		case holdsSyncState(v.spec):
-			s.add(v.file, v.line, sectionGlobals, "package-level %s holds runtime state (a lock, a once or an atomic); state lives in what New builds", v.name)
-		case changed[v.name]:
-			s.add(v.file, v.line, sectionGlobals, "package-level var %s is changed at runtime; state lives in what New builds", v.name)
-		}
-	}
-	return nil
+	return pkg, nil
 }
 
-func collectChanged(f *ast.File, vars []pkgVar, changed map[string]bool) {
-	byName := map[string]*ast.ValueSpec{}
-	for _, v := range vars {
-		byName[v.name] = v.spec
-	}
-	mark := func(e ast.Expr) {
-		id := rootIdent(e)
-		if id == nil {
-			return
-		}
-		spec, ok := byName[id.Name]
-		if !ok {
-			return
-		}
-		if id.Obj == nil || id.Obj.Decl == spec {
-			changed[id.Name] = true
-		}
-	}
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+func (s *shapeScan) importedDirs(f *ast.File, pkgs map[string]*parsedPackage) map[string]string {
+	byAlias := map[string]string{}
+	prefix := s.modulePath + "/"
+	for _, imp := range f.Imports {
+		target, err := strconv.Unquote(imp.Path.Value)
+		if err != nil || !strings.HasPrefix(target, prefix) {
 			continue
 		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			switch x := n.(type) {
-			case *ast.AssignStmt:
-				if x.Tok != token.DEFINE {
-					for _, l := range x.Lhs {
-						mark(l)
-					}
-				}
-			case *ast.IncDecStmt:
-				mark(x.X)
-			case *ast.CallExpr:
-				if fun, ok := x.Fun.(*ast.Ident); ok && (fun.Name == "delete" || fun.Name == "clear") && len(x.Args) > 0 {
-					mark(x.Args[0])
-				}
-			}
-			return true
-		})
+		pkgDir := filepath.Clean(filepath.Join(s.root, filepath.FromSlash(strings.TrimPrefix(target, prefix))))
+		if _, ok := pkgs[pkgDir]; !ok {
+			continue
+		}
+		alias := packageName(pkgDir)
+		if imp.Name != nil {
+			alias = imp.Name.Name
+		}
+		byAlias[alias] = pkgDir
 	}
+	return byAlias
 }
 
-func rootIdent(e ast.Expr) *ast.Ident {
-	for {
-		switch x := e.(type) {
-		case *ast.Ident:
-			return x
-		case *ast.IndexExpr:
-			e = x.X
-		case *ast.SelectorExpr:
-			e = x.X
-		case *ast.StarExpr:
-			e = x.X
-		case *ast.ParenExpr:
-			e = x.X
-		default:
-			return nil
+func (s *shapeScan) collectChanged(f *ast.File, pkgDir string, pkgs map[string]*parsedPackage, changed map[string]map[string]bool) {
+	own := map[string]*ast.ValueSpec{}
+	for _, v := range pkgs[pkgDir].vars {
+		own[v.name] = v.spec
+	}
+	imported := s.importedDirs(f, pkgs)
+	mark := func(e ast.Expr) {
+		for {
+			switch x := e.(type) {
+			case *ast.Ident:
+				if spec, ok := own[x.Name]; ok && (x.Obj == nil || x.Obj.Decl == spec) {
+					changed[pkgDir][x.Name] = true
+				}
+				return
+			case *ast.SelectorExpr:
+				if id, ok := x.X.(*ast.Ident); ok && id.Obj == nil {
+					if target, isImport := imported[id.Name]; isImport {
+						changed[target][x.Sel.Name] = true
+						return
+					}
+				}
+				e = x.X
+			case *ast.IndexExpr:
+				e = x.X
+			case *ast.StarExpr:
+				e = x.X
+			case *ast.ParenExpr:
+				e = x.X
+			default:
+				return
+			}
 		}
 	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.AssignStmt:
+			if x.Tok != token.DEFINE {
+				for _, l := range x.Lhs {
+					mark(l)
+				}
+			}
+		case *ast.IncDecStmt:
+			mark(x.X)
+		case *ast.CallExpr:
+			if fun, ok := x.Fun.(*ast.Ident); ok && (fun.Name == "delete" || fun.Name == "clear") && len(x.Args) > 0 {
+				mark(x.Args[0])
+			}
+		}
+		return true
+	})
 }
 
 func holdsSyncState(spec *ast.ValueSpec) bool {
