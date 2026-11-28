@@ -33,9 +33,9 @@ const CLIENT_EVENT_TYPES: Record<ClientEventType, true> = {
 };
 
 const clientTypes = Object.keys(CLIENT_EVENT_TYPES).sort();
-const knownTypes = wireFixture('discovery_event_types') as string[];
-const submittableTypes = wireFixture('discovery_event_types_client_submittable') as string[];
-const payloadTypes = wireFixture('discovery_event_payload_types') as Record<string, string[]>;
+const knownTypes = wireFixture('search_event_types') as string[];
+const submittableTypes = wireFixture('search_event_types_client_submittable') as string[];
+const payloadTypes = wireFixture('search_event_payload_types') as Record<string, string[]>;
 
 const CLIENT_SRC = path.join(__dirname, '..', '..', '..');
 
@@ -79,10 +79,10 @@ describe('event types: the server fixtures against the ClientEventType the clien
   });
 });
 
-describe('request envelope: the keys the client sends against req_discovery_events', () => {
+describe('request envelope: the keys the client sends against req_search_events', () => {
   it('sends only keys the server request fixture has, and every envelope key it has', async () => {
     __http.reply(EVENT_ROUTES, { status: 204 });
-    const fixtureKeys = Object.keys(wireFixture('req_discovery_events') as object).sort();
+    const fixtureKeys = Object.keys(wireFixture('req_search_events') as object).sort();
 
     await recordEvent({
       type: 'play',
