@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -21,7 +22,7 @@ func readTestdata(t *testing.T, name string) []byte {
 
 func luckiSongs(t *testing.T) []download.YouTubeMusicSong {
 	t.Helper()
-	songs, err := download.ParseYtmSongs(readTestdata(t, "search_lucki_2021_vibes.json"))
+	songs, err := downloadtest.ParseYtmSongs(readTestdata(t, "search_lucki_2021_vibes.json"))
 	if err != nil {
 		t.Fatalf("ParseSongs: %v", err)
 	}
@@ -37,7 +38,7 @@ func TestYoutubeFlags_AppliesTheStudyRules(t *testing.T) {
 	}{
 		"the official audio of the right upload raises nothing": {
 			track: liveTrack{Title: "remember them days", Artist: "SLAYR"},
-			src:   youtubeSource{VideoID: "XDC3uH1FSgw", Title: "remember them days", Author: "slayr - Topic", Type: download.VideoTypeAudioOnly},
+			src:   youtubeSource{VideoID: "XDC3uH1FSgw", Title: "remember them days", Author: "slayr - Topic", Type: downloadtest.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 		"an official music video is a music_video and a video_title": {
@@ -72,45 +73,45 @@ func TestYoutubeFlags_AppliesTheStudyRules(t *testing.T) {
 		},
 		"an empty author never raises fan_reupload_channel": {
 			track: liveTrack{Title: "Song", Artist: "Somebody"},
-			src:   youtubeSource{Title: "Song", Author: "", Type: download.VideoTypeAudioOnly},
+			src:   youtubeSource{Title: "Song", Author: "", Type: downloadtest.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 		"a qualifier the track title asked for is not flagged": {
 			track: liveTrack{Title: "Song (Live)", Artist: "Somebody"},
-			src:   youtubeSource{Title: "Song (Live)", Author: "Somebody - Topic", Type: download.VideoTypeAudioOnly},
+			src:   youtubeSource{Title: "Song (Live)", Author: "Somebody - Topic", Type: downloadtest.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 		"the clean master is flagged when an explicit twin exists": {
 			track: luckiTrack,
-			src:   youtubeSource{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly, Songs: luckiSongs(t)},
+			src:   youtubeSource{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: downloadtest.VideoTypeAudioOnly, Songs: luckiSongs(t)},
 			want:  []string{"clean_edit(explicit exists)"},
 		},
 		"the explicit master is not flagged": {
 			track: luckiTrack,
-			src:   youtubeSource{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly, Songs: luckiSongs(t)},
+			src:   youtubeSource{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: downloadtest.VideoTypeAudioOnly, Songs: luckiSongs(t)},
 			want:  []string{},
 		},
 		"a stored id outside the search results is never a clean_edit": {
 			track: luckiTrack,
-			src:   youtubeSource{VideoID: "notInResult", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly, Songs: luckiSongs(t)},
+			src:   youtubeSource{VideoID: "notInResult", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: downloadtest.VideoTypeAudioOnly, Songs: luckiSongs(t)},
 			want:  []string{},
 		},
 		"only the top five search results count": {
 			track: luckiTrack,
 			src: youtubeSource{
-				VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly,
+				VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: downloadtest.VideoTypeAudioOnly,
 				Songs: append(luckiSongs(t)[:1:1], luckiSongs(t)[2:]...),
 			},
 			want: []string{},
 		},
 		"a duration delta beyond eight seconds is flagged with its rounded sign": {
 			track: liveTrack{Title: "Song", Artist: "Somebody", Evidence: &liveEvidence{DurationDeltaSeconds: -12.4}},
-			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: download.VideoTypeAudioOnly},
+			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: downloadtest.VideoTypeAudioOnly},
 			want:  []string{"duration_delta:-12s"},
 		},
 		"a duration delta of exactly eight seconds is not flagged": {
 			track: liveTrack{Title: "Song", Artist: "Somebody", Evidence: &liveEvidence{DurationDeltaSeconds: 8}},
-			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: download.VideoTypeAudioOnly},
+			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: downloadtest.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 	}

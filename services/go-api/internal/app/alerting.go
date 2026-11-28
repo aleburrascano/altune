@@ -2,7 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/app/alerts"
-	"altune/go-api/internal/app/downloadsetup"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
@@ -41,7 +40,7 @@ func (a *application) alertConditions(coverage alerts.CoverageEvents) ([]monitor
 	r0, err := alerts.Conditions(alerts.Sources{
 		DependencyHealth:      a.dependencyHealth,
 		Coverage:              coverage,
-		YouTubeSignedOutSince: downloadsetup.YtDlpSearcher(a.cfg).SignedOutSince,
+		YouTubeSignedOutSince: a.download.YouTubeSignedOutSince,
 		Jobs:                  &a.jobs,
 		Requests:              a.latency.Snapshot,
 		Clock:                 clock.Now,

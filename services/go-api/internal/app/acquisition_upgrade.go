@@ -1,16 +1,16 @@
 package app
 
 import (
-	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/download"
 	"context"
 )
 
-func (a *application) startAcquisitionUpgrade(ctx context.Context, scheduler *download.BackgroundAcquisitionScheduler) {
-	planner := download.NewReplacementPlanner(download.NewPostgresUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads().
-		UpgradingFrom(downloadfromlibrary.Rules{}).RescuingLowBitrate(a.cfg.AcquisitionLowBitrateFloorKbps)
-	interval := download.UpgradeInterval(a.cfg.AcquisitionUpgradePerHour)
-	a.jobs.StartTicker(ctx, jobs.AcquisitionUpgrade, interval, planner.PlanNext,
+func (a *application) startAcquisitionUpgrade(ctx context.Context, module *download.Module) {
+	plan, interval := module.Upgrade()
+	if plan == nil {
+		return
+	}
+	a.jobs.StartTicker(ctx, jobs.AcquisitionUpgrade, interval, plan,
 		"interval", interval.String())
 }

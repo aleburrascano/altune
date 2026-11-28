@@ -3,7 +3,6 @@ package app
 import (
 	"altune/go-api/internal/app/health"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/app/sourcecheck"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/monitoring"
@@ -31,8 +30,7 @@ type application struct {
 	pool          *pgxpool.Pool
 	probes        health.Probes
 	redisClient   *goredis.Client
-	scheduler     *download.BackgroundAcquisitionScheduler
-	acquisitionOn bool
+	download      *download.Module
 	vocabRefresh  *search.SpellingHintsRefreshService
 	evalSearch    *search.SearchService
 	eventBus      *events.InProcessBus
@@ -73,16 +71,10 @@ func (a *application) connectAuth(ctx context.Context) (auth.TokenVerifier, erro
 func (a *application) startCatalogJobs(ctx context.Context, cat catalogWiring, playbackModule *playback.Module) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playbackModule)
-	a.startSourceCanary(ctx, sourcecheck.Probes{
-		YtDlp: cat.ytDlpSearcher, YtDlpAvailable: cat.ytDlpAvailable, InnerTube: cat.ytmCanary,
-		YtMusicEnabled: a.cfg.YtMusicEnabled, YtDlpEnabled: a.cfg.YtDLPEnabled,
-	})
-	a.startAcquisitionPrune(ctx,
-		download.NewPostgresOutcomeStore(a.pool),
-		download.NewPostgresRejectionStore(a.pool))
-	if cat.acquisitionOn {
-		a.startAcquisitionUpgrade(ctx, cat.scheduler)
-	}
+	a.startSourceCanary(ctx, cat.download)
+	outcomes, rejections := cat.download.Retention()
+	a.startAcquisitionPrune(ctx, outcomes, rejections)
+	a.startAcquisitionUpgrade(ctx, cat.download)
 }
 
 func (a *application) applyDisabledJobs(ctx context.Context) error {
@@ -93,8 +85,8 @@ func (a *application) applyDisabledJobs(ctx context.Context) error {
 }
 
 func (a *application) applyStartupSwitches(ctx context.Context) error {
-	if a.cfg.AcquisitionPaused && a.acquisitionOn {
-		a.scheduler.Pause()
+	if a.cfg.AcquisitionPaused && a.download.On() {
+		a.download.Scheduler().Pause()
 		slog.InfoContext(ctx, "acquisition started paused")
 	}
 	if err := a.applyDisabledJobs(ctx); err != nil {

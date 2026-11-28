@@ -3,6 +3,7 @@ package downloadfromlibrary_test
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
@@ -22,8 +23,14 @@ type readyTrackSpec struct {
 	sourceURL *string
 }
 
-func newInPlaceRecorder(pool *pgxpool.Pool) *downloadfromlibrary.InPlaceRecorder {
-	return downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), download.NewPostgresUpgradeStore(pool))
+type inPlaceRecorder interface {
+	RecordInPlace(ctx context.Context, trackID sharedids.TrackId, record download.InPlaceRecord) (bool, error)
+	NoteInPlaceFailure(ctx context.Context, trackID sharedids.TrackId) (int, error)
+}
+
+func newInPlaceRecorder(pool *pgxpool.Pool) inPlaceRecorder {
+	verdicts := downloadfromlibrary.NewInPlaceVerdicts(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()))
+	return downloadtest.MustNewPostgresInPlaceRecorder(download.NewDatabase(pool), verdicts)
 }
 
 func insertUpgradableTrack(t *testing.T, pool *pgxpool.Pool, spec readyTrackSpec) sharedids.TrackId {

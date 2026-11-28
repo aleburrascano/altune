@@ -8,7 +8,7 @@ import (
 func (a *application) shutdownComponents() shutdown.Components {
 	return shutdown.Components{
 		EventFeed:      shutdown.Stop(a.eventFeed),
-		Scheduler:      shutdown.Stop(a.scheduler),
+		Scheduler:      shutdown.Stop(a.download.Scheduler()),
 		Background:     func(context.Context) { a.jobs.Wait() },
 		LeaderElection: shutdown.Stop(a.jobs.Election()),
 		DetachedTasks:  func(ctx context.Context) { a.background.Drain(ctx) },

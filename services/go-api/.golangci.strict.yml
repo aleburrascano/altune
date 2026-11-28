@@ -137,7 +137,6 @@ linters:
             - "!**/internal/shared/dbtest/**"
             - "!**/cmd/**"
             - "!**/internal/app/*.go"
-            - "!**/internal/app/downloadsetup/**"
             - "!**/internal/app/shutdown/**"
           deny:
             - pkg: github.com/jackc/pgx
@@ -147,7 +146,6 @@ linters:
           files:
             - "**/cmd/**"
             - "**/internal/app/*.go"
-            - "**/internal/app/downloadsetup/**"
             - "**/internal/app/shutdown/**"
             - "!$test"
           allow:
