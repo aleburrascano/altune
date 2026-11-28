@@ -1,4 +1,4 @@
-Each folder here is one platform module: something the whole server needs that no single feature owns. `app` and the programs in `cmd/` are its only importers, and a platform module imports only `shared/` (and `outbound`, the one platform module every feature may use).
+Each folder here is one platform module: something the whole server needs that no single feature owns. `app` and the programs in `cmd/` import every platform module except `outbound`, which features import too, and a platform module imports only `shared/` (and `outbound`).
 
 ## Shape
 

@@ -4,9 +4,9 @@ It owns the table `client_events`. Only `monitoring` writes it. Other modules ma
 
 ## Must not
 
-- Import a feature or another platform module. `search` and `download` data reaches it through `app/bridges` (`monitoringfromsearch`, `monitoringfromdownload`), and what decides when to page (the alert conditions) and what the live metrics map holds stay in `app/alerts` and `app/livemetrics` until they can be expressed through its ports.
+- Import a feature or another platform module (`outbound`, which its notifiers use, is the one exception). `search` and `download` data reaches it through `app/bridges` (`monitoringfromsearch`, `monitoringfromdownload`), and what decides when to page (the alert conditions) and what the live metrics map holds stay in `app/alerts` and `app/livemetrics` until they can be expressed through its ports.
 - Put a domain type on the wire. Wire shapes live in `internal/adapters/handler/dto.go` and its errors map in `errors.go`. The alert monitor status, the eval meter status and the tap events keep their json tags in `internal/service/` because `app/livemetrics` and the observe stream serialize them as they are.
-- Read config: `app` passes the stream bounds, notifier and intervals.
+- Read config: `app` passes the notifier and the intervals; the observe stream bounds default unless `Deps.Streams` sets them.
 
 ## Shape
 

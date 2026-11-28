@@ -3,7 +3,7 @@
 ## Must not
 
 - Publish events or decide what an event means: it only forwards what `shared/events` holds.
-- Read config: `app` passes the connection cap, heartbeat, write timeout and shutdown channel in `Deps`.
+- Read config: `app` passes the connection cap and the shutdown channel in `Deps`; the heartbeat and write timeout default unless a test sets them.
 - Own a table.
 
 ## Shape
