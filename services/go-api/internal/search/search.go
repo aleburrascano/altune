@@ -81,6 +81,7 @@ const (
 )
 
 var (
+	DefaultDiscoveryRateLimits         = handler.DefaultDiscoveryRateLimits
 	ErrIdentityStoreUnavailable        = domain.ErrIdentityStoreUnavailable
 	NewSearchQuery                     = domain.NewSearchQuery
 	ParseDiscographyGroupBy            = ports.ParseDiscographyGroupBy
@@ -112,8 +113,7 @@ type Deps struct {
 	Providers       ProviderSettings
 	Search          SearchSettings
 	Unreleased      UnreleasedSettings
-
-	identityStore ports.IdentityStore
+	RateLimits      handler.DiscoveryRateLimits
 }
 
 type ProviderSettings struct {
@@ -226,9 +226,6 @@ func newStoreSet(d Deps) (storeSet, error) {
 }
 
 func identityStoreOf(d Deps) ports.IdentityStore {
-	if d.identityStore != nil {
-		return d.identityStore
-	}
 	if d.Pool == nil {
 		return nil
 	}
@@ -422,6 +419,7 @@ func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryService
 		Enrichers:     enrichers,
 		Ownership:     handler.NoOwnership{},
 		ClientEvents:  w.deps.ClientEvents,
+		RateLimits:    w.deps.RateLimits,
 		Suggest:       service.NewSuggestService(s.SpellingHints),
 		Event:         eventService,
 		Favorites:     favoritesService,
@@ -678,7 +676,7 @@ func (t *providerTable) artworkChain() *artworkfallback.ChainedArtworkLookup {
 		resolvers = append(resolvers, row.artwork...)
 		byIdentity = append(byIdentity, row.artworkByID...)
 	}
-	return artworkfallback.NewChainedArtworkLookup(resolvers...).WithIdentityLookups(byIdentity...)
+	return artworkfallback.NewChainedArtworkLookupWithIdentities(byIdentity, resolvers...)
 }
 
 func (t *providerTable) log(ctx context.Context, logger *slog.Logger) {

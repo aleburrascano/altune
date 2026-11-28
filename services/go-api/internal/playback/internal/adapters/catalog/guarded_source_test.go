@@ -186,19 +186,19 @@ func TestNewNowPlayingReader_RequiresItsMetricsClockAndTimeout(t *testing.T) {
 		"track source": {func() error {
 			_, err := catalog.NewGuardedSource(nil, noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 			return err
-		}, catalog.ErrCollaboratorRequired},
+		}, domain.ErrCollaboratorRequired},
 		"metrics": {func() error {
 			_, err := catalog.NewGuardedSource(absentSource(), nil, time.Now, defaultLookupTimeout)
 			return err
-		}, catalog.ErrCollaboratorRequired},
+		}, domain.ErrCollaboratorRequired},
 		"clock": {func() error {
 			_, err := catalog.NewGuardedSource(absentSource(), noopEnrichmentMetrics{}, nil, defaultLookupTimeout)
 			return err
-		}, catalog.ErrClockRequired},
+		}, domain.ErrClockRequired},
 		"timeout": {func() error {
 			_, err := catalog.NewGuardedSource(absentSource(), noopEnrichmentMetrics{}, time.Now, 0)
 			return err
-		}, catalog.ErrInvalidTimeout},
+		}, domain.ErrInvalidTimeout},
 	}
 	for name, tt := range cases {
 		t.Run(name, func(t *testing.T) {

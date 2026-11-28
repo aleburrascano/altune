@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -151,10 +150,10 @@ func TestContentEndpoints_NoProvidersIsTheUnservedEnvelope(t *testing.T) {
 
 func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	provider := &fakeRelatedTracksProvider{results: seedTracks(5)}
-	svc := searchtest.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
+	svc := memory.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Related: svc}), time.Now)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Related: svc}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -224,8 +223,8 @@ func identityContentRouter(t testing.TB, down map[domain.ProviderName]bool) chi.
 		providers[pn] = partialContentProvider{provider: pn, down: down[pn]}
 		xref[pn.Key()] = "id-" + pn.String()
 	}
-	svc := searchtest.NewArtistContent(t, providers, searchtest.ArtistIdentities(stubIdentityStore{xref: xref}))
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now)
+	svc := memory.NewArtistContent(t, providers, memory.ArtistIdentities(stubIdentityStore{xref: xref}))
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -342,13 +341,13 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 		}
 		return &memory.ArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
 	}
-	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+	svc := memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 		domain.ProviderDeezer:  recording(domain.ProviderDeezer),
 		domain.ProviderSpotify: recording(domain.ProviderSpotify),
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
-	router.Mount("/discovery", handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now).Routes())
+	router.Mount("/discovery", handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now).Routes())
 
 	for _, path := range []string{"content", "albums", "top-tracks"} {
 		asked = map[string]bool{}
@@ -362,12 +361,12 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 }
 
 func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
-	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+	svc := memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 		domain.ProviderDeezer: &memory.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
-	router.Mount("/discovery", handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now).Routes())
+	router.Mount("/discovery", handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now).Routes())
 
 	for _, path := range []string{"content", "albums", "top-tracks"} {
 		rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/d1/"+path+"?name="+strings.Repeat("a", 5000), nil)
@@ -383,13 +382,13 @@ func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 		gotSpotifyID = id
 		return nil, nil
 	}}
-	svc := searchtest.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
+	svc := memory.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
 		domain.ProviderDeezer:  deezer,
 		domain.ProviderSpotify: spotify,
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
-	router.Mount("/discovery", handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Album: svc}), time.Now).Routes())
+	router.Mount("/discovery", handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Album: svc}), time.Now).Routes())
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/d1/tracks?ids=spotify:sp1", nil)
 
@@ -423,12 +422,12 @@ func TestHandleArtistAlbums_LimitDefaultsAndCap(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+			svc := memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 				domain.ProviderDeezer: &memory.ArtistContentProvider{Albums: numberedAlbums(120)},
 			})
 			router := chi.NewRouter()
 			router.Use(discAsTestUser)
-			router.Mount("/discovery", handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now).Routes())
+			router.Mount("/discovery", handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Artist: svc}), time.Now).Routes())
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/albums"+c.query, nil)
 

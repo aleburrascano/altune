@@ -52,7 +52,7 @@ func (c *RedisResultCache) Get(ctx context.Context, key string) ([]domain.Search
 }
 
 func (c *RedisResultCache) Set(ctx context.Context, key string, results []domain.SearchResult) {
-	if err := c.base.Set(ctx, key, results); err != nil {
+	if err := c.base.Set(ctx, key, entriesOf(results)); err != nil {
 		slog.WarnContext(ctx, "search.result_cache_set_failed", logging.KeyError, err)
 	}
 }
@@ -82,7 +82,7 @@ func (c *RedisProviderResultCache) Set(ctx context.Context, provider domain.Prov
 	if results == nil {
 		results = []domain.SearchResult{}
 	}
-	_ = c.setJSON(ctx, c.redisKey(provider, key), results, c.ttl)
+	_ = c.setJSON(ctx, c.redisKey(provider, key), entriesOf(results), c.ttl)
 }
 
 func (c *RedisProviderResultCache) redisKey(provider domain.ProviderName, key string) string {

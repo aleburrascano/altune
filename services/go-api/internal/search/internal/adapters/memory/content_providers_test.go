@@ -1,4 +1,4 @@
-package searchtest_test
+package memory_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"

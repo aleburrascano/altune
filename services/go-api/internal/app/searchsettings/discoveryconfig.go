@@ -28,6 +28,7 @@ func Deps(ctx context.Context, cfg *config.Config, transport http.RoundTripper, 
 		CacheOps:        metrics.LabeledCounter(cacheOpsVarName),
 		Providers:       discoveryProviderSettings(cfg),
 		Search:          discoverySearchSettings(cfg),
+		RateLimits:      search.DefaultDiscoveryRateLimits,
 		Unreleased:      search.UnreleasedSettings{ServeFromCache: cfg.UnreleasedSource == "cache", Tuning: unreleasedConfig(cfg)},
 	}
 }

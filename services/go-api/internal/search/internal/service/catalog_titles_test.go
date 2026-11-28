@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"slices"
@@ -13,7 +12,7 @@ import (
 )
 
 func TestGetArtistContentService_CatalogTitles_CoversTopTracksAndAlbums(t *testing.T) {
-	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+	svc := memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 		domain.ProviderDeezer: &memory.ArtistContentProvider{
 			TopTracks: []domain.SearchResult{memory.NewResult(
 				domain.ResultKindTrack,
@@ -55,9 +54,9 @@ func (p *tracklistProvider) GetAlbumTracks(_ context.Context, _ domain.ProviderN
 
 func tracklistService(t testing.TB, failing map[string]bool) *service.GetArtistContentService {
 	provider := newTracklistProvider(failing)
-	return searchtest.NewArtistContent(t,
+	return memory.NewArtistContent(t,
 		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: provider},
-		searchtest.ArtistTracklists(map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: provider}))
+		memory.ArtistTracklists(map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: provider}))
 }
 
 func newTracklistProvider(failing map[string]bool) *tracklistProvider {
@@ -120,9 +119,9 @@ func (p *panickingTracklistProvider) GetAlbumTracks(ctx context.Context, provide
 
 func TestGetArtistContentService_CatalogTitles_PanickingTracklistIsPartialNotACrash(t *testing.T) {
 	provider := &panickingTracklistProvider{tracklistProvider: newTracklistProvider(nil), panicsOn: "a1"}
-	svc := searchtest.NewArtistContent(t,
+	svc := memory.NewArtistContent(t,
 		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: provider},
-		searchtest.ArtistTracklists(map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: provider}))
+		memory.ArtistTracklists(map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: provider}))
 
 	titles, err := svc.CatalogTitles(context.Background(), domain.ProviderDeezer, "artist-1", nil)
 

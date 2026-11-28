@@ -2,8 +2,8 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +18,7 @@ import (
 const validAuthFailureBody = `{"reason":"invalid_credentials","app_version":"1.2.3"}`
 
 func buildAuthFailureRouter(t *testing.T, store *recordingEventStore, limit handler.RequestLimit) chi.Router {
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Event: searchtest.NewRecordEvent(t, store)}), time.Now)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Event: memory.NewRecordEvent(t, store)}), time.Now)
 	r := chi.NewRouter()
 	h.PublicRoutes(r, limit)
 	return r

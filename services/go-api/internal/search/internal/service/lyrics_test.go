@@ -1,10 +1,10 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"strings"
@@ -20,8 +20,8 @@ func sampleLyrics() domain.DeezerLyrics {
 }
 
 func TestLyricsService_TranslatesNames(t *testing.T) {
-	provider := &searchtest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
-	svc := searchtest.NewLyrics(t, provider, searchtest.NewNameKeyedCache[domain.DeezerLyrics]())
+	provider := &memory.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
+	svc := memory.NewLyrics(t, provider, memory.NewNameKeyedCache[domain.DeezerLyrics]())
 
 	_, err := svc.Execute(context.Background(), "Hello", "Adele")
 	if err != nil {
@@ -33,9 +33,9 @@ func TestLyricsService_TranslatesNames(t *testing.T) {
 }
 
 func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
-	provider := &searchtest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
-	svc := searchtest.NewLyrics(t, provider, cache)
+	provider := &memory.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
+	cache := memory.NewNameKeyedCache[domain.DeezerLyrics]()
+	svc := memory.NewLyrics(t, provider, cache)
 
 	_, _ = svc.Execute(context.Background(), "Hello", "Adele")
 	if provider.Lookups != 1 || cache.Sets() != 1 {
@@ -49,9 +49,9 @@ func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
 }
 
 func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
-	provider := &searchtest.LyricsProvider{ResolvedID: ""}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
-	svc := searchtest.NewLyrics(t, provider, cache)
+	provider := &memory.LyricsProvider{ResolvedID: ""}
+	cache := memory.NewNameKeyedCache[domain.DeezerLyrics]()
+	svc := memory.NewLyrics(t, provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Nonexistent", "Nobody")
 	if err != nil {
@@ -69,9 +69,9 @@ func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
 }
 
 func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
-	provider := &searchtest.LyricsProvider{ResolvedID: "1", Lyrics: domain.EmptyDeezerLyrics()}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
-	svc := searchtest.NewLyrics(t, provider, cache)
+	provider := &memory.LyricsProvider{ResolvedID: "1", Lyrics: domain.EmptyDeezerLyrics()}
+	cache := memory.NewNameKeyedCache[domain.DeezerLyrics]()
+	svc := memory.NewLyrics(t, provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Instrumental", "Someone")
 	if err != nil {
@@ -86,9 +86,9 @@ func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
 }
 
 func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
-	provider := &searchtest.LyricsProvider{ResolvedID: "1", LookupErr: errors.New("pipe 500")}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
-	svc := searchtest.NewLyrics(t, provider, cache)
+	provider := &memory.LyricsProvider{ResolvedID: "1", LookupErr: errors.New("pipe 500")}
+	cache := memory.NewNameKeyedCache[domain.DeezerLyrics]()
+	svc := memory.NewLyrics(t, provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Hello", "Adele")
 	if !errors.Is(err, domain.ErrEnrichmentDegraded) {
@@ -103,8 +103,8 @@ func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
 }
 
 func TestLyricsService_RefusesAMissingCollaborator(t *testing.T) {
-	provider := &searchtest.LyricsProvider{}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerLyrics]()
+	provider := &memory.LyricsProvider{}
+	cache := memory.NewNameKeyedCache[domain.DeezerLyrics]()
 	tests := []struct {
 		name     string
 		provider ports.LyricsProvider

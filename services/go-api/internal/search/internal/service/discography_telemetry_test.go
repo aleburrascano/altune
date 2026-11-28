@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -61,13 +60,13 @@ func albumsFrom(albums map[domain.ProviderName][]domain.SearchResult) map[domain
 
 func observeDiscography(t *testing.T, albums map[domain.ProviderName][]domain.SearchResult) domain.InteractionEvent {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	known := map[domain.ProviderName]string{}
 	for name := range albums {
 		known[name] = name.String() + "-che"
 	}
 	store := newRecordingEventStore()
-	svc := searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, bg))
+	svc := memory.NewArtistContent(t, albumsFrom(albums), memory.ArtistEvents(store, bg))
 	if _, err := svc.GetAlbums(context.Background(), domain.ProviderSpotify, "abc123", known, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
@@ -100,7 +99,7 @@ func noDiscographyObserverLeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 	}
 	store := newRecordingEventStore()
 
-	observed := fetch(searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, searchtest.NewTracker(t))))
+	observed := fetch(memory.NewArtistContent(t, albumsFrom(albums), memory.ArtistEvents(store, memory.NewTracker(t))))
 	store.next(t)
 	silent, err := service.NewGetArtistContentService(albumsFrom(albums), map[domain.ProviderName]ports.AlbumContentProvider{}, service.SeedPathIdentity{}, service.NoAnchoring{}, service.NoDiscographyObserver{}, service.NewCircuitBreaker(clock.Now))
 	if err != nil {
@@ -187,13 +186,13 @@ func TestDiscographyEmit_ReleasesFromTheIdentityFanOutAreNeverSuspects(t *testin
 
 func discographyEmitLogs(t *testing.T, appendErr error) string {
 	t.Helper()
-	logs := searchtest.CaptureLogs(t)
-	bg := searchtest.NewTracker(t)
-	store := &searchtest.FakeEventStore{Err: appendErr}
+	logs := memory.CaptureLogs(t)
+	bg := memory.NewTracker(t)
+	store := &memory.FakeEventStore{Err: appendErr}
 	albums := map[domain.ProviderName][]domain.SearchResult{
 		domain.ProviderSpotify: {catalogAlbum(domain.ProviderSpotify, "sp-a", "Fully Loaded")},
 	}
-	svc := searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, bg))
+	svc := memory.NewArtistContent(t, albumsFrom(albums), memory.ArtistEvents(store, bg))
 	if _, err := svc.GetAlbums(context.Background(), domain.ProviderSpotify, "abc123", map[domain.ProviderName]string{domain.ProviderSpotify: "sp-che"}, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
@@ -220,9 +219,9 @@ func (s panickingEventStore) Append(context.Context, domain.InteractionEvent) er
 }
 
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	store := panickingEventStore{asked: make(chan struct{})}
-	svc := identityFanOut(t, func(domain.ProviderName) bool { return false }, searchtest.ArtistEvents(store, bg))
+	svc := identityFanOut(t, func(domain.ProviderName) bool { return false }, memory.ArtistEvents(store, bg))
 
 	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
 	if err != nil {
@@ -257,7 +256,7 @@ func assertPayloadInt(t *testing.T, payload map[string]any, key string, want int
 }
 
 func TestNewDiscographyTelemetry_RefusesANilClock(t *testing.T) {
-	_, err := service.NewDiscographyTelemetry(&searchtest.FakeEventStore{}, searchtest.NewTracker(t), nil)
+	_, err := service.NewDiscographyTelemetry(&memory.FakeEventStore{}, memory.NewTracker(t), nil)
 
 	if !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "clock") {
 		t.Errorf("without a clock: err = %v, want artistpage.ErrCollaboratorRequired naming the clock", err)

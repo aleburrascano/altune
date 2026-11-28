@@ -2,8 +2,9 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/searchtest"
+	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -14,8 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	apierror "altune/go-api/internal/shared/apierror"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -35,8 +34,8 @@ func (r erroringFavoritesRepo) ListForUser(context.Context, ids.UserId) ([]domai
 }
 
 func buildFavoritesRouter(t *testing.T, err error) chi.Router {
-	svc := searchtest.NewFavorites(t, erroringFavoritesRepo{err: err})
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Favorites: svc}), time.Now)
+	svc := memory.NewFavorites(t, erroringFavoritesRepo{err: err})
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Favorites: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -132,9 +131,10 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 }
 
 func buildFavoritesLimitedRouter(t *testing.T, limits handler.DiscoveryRateLimits) chi.Router {
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Favorites: searchtest.NewFavorites(t, erroringFavoritesRepo{}),
-	}), time.Now).WithRateLimits(limits)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
+		Favorites:  memory.NewFavorites(t, erroringFavoritesRepo{}),
+		RateLimits: limits,
+	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -155,8 +155,8 @@ func TestFavoritesRateLimit_WritesShareOneBudgetThenReject(t *testing.T) {
 }
 
 func TestFavoritesRateLimit_DefaultBudgetThenRejects(t *testing.T) {
-	router := buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Favorites: searchtest.NewFavorites(t, erroringFavoritesRepo{}),
+	router := buildFrozenDefaultLimitsRouter(memory.CompleteServices(t, handler.DiscoveryServices{
+		Favorites: memory.NewFavorites(t, erroringFavoritesRepo{}),
 	}))
 	const body = `{"kind":"album","title":"DAMN.","subtitle":"Kendrick Lamar"}`
 

@@ -1,4 +1,4 @@
-package searchtest
+package memory
 
 import (
 	"altune/go-api/internal/search/internal/domain"
@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
-	"testing"
 )
 
 type artistContentParts struct {
@@ -40,7 +39,7 @@ func ArtistBreaker(breaker *service.CircuitBreaker) ArtistContentPart {
 	return func(p *artistContentParts) { p.breaker = breaker }
 }
 
-func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.ArtistContentProvider, parts ...ArtistContentPart) *service.GetArtistContentService {
+func NewArtistContent(t TB, providers map[domain.ProviderName]ports.ArtistContentProvider, parts ...ArtistContentPart) *service.GetArtistContentService {
 	t.Helper()
 	p := artistContentParts{breaker: service.NewCircuitBreaker(clock.Now), tracklists: map[domain.ProviderName]ports.AlbumContentProvider{}}
 	for _, part := range parts {
@@ -97,7 +96,7 @@ func AlbumBreaker(breaker *service.CircuitBreaker) AlbumTracksPart {
 	return func(p *albumTracksParts) { p.breaker = breaker }
 }
 
-func NewAlbumTracks(t testing.TB, providers map[domain.ProviderName]ports.AlbumContentProvider, parts ...AlbumTracksPart) *service.GetAlbumTracksService {
+func NewAlbumTracks(t TB, providers map[domain.ProviderName]ports.AlbumContentProvider, parts ...AlbumTracksPart) *service.GetAlbumTracksService {
 	t.Helper()
 	p := albumTracksParts{breaker: service.NewCircuitBreaker(clock.Now)}
 	for _, part := range parts {
@@ -126,7 +125,7 @@ func NewAlbumTracks(t testing.TB, providers map[domain.ProviderName]ports.AlbumC
 	return svc
 }
 
-func NewFeaturedResolver(t testing.TB, mb service.MBFeaturedSearcher, deezer service.DeezerFeaturedLookup) *service.FeaturedArtistResolver {
+func NewFeaturedResolver(t TB, mb service.MBFeaturedSearcher, deezer service.DeezerFeaturedLookup) *service.FeaturedArtistResolver {
 	t.Helper()
 	resolver, err := service.NewFeaturedArtistResolver(mb, deezer)
 	if err != nil {

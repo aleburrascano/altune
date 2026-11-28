@@ -15,6 +15,7 @@ type EventRepoUnderTest interface {
 	ports.EventStore
 	NoResultSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error)
 	NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error)
+	AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error)
 	NewUser(t *testing.T) ids.UserId
 }
 
@@ -29,6 +30,12 @@ func EventRepoContract(t *testing.T, newRepo func(t *testing.T) EventRepoUnderTe
 		"an event appended twice under one id is counted once":          contractEventIdIsIdempotent,
 		"a found search nobody clicked is reported":                     contractUnclickedSearchIsReported,
 		"a found search with a click on it is not reported":             contractClickedSearchIsNotReported,
+
+		"an unclicked search followed by an unrelated search inside the minute is abandoned": contractUnclickedSearchFollowedByAnotherIsAbandoned,
+		"a follow-up 59 seconds later counts and one 61 seconds later does not":              contractAbandonedFollowUpWindowIsSixtySeconds,
+		"a clicked search is not abandoned":                                                  contractClickedSearchIsNotAbandoned,
+		"a follow-up that only keeps typing the query is not abandonment":                    contractRefinedQueryIsNotAbandonment,
+		"a follow-up by another user is not abandonment":                                     contractOtherUsersSearchIsNotAbandonment,
 	}
 	for name, contract := range contracts {
 		t.Run(name, func(t *testing.T) { contract(t, newRepo(t)) })
@@ -164,5 +171,89 @@ func contractClickedSearchIsNotReported(t *testing.T, r EventRepoUnderTest) {
 
 	if got := countsFor(t, counts, err, query); len(got) != 0 {
 		t.Errorf("counts = %v, want %s absent once clicked", got, query)
+	}
+}
+
+const (
+	abandonedSearchAge  = 10 * time.Minute
+	unrelatedFollowUp   = 30 * time.Second
+	insideFollowUpGap   = 59 * time.Second
+	outsideFollowUpGap  = 61 * time.Second
+	clickAfterSearchGap = 5 * time.Second
+	keepTypingGap       = 2 * time.Second
+	otherUserFollowUp   = 10 * time.Second
+)
+
+func abandonedStart() time.Time { return time.Now().Add(-abandonedSearchAge) }
+
+func abandonedCounts(t *testing.T, r EventRepoUnderTest, queries ...string) map[string]int {
+	t.Helper()
+	counts, err := r.AbandonedSearches(t.Context(), eventWindow(), eventQueryLimit)
+	return countsFor(t, counts, err, queries...)
+}
+
+func contractUnclickedSearchFollowedByAnotherIsAbandoned(t *testing.T, r EventRepoUnderTest) {
+	user, first, next, at := r.NewUser(t), uniqueQuery(), uniqueQuery(), abandonedStart()
+	appendEventOrFail(t, r, searchEvent(user, first, false, at))
+	appendEventOrFail(t, r, searchEvent(user, next, false, at.Add(unrelatedFollowUp)))
+
+	if got := abandonedCounts(t, r, first, next); got[first] != 1 || len(got) != 1 {
+		t.Errorf("counts = %v, want only %s abandoned, once", got, first)
+	}
+}
+
+func contractAbandonedFollowUpWindowIsSixtySeconds(t *testing.T, r EventRepoUnderTest) {
+	at := abandonedStart()
+	inside, outside := uniqueQuery(), uniqueQuery()
+	for query, gap := range map[string]time.Duration{inside: insideFollowUpGap, outside: outsideFollowUpGap} {
+		user := r.NewUser(t)
+		appendEventOrFail(t, r, searchEvent(user, query, false, at))
+		appendEventOrFail(t, r, searchEvent(user, uniqueQuery(), false, at.Add(gap)))
+	}
+
+	got := abandonedCounts(t, r, inside, outside)
+
+	if got[inside] != 1 {
+		t.Errorf("counts = %v, want %s abandoned at 59s", got, inside)
+	}
+	if _, present := got[outside]; present {
+		t.Errorf("counts = %v, want %s absent at 61s", got, outside)
+	}
+}
+
+func contractClickedSearchIsNotAbandoned(t *testing.T, r EventRepoUnderTest) {
+	user, query, at := r.NewUser(t), uniqueQuery(), abandonedStart()
+	search := searchEvent(user, query, false, at)
+	appendEventOrFail(t, r, search)
+	appendEventOrFail(t, r, domain.InteractionEvent{
+		UserId:     user,
+		Type:       domain.InteractionTypeResultClicked,
+		SearchId:   search.SearchId,
+		OccurredAt: at.Add(clickAfterSearchGap),
+	})
+	appendEventOrFail(t, r, searchEvent(user, uniqueQuery(), false, at.Add(unrelatedFollowUp)))
+
+	if got := abandonedCounts(t, r, query); len(got) != 0 {
+		t.Errorf("counts = %v, want %s absent once clicked", got, query)
+	}
+}
+
+func contractRefinedQueryIsNotAbandonment(t *testing.T, r EventRepoUnderTest) {
+	user, query, at := r.NewUser(t), uniqueQuery(), abandonedStart()
+	appendEventOrFail(t, r, searchEvent(user, query, false, at))
+	appendEventOrFail(t, r, searchEvent(user, query+"-more", false, at.Add(keepTypingGap)))
+
+	if got := abandonedCounts(t, r, query); len(got) != 0 {
+		t.Errorf("counts = %v, want %s absent when the next search only extends it", got, query)
+	}
+}
+
+func contractOtherUsersSearchIsNotAbandonment(t *testing.T, r EventRepoUnderTest) {
+	query, at := uniqueQuery(), abandonedStart()
+	appendEventOrFail(t, r, searchEvent(r.NewUser(t), query, false, at))
+	appendEventOrFail(t, r, searchEvent(r.NewUser(t), uniqueQuery(), false, at.Add(otherUserFollowUp)))
+
+	if got := abandonedCounts(t, r, query); len(got) != 0 {
+		t.Errorf("counts = %v, want %s absent when only another user searched next", got, query)
 	}
 }

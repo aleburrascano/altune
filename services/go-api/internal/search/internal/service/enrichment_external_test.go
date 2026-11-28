@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/coverartarchive"
 	"altune/go-api/internal/search/internal/adapters/discogs"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"context"
 	"net/http"
@@ -80,7 +81,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 	}))
 	defer srv.Close()
 	caa := coverartarchive.NewCoverArtArchiveResolver(serverClient(srv.URL, false))
-	chain := artworkfallback.NewChainedArtworkLookup(caa).WithIdentityLookups(coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{coverartarchive.NewCoverArtArchiveIdentityResolver(caa)}, caa)
 	enrichment := domain.EmptyEnrichment()
 	enrichment.MBID, enrichment.Genres, enrichment.Year = "mbid-1", []string{"hip hop"}, 2017
 	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), service.NoDetailsMBIDIndex{})
@@ -104,7 +105,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 	}))
 	defer srv.Close()
 	discogsLookup := discogs.NewDiscogsAdapter(serverClient(srv.URL, true), "test-token", "altune-test/1.0")
-	chain := artworkfallback.NewChainedArtworkLookup().WithIdentityLookups(discogsLookup)
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{discogsLookup})
 	enrichment := domain.EmptyEnrichment()
 	enrichment.MBID = "mbid-artist-1"
 	enrichment.ExternalIDs = map[domain.ProviderKey]string{"discogs": "38"}

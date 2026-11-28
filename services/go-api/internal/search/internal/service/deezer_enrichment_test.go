@@ -1,10 +1,10 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"strings"
@@ -20,8 +20,8 @@ func sampleDeezerTrackEnrichment() domain.DeezerEnrichment {
 }
 
 func TestDeezerEnrichmentService_TrackTranslatesNames(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: "1109731", Enrichment: sampleDeezerTrackEnrichment()}
-	svc := searchtest.NewDeezerEnrichment(t, enricher, searchtest.NewNameKeyedCache[domain.DeezerEnrichment]())
+	enricher := &memory.DeezerEnricher{ResolvedID: "1109731", Enrichment: sampleDeezerTrackEnrichment()}
+	svc := memory.NewDeezerEnrichment(t, enricher, memory.NewNameKeyedCache[domain.DeezerEnrichment]())
 
 	_, err := svc.Execute(context.Background(), domain.ResultKindTrack, "Lose Yourself", "Eminem")
 	if err != nil {
@@ -33,8 +33,8 @@ func TestDeezerEnrichmentService_TrackTranslatesNames(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_ArtistKindReturnsEmpty(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: "27", Enrichment: sampleDeezerTrackEnrichment()}
-	svc := searchtest.NewDeezerEnrichment(t, enricher, searchtest.NewNameKeyedCache[domain.DeezerEnrichment]())
+	enricher := &memory.DeezerEnricher{ResolvedID: "27", Enrichment: sampleDeezerTrackEnrichment()}
+	svc := memory.NewDeezerEnrichment(t, enricher, memory.NewNameKeyedCache[domain.DeezerEnrichment]())
 
 	e, err := svc.Execute(context.Background(), domain.ResultKindArtist, "Daft Punk", "")
 	if err != nil {
@@ -49,9 +49,9 @@ func TestDeezerEnrichmentService_ArtistKindReturnsEmpty(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_CacheHitShortCircuits(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: "1109731", Enrichment: sampleDeezerTrackEnrichment()}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerEnrichment]()
-	svc := searchtest.NewDeezerEnrichment(t, enricher, cache)
+	enricher := &memory.DeezerEnricher{ResolvedID: "1109731", Enrichment: sampleDeezerTrackEnrichment()}
+	cache := memory.NewNameKeyedCache[domain.DeezerEnrichment]()
+	svc := memory.NewDeezerEnrichment(t, enricher, cache)
 
 	_, _ = svc.Execute(context.Background(), domain.ResultKindTrack, "Lose Yourself", "Eminem")
 	if enricher.Lookups != 1 || cache.Sets() != 1 {
@@ -65,9 +65,9 @@ func TestDeezerEnrichmentService_CacheHitShortCircuits(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_UnresolvedCachedNegative(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: ""}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerEnrichment]()
-	svc := searchtest.NewDeezerEnrichment(t, enricher, cache)
+	enricher := &memory.DeezerEnricher{ResolvedID: ""}
+	cache := memory.NewNameKeyedCache[domain.DeezerEnrichment]()
+	svc := memory.NewDeezerEnrichment(t, enricher, cache)
 
 	e, err := svc.Execute(context.Background(), domain.ResultKindTrack, "Nonexistent", "Nobody")
 	if err != nil {
@@ -85,9 +85,9 @@ func TestDeezerEnrichmentService_UnresolvedCachedNegative(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_ResolveErrorDegradesToEmpty(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolveErr: errors.New("boom")}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerEnrichment]()
-	svc := searchtest.NewDeezerEnrichment(t, enricher, cache)
+	enricher := &memory.DeezerEnricher{ResolveErr: errors.New("boom")}
+	cache := memory.NewNameKeyedCache[domain.DeezerEnrichment]()
+	svc := memory.NewDeezerEnrichment(t, enricher, cache)
 
 	e, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk")
 	if !errors.Is(err, domain.ErrEnrichmentDegraded) {
@@ -102,8 +102,8 @@ func TestDeezerEnrichmentService_ResolveErrorDegradesToEmpty(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_RefusesAMissingCollaborator(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerEnrichment]()
+	enricher := &memory.DeezerEnricher{}
+	cache := memory.NewNameKeyedCache[domain.DeezerEnrichment]()
 	tests := []struct {
 		name     string
 		enricher ports.DeezerEnricher
@@ -125,8 +125,8 @@ func TestDeezerEnrichmentService_RefusesAMissingCollaborator(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_AnAbsentCacheStillResolves(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
-	svc := searchtest.NewDeezerEnrichment(t, enricher, service.NoNameKeyedCache[domain.DeezerEnrichment]{})
+	enricher := &memory.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
+	svc := memory.NewDeezerEnrichment(t, enricher, service.NoNameKeyedCache[domain.DeezerEnrichment]{})
 
 	e, err := svc.Execute(context.Background(), domain.ResultKindTrack, "Lose Yourself", "Eminem")
 
@@ -136,9 +136,9 @@ func TestDeezerEnrichmentService_AnAbsentCacheStillResolves(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_SymbolOnlyNamesRunUncached(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerEnrichment]()
-	svc := searchtest.NewDeezerEnrichment(t, enricher, cache)
+	enricher := &memory.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
+	cache := memory.NewNameKeyedCache[domain.DeezerEnrichment]()
+	svc := memory.NewDeezerEnrichment(t, enricher, cache)
 
 	for range 2 {
 		if _, err := svc.Execute(context.Background(), domain.ResultKindTrack, "!!!", "!!!"); err != nil {
@@ -155,9 +155,9 @@ func TestDeezerEnrichmentService_SymbolOnlyNamesRunUncached(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_CacheKeyDistinguishesSplitsOfTheSameWords(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerEnrichment]()
-	svc := searchtest.NewDeezerEnrichment(t, enricher, cache)
+	enricher := &memory.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
+	cache := memory.NewNameKeyedCache[domain.DeezerEnrichment]()
+	svc := memory.NewDeezerEnrichment(t, enricher, cache)
 
 	_, _ = svc.Execute(context.Background(), domain.ResultKindTrack, "C", "A B")
 	_, _ = svc.Execute(context.Background(), domain.ResultKindTrack, "B C", "A")
@@ -168,9 +168,9 @@ func TestDeezerEnrichmentService_CacheKeyDistinguishesSplitsOfTheSameWords(t *te
 }
 
 func TestDeezerEnrichmentService_CacheKeyPartitionsByKind(t *testing.T) {
-	enricher := &searchtest.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
-	cache := searchtest.NewNameKeyedCache[domain.DeezerEnrichment]()
-	svc := searchtest.NewDeezerEnrichment(t, enricher, cache)
+	enricher := &memory.DeezerEnricher{ResolvedID: "1", Enrichment: sampleDeezerTrackEnrichment()}
+	cache := memory.NewNameKeyedCache[domain.DeezerEnrichment]()
+	svc := memory.NewDeezerEnrichment(t, enricher, cache)
 
 	_, _ = svc.Execute(context.Background(), domain.ResultKindTrack, "One More Time", "Daft Punk")
 	_, _ = svc.Execute(context.Background(), domain.ResultKindAlbum, "One More Time", "Daft Punk")

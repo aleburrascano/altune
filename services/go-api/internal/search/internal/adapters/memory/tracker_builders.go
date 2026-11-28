@@ -1,11 +1,10 @@
-package searchtest
+package memory
 
 import (
 	"altune/go-api/internal/shared/background"
-	"testing"
 )
 
-func NewTracker(t testing.TB) *background.Tracker {
+func NewTracker(t TB) *background.Tracker {
 	t.Helper()
 	bg := &background.Tracker{}
 	t.Cleanup(bg.Wait)

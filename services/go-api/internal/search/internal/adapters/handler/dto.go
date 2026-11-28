@@ -97,6 +97,22 @@ type SuggestResponse struct {
 
 const addedExtraFields = 9
 
+type collapsedArtistDTO struct {
+	Title    string                `json:"title"`
+	Subtitle string                `json:"subtitle"`
+	ImageURL string                `json:"image_url,omitempty"`
+	Sources  []domain.ProviderLink `json:"sources"`
+	Extras   map[string]any        `json:"extras"`
+}
+
+func collapsedArtistsToDTO(collapsed []domain.CollapsedArtistSummary) []collapsedArtistDTO {
+	out := make([]collapsedArtistDTO, len(collapsed))
+	for i, c := range collapsed {
+		out[i] = collapsedArtistDTO{Title: c.Title, Subtitle: c.Subtitle, ImageURL: c.ImageURL, Sources: c.Sources, Extras: c.Extras}
+	}
+	return out
+}
+
 func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	sources := make([]SourceRefDTO, len(sr.Sources))
 	for i, s := range sr.Sources {
@@ -109,6 +125,9 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	extras := make(map[string]any, len(sr.Extras)+addedExtraFields)
 	for k, v := range sr.Extras {
 		extras[k] = v
+	}
+	if collapsed, ok := extras[domain.ExtraCollapsedArtists].([]domain.CollapsedArtistSummary); ok {
+		extras[domain.ExtraCollapsedArtists] = collapsedArtistsToDTO(collapsed)
 	}
 	domain.PutTypedExtras(extras, sr)
 	if _, set := extras[domain.ExtraAlbum]; !set && sr.Album != "" {

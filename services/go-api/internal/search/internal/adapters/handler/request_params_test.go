@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"net/http"
 	"net/url"
@@ -23,7 +22,7 @@ const radioheadMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 
 func paramValidationRouter(t *testing.T) chi.Router {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	albumProviders := map[domain.ProviderName]ports.AlbumContentProvider{
 		domain.ProviderDeezer: &memory.AlbumContentProvider{Results: seedTracks(3)},
 	}
@@ -31,12 +30,12 @@ func paramValidationRouter(t *testing.T) chi.Router {
 		domain.ProviderDeezer: &memory.ArtistContentProvider{Albums: seedTracks(3)},
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search:       searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{&fakeSearchProvider{name: domain.ProviderDeezer}}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.History = historyRepo }),
-		History:      searchtest.NewListHistory(t, historyRepo),
-		ClearHistory: searchtest.NewClearHistory(t, historyRepo),
-		Album:        searchtest.NewAlbumTracks(t, albumProviders),
-		Artist:       searchtest.NewArtistContent(t, artistProviders),
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
+		Search:       memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{&fakeSearchProvider{name: domain.ProviderDeezer}}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.History = historyRepo }),
+		History:      memory.NewListHistory(t, historyRepo),
+		ClearHistory: memory.NewClearHistory(t, historyRepo),
+		Album:        memory.NewAlbumTracks(t, albumProviders),
+		Artist:       memory.NewArtistContent(t, artistProviders),
 		Enrich:       mustEnrichment(service.NewEnrichmentService(&fakeMetadataEnricher{}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{})),
 	}), time.Now)
 	r := chi.NewRouter()

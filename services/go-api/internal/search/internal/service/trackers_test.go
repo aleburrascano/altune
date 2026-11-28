@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
@@ -28,7 +27,7 @@ func listWith(t *testing.T, genius *memory.GeniusSongCatalog, trackers *memory.T
 	if cache == nil {
 		cache = service.NoUnreleasedCache{}
 	}
-	svc := searchtest.MustUnreleased(service.NewUnreleasedService(geniusPort(genius), &searchtest.ArtistCatalogTitles{}, cachedConfig, searchtest.UnreleasedWiring(t, cache, searchtest.UnreleasedTrackers(trackers))))
+	svc := memory.MustUnreleased(service.NewUnreleasedService(geniusPort(genius), &memory.ArtistCatalogTitles{}, cachedConfig, memory.UnreleasedWiring(t, cache, memory.UnreleasedTrackers(trackers))))
 	return svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
 }
 
@@ -80,7 +79,7 @@ func TestService_List_TrackerSongsDoNotUseUpDetailLookups(t *testing.T) {
 
 func TestService_List_ReleasedTrackerSongIsHidden(t *testing.T) {
 	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Magnolia", "magnolia"), trackerSong("Dream [V2]", "dreamv2a")}}
-	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{Titles: []string{"Magnolia"}}, cachedConfig, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+	svc := memory.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &memory.ArtistCatalogTitles{Titles: []string{"Magnolia"}}, cachedConfig, memory.UnreleasedWiring(t, service.NoUnreleasedCache{}, memory.UnreleasedTrackers(trackers))))
 	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
 		t.Errorf("got %v, err %v, want only the unreleased tracker song", titlesOf(got), err)
@@ -96,7 +95,7 @@ func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
 		domain.UnreleasedVersion{Title: "Sports Car", Quality: "Lossless"},
 		domain.UnreleasedVersion{Title: "Sports Car [V3]", Label: "V3", Quality: "High Quality"})
 	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{sportsCar, trackerSong("Magnolia", "magnolia")}}
-	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, cachedConfig, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+	svc := memory.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &memory.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, cachedConfig, memory.UnreleasedWiring(t, service.NoUnreleasedCache{}, memory.UnreleasedTrackers(trackers))))
 	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || len(got) != 1 || got[0].Title != "Sports Car" {
 		t.Fatalf("got %v, err %v, want only Sports Car", titlesOf(got), err)
@@ -110,7 +109,7 @@ func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
 func TestService_List_CatalogMatchDropsASongWhoseVersionsAreAllUntagged(t *testing.T) {
 	song := versionedTrackerSong("Sports Car", domain.UnreleasedVersion{Title: "Sports Car"})
 	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{song}}
-	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{Titles: []string{"Sports Car"}}, cachedConfig, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+	svc := memory.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &memory.ArtistCatalogTitles{Titles: []string{"Sports Car"}}, cachedConfig, memory.UnreleasedWiring(t, service.NoUnreleasedCache{}, memory.UnreleasedTrackers(trackers))))
 	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || len(got) != 0 {
 		t.Errorf("got %v, err %v, want nothing", titlesOf(got), err)
@@ -186,7 +185,7 @@ func TestService_List_CancelledJobIsAnErrorEvenWithTrackerSongs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
-	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{}, cachedConfig, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+	svc := memory.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &memory.ArtistCatalogTitles{}, cachedConfig, memory.UnreleasedWiring(t, service.NoUnreleasedCache{}, memory.UnreleasedTrackers(trackers))))
 	if _, err := svc.List(ctx, domain.ProviderDeezer, "1", "Ken Carson", nil); !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}

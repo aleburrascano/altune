@@ -1,9 +1,9 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
@@ -18,7 +18,7 @@ func countingFetch(calls *int, value string, found bool, err error) func(context
 }
 
 func TestCachedLookup_PositiveHitSkipsLoader(t *testing.T) {
-	cache := searchtest.NewNameKeyedCache[string]()
+	cache := memory.NewNameKeyedCache[string]()
 	cache.Seed("daft punk", "cached")
 	calls := 0
 
@@ -35,7 +35,7 @@ func TestCachedLookup_PositiveHitSkipsLoader(t *testing.T) {
 }
 
 func TestCachedLookup_NegativeHitReturnsEmptyWithoutLoader(t *testing.T) {
-	cache := searchtest.NewNameKeyedCache[string]()
+	cache := memory.NewNameKeyedCache[string]()
 	cache.SeedNegative("nobody")
 	calls := 0
 
@@ -52,7 +52,7 @@ func TestCachedLookup_NegativeHitReturnsEmptyWithoutLoader(t *testing.T) {
 }
 
 func TestCachedLookup_LoaderHitIsPositiveCached(t *testing.T) {
-	cache := searchtest.NewNameKeyedCache[string]()
+	cache := memory.NewNameKeyedCache[string]()
 	calls := 0
 	fetch := countingFetch(&calls, "fresh", true, nil)
 
@@ -71,7 +71,7 @@ func TestCachedLookup_LoaderHitIsPositiveCached(t *testing.T) {
 }
 
 func TestCachedLookup_DefinitiveMissIsNegativeCached(t *testing.T) {
-	cache := searchtest.NewNameKeyedCache[string]()
+	cache := memory.NewNameKeyedCache[string]()
 	calls := 0
 	fetch := countingFetch(&calls, "", false, nil)
 
@@ -90,7 +90,7 @@ func TestCachedLookup_DefinitiveMissIsNegativeCached(t *testing.T) {
 }
 
 func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
-	cache := searchtest.NewNameKeyedCache[string]()
+	cache := memory.NewNameKeyedCache[string]()
 	calls := 0
 	fetch := countingFetch(&calls, "", false, errors.New("network down"))
 
@@ -112,7 +112,7 @@ func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
 }
 
 func TestCachedLookup_EmptyNameKeyRunsUncached(t *testing.T) {
-	cache := searchtest.NewNameKeyedCache[string]()
+	cache := memory.NewNameKeyedCache[string]()
 	cache.Seed("", "another symbol-only track's data")
 	calls := 0
 
@@ -146,7 +146,7 @@ func TestCachedLookup_AnAbsentCacheRunsUncached(t *testing.T) {
 }
 
 type failingNegativeCache struct {
-	*searchtest.NameKeyedCache[string]
+	*memory.NameKeyedCache[string]
 }
 
 func (failingNegativeCache) GetNegative(context.Context, string) (bool, error) {
@@ -154,7 +154,7 @@ func (failingNegativeCache) GetNegative(context.Context, string) (bool, error) {
 }
 
 func TestCachedLookup_ErroringGetNegativeStillFallsThroughToFetch(t *testing.T) {
-	cache := &failingNegativeCache{searchtest.NewNameKeyedCache[string]()}
+	cache := &failingNegativeCache{memory.NewNameKeyedCache[string]()}
 	calls := 0
 
 	got, err := service.CachedLookup(context.Background(), cache, "daft punk", "", countingFetch(&calls, "fresh", true, nil))
@@ -167,7 +167,7 @@ func TestCachedLookup_ErroringGetNegativeStillFallsThroughToFetch(t *testing.T) 
 }
 
 type failingSetCache struct {
-	*searchtest.NameKeyedCache[string]
+	*memory.NameKeyedCache[string]
 }
 
 func (failingSetCache) Set(context.Context, string, string) error {
@@ -190,7 +190,7 @@ func TestCachedLookup_AFailedCacheWriteStillAnswersAndIsLogged(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ring := logging.CaptureRing(t, "info")
-			cache := &failingSetCache{searchtest.NewNameKeyedCache[string]()}
+			cache := &failingSetCache{memory.NewNameKeyedCache[string]()}
 			calls := 0
 
 			if _, err := service.CachedLookup(context.Background(), cache, "daft punk", "", countingFetch(&calls, "fresh", tc.found, nil)); err != nil {

@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/jsoncontract"
 	"encoding/json"
 	"net/http"
@@ -21,7 +20,7 @@ import (
 
 func wireRouter(t *testing.T, services handler.DiscoveryServices) chi.Router {
 	t.Helper()
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, services), time.Now)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, services), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -88,7 +87,7 @@ func TestWire_DiscoveryFavorites(t *testing.T) {
 	repo := &memory.FakeFavoritesRepo{Favorites: []domain.Favorite{
 		{Kind: domain.ResultKindAlbum, Key: "album|damn.|kendrick lamar", Title: "DAMN.", Subtitle: "Kendrick Lamar", ImageURL: "https://img.example/damn.jpg"},
 	}}
-	router := wireRouter(t, handler.DiscoveryServices{Favorites: searchtest.NewFavorites(t, repo)})
+	router := wireRouter(t, handler.DiscoveryServices{Favorites: memory.NewFavorites(t, repo)})
 	request := map[string]any{"kind": "album", "title": "DAMN.", "subtitle": "Kendrick Lamar", "image_url": "https://img.example/damn.jpg"}
 
 	wireGet(t, router, "/discovery/favorites", "search_favorites")
@@ -111,7 +110,7 @@ func TestWire_DiscoveryDeezerEnrichment(t *testing.T) {
 	e.Genres = []string{"hip hop"}
 	e.UPC = "0602557"
 	e.RecordType = "album"
-	svc := searchtest.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, service.NoNameKeyedCache[domain.DeezerEnrichment]{})
+	svc := memory.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, service.NoNameKeyedCache[domain.DeezerEnrichment]{})
 	router := wireRouter(t, handler.DiscoveryServices{Enrichers: handler.DetailEnrichers{Deezer: svc}})
 
 	wireGet(t, router, "/discovery/enrichment/deezer?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", "search_enrichment_deezer")
@@ -123,7 +122,7 @@ func TestWire_DiscoveryLyrics(t *testing.T) {
 	l.SyncedLines = []domain.SyncedLyricLine{{Timecode: "[00:12.30]", Line: "I never sleep", Milliseconds: 12300, Duration: 2100}}
 	l.Writers = []string{"Nasir Jones"}
 	l.Copyright = "1994 Columbia"
-	svc := searchtest.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, service.NoNameKeyedCache[domain.DeezerLyrics]{})
+	svc := memory.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, service.NoNameKeyedCache[domain.DeezerLyrics]{})
 	router := wireRouter(t, handler.DiscoveryServices{Enrichers: handler.DetailEnrichers{Lyrics: svc}})
 
 	wireGet(t, router, "/discovery/lyrics?title=N.Y.+State+of+Mind&subtitle=Nas", "search_lyrics")
@@ -134,7 +133,7 @@ func TestWire_DiscoveryAlbumTracks(t *testing.T) {
 		wireResult(domain.ResultKindTrack, "DNA.", "Kendrick Lamar", "t1"),
 		wireResult(domain.ResultKindTrack, "HUMBLE.", "Kendrick Lamar", "t2"),
 	}}
-	svc := searchtest.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: provider})
+	svc := memory.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: provider})
 	router := wireRouter(t, handler.DiscoveryServices{Album: svc})
 
 	wireGet(t, router, "/discovery/albums/deezer/d1/tracks", "search_album_tracks")
@@ -144,7 +143,7 @@ func TestWire_DiscoveryRelatedTracks(t *testing.T) {
 	provider := &fakeRelatedTracksProvider{results: []domain.SearchResult{
 		wireResult(domain.ResultKindTrack, "Similar", "Someone", "t9"),
 	}}
-	svc := searchtest.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{"soundcloud": provider})
+	svc := memory.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{"soundcloud": provider})
 	router := wireRouter(t, handler.DiscoveryServices{Related: svc})
 
 	wireGet(t, router, "/discovery/tracks/soundcloud/1/related", "search_related_tracks")
@@ -155,7 +154,7 @@ func TestWire_DiscoveryArtistContent(t *testing.T) {
 		TopTracks: []domain.SearchResult{wireResult(domain.ResultKindTrack, "Alright", "Kendrick Lamar", "t1")},
 		Albums:    []domain.SearchResult{wireResult(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "a1")},
 	}
-	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: provider})
+	svc := memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: provider})
 	router := wireRouter(t, handler.DiscoveryServices{Artist: svc})
 
 	wireGet(t, router, "/discovery/artists/deezer/1/content", "search_artist_content")
@@ -172,7 +171,7 @@ func TestWire_DiscoveryUnreleased(t *testing.T) {
 	router := unreleasedRouter(t, genius, nil)
 	wireGet(t, router, "/discovery/artists/deezer/1/unreleased?name=Playboi+Carti", "search_artist_unreleased")
 
-	store := &searchtest.UnreleasedStore{Hits: []ports.UnreleasedHit{
+	store := &memory.UnreleasedStore{Hits: []ports.UnreleasedHit{
 		{Artist: ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "42"}, ArtistName: "Playboi Carti", Song: domain.UnreleasedSong{GeniusID: 1, Title: "Cancun", Quality: "lossless"}},
 	}}
 	wireGet(t, unreleasedSearchRouter(t, store), "/discovery/unreleased/search?q=cancun", "search_unreleased_search")

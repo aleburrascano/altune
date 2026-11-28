@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"slices"
@@ -46,11 +45,11 @@ func topTrackLookups(t *testing.T, store ports.IdentityStore, known map[domain.P
 			return nil, nil
 		}}
 	}
-	var opts []searchtest.ArtistContentPart
+	var opts []memory.ArtistContentPart
 	if store != nil {
-		opts = append(opts, searchtest.ArtistIdentities(store))
+		opts = append(opts, memory.ArtistIdentities(store))
 	}
-	svc := searchtest.NewArtistContent(t, providers, opts...)
+	svc := memory.NewArtistContent(t, providers, opts...)
 	if _, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "deezer-che", known, 10); err != nil {
 		t.Fatalf("GetTopTracks: %v", err)
 	}

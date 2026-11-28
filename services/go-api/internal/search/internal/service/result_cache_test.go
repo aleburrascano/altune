@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -15,10 +14,10 @@ import (
 )
 
 func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.CountingProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	cache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ResultCache = cache })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ResultCache = cache })
 
 	out1 := runSearch(t, svc, "humble")
 	if p.Calls != 1 {
@@ -41,7 +40,7 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 }
 
 func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.QueryFakeProvider{
 		Provider: domain.ProviderDeezer,
 		ResultsByQuery: map[string][]domain.SearchResult{
@@ -50,7 +49,7 @@ func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
 		},
 	}
 	cache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ResultCache = cache })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ResultCache = cache })
 
 	out1 := runSearch(t, svc, "!!!")
 	out2 := runSearch(t, svc, "†††")
@@ -67,11 +66,11 @@ func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
 }
 
 func TestService_ResultCache_PartialNotCached(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	good := &memory.CountingProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &memory.CountingProvider{Provider: domain.ProviderITunes, Err: errors.New("boom")}
 	cache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{good, bad}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ResultCache = cache })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{good, bad}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ResultCache = cache })
 
 	out := runSearch(t, svc, "humble")
 	if !out.Partial {
@@ -107,9 +106,9 @@ func (c *fakeProviderCache) Set(_ context.Context, provider domain.ProviderName,
 }
 
 func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.CountingProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	out := runSearch(t, svc, "humble")
@@ -126,10 +125,10 @@ func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
 }
 
 func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	good := &memory.CountingProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &memory.CountingProvider{Provider: domain.ProviderITunes, Err: errors.New("boom")}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{good, bad}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{good, bad}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	runSearch(t, svc, "humble")
@@ -143,9 +142,9 @@ func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
 }
 
 func TestService_ProviderCache_EmptyAnswerIsCached(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.CountingProvider{Provider: domain.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "qwzxv")
 	runSearch(t, svc, "qwzxv")
@@ -156,10 +155,10 @@ func TestService_ProviderCache_EmptyAnswerIsCached(t *testing.T) {
 }
 
 func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.CountingProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	breaker := service.NewCircuitBreaker(clock.Now)
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, breaker, func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, breaker, func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	openBreaker(t, breaker, domain.ProviderDeezer)
@@ -172,9 +171,9 @@ func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
 }
 
 func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.CountingProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	runSearch(t, svc, "  HUMBLE ")
@@ -193,10 +192,10 @@ func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
 }
 
 func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.CountingProvider{Provider: domain.ProviderDeezer}
 	cache := newFakeProviderCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = cache })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = cache })
 
 	runSearch(t, svc, "!!!")
 	runSearch(t, svc, "†††")
@@ -207,9 +206,9 @@ func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
 }
 
 func TestInspectSearch_BypassesProviderCache(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.CountingProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	q, err := domain.NewSearchQuery("humble", domain.AllKinds(), 10)

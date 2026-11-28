@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -19,10 +18,10 @@ import (
 )
 
 func TestService_EmitsSearchTelemetryV2(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	store := &memory.FakeEventStore{}
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
 
 	runSearch(t, svc, "humble")
 	bg.Wait()
@@ -53,10 +52,10 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 }
 
 func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	store := &memory.FakeEventStore{}
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
 
 	runSearch(t, svc, "humble")
 	bg.Wait()
@@ -79,10 +78,10 @@ func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
 }
 
 func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	store := &memory.FakeEventStore{Err: errors.New("db down")}
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
 
 	out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
 	bg.Wait()
@@ -96,22 +95,22 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 }
 
 func TestService_NoEventStoreNoEmit(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchService(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now))
+	svc := memory.NewSearchService(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now))
 	runSearch(t, svc, "humble")
 	bg.Wait()
 }
 
 func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	store := &memory.FakeEventStore{}
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{
 		memory.DeezerTrack("Humble", "Kendrick Lamar", 80),
 		memory.DeezerTrack("Humble Pie", "Other Artist", 60),
 		memory.DeezerTrack("Humble Beginnings", "Third Artist", 40),
 	}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
 	q, err := domain.NewSearchQuery("humble", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -154,10 +153,10 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 }
 
 func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	store := &memory.FakeEventStore{Err: errors.New("db down")}
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
 	user := memory.NewUser()
 	ring := memory.CaptureDetachedLogs(t)
 
@@ -184,9 +183,9 @@ func TestService_SearchRecordsAStageSpanAndAProviderSpanUnderIt(t *testing.T) {
 	previous := otel.GetTracerProvider()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
 	t.Cleanup(func() { otel.SetTracerProvider(previous) })
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(*service.Collaborators) {})
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(*service.Collaborators) {})
 
 	runSearch(t, svc, "humble")
 	bg.Wait()

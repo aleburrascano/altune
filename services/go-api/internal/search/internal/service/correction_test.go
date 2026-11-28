@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"strings"
@@ -30,7 +29,7 @@ func trackTerm(term string, score float64) domain.SpellingHintsEntry {
 
 func correctedTo(t *testing.T, store *memory.FakeVocabularyStore, query string) string {
 	t.Helper()
-	result := searchtest.NewCorrection(t, store).Correct(context.Background(), query)
+	result := memory.NewCorrection(t, store).Correct(context.Background(), query)
 	if result == nil {
 		return ""
 	}
@@ -49,7 +48,7 @@ func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {
 			return nil, nil
 		},
 	}
-	svc := searchtest.NewCorrection(t, store)
+	svc := memory.NewCorrection(t, store)
 
 	result := svc.CorrectAggressive(context.Background(), "kendrick humbel")
 	if result == nil || result.Corrected != "kendrick humble" {
@@ -133,7 +132,7 @@ func TestCorrect_MaxEditDistanceGrowsWithQueryLength(t *testing.T) {
 
 func TestCorrectAggressive_ManyTokenQueryIsBounded(t *testing.T) {
 	vocab := &memory.CtxRecordingVocab{}
-	svc := searchtest.NewCorrection(t, vocab)
+	svc := memory.NewCorrection(t, vocab)
 
 	hostile := strings.TrimSpace(strings.Repeat("zxqv ", 5000))
 	svc.CorrectAggressive(context.Background(), hostile)
@@ -150,7 +149,7 @@ func TestCorrectAggressive_ManyTokenQueryIsBounded(t *testing.T) {
 
 func TestCorrectAggressive_ShortMultiTokenQueryStillCorrectsEveryToken(t *testing.T) {
 	vocab := &memory.CtxRecordingVocab{}
-	svc := searchtest.NewCorrection(t, vocab)
+	svc := memory.NewCorrection(t, vocab)
 
 	svc.CorrectAggressive(context.Background(), "kendrik lamar humbel")
 
@@ -162,7 +161,7 @@ func TestCorrectAggressive_ShortMultiTokenQueryStillCorrectsEveryToken(t *testin
 func TestCorrect_DoesNotLogRawQueryText(t *testing.T) {
 	buf := memory.CaptureLogs(t)
 
-	svc := searchtest.NewCorrection(t, vocabOffering(trackTerm("humble", 0.8)))
+	svc := memory.NewCorrection(t, vocabOffering(trackTerm("humble", 0.8)))
 
 	result := svc.CorrectAggressive(context.Background(), "humbel")
 	if result == nil || result.Corrected != "humble" {
@@ -185,7 +184,7 @@ func TestCorrection_RefusesAMissingVocabulary(t *testing.T) {
 }
 
 func TestVocabularyIngestor_RefusesAMissingStoreOrTracker(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	for name, build := range map[string]func() error{
 		"store": func() error { _, err := service.NewVocabularyIngestor(nil, bg); return err },
 		"tracker": func() error {
@@ -201,7 +200,7 @@ func TestVocabularyIngestor_RefusesAMissingStoreOrTracker(t *testing.T) {
 
 func TestCorrection_CorrectWholeQuery(t *testing.T) {
 	store := vocabOffering(domain.SpellingHintsEntry{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.9})
-	s := searchtest.NewCorrection(t, store)
+	s := memory.NewCorrection(t, store)
 
 	got := s.Correct(context.Background(), "kendrik")
 	if got == nil || got.Corrected != "Kendrick" {
@@ -219,17 +218,17 @@ func TestCorrection_WholeQueryErrorOrEmptyIsNil(t *testing.T) {
 			return nil, errors.New("redis down")
 		},
 	}
-	if got := searchtest.NewCorrection(t, erroring).Correct(context.Background(), "kendrik"); got != nil {
+	if got := memory.NewCorrection(t, erroring).Correct(context.Background(), "kendrik"); got != nil {
 		t.Errorf("store error must degrade to nil, got %+v", got)
 	}
 	empty := &memory.FakeVocabularyStore{}
-	if got := searchtest.NewCorrection(t, empty).Correct(context.Background(), "kendrik"); got != nil {
+	if got := memory.NewCorrection(t, empty).Correct(context.Background(), "kendrik"); got != nil {
 		t.Errorf("no candidates must yield nil, got %+v", got)
 	}
 }
 
 func TestCorrection_TokenPathSingleTokenIsNil(t *testing.T) {
-	s := searchtest.NewCorrection(t, &memory.FakeVocabularyStore{})
+	s := memory.NewCorrection(t, &memory.FakeVocabularyStore{})
 	if got := s.CorrectAggressive(context.Background(), "kendrik"); got != nil {
 		t.Errorf("single-token aggressive miss = %+v, want nil", got)
 	}
@@ -250,7 +249,7 @@ func TestCorrection_TokenPathPrefixErrorDegrades(t *testing.T) {
 			return []domain.SpellingHintsEntry{{Term: "Lamar", TermNorm: "lamar", Kind: domain.VocabKindArtist, MatchScore: 1}}, nil
 		},
 	}
-	s := searchtest.NewCorrection(t, store)
+	s := memory.NewCorrection(t, store)
 	got := s.CorrectAggressive(context.Background(), "kendrik lamar")
 	if got == nil || got.Corrected != "kendrick lamar" {
 		t.Fatalf("aggressive = %+v, want token-corrected \"kendrick lamar\"", got)

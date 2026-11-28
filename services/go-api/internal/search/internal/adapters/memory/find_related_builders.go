@@ -1,28 +1,21 @@
-package searchtest
+package memory
 
 import (
-	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
-	"testing"
-)
-
-type (
-	CountingRelationshipQuerier = memory.CountingRelationshipQuerier
-	CountingAlbumTracksProvider = memory.CountingAlbumTracksProvider
 )
 
 type FindRelatedPart func(*findRelatedParts)
 
 type findRelatedParts struct {
-	sources []func(testing.TB, *service.CircuitBreaker) service.LookupSource
+	sources []func(TB, *service.CircuitBreaker) service.LookupSource
 	breaker *service.CircuitBreaker
 }
 
 func RelatedLibrary(querier ports.RelationshipQuerier) FindRelatedPart {
 	return func(p *findRelatedParts) {
-		p.sources = append(p.sources, func(t testing.TB, _ *service.CircuitBreaker) service.LookupSource {
+		p.sources = append(p.sources, func(t TB, _ *service.CircuitBreaker) service.LookupSource {
 			t.Helper()
 			source, err := service.LibraryMatches(querier)
 			if err != nil {
@@ -35,7 +28,7 @@ func RelatedLibrary(querier ports.RelationshipQuerier) FindRelatedPart {
 
 func RelatedAlbumTracks(provider ports.AlbumContentProvider) FindRelatedPart {
 	return func(p *findRelatedParts) {
-		p.sources = append(p.sources, func(t testing.TB, breaker *service.CircuitBreaker) service.LookupSource {
+		p.sources = append(p.sources, func(t TB, breaker *service.CircuitBreaker) service.LookupSource {
 			t.Helper()
 			source, err := service.AlbumTracksSource(provider, breaker)
 			if err != nil {
@@ -48,7 +41,7 @@ func RelatedAlbumTracks(provider ports.AlbumContentProvider) FindRelatedPart {
 
 func RelatedArtistAlbums(provider ports.ArtistContentProvider) FindRelatedPart {
 	return func(p *findRelatedParts) {
-		p.sources = append(p.sources, func(t testing.TB, breaker *service.CircuitBreaker) service.LookupSource {
+		p.sources = append(p.sources, func(t TB, breaker *service.CircuitBreaker) service.LookupSource {
 			t.Helper()
 			source, err := service.ArtistAlbumsSource(provider, breaker)
 			if err != nil {
@@ -63,7 +56,7 @@ func RelatedBreaker(breaker *service.CircuitBreaker) FindRelatedPart {
 	return func(p *findRelatedParts) { p.breaker = breaker }
 }
 
-func NewFindRelated(t testing.TB, parts ...FindRelatedPart) *service.FindRelatedService {
+func NewFindRelated(t TB, parts ...FindRelatedPart) *service.FindRelatedService {
 	t.Helper()
 	p := findRelatedParts{breaker: service.NewCircuitBreaker(clock.Now)}
 	for _, part := range parts {

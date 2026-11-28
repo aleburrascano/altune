@@ -1,9 +1,9 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"slices"
 	"testing"
 )
@@ -13,11 +13,11 @@ const diversityWindow = 10
 func TestEnforceDiversity(t *testing.T) {
 	var results []domain.SearchResult
 	for i := 0; i < 6; i++ {
-		results = append(results, searchtest.TrackResult(domain.ProviderDeezer, "",
+		results = append(results, memory.TrackResult(domain.ProviderDeezer, "",
 			"Song "+string(rune('A'+i)), "Same Artist", map[string]any{"popularity": int64(90 - i)}))
 	}
 	for i := 0; i < 8; i++ {
-		results = append(results, searchtest.TrackResult(domain.ProviderDeezer, "",
+		results = append(results, memory.TrackResult(domain.ProviderDeezer, "",
 			"Other "+string(rune('A'+i)), "Other Artist "+string(rune('A'+i)), map[string]any{"popularity": int64(50)}))
 	}
 
@@ -49,14 +49,14 @@ func TestEnforceDiversity(t *testing.T) {
 func TestCollapseArtistDuplicates(t *testing.T) {
 	t.Run("groups same-name artists keeping highest popularity", func(t *testing.T) {
 		results := []domain.SearchResult{
-			searchtest.ArtistResult(domain.ProviderDeezer, "1", "Che", map[string]any{
+			memory.ArtistResult(domain.ProviderDeezer, "1", "Che", map[string]any{
 				"popularity": float64(80), "disambiguation": "Atlanta rapper",
 			}),
-			searchtest.TrackResult(domain.ProviderDeezer, "t1", "BA$$", "Che", nil),
-			searchtest.ArtistResult(domain.ProviderDeezer, "2", "Che", map[string]any{
+			memory.TrackResult(domain.ProviderDeezer, "t1", "BA$$", "Che", nil),
+			memory.ArtistResult(domain.ProviderDeezer, "2", "Che", map[string]any{
 				"popularity": float64(30), "disambiguation": "Korean singer-songwriter",
 			}),
-			searchtest.ArtistResult(domain.ProviderDeezer, "3", "Che", map[string]any{
+			memory.ArtistResult(domain.ProviderDeezer, "3", "Che", map[string]any{
 				"popularity": float64(10),
 			}),
 		}
@@ -86,8 +86,8 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 
 	t.Run("no grouping when names differ", func(t *testing.T) {
 		results := []domain.SearchResult{
-			searchtest.ArtistResult(domain.ProviderDeezer, "1", "Drake", map[string]any{"popularity": float64(90)}),
-			searchtest.ArtistResult(domain.ProviderDeezer, "2", "Aurora", map[string]any{"popularity": float64(70)}),
+			memory.ArtistResult(domain.ProviderDeezer, "1", "Drake", map[string]any{"popularity": float64(90)}),
+			memory.ArtistResult(domain.ProviderDeezer, "2", "Aurora", map[string]any{"popularity": float64(70)}),
 		}
 		got := service.CollapseArtistDuplicates(results)
 		if len(got) != 2 {
@@ -100,7 +100,7 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 
 	t.Run("single artist not collapsed", func(t *testing.T) {
 		results := []domain.SearchResult{
-			searchtest.ArtistResult(domain.ProviderDeezer, "1", "Che", map[string]any{"popularity": float64(80)}),
+			memory.ArtistResult(domain.ProviderDeezer, "1", "Che", map[string]any{"popularity": float64(80)}),
 		}
 		got := service.CollapseArtistDuplicates(results)
 		if len(got) != 1 {
@@ -118,9 +118,9 @@ func withFans(r domain.SearchResult, fans int64) domain.SearchResult {
 }
 
 func TestDropCollabArtistCards(t *testing.T) {
-	yachty := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
-	cochise := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "2", "Cochise", nil), 400_000)
-	simon := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "3", "Simon", nil), 100)
+	yachty := withFans(memory.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	cochise := withFans(memory.ArtistResult(domain.ProviderDeezer, "2", "Cochise", nil), 400_000)
+	simon := withFans(memory.ArtistResult(domain.ProviderDeezer, "3", "Simon", nil), 100)
 
 	tests := []struct {
 		name  string
@@ -128,13 +128,13 @@ func TestDropCollabArtistCards(t *testing.T) {
 		with  []domain.SearchResult
 		keeps bool
 	}{
-		{"comma collab", withFans(searchtest.ArtistResult(domain.ProviderDeezer, "10", "DDG, Lil Yachty", nil), 0), []domain.SearchResult{yachty}, false},
-		{"x collab", withFans(searchtest.ArtistResult(domain.ProviderDeezer, "11", "BIA x Lil Yachty", nil), 11), []domain.SearchResult{yachty}, false},
-		{"ampersand collab", withFans(searchtest.ArtistResult(domain.ProviderDeezer, "12", "Cochise & $NOT", nil), 1233), []domain.SearchResult{cochise}, false},
-		{"feat collab", withFans(searchtest.ArtistResult(domain.ProviderDeezer, "13", "Lil Yachty Feat. ian", nil), 0), []domain.SearchResult{yachty}, false},
-		{"a real duo bigger than its namesake", withFans(searchtest.ArtistResult(domain.ProviderDeezer, "14", "Simon & Garfunkel", nil), 2_000_000), []domain.SearchResult{simon}, true},
-		{"a collab with none of its artists in the results", withFans(searchtest.ArtistResult(domain.ProviderDeezer, "15", "DDG, Lil Yachty", nil), 0), nil, true},
-		{"a name with a comma in it", withFans(searchtest.ArtistResult(domain.ProviderDeezer, "16", "Tyler, The Creator", nil), 9_000_000), nil, true},
+		{"comma collab", withFans(memory.ArtistResult(domain.ProviderDeezer, "10", "DDG, Lil Yachty", nil), 0), []domain.SearchResult{yachty}, false},
+		{"x collab", withFans(memory.ArtistResult(domain.ProviderDeezer, "11", "BIA x Lil Yachty", nil), 11), []domain.SearchResult{yachty}, false},
+		{"ampersand collab", withFans(memory.ArtistResult(domain.ProviderDeezer, "12", "Cochise & $NOT", nil), 1233), []domain.SearchResult{cochise}, false},
+		{"feat collab", withFans(memory.ArtistResult(domain.ProviderDeezer, "13", "Lil Yachty Feat. ian", nil), 0), []domain.SearchResult{yachty}, false},
+		{"a real duo bigger than its namesake", withFans(memory.ArtistResult(domain.ProviderDeezer, "14", "Simon & Garfunkel", nil), 2_000_000), []domain.SearchResult{simon}, true},
+		{"a collab with none of its artists in the results", withFans(memory.ArtistResult(domain.ProviderDeezer, "15", "DDG, Lil Yachty", nil), 0), nil, true},
+		{"a name with a comma in it", withFans(memory.ArtistResult(domain.ProviderDeezer, "16", "Tyler, The Creator", nil), 9_000_000), nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -147,8 +147,8 @@ func TestDropCollabArtistCards(t *testing.T) {
 				t.Errorf("%q kept = %v, want %v", tt.card.Title, kept, tt.keeps)
 			}
 			for _, solo := range tt.with {
-				if !slices.Contains(searchtest.Titles(got), solo.Title) {
-					t.Errorf("dropped the solo artist %q: %v", solo.Title, searchtest.Titles(got))
+				if !slices.Contains(memory.Titles(got), solo.Title) {
+					t.Errorf("dropped the solo artist %q: %v", solo.Title, memory.Titles(got))
 				}
 			}
 		})
@@ -156,43 +156,43 @@ func TestDropCollabArtistCards(t *testing.T) {
 }
 
 func TestDropCollabArtistCards_LeavesSongsWithCollabCreditsAlone(t *testing.T) {
-	yachty := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
-	song := searchtest.TrackResult(domain.ProviderDeezer, "20", "POP IT", "DDG, Lil Yachty", nil)
+	yachty := withFans(memory.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	song := memory.TrackResult(domain.ProviderDeezer, "20", "POP IT", "DDG, Lil Yachty", nil)
 
 	if got := service.DropCollabArtistCards([]domain.SearchResult{yachty, song}); len(got) != 2 {
-		t.Fatalf("got %v, want the song kept", searchtest.Titles(got))
+		t.Fatalf("got %v, want the song kept", memory.Titles(got))
 	}
 }
 
 func TestReshape_DropsCollabArtistCards(t *testing.T) {
-	yachty := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
-	collab := searchtest.ArtistResult(domain.ProviderDeezer, "10", "DDG, Lil Yachty", nil)
+	yachty := withFans(memory.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	collab := memory.ArtistResult(domain.ProviderDeezer, "10", "DDG, Lil Yachty", nil)
 
 	if got := service.Reshape([]domain.SearchResult{yachty, collab}); len(got) != 1 {
-		t.Fatalf("got %v, want only Lil Yachty", searchtest.Titles(got))
+		t.Fatalf("got %v, want only Lil Yachty", memory.Titles(got))
 	}
 }
 
 func TestDropCollabArtistCards_KeepsArtistsAnotherProviderConfirms(t *testing.T) {
-	fire := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "1", "Fire", nil), 9_000_000)
-	band := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "2", "Earth, Wind & Fire", nil), 3_000_000)
+	fire := withFans(memory.ArtistResult(domain.ProviderDeezer, "1", "Fire", nil), 9_000_000)
+	band := withFans(memory.ArtistResult(domain.ProviderDeezer, "2", "Earth, Wind & Fire", nil), 3_000_000)
 	band.Sources = append(band.Sources, domain.ProviderLink{Provider: domain.ProviderSpotify, ExternalID: "sp"})
 
 	got := service.DropCollabArtistCards([]domain.SearchResult{fire, band})
 
-	if !slices.Equal(searchtest.Titles(got), []string{"Fire", "Earth, Wind & Fire"}) {
-		t.Fatalf("got %v, want the band Spotify also lists kept", searchtest.Titles(got))
+	if !slices.Equal(memory.Titles(got), []string{"Fire", "Earth, Wind & Fire"}) {
+		t.Fatalf("got %v, want the band Spotify also lists kept", memory.Titles(got))
 	}
 }
 
 func TestDropCollabArtistCards_KeepsTheTopPick(t *testing.T) {
-	yachty := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
-	picked := searchtest.ArtistResult(domain.ProviderDeezer, "2", "Simon & Garfunkel", map[string]any{domain.ExtraTopPick: true})
-	simon := withFans(searchtest.ArtistResult(domain.ProviderDeezer, "3", "Simon", nil), 9_000_000)
+	yachty := withFans(memory.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	picked := memory.ArtistResult(domain.ProviderDeezer, "2", "Simon & Garfunkel", map[string]any{domain.ExtraTopPick: true})
+	simon := withFans(memory.ArtistResult(domain.ProviderDeezer, "3", "Simon", nil), 9_000_000)
 
 	got := service.DropCollabArtistCards([]domain.SearchResult{yachty, simon, picked})
 
-	if !slices.Contains(searchtest.Titles(got), "Simon & Garfunkel") {
-		t.Fatalf("got %v, want the top pick kept", searchtest.Titles(got))
+	if !slices.Contains(memory.Titles(got), "Simon & Garfunkel") {
+		t.Fatalf("got %v, want the top pick kept", memory.Titles(got))
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -57,6 +58,38 @@ func (r *EventRepo) NonZeroNoClickQueries(_ context.Context, since time.Time, li
 		}
 	}
 	return rankedCounts(counts, limit), nil
+}
+
+const abandonedFollowUpWindow = 60 * time.Second
+
+func (r *EventRepo) AbandonedSearches(_ context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	counts := map[string]int{}
+	for _, e := range r.events {
+		if r.isSearchSince(e, since) && !r.clicked(e.SearchId) && r.searchedAgainSoon(e) {
+			counts[e.QueryNorm]++
+		}
+	}
+	return rankedCounts(counts, limit), nil
+}
+
+func (r *EventRepo) clicked(searchId string) bool {
+	return searchId != "" && slices.ContainsFunc(r.events, func(c domain.InteractionEvent) bool {
+		return c.Type == domain.InteractionTypeResultClicked && c.SearchId == searchId
+	})
+}
+
+func (r *EventRepo) searchedAgainSoon(first domain.InteractionEvent) bool {
+	return slices.ContainsFunc(r.events, func(next domain.InteractionEvent) bool {
+		return next.Type == domain.InteractionTypeSearchPerformed &&
+			next.UserId == first.UserId &&
+			next.QueryNorm != "" &&
+			!strings.HasPrefix(next.QueryNorm, first.QueryNorm) &&
+			!strings.HasPrefix(first.QueryNorm, next.QueryNorm) &&
+			next.OccurredAt.After(first.OccurredAt) &&
+			!next.OccurredAt.After(first.OccurredAt.Add(abandonedFollowUpWindow))
+	})
 }
 
 type zeroResultState int

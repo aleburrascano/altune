@@ -135,6 +135,57 @@ func TestRedisResultCache_RecordTypeIsStoredAsItsBareString(t *testing.T) {
 	}
 }
 
+const collapsedArtistsStoredBytes = `"collapsed_artists":[{"title":"Band","subtitle":"","image_url":"https://img/b.jpg","sources":[{"Provider":11,"ExternalID":"5","URL":""}],"extras":{"mbid":"m1"}}]`
+
+func withCollapsedArtist() domain.SearchResult {
+	return memory.NewResult(domain.ResultKindArtist, "Band").WithExtra(domain.ExtraCollapsedArtists, []domain.CollapsedArtistSummary{{
+		Title:    "Band",
+		ImageURL: "https://img/b.jpg",
+		Sources:  []domain.ProviderLink{{Provider: domain.ProviderSpotify, ExternalID: "5"}},
+		Extras:   map[string]any{"mbid": "m1"},
+	}})
+}
+
+func TestRedisResultCaches_CollapsedArtistsKeepTheirStoredBytes(t *testing.T) {
+	tests := []struct {
+		name  string
+		store func(*goredis.Client, []domain.SearchResult)
+	}{
+		{"search results", func(c *goredis.Client, r []domain.SearchResult) {
+			cache.NewRedisResultCache(c).Set(context.Background(), "band|artist", r)
+		}},
+		{"held slates", func(c *goredis.Client, r []domain.SearchResult) {
+			cache.NewRedisHeldSlateCache(c).Set(context.Background(), "band|artist", r)
+		}},
+		{"provider results", func(c *goredis.Client, r []domain.SearchResult) {
+			cache.NewRedisProviderResultCache(c, time.Minute).Set(context.Background(), domain.ProviderSpotify, "band|artist", r)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, client := newRedis(t)
+			original := withCollapsedArtist()
+
+			tt.store(client, []domain.SearchResult{original})
+
+			keys := storedKeys(server)
+			if len(keys) != 1 {
+				t.Fatalf("stored keys = %v, want 1", keys)
+			}
+			raw, err := server.Get(keys[0])
+			if err != nil {
+				t.Fatalf("read stored entry: %v", err)
+			}
+			if !strings.Contains(raw, collapsedArtistsStoredBytes) {
+				t.Errorf("stored entry = %s, want it to contain %s", raw, collapsedArtistsStoredBytes)
+			}
+			if _, still := original.Extras[domain.ExtraCollapsedArtists].([]domain.CollapsedArtistSummary); !still {
+				t.Errorf("storing replaced the caller's extra with %T", original.Extras[domain.ExtraCollapsedArtists])
+			}
+		})
+	}
+}
+
 const legacyV1ResultPayload = `[{"Kind":2,"Title":"Blue","Subtitle":"Band","ImageURL":"","ArtworkSource":"","Confidence":2,"Sources":[{"Provider":1,"ExternalID":"1","URL":""},{"Provider":10,"ExternalID":"2","URL":""}],"Popularity":0,"ISRC":"","MBID":"","UPC":"123","Xref":null,"Year":0,"ReleaseDate":"","TrackCount":5,"ProviderRank":0,"FanCount":0,"Album":"","Duration":0,"DeezerAlbumID":"","Signature":"","Extras":{"genre_id":1,"record_type":"ep","resolution_tier":"upc","upc":"123"}}]`
 
 func TestRedisResultCache_ALegacyV1EntryIsNotRead(t *testing.T) {
