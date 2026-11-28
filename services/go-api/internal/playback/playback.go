@@ -13,7 +13,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 )
 
@@ -21,13 +20,12 @@ type (
 	TrackSource     = ports.TrackSource
 	NowPlayingTrack = ports.NowPlayingTrack
 	QueueSaveLimit  = handler.QueueSaveLimit
-	MetricsSnapshot = playbacktelemetry.Snapshot
+	Routes          = handler.Routes
 )
 
 var (
-	ErrTrackSourceUnavailable   = domain.ErrTrackSourceUnavailable
-	ErrNowPlayingTrackNotFound  = domain.ErrNowPlayingTrackNotFound
-	ErrIdentityStoreUnavailable = domain.ErrIdentityStoreUnavailable
+	ErrTrackSourceUnavailable  = domain.ErrTrackSourceUnavailable
+	ErrNowPlayingTrackNotFound = domain.ErrNowPlayingTrackNotFound
 )
 
 var errDepsIncomplete = errors.New("playback: New needs a database, a metrics registry, a track source and positive lookup and erasure timeouts")
@@ -54,7 +52,7 @@ func (d Deps) validate() error {
 }
 
 type Module struct {
-	routes  http.Handler
+	routes  handler.Routes
 	sweeper *service.ErasureSweeper
 }
 
@@ -82,13 +80,13 @@ func New(d Deps) (*Module, error) {
 		return nil, fmt.Errorf("build the queue handler: %w", err)
 	}
 	return &Module{
-		routes: queueHandler.Routes(),
+		routes: handler.NewRoutes(queueHandler),
 		sweeper: service.NewErasureSweeper(
 			persistence.NewPostgresDeletedIdentityRepository(d.DB), queues, metrics, queueStates, d.ErasureScanTimeout),
 	}, nil
 }
 
-func (m *Module) Routes() http.Handler { return m.routes }
+func (m *Module) Routes() Routes { return m.routes }
 
 func (m *Module) EraseDeletedUserData(ctx context.Context) (int, error) {
 	forgotten, err := m.sweeper.Execute(ctx)
@@ -98,8 +96,6 @@ func (m *Module) EraseDeletedUserData(ctx context.Context) (int, error) {
 	return forgotten, nil
 }
 
-func DefaultQueueSaveLimit() QueueSaveLimit { return handler.DefaultQueueSaveLimit() }
-
-func ReadSnapshot(reg *telemetry.Registry) MetricsSnapshot {
+func ReadSnapshot(reg *telemetry.Registry) playbacktelemetry.Snapshot {
 	return playbacktelemetry.ReadSnapshot(reg)
 }

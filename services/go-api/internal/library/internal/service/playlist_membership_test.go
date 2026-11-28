@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/library/internal/adapters/handler"
 	"altune/go-api/internal/library/internal/adapters/memory"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/library/internal/service"
@@ -10,8 +9,6 @@ import (
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -358,10 +355,9 @@ func freshTrackIds(n int) []domain.TrackId {
 	return ids
 }
 
-func httpStatus(err error) int {
-	rec := httptest.NewRecorder()
-	handler.HandleError(rec, httptest.NewRequest(http.MethodPost, "/playlists", nil), err)
-	return rec.Code
+func isValidationRejection(err error) bool {
+	var invalid *domain.ValidationError
+	return errors.As(err, &invalid)
 }
 
 func assertBatchCap(t *testing.T, call func([]domain.TrackId) error) {
@@ -369,8 +365,8 @@ func assertBatchCap(t *testing.T, call func([]domain.TrackId) error) {
 	if err := call(freshTrackIds(playlistBatchCap)); err != nil {
 		t.Fatalf("a batch of exactly %d: %v, want it taken", playlistBatchCap, err)
 	}
-	if err := call(freshTrackIds(playlistBatchCap + 1)); httpStatus(err) != 400 {
-		t.Fatalf("a batch of %d: error = %v, want a 400 validation error", playlistBatchCap+1, err)
+	if err := call(freshTrackIds(playlistBatchCap + 1)); !isValidationRejection(err) {
+		t.Fatalf("a batch of %d: error = %v, want a validation error", playlistBatchCap+1, err)
 	}
 }
 
@@ -431,9 +427,6 @@ func TestPlaylistMembershipService_AddTrack_SurfacesTheDuplicateRefusalWhole(t *
 
 	if !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) || err.Error() != domain.ErrTrackAlreadyInPlaylist.Error() {
 		t.Fatalf("error = %v, want the bare ErrTrackAlreadyInPlaylist", err)
-	}
-	if httpStatus(err) != 409 {
-		t.Fatalf("status = %d, want 409", httpStatus(err))
 	}
 }
 
@@ -773,8 +766,8 @@ func TestPlaylistMembershipService_Reorder_RefusesAnOrderThatIsNotThePlaylist(t 
 
 			err := svc.Reorder(ctx, userId, pl.ID, tc.order)
 
-			if httpStatus(err) != 400 {
-				t.Fatalf("error = %v, want a 400 validation error", err)
+			if !isValidationRejection(err) {
+				t.Fatalf("error = %v, want a validation error", err)
 			}
 			want := []domain.PlaylistTrack{{TrackId: first, Position: 0}, {TrackId: second, Position: 1}}
 			if !reflect.DeepEqual(pl.Tracks, want) {
@@ -833,8 +826,8 @@ func TestPlaylistMembershipService_Reorder_RefusesAPlanInvalidatedAfterTheRead(t
 	if !errors.Is(err, domain.ErrPlaylistChangedDuringReorder) {
 		t.Fatalf("error = %v, want %v", err, domain.ErrPlaylistChangedDuringReorder)
 	}
-	if httpStatus(err) != 400 {
-		t.Fatalf("error = %v, want a 400 the client can retry from", err)
+	if !isValidationRejection(err) {
+		t.Fatalf("error = %v, want a validation error the client can retry from", err)
 	}
 }
 

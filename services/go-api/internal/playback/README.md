@@ -16,12 +16,12 @@ No module reads `playback_queue_state`.
 
 ## Shape
 
-The door is `playback.go`: `New(Deps)`, `Deps`, and the few names `app` and the bridge use. Everything else is under `internal/`:
+The door is `playback.go`: `New(Deps)`, `Deps`, `Module` with `Routes()` (the same `Bounded` and `LongLived` shape as library; playback has no long-lived routes), and the few names `app` and the bridge use. `playbacktest/` holds the door names only tests use. Everything else is under `internal/`:
 
 - `domain/`: `queue_state.go`, `queue_position.go`, `queue_source.go`, `repeat_mode.go`, `errors.go`.
 - `ports/ports.go`: every interface the module needs from outside.
 - `service/`: one file per use case (`save_queue_state.go`, `save_queue_position.go`, `resume_queue_state.go`, `forget_queue_state.go`, `erase_deleted_users.go`), plus the now-playing reader, a query use case.
 - `adapters/handler/`: `routes.go`, `dto.go`, `errors.go` and the rate limit.
 - `adapters/telemetry/metrics.go`: the metrics registry the module and the live-metrics snapshot share.
-- `adapters/catalog/`: the circuit breaker and lookup timeout around the `TrackSource` call (`guarded_source.go`).
+- `adapters/catalog/`: the circuit breaker and lookup timeout around the `TrackSource` call (`guarded_source.go`, with the errors its constructor returns).
 - `adapters/persistence/queue_state_repo.go` and `adapters/memory/queue_state_repo.go`; the contract test that runs both is `adapters/memory/queue_state_repo_contract_test.go` (Postgres half runs with `INTEGRATION=1`).

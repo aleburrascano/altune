@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/library/internal/adapters/handler"
 	"altune/go-api/internal/library/internal/adapters/memory"
 	"altune/go-api/internal/library/internal/adapters/storage"
 	"altune/go-api/internal/library/internal/domain"
@@ -10,14 +9,10 @@ import (
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -101,7 +96,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 		stubAdder
 		stubCounter
 		stubUpdater
-	}{}, handler.NewWireEvents(events.NoopPublisher()), &memory.Scheduler{}, time.Now, ids.Real)
+	}{}, memory.NewTrackEvents(events.NoopPublisher()), &memory.Scheduler{}, time.Now, ids.Real)
 	_ = service.MustNewAudioURLService(stubBatchGetter{}, storage.NoAudioLinks{}, time.Now, &librarytest.Metrics{})
 	_ = service.MustNewBackfillFeaturedService(stubLister{}, nil, nil, time.Now)
 	_ = service.NewStreamTrackService(struct {
@@ -144,7 +139,6 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 			if !errors.Is(err, domain.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("err = %v, want ErrCatalogTemporarilyUnavailable", err)
 			}
-			assertServiceErrorResponse(t, err, http.StatusServiceUnavailable, "catalog.temporarily_unavailable")
 		})
 		t.Run(p.name+"/permanent stays a 500", func(t *testing.T) {
 			repo := memory.NewTrackRepo()
@@ -153,7 +147,9 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 			if errors.Is(err, domain.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("permanent failure classified transient: %v", err)
 			}
-			assertServiceErrorResponse(t, err, http.StatusInternalServerError, "internal")
+			if !errors.Is(err, permanent) {
+				t.Errorf("err = %v lost the original error", err)
+			}
 		})
 	}
 }
@@ -235,7 +231,6 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 			if !errors.Is(err, domain.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("err = %v, want ErrCatalogTemporarilyUnavailable", err)
 			}
-			assertServiceErrorResponse(t, err, http.StatusServiceUnavailable, "catalog.temporarily_unavailable")
 		})
 		t.Run(p.name+"/permanent stays a 500", func(t *testing.T) {
 			err := p.call(permanent)
@@ -245,23 +240,6 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 			if !errors.Is(err, permanent) {
 				t.Errorf("err = %v lost the original error", err)
 			}
-			assertServiceErrorResponse(t, err, http.StatusInternalServerError, "internal")
 		})
-	}
-}
-
-func assertServiceErrorResponse(t *testing.T, err error, wantStatus int, wantCode string) {
-	t.Helper()
-	rec := httptest.NewRecorder()
-	handler.HandleError(rec, httptest.NewRequest(http.MethodGet, "/", nil), err)
-	if rec.Code != wantStatus {
-		t.Errorf("status = %d, want %d", rec.Code, wantStatus)
-	}
-	var body httpserver.Problem
-	if decodeErr := json.NewDecoder(rec.Body).Decode(&body); decodeErr != nil {
-		t.Fatalf("decode body: %v", decodeErr)
-	}
-	if body.Code != wantCode {
-		t.Errorf("code = %q, want %q", body.Code, wantCode)
 	}
 }

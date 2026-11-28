@@ -18,11 +18,9 @@ import (
 type (
 	Track                           = domain.Track
 	TrackId                         = domain.TrackId
-	NewTrackInput                   = domain.NewTrackInput
 	DownloadStatus                  = domain.DownloadStatus
 	AcquisitionEvent                = domain.AcquisitionEvent
 	CatalogSource                   = domain.CatalogSource
-	FeaturedArtist                  = domain.FeaturedArtist
 	OwnedTrackRef                   = domain.OwnedTrackRef
 	ReadyAudioTrack                 = ports.ReadyAudioTrack
 	AudioStore                      = ports.AudioStore
@@ -43,7 +41,6 @@ type (
 	SetTrackNumberService           = service.SetTrackNumberService
 	PostgresTrackRepository         = persistence.PostgresTrackRepository
 	PostgresOrphanedAudioRepository = persistence.PostgresOrphanedAudioRepository
-	MetricsSnapshot                 = telemetry.Snapshot
 	Routes                          = handler.Routes
 )
 
@@ -60,11 +57,8 @@ const (
 
 var (
 	ErrTrackNotFound                   = domain.ErrTrackNotFound
-	ErrAudioNotAvailable               = domain.ErrAudioNotAvailable
-	ErrAudioTemporarilyUnavailable     = domain.ErrAudioTemporarilyUnavailable
 	ErrIllegalAcquisitionTransition    = domain.ErrIllegalAcquisitionTransition
 	ErrDBTransient                     = domain.ErrDBTransient
-	ErrTrackMissing                    = domain.ErrTrackMissing
 	ErrTrackVersionConflict            = domain.ErrTrackVersionConflict
 	ErrTrackFenceSuperseded            = domain.ErrTrackFenceSuperseded
 	AcquisitionStatuses                = domain.AcquisitionStatuses
@@ -73,17 +67,11 @@ var (
 	UpgradableStatuses                 = domain.UpgradableStatuses
 	Transition                         = domain.Transition
 	PlausibleYear                      = domain.PlausibleYear
-	KnownCatalogProviders              = domain.KnownCatalogProviders
-	NewTrack                           = domain.NewTrack
 	NoopAcquisitionScheduler           = ports.NoopAcquisitionScheduler
 	NewFeaturedArtistResolver          = service.NewFeaturedArtistResolver
-	NewStreamTrackService              = service.NewStreamTrackService
 	NewReconcileOrphanedAudioService   = service.NewReconcileOrphanedAudioService
 	NewPostgresTrackRepository         = persistence.NewPostgresTrackRepository
-	NewPostgresCatalogTrackRepository  = persistence.NewPostgresCatalogTrackRepository
-	NewPostgresPlaylistRepository      = persistence.NewPostgresPlaylistRepository
 	NewPostgresOrphanedAudioRepository = persistence.NewPostgresOrphanedAudioRepository
-	NewFilesystemAudioStore            = storage.NewFilesystemAudioStore
 	NewAudioStoreFromConfig            = storage.NewAudioStoreFromConfig
 	NewAudioStoreMetrics               = telemetry.NewAudioStoreMetrics
 	NewDBCallMetrics                   = telemetry.NewDBCallMetrics
@@ -91,12 +79,11 @@ var (
 	ReadSnapshot                       = telemetry.ReadSnapshot
 )
 
-var errDepsIncomplete = errors.New("library: New needs its three repositories, an events publisher, an acquisition scheduler, audio links (a signer that reports SignsLinks false when the store cannot sign), audio metrics and a stream recovery switch")
+var errDepsIncomplete = errors.New("library: New needs a database, database call metrics, an events publisher, an acquisition scheduler, audio links (a signer that reports SignsLinks false when the store cannot sign), audio metrics and a stream recovery switch")
 
 type Deps struct {
-	CatalogTracks   *persistence.PostgresCatalogTrackRepository
-	Playlists       *persistence.PostgresPlaylistRepository
-	OrphanedAudio   *persistence.PostgresOrphanedAudioRepository
+	DB              persistence.Database
+	DBMetrics       ports.DBCallMetrics
 	Events          events.Publisher
 	Scheduler       ports.AcquisitionScheduler
 	AudioStore      ports.AudioStore
@@ -108,7 +95,7 @@ type Deps struct {
 }
 
 func (d Deps) validate() error {
-	if d.CatalogTracks == nil || d.Playlists == nil || d.OrphanedAudio == nil || d.Events == nil || d.Scheduler == nil || d.AudioLinks == nil || d.AudioMetrics == nil || d.StreamRecovery == nil {
+	if d.DB == nil || d.DBMetrics == nil || d.Events == nil || d.Scheduler == nil || d.AudioLinks == nil || d.AudioMetrics == nil || d.StreamRecovery == nil {
 		return errDepsIncomplete
 	}
 	return nil
@@ -126,7 +113,9 @@ func New(d Deps) (*Module, error) {
 	if err := d.validate(); err != nil {
 		return nil, err
 	}
-	catalogTracks, playlists, orphanedAudio := d.CatalogTracks, d.Playlists, d.OrphanedAudio
+	catalogTracks := persistence.NewPostgresCatalogTrackRepository(d.DB, d.DBMetrics)
+	playlists := persistence.NewPostgresPlaylistRepository(d.DB, d.DBMetrics)
+	orphanedAudio := persistence.NewPostgresOrphanedAudioRepository(d.DB, d.DBMetrics)
 
 	addTrack, err := service.NewAddTrackService(catalogTracks, handler.NewWireEvents(d.Events), d.Scheduler, clock.Now, ids.Real)
 	if err != nil {

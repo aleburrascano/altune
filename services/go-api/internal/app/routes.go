@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/app/router"
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/eventstream"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
 	"net/http"
@@ -21,7 +22,7 @@ const (
 func (a *application) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
-	playbackRoutes http.Handler,
+	playbackRoutes playback.Routes,
 	discoveryH *search.DiscoveryHandler,
 	clientEventRoutes http.Handler,
 ) *chi.Mux {
@@ -43,7 +44,7 @@ func (a *application) mountRoutes(
 					r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
 					r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
 				}
-				r.Mount("/playback", playbackRoutes)
+				playbackRoutes.Bounded(r)
 				r.Mount("/discovery", discoveryH.Routes())
 				r.Mount("/telemetry", clientEventRoutes)
 			})
@@ -52,6 +53,7 @@ func (a *application) mountRoutes(
 			r.Use(requireAuth)
 
 			cat.libraryRoutes.LongLived(r)
+			playbackRoutes.LongLived(r)
 			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		},
 	})

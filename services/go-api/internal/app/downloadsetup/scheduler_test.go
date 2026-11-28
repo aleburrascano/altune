@@ -86,7 +86,7 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 		Config:     cfg,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, librarytest.DiscardFSCallMetrics()),
+		AudioStore: librarytest.NewFilesystemAudioStore(cfg.MusicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    sources,
 	})
@@ -100,7 +100,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	musicDir := t.TempDir()
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Fixture Song", Artist: "Fixture Artist", Album: ""}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: userID, Title: "Fixture Song", Artist: "Fixture Artist", Album: ""}, time.Now, ids.Real)
 	if err != nil || track.SetDuration(212) != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -116,7 +116,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(musicDir, librarytest.DiscardFSCallMetrics()),
+		AudioStore: librarytest.NewFilesystemAudioStore(musicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -181,7 +181,7 @@ func TestNewScheduler_ZeroUpgradeWorkersBuildsNoUpgradeLaneInsteadOfPanicking(t 
 		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(musicDir, librarytest.DiscardFSCallMetrics()),
+		AudioStore: librarytest.NewFilesystemAudioStore(musicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -266,7 +266,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Song", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: userID, Title: "Song", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()),
+		AudioStore: librarytest.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
@@ -313,7 +313,7 @@ func (sourceWithNothing) Fetch(context.Context, download.AudioCandidate, string)
 func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.TrackId) {
 	t.Helper()
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Song", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: userID, Title: "Song", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -377,7 +377,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), time.Now, download.NewPostgresUpgradeStore(pool), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir, librarytest.DiscardFSCallMetrics()),
+		AudioStore: librarytest.NewFilesystemAudioStore(cfg.MusicDir, librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{sourceWithNothing{}}},
 	})
@@ -443,7 +443,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(library.NewTrackInput{UserId: userID, Title: "Hanging Song", Artist: "Artist", Album: ""}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: userID, Title: "Hanging Song", Artist: "Artist", Album: ""}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		DBMetrics:  librarytest.DiscardDBCallMetrics(),
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New(), ids.Real),
-		AudioStore: library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()),
+		AudioStore: librarytest.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{hang}},
 	})

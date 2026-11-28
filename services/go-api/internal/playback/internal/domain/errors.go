@@ -16,10 +16,6 @@ var (
 	ErrTrackSourceUnavailable  = errors.New("now-playing track source unavailable")
 	ErrNowPlayingTrackNotFound = errors.New("now-playing track not found")
 	ErrEnrichmentUnavailable   = errors.New("now-playing enrichment temporarily unavailable")
-
-	ErrEnrichmentCollaboratorRequired = errors.New("nowplaying: a required collaborator is missing")
-	ErrEnrichmentClockRequired        = errors.New("nowplaying: the reader requires a clock")
-	ErrEnrichmentInvalidTimeout       = errors.New("nowplaying: the lookup timeout must be positive")
 )
 
 type ValidationKind string

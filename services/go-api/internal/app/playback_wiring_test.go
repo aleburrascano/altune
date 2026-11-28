@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"altune/go-api/internal/playback"
+	"altune/go-api/internal/playback/playbacktest"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/polltest"
 	"context"
@@ -53,8 +54,8 @@ func TestQueueRateLimit_TheConfigDefaultsMatchPlaybacksOwnLimit(t *testing.T) {
 	}
 
 	got := playback.QueueSaveLimit{Every: cfg.PlaybackQueueRateEvery, Burst: cfg.PlaybackQueueRateBurst}
-	if got != playback.DefaultQueueSaveLimit() {
-		t.Errorf("default limit = %+v, want %+v", got, playback.DefaultQueueSaveLimit())
+	if got != playbacktest.DefaultQueueSaveLimit() {
+		t.Errorf("default limit = %+v, want %+v", got, playbacktest.DefaultQueueSaveLimit())
 	}
 }
 
@@ -92,14 +93,14 @@ func TestPlayback_TheErasureSweepReapsErasedQueueStates(t *testing.T) {
 	}
 }
 
-func livePlaybackMetrics(t *testing.T, h http.Handler, token string) playback.MetricsSnapshot {
+func livePlaybackMetrics(t *testing.T, h http.Handler, token string) playbacktest.MetricsSnapshot {
 	t.Helper()
 	code, body := getAs(t, h, "/observe/metrics/live", token)
 	if code != http.StatusOK {
 		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Playback playback.MetricsSnapshot `json:"playback"`
+		Playback playbacktest.MetricsSnapshot `json:"playback"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)

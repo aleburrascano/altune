@@ -62,9 +62,8 @@ func (a *application) wireCatalog(
 	}
 	dbMetrics := library.NewDBCallMetrics(a.metrics)
 	module, err := library.New(library.Deps{
-		CatalogTracks:   library.NewPostgresCatalogTrackRepository(a.pool, dbMetrics),
-		Playlists:       library.NewPostgresPlaylistRepository(a.pool, dbMetrics),
-		OrphanedAudio:   library.NewPostgresOrphanedAudioRepository(a.pool, dbMetrics),
+		DB:              a.pool,
+		DBMetrics:       dbMetrics,
 		Events:          tap,
 		Scheduler:       audio.scheduler,
 		AudioStore:      audio.audioStore,
