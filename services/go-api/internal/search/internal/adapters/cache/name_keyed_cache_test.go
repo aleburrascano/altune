@@ -2,7 +2,7 @@ package cache_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/cache"
-	"altune/go-api/internal/search/internal/adapters/memory/memorytest"
+	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"testing"
@@ -14,7 +14,7 @@ import (
 const humbleNameHash = "432522d092e990b60aed5164042056aa"
 
 func TestRedisDeezerEnrichmentCache_KeepsTheNameKeyedCacheContract(t *testing.T) {
-	memorytest.NameKeyedCacheContract(t, func(t *testing.T) memorytest.NameKeyedCacheUnderTest[domain.DeezerEnrichment] {
+	contracttest.NameKeyedCacheContract(t, func(t *testing.T) contracttest.NameKeyedCacheUnderTest[domain.DeezerEnrichment] {
 		_, client := newRedis(t)
 		return cache.NewRedisDeezerEnrichmentCache(client)
 	}, domain.DeezerEnrichment{BPM: 172, Explicit: true}, domain.DeezerEnrichment{BPM: 90},
@@ -22,7 +22,7 @@ func TestRedisDeezerEnrichmentCache_KeepsTheNameKeyedCacheContract(t *testing.T)
 }
 
 func TestRedisDeezerLyricsCache_KeepsTheNameKeyedCacheContract(t *testing.T) {
-	memorytest.NameKeyedCacheContract(t, func(t *testing.T) memorytest.NameKeyedCacheUnderTest[domain.DeezerLyrics] {
+	contracttest.NameKeyedCacheContract(t, func(t *testing.T) contracttest.NameKeyedCacheUnderTest[domain.DeezerLyrics] {
 		_, client := newRedis(t)
 		return cache.NewRedisDeezerLyricsCache(client)
 	}, domain.DeezerLyrics{Plain: "la la", Copyright: "c"}, domain.DeezerLyrics{Plain: "other"},

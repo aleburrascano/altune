@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/rank"
+	"altune/go-api/internal/search/internal/service"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -95,10 +95,10 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 	)
 
 	results := make([]search.SearchResult, 0, 3)
-	for _, e := range rank.Merge([][]search.SearchResult{{dz, solo}, {am}}) {
+	for _, e := range service.Merge([][]search.SearchResult{{dz, solo}, {am}}) {
 		results = append(results, e.Result)
 	}
-	results = append(results, rank.CollapseArtistDuplicates([]search.SearchResult{primary, dup})...)
+	results = append(results, service.CollapseArtistDuplicates([]search.SearchResult{primary, dup})...)
 
 	got, err := json.Marshal(servedItems(t, results...))
 	if err != nil {
@@ -179,7 +179,7 @@ func TestSearchResultToDTO_AMergedCleanEditSendsExplicitFalseOnTheWire(t *testin
 		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderSpotify, ExternalID: "s1"}}),
 	)
 	for i, groups := range [][][]search.SearchResult{{{clean}, {unknown}}, {{unknown}, {clean}}} {
-		entities := rank.Merge(groups)
+		entities := service.Merge(groups)
 		if len(entities) != 1 {
 			t.Fatalf("order %d: got %d entities, want one merged track", i, len(entities))
 		}

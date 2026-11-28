@@ -5,9 +5,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/artistpage"
-	"altune/go-api/internal/search/internal/service/unreleased"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
@@ -15,19 +14,19 @@ import (
 
 type unreleasedServices struct {
 	lookup  handler.UnreleasedReader
-	refresh *unreleased.Service
+	refresh *service.UnreleasedService
 }
 
-func newUnreleasedServices(ctx context.Context, d connections.Deps, t *providerTable, s connections.Stores, artists *artistpage.GetArtistContentService) (unreleasedServices, error) {
+func newUnreleasedServices(ctx context.Context, d connections.Deps, t *providerTable, s connections.Stores, artists *service.GetArtistContentService) (unreleasedServices, error) {
 	songs, lists := t.named(rowGenius).unreleasedSongs, t.named(rowTrackers).unreleasedLists
 	if songs == nil && lists == nil {
 		return unreleasedServices{lookup: handler.NoUnreleased{}}, nil
 	}
-	var genius ports.GeniusSongCatalog = unreleased.NoGenius{}
+	var genius ports.GeniusSongCatalog = service.NoGenius{}
 	if songs != nil {
 		genius = songs
 	}
-	var trackers ports.TrackerSongs = unreleased.NoTrackers{}
+	var trackers ports.TrackerSongs = service.NoTrackers{}
 	if lists != nil {
 		trackers = lists
 	}
@@ -35,7 +34,7 @@ func newUnreleasedServices(ctx context.Context, d connections.Deps, t *providerT
 	if err != nil {
 		return unreleasedServices{}, err
 	}
-	lookup, err := unreleased.NewService(genius, artists, d.Unreleased.Tuning, unreleased.Wiring{
+	lookup, err := service.NewUnreleasedService(genius, artists, d.Unreleased.Tuning, service.Wiring{
 		Trackers: trackers,
 		Storage:  storage,
 		Backend:  backend,
@@ -53,19 +52,19 @@ func newUnreleasedServices(ctx context.Context, d connections.Deps, t *providerT
 	return unreleasedServices{lookup: lookup}, nil
 }
 
-func unreleasedStorage(ctx context.Context, d connections.Deps, s connections.Stores) (unreleased.Storage, unreleased.Background, bool, error) {
+func unreleasedStorage(ctx context.Context, d connections.Deps, s connections.Stores) (service.Storage, service.Background, bool, error) {
 	if store := unreleasedStore(ctx, d, s); store != nil {
-		storage, err := unreleased.NewStoredStorage(store)
+		storage, err := service.NewStoredStorage(store)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("build the unreleased store storage: %w", err)
 		}
 		return storage, storage, true, nil
 	}
-	storage, err := unreleased.NewCachedStorage(cache.NewRedisUnreleasedCache(s.Redis, s.CacheOption()))
+	storage, err := service.NewCachedStorage(cache.NewRedisUnreleasedCache(s.Redis, s.CacheOption()))
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("build the unreleased cache storage: %w", err)
 	}
-	return storage, unreleased.NoBackground{}, false, nil
+	return storage, service.NoBackground{}, false, nil
 }
 
 func unreleasedStore(ctx context.Context, d connections.Deps, s connections.Stores) ports.UnreleasedStore {

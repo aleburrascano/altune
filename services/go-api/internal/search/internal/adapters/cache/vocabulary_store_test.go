@@ -2,7 +2,6 @@ package cache_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/cache"
-	"altune/go-api/internal/search/internal/adapters/cache/spellingmatch"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"encoding/json"
@@ -586,7 +585,7 @@ func assertIndexed(t *testing.T, client *goredis.Client, norm, term string, want
 	if got := err == nil; got != want || (err != nil && !errors.Is(err, goredis.Nil)) {
 		t.Errorf("%s entry blob present = %v (err=%v), want %v", norm, got, err, want)
 	}
-	for _, tri := range spellingmatch.Trigrams(norm) {
+	for _, tri := range cache.Trigrams(norm) {
 		if got, _ := client.SIsMember(ctx, vocabTriPrefix+tri, norm).Result(); got != want {
 			t.Errorf("%s in trigram set %q = %v, want %v", norm, tri, got, want)
 		}

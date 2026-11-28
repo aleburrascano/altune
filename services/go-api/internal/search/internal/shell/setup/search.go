@@ -4,12 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/cache"
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/artwork"
-	"altune/go-api/internal/search/internal/service/providerguard"
-	"altune/go-api/internal/search/internal/service/query"
-	"altune/go-api/internal/search/internal/service/rank"
-	"altune/go-api/internal/search/internal/service/related"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
@@ -17,25 +13,25 @@ import (
 )
 
 type searchPlan struct {
-	collaborators query.Collaborators
-	options       []query.Option
+	collaborators service.Collaborators
+	options       []service.Option
 	chosen        []string
 }
 
 func newSearchPlan() *searchPlan {
-	return &searchPlan{collaborators: query.AbsentCollaborators()}
+	return &searchPlan{collaborators: service.AbsentCollaborators()}
 }
 
 func (p *searchPlan) choose(name string) {
 	p.chosen = append(p.chosen, name)
 }
 
-func (p *searchPlan) option(name string, opt query.Option) {
+func (p *searchPlan) option(name string, opt service.Option) {
 	p.options = append(p.options, opt)
 	p.choose(name)
 }
 
-func newSearchService(ctx context.Context, w wiring, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
+func newSearchService(ctx context.Context, w wiring, breaker *service.CircuitBreaker) (*service.SearchService, error) {
 	p := newSearchPlan()
 	planRanking(p, w.deps.Search, w.stores)
 	planExplorationAndDeadline(p, w.deps.Search)
@@ -52,17 +48,17 @@ func newSearchService(ctx context.Context, w wiring, breaker *providerguard.Circ
 	return w.namedSearchService(ctx, "discovery.search", p, breaker)
 }
 
-func newRankingOnlySearchService(ctx context.Context, w wiring) (*query.Service, error) {
+func newRankingOnlySearchService(ctx context.Context, w wiring) (*service.SearchService, error) {
 	p := newSearchPlan()
 	planRanking(p, w.deps.Search, w.stores)
 	planVocabulary(p, w.stores)
-	return w.namedSearchService(ctx, "discovery.ranking_only_search", p, providerguard.NewCircuitBreaker(clock.Now))
+	return w.namedSearchService(ctx, "discovery.ranking_only_search", p, service.NewCircuitBreaker(clock.Now))
 }
 
-func (w wiring) namedSearchService(ctx context.Context, message string, p *searchPlan, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
+func (w wiring) namedSearchService(ctx context.Context, message string, p *searchPlan, breaker *service.CircuitBreaker) (*service.SearchService, error) {
 	w.deps.Logger.InfoContext(ctx, message, "options", strings.Join(p.chosen, ","))
-	options := append([]query.Option{query.WithProviderTimeouts(w.table.searchTimeouts())}, p.options...)
-	svc, err := query.NewService(w.deps.Tracker, w.table.searchProviders(), breaker, p.collaborators, options...)
+	options := append([]service.Option{service.WithProviderTimeouts(w.table.searchTimeouts())}, p.options...)
+	svc, err := service.NewSearchService(w.deps.Tracker, w.table.searchProviders(), breaker, p.collaborators, options...)
 	if err != nil {
 		return nil, fmt.Errorf("build %s: %w", message, err)
 	}
@@ -73,23 +69,23 @@ func planRanking(p *searchPlan, settings connections.SearchSettings, s connectio
 	p.collaborators.History = s.History
 	p.choose("history")
 	if settings.TailDemotion {
-		p.option("tail_demotion", query.WithTailDemotion())
+		p.option("tail_demotion", service.WithTailDemotion())
 	}
 	if settings.CrossKindProminence {
-		p.option("cross_kind_prominence", query.WithCrossKindProminence())
+		p.option("cross_kind_prominence", service.WithCrossKindProminence())
 	}
 }
 
 func planExplorationAndDeadline(p *searchPlan, settings connections.SearchSettings) {
 	if settings.Exploration && settings.ExplorationRate > 0 {
-		p.option("exploration", query.WithExploration(settings.ExplorationRate))
+		p.option("exploration", service.WithExploration(settings.ExplorationRate))
 	}
 	if settings.Deadline > 0 {
-		p.option("deadline", query.WithSearchDeadline(settings.Deadline))
+		p.option("deadline", service.WithSearchDeadline(settings.Deadline))
 	}
 }
 
-func planArtworkAndRelated(p *searchPlan, w wiring, breaker *providerguard.CircuitBreaker) error {
+func planArtworkAndRelated(p *searchPlan, w wiring, breaker *service.CircuitBreaker) error {
 	filler, err := newArtworkFiller(w)
 	if err != nil {
 		return fmt.Errorf("build the artwork filler: %w", err)
@@ -106,41 +102,41 @@ func planArtworkAndRelated(p *searchPlan, w wiring, breaker *providerguard.Circu
 	return nil
 }
 
-func newFindRelatedService(t *providerTable, s connections.Stores, breaker *providerguard.CircuitBreaker) (*related.FindRelatedService, error) {
+func newFindRelatedService(t *providerTable, s connections.Stores, breaker *service.CircuitBreaker) (*service.FindRelatedService, error) {
 	similar := t.named(rowDeezer).similar
-	library, err := related.LibraryMatches(persistence.NewPostgresRelationshipQuerier(s.Pool))
+	library, err := service.LibraryMatches(persistence.NewPostgresRelationshipQuerier(s.Pool))
 	if err != nil {
 		return nil, fmt.Errorf("build the library matches source: %w", err)
 	}
-	albumTracks, err := related.AlbumTracksSource(similar, breaker)
+	albumTracks, err := service.AlbumTracksSource(similar, breaker)
 	if err != nil {
 		return nil, fmt.Errorf("build the album tracks source: %w", err)
 	}
-	artistAlbums, err := related.ArtistAlbumsSource(similar, breaker)
+	artistAlbums, err := service.ArtistAlbumsSource(similar, breaker)
 	if err != nil {
 		return nil, fmt.Errorf("build the artist albums source: %w", err)
 	}
-	r0, err := related.NewFindRelatedService(clock.Now, library, albumTracks, artistAlbums)
+	r0, err := service.NewFindRelatedService(clock.Now, library, albumTracks, artistAlbums)
 	if err != nil {
 		return r0, fmt.Errorf("new find related service: %w", err)
 	}
 	return r0, nil
 }
 
-func newArtworkFiller(w wiring) (*artwork.ArtworkFiller, error) {
+func newArtworkFiller(w wiring) (*service.ArtworkFiller, error) {
 	s := w.stores
-	var identities ports.IdentityStore = artwork.NoIdentities{}
+	var identities ports.IdentityStore = service.NoIdentities{}
 	if s.Identities != nil {
 		identities = s.Identities
 	}
 	if s.Redis == nil {
-		r0, err := artwork.NewPendingFiller(identities, w.deps.Tracker)
+		r0, err := service.NewPendingFiller(identities, w.deps.Tracker)
 		if err != nil {
 			return r0, fmt.Errorf("new pending filler: %w", err)
 		}
 		return r0, nil
 	}
-	r0, err := artwork.NewArtworkFiller(
+	r0, err := service.NewArtworkFiller(
 		w.artwork,
 		cache.NewRedisArtworkCache(s.Redis, s.CacheOption()),
 		identities,
@@ -195,7 +191,7 @@ func planRecording(p *searchPlan, w wiring) error {
 	p.collaborators.Events = w.stores.Events
 	p.choose("event_store")
 	if w.deps.Search.BehavioralRanking {
-		scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(w.stores.Events), clock.Now)
+		scoring, err := service.NewBehavioralScoring(service.NewSatisfactionConsumer(w.stores.Events), clock.Now)
 		if err != nil {
 			return fmt.Errorf("build behavioral ranking: %w", err)
 		}

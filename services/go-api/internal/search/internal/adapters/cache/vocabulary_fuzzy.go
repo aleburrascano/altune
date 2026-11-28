@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"altune/go-api/internal/search/internal/adapters/cache/spellingmatch"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"encoding/json"
@@ -28,7 +27,7 @@ func (s *RedisVocabularyStore) fuzzySearch(
 	limit int,
 ) ([]domain.SpellingHintsEntry, error) {
 	norm := s.normalizeTerm(query)
-	q := spellingmatch.NewQuery(norm)
+	q := NewQuery(norm)
 	if len(q.Trigrams()) == 0 {
 		return nil, nil
 	}
@@ -195,7 +194,7 @@ type fuzzyCandidate struct {
 func (s *RedisVocabularyStore) topMatchingEntries(
 	ctx context.Context,
 	candidates map[string]int,
-	q spellingmatch.Query,
+	q Query,
 	limit int,
 	phoneticSet map[string]bool,
 ) ([]domain.SpellingHintsEntry, error) {
@@ -205,7 +204,7 @@ func (s *RedisVocabularyStore) topMatchingEntries(
 
 func survivingNorms(
 	candidates map[string]int,
-	q spellingmatch.Query,
+	q Query,
 	phoneticSet map[string]bool,
 ) []scoredNorm {
 	survivors := make([]scoredNorm, 0, len(candidates))

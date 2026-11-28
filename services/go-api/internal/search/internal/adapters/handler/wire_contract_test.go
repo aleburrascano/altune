@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/details"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/jsoncontract"
 	"encoding/json"
@@ -99,7 +99,7 @@ func TestWire_DiscoveryFavorites(t *testing.T) {
 }
 
 func TestWire_DiscoveryEnrichment(t *testing.T) {
-	svc := mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{}))
+	svc := mustEnrichment(service.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{}))
 	router := wireRouter(t, handler.DiscoveryServices{Enrich: svc})
 
 	wireGet(t, router, "/discovery/enrichment?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", "search_enrichment")

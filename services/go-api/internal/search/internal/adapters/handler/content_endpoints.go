@@ -2,8 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/artistpage"
-	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/search/internal/service"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/httpserver"
@@ -23,7 +22,7 @@ type ContentFetchResponseDTO struct {
 	Code     string            `json:"code,omitempty"`
 }
 
-func contentFetchToDTO(resp *providerguard.ContentFetchResponse) ContentFetchResponseDTO {
+func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
 	items := make([]SearchResultDTO, len(resp.Items))
 	for i, r := range resp.Items {
 		items[i] = searchResultToDTO(r)
@@ -39,7 +38,7 @@ func contentFetchToDTO(resp *providerguard.ContentFetchResponse) ContentFetchRes
 
 var errContentUnserved = apierror.NewError(apierror.CodeDiscoveryContentUnserved, "")
 
-func contentFetchFailure(resp *providerguard.ContentFetchResponse) *apierror.CodedError {
+func contentFetchFailure(resp *service.ContentFetchResponse) *apierror.CodedError {
 	if resp.Unserved {
 		return errContentUnserved
 	}
@@ -122,7 +121,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				return
 			}
 
-			resp, err := h.albumSvc.ExecuteRequest(ctx, artistpage.AlbumTracksRequest{
+			resp, err := h.albumSvc.ExecuteRequest(ctx, service.AlbumTracksRequest{
 				Provider:              pn,
 				ExternalID:            externalID,
 				Title:                 albumTitle,
@@ -207,7 +206,7 @@ type ArtistContentResponseDTO struct {
 	Albums    ContentFetchResponseDTO `json:"albums"`
 }
 
-func artistContentFailure(tracks, albums *providerguard.ContentFetchResponse) *apierror.CodedError {
+func artistContentFailure(tracks, albums *service.ContentFetchResponse) *apierror.CodedError {
 	tracksFailure, albumsFailure := contentFetchFailure(tracks), contentFetchFailure(albums)
 	if tracksFailure == nil || albumsFailure == nil {
 		return nil
@@ -220,15 +219,15 @@ func artistContentFailure(tracks, albums *providerguard.ContentFetchResponse) *a
 
 func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
 	ctx context.Context, pn domain.ProviderName, externalID string, known map[domain.ProviderName]string, tracksLimit, albumsLimit int,
-) (tracksResp, albumsResp *providerguard.ContentFetchResponse, tracksErr, albumsErr error) {
+) (tracksResp, albumsResp *service.ContentFetchResponse, tracksErr, albumsErr error) {
 	g := parallel.New("artist_content.fetch", 2)
 	g.Go(ctx, func() {
-		tracksResp, tracksErr = fetchContentPart(ctx, "artist_content.top_tracks_panic", func() (*providerguard.ContentFetchResponse, error) {
+		tracksResp, tracksErr = fetchContentPart(ctx, "artist_content.top_tracks_panic", func() (*service.ContentFetchResponse, error) {
 			return h.artistSvc.GetTopTracks(ctx, pn, externalID, known, tracksLimit)
 		})
 	})
 	g.Go(ctx, func() {
-		albumsResp, albumsErr = fetchContentPart(ctx, "artist_content.albums_panic", func() (*providerguard.ContentFetchResponse, error) {
+		albumsResp, albumsErr = fetchContentPart(ctx, "artist_content.albums_panic", func() (*service.ContentFetchResponse, error) {
 			return h.artistSvc.GetAlbums(ctx, pn, externalID, known, albumsLimit)
 		})
 	})
@@ -237,8 +236,8 @@ func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
 }
 
 func fetchContentPart(
-	ctx context.Context, panicEvent string, fetch func() (*providerguard.ContentFetchResponse, error),
-) (resp *providerguard.ContentFetchResponse, err error) {
+	ctx context.Context, panicEvent string, fetch func() (*service.ContentFetchResponse, error),
+) (resp *service.ContentFetchResponse, err error) {
 	if panicked := background.SafeRun(ctx, panicEvent, func() { resp, err = fetch() }); panicked != nil {
 		return nil, fmt.Errorf("run background task: %w", panicked)
 	}

@@ -3,8 +3,8 @@ package handler_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"context"

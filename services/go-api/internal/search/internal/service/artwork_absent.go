@@ -1,0 +1,47 @@
+package service
+
+import (
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"context"
+)
+
+type NoLookup struct{}
+
+func (NoLookup) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, error) {
+	return "", "", nil
+}
+
+func (NoLookup) ResolveWithIdentityTagged(context.Context, domain.ResultKind, string, string, ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
+	return "", "", nil
+}
+
+type NoArtworkCache struct{}
+
+func (NoArtworkCache) Get(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, bool, error) {
+	return "", "", false, nil
+}
+
+func (NoArtworkCache) Set(context.Context, domain.ResultKind, string, string, string, string, domain.ProviderKey, ports.ArtworkConfidence) error {
+	return nil
+}
+
+type NoArtworkMBIDIndex struct{}
+
+func (NoArtworkMBIDIndex) LookupMBID(context.Context, domain.ResultKind, string) (string, bool) {
+	return "", false
+}
+
+func (NoArtworkMBIDIndex) RememberMBID(context.Context, domain.ResultKind, string, string) error {
+	return nil
+}
+
+type NoIdentities struct{}
+
+func (NoIdentities) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
+	return "", nil, false
+}
+
+func (NoIdentities) LookupByProviderIDs(context.Context, []ports.IdentityRef) map[ports.IdentityRef]ports.IdentityHit {
+	return nil
+}

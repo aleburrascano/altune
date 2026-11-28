@@ -4,10 +4,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/inlibrary"
-	"altune/go-api/internal/search/internal/service/unreleased"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"encoding/json"
 	"errors"
@@ -164,7 +163,7 @@ func ownedUnreleasedRouter(t *testing.T, reader goldenOwnershipReader) chi.Route
 		},
 	}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{})))
-	h := wireGoldenOwnership(t, searchtest.NewTracker(t), handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), reader, inlibrary.AbsentTrackNumberFiller{})
+	h := wireGoldenOwnership(t, searchtest.NewTracker(t), handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), reader, service.AbsentTrackNumberFiller{})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -269,7 +268,7 @@ func TestUnreleasedSongDTO_CarriesEveryDomainField(t *testing.T) {
 func TestHandleArtistUnreleased_StoreBuiltArtistAnswersFromTheStoreWithNoGeniusCalls(t *testing.T) {
 	key := ports.UnreleasedArtistKey{Provider: search.ProviderDeezer, ExternalID: "27"}
 	store := &searchtest.UnreleasedStore{Artists: map[ports.UnreleasedArtistKey]memory.StoredArtist{key: {
-		Complete: true, Built: true, BuildVersion: unreleased.CurrentBuildVersion,
+		Complete: true, Built: true, BuildVersion: service.CurrentBuildVersion,
 		Songs: []domain.UnreleasedSong{{GeniusID: 1, Title: "A"}, {GeniusID: 2, Title: "B"}, {GeniusID: 3, Title: "C"}},
 	}}}
 	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: []domain.UnreleasedSong{{GeniusID: 9, Title: "Other"}}}
@@ -309,7 +308,7 @@ func TestHandleArtistUnreleased_OwnedVersionIsStampedByItsFullTitleNotTheBaseTit
 		domain.OwnershipKey("Sports Car [V3]", "Carti"): {TrackID: "saved-v3", AcquisitionStatus: "ready"},
 		domain.OwnershipKey("Other", "Carti"):           {TrackID: "streaming-other", AcquisitionStatus: "ready"},
 	}}
-	h := wireGoldenOwnership(t, searchtest.NewTracker(t), handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), owned, inlibrary.AbsentTrackNumberFiller{})
+	h := wireGoldenOwnership(t, searchtest.NewTracker(t), handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Unreleased: svc}), time.Now), owned, service.AbsentTrackNumberFiller{})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -476,7 +475,7 @@ func TestArtistUnreleased_KnownIDsKeepValidEntriesAndSkipTheRest(t *testing.T) {
 	for _, tc := range cases {
 		store := &recordingUnreleasedStore{UnreleasedStore: &searchtest.UnreleasedStore{
 			Artists: map[ports.UnreleasedArtistKey]memory.StoredArtist{
-				key: {Built: true, BuildVersion: unreleased.CurrentBuildVersion},
+				key: {Built: true, BuildVersion: service.CurrentBuildVersion},
 			},
 		}}
 		svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))

@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/artistpage"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -180,7 +180,7 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 	}
 }
 
-func goldenArtistSvc(t testing.TB) *artistpage.GetArtistContentService {
+func goldenArtistSvc(t testing.TB) *service.GetArtistContentService {
 	return searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
 		search.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: goldenTracks(), Albums: goldenTracks()},
 	})

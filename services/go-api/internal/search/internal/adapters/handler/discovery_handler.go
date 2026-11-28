@@ -1,17 +1,9 @@
 package handler
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/artistpage"
-	"altune/go-api/internal/search/internal/service/details"
-	"altune/go-api/internal/search/internal/service/favorites"
-	"altune/go-api/internal/search/internal/service/history"
-	"altune/go-api/internal/search/internal/service/query"
-	"altune/go-api/internal/search/internal/service/related"
-	"altune/go-api/internal/search/internal/service/unreleased"
-	"altune/go-api/internal/search/internal/service/useractivity"
-	"altune/go-api/internal/search/internal/service/vocabulary"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/telemetry"
@@ -26,18 +18,18 @@ import (
 
 type DiscoveryHandler struct {
 	now             clock.Func
-	searchSvc       *query.Service
-	historySvc      *history.ListSearchHistoryService
-	recordHistory   *history.RecordSearchHistoryService
-	clearHistorySvc *history.ClearSearchHistoryService
-	albumSvc        *artistpage.GetAlbumTracksService
-	artistSvc       *artistpage.GetArtistContentService
-	relatedSvc      *related.GetRelatedTracksService
+	searchSvc       *service.SearchService
+	historySvc      *service.ListSearchHistoryService
+	recordHistory   *service.RecordSearchHistoryService
+	clearHistorySvc *service.ClearSearchHistoryService
+	albumSvc        *service.GetAlbumTracksService
+	artistSvc       *service.GetArtistContentService
+	relatedSvc      *service.GetRelatedTracksService
 	unreleasedSvc   UnreleasedReader
 	enrichSvc       Enricher
-	suggestSvc      *vocabulary.SuggestService
-	eventSvc        *useractivity.RecordEventService
-	favoritesSvc    *favorites.FavoritesService
+	suggestSvc      *service.SuggestService
+	eventSvc        *service.RecordEventService
+	favoritesSvc    *service.FavoritesService
 	clientEvents    ClientEventSink
 	enrichers       DetailEnrichers
 	ownership       OwnershipStamper
@@ -51,14 +43,14 @@ type DiscoveryHandler struct {
 }
 
 type DetailEnrichers struct {
-	Deezer *details.DeezerEnrichmentService
-	Lyrics *details.LyricsService
+	Deezer *service.DeezerEnrichmentService
+	Lyrics *service.LyricsService
 }
 
 type UnreleasedReader interface {
 	Search(ctx context.Context, query string) ([]ports.UnreleasedHit, error)
-	Lookup(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (unreleased.Lookup, error)
-	Warm(ctx context.Context, artists []unreleased.ArtistToRefresh)
+	Lookup(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (service.Lookup, error)
+	Warm(ctx context.Context, artists []service.ArtistToRefresh)
 }
 
 type NoUnreleased struct{}
@@ -67,11 +59,11 @@ func (NoUnreleased) Search(context.Context, string) ([]ports.UnreleasedHit, erro
 	return []ports.UnreleasedHit{}, nil
 }
 
-func (NoUnreleased) Lookup(context.Context, domain.ProviderName, string, string, map[domain.ProviderName]string) (unreleased.Lookup, error) {
-	return unreleased.Lookup{}, nil
+func (NoUnreleased) Lookup(context.Context, domain.ProviderName, string, string, map[domain.ProviderName]string) (service.Lookup, error) {
+	return service.Lookup{}, nil
 }
 
-func (NoUnreleased) Warm(context.Context, []unreleased.ArtistToRefresh) {}
+func (NoUnreleased) Warm(context.Context, []service.ArtistToRefresh) {}
 
 type ClientEventSink interface {
 	Emit(ctx context.Context, event telemetry.ClientEvent)
@@ -82,17 +74,17 @@ type NoClientEvents struct{}
 func (NoClientEvents) Emit(context.Context, telemetry.ClientEvent) {}
 
 type DiscoveryServices struct {
-	Search        *query.Service
-	History       *history.ListSearchHistoryService
-	RecordHistory *history.RecordSearchHistoryService
-	ClearHistory  *history.ClearSearchHistoryService
-	Album         *artistpage.GetAlbumTracksService
-	Artist        *artistpage.GetArtistContentService
-	Related       *related.GetRelatedTracksService
+	Search        *service.SearchService
+	History       *service.ListSearchHistoryService
+	RecordHistory *service.RecordSearchHistoryService
+	ClearHistory  *service.ClearSearchHistoryService
+	Album         *service.GetAlbumTracksService
+	Artist        *service.GetArtistContentService
+	Related       *service.GetRelatedTracksService
 	Enrich        Enricher
-	Suggest       *vocabulary.SuggestService
-	Event         *useractivity.RecordEventService
-	Favorites     *favorites.FavoritesService
+	Suggest       *service.SuggestService
+	Event         *service.RecordEventService
+	Favorites     *service.FavoritesService
 	Unreleased    UnreleasedReader
 	Enrichers     DetailEnrichers
 	Ownership     OwnershipStamper

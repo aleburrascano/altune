@@ -1,12 +1,12 @@
 package search
 
-import ownership "altune/go-api/internal/search/internal/service/inlibrary"
+import "altune/go-api/internal/search/internal/service"
 
 type (
-	OwnershipEnrichmentService = ownership.OwnershipEnrichmentService
+	OwnershipEnrichmentService = service.OwnershipEnrichmentService
 )
 
 var (
-	NewOwnershipEnrichmentService = ownership.NewOwnershipEnrichmentService
-	NewOwnershipReader            = ownership.NewOwnershipReader
+	NewOwnershipEnrichmentService = service.NewOwnershipEnrichmentService
+	NewOwnershipReader            = service.NewOwnershipReader
 )

@@ -3,7 +3,7 @@ package connections_test
 import (
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/adapters/handler"
-	"altune/go-api/internal/search/internal/service/useractivity"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
 	"altune/go-api/internal/shared/telemetry"
@@ -20,7 +20,7 @@ func depsWithProviderTimeout(timeout time.Duration) connections.Deps {
 		Tracker:         &background.Tracker{},
 		Logger:          slog.Default(),
 		Transport:       http.DefaultTransport,
-		Activity:        useractivity.NoopActivityFeed{},
+		Activity:        service.NoopActivityFeed{},
 		ClientEvents:    handler.NoClientEvents{},
 		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		ProviderTimeout: timeout,

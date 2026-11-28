@@ -2,11 +2,11 @@ package search
 
 import (
 	handler "altune/go-api/internal/search/internal/adapters/handler"
-	useractivity "altune/go-api/internal/search/internal/service/useractivity"
+	"altune/go-api/internal/search/internal/service"
 )
 
 type (
 	ClientEventSink = handler.ClientEventSink
-	NoActivityFeed  = useractivity.NoopActivityFeed
+	NoActivityFeed  = service.NoopActivityFeed
 	NoClientEvents  = handler.NoClientEvents
 )

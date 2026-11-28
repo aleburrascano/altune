@@ -3,10 +3,9 @@ package searchtest
 import (
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/providerguard"
-	"altune/go-api/internal/search/internal/service/vocabulary"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"testing"
 )
@@ -15,7 +14,7 @@ func CompleteServices(t testing.TB, given handler.DiscoveryServices) handler.Dis
 	t.Helper()
 	s := given
 	if s.Search == nil {
-		s.Search = NewSearchService(t, NewTracker(t), nil, providerguard.NewCircuitBreaker(clock.Now))
+		s.Search = NewSearchService(t, NewTracker(t), nil, service.NewCircuitBreaker(clock.Now))
 	}
 	if s.History == nil {
 		s.History = NewListHistory(t, &memory.FakeHistoryReader{})
@@ -39,7 +38,7 @@ func CompleteServices(t testing.TB, given handler.DiscoveryServices) handler.Dis
 		s.Enrich = handler.UnconfiguredEnrichment{}
 	}
 	if s.Suggest == nil {
-		s.Suggest = vocabulary.NewSuggestService(&memory.FakeVocabularyStore{})
+		s.Suggest = service.NewSuggestService(&memory.FakeVocabularyStore{})
 	}
 	if s.Event == nil {
 		s.Event = NewRecordEvent(t, &memory.FakeEventStore{})

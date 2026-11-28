@@ -1,15 +1,15 @@
 package searchtest
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/inlibrary"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"testing"
 )
 
-func NewOwnership(t testing.TB, bg *background.Tracker, reader ports.OwnershipReader, filler ports.TrackNumberFiller) *inlibrary.OwnershipEnrichmentService {
+func NewOwnership(t testing.TB, bg *background.Tracker, reader ports.OwnershipReader, filler ports.TrackNumberFiller) *service.OwnershipEnrichmentService {
 	t.Helper()
-	svc, err := inlibrary.NewOwnershipEnrichmentService(bg, reader, filler)
+	svc, err := service.NewOwnershipEnrichmentService(bg, reader, filler)
 	if err != nil {
 		t.Fatalf("inlibrary.NewOwnershipEnrichmentService: %v", err)
 	}

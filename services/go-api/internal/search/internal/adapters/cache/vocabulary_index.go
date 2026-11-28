@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"altune/go-api/internal/search/internal/adapters/cache/spellingmatch"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"encoding/json"
@@ -109,7 +108,7 @@ func encodeEntryData(entry domain.SpellingHintsEntry) ([]byte, error) {
 
 func addEntryIndexes(pipe goredis.Pipeliner, ctx context.Context, norm, member string, metaphone MetaphoneFunc) {
 	pipe.ZAdd(ctx, vocabLexKey, goredis.Z{Score: 0, Member: member})
-	for _, tri := range spellingmatch.Trigrams(norm) {
+	for _, tri := range Trigrams(norm) {
 		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
 	}
 	if code := metaphone(norm); code != "" {
@@ -170,7 +169,7 @@ func (s *RedisVocabularyStore) trimTx(ctx context.Context, tx *goredis.Tx, maxEn
 func (s *RedisVocabularyStore) queueEvict(ctx context.Context, pipe goredis.Pipeliner, norm, member string) {
 	pipe.ZRem(ctx, vocabTermsKey, member)
 	pipe.ZRem(ctx, vocabLexKey, member)
-	for _, tri := range spellingmatch.Trigrams(norm) {
+	for _, tri := range Trigrams(norm) {
 		pipe.SRem(ctx, vocabTriPrefix+tri, norm)
 	}
 	if code := s.metaphone(norm); code != "" {

@@ -4,15 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/artistpage"
-	"altune/go-api/internal/search/internal/service/favorites"
-	"altune/go-api/internal/search/internal/service/history"
-	"altune/go-api/internal/search/internal/service/providerguard"
-	"altune/go-api/internal/search/internal/service/query"
-	"altune/go-api/internal/search/internal/service/unreleased"
-	"altune/go-api/internal/search/internal/service/useractivity"
-	"altune/go-api/internal/search/internal/service/vocabulary"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -34,14 +27,14 @@ type EventRetention interface {
 
 type Discovery struct {
 	Handler           *handler.DiscoveryHandler
-	Search            *query.Service
-	FeaturedArtists   *artistpage.FeaturedArtistResolver
+	Search            *service.SearchService
+	FeaturedArtists   *service.FeaturedArtistResolver
 	Recordings        RecordingAuthority
 	Charts            []ports.ChartProvider
 	SpellingHints     ports.SpellingHintsStore
-	UnreleasedRefresh *unreleased.Service
+	UnreleasedRefresh *service.UnreleasedService
 	Events            EventRetention
-	rankingOnly       *query.Service
+	rankingOnly       *service.SearchService
 }
 
 type wiring struct {
@@ -106,12 +99,12 @@ func newWiring(ctx context.Context, d connections.Deps) (wiring, error) {
 	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}, nil
 }
 
-func (d *Discovery) RankingOnlySearch() *query.Service {
+func (d *Discovery) RankingOnlySearch() *service.SearchService {
 	return d.rankingOnly
 }
 
 func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryServices, error) {
-	breaker := providerguard.NewCircuitBreaker(clock.Now)
+	breaker := service.NewCircuitBreaker(clock.Now)
 	t, s := w.table, w.stores
 	enrichment, err := newEnrichment(t, s, w.artwork)
 	if err != nil {
@@ -125,7 +118,7 @@ func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryService
 	if err != nil {
 		return handler.DiscoveryServices{}, err
 	}
-	recordHistory, err := history.NewRecordSearchHistoryService(s.History, clock.Now, ids.Real)
+	recordHistory, err := service.NewRecordSearchHistoryService(s.History, clock.Now, ids.Real)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the history recorder: %w", err)
 	}
@@ -141,15 +134,15 @@ func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryService
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the related tracks service: %w", err)
 	}
-	listHistory, err := history.NewListSearchHistoryService(s.History)
+	listHistory, err := service.NewListSearchHistoryService(s.History)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the history list service: %w", err)
 	}
-	clearHistory, err := history.NewClearSearchHistoryService(s.History, clock.Now)
+	clearHistory, err := service.NewClearSearchHistoryService(s.History, clock.Now)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the clear-history service: %w", err)
 	}
-	favoritesService, err := favorites.NewFavoritesService(persistence.NewPostgresFavoritesRepository(s.Pool))
+	favoritesService, err := service.NewFavoritesService(persistence.NewPostgresFavoritesRepository(s.Pool))
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the favorites service: %w", err)
 	}
@@ -169,14 +162,14 @@ func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryService
 		Enrichers:     enrichers,
 		Ownership:     handler.NoOwnership{},
 		ClientEvents:  w.deps.ClientEvents,
-		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
+		Suggest:       service.NewSuggestService(s.SpellingHints),
 		Event:         eventService,
 		Favorites:     favoritesService,
 	}, nil
 }
 
-func newEventService(activity ports.ActivityFeed, s connections.Stores) (*useractivity.RecordEventService, error) {
-	r0, err := useractivity.NewRecordEventService(s.Events, activity, clock.Now)
+func newEventService(activity ports.ActivityFeed, s connections.Stores) (*service.RecordEventService, error) {
+	r0, err := service.NewRecordEventService(s.Events, activity, clock.Now)
 	if err != nil {
 		return r0, fmt.Errorf("new record event service: %w", err)
 	}

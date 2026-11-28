@@ -2,9 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/history"
-	"altune/go-api/internal/search/internal/service/unreleased"
-	"altune/go-api/internal/search/internal/service/useractivity"
+	"altune/go-api/internal/search/internal/service"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -137,7 +135,7 @@ const (
 )
 
 func (h *DiscoveryHandler) warmUnreleased(ctx context.Context, results []domain.SearchResult) {
-	var artists []unreleased.ArtistToRefresh
+	var artists []service.ArtistToRefresh
 	for _, res := range results {
 		if res.Kind != domain.ResultKindArtist || len(res.Sources) == 0 {
 			continue
@@ -147,7 +145,7 @@ func (h *DiscoveryHandler) warmUnreleased(ctx context.Context, results []domain.
 			known[src.Provider] = src.ExternalID
 		}
 		first := res.Sources[0]
-		artists = append(artists, unreleased.ArtistToRefresh{Provider: first.Provider, ExternalID: first.ExternalID, Name: res.Title, Known: known})
+		artists = append(artists, service.ArtistToRefresh{Provider: first.Provider, ExternalID: first.ExternalID, Name: res.Title, Known: known})
 		if len(artists) == warmArtistLimit {
 			break
 		}
@@ -204,8 +202,8 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
 		slog.WarnContext(r.Context(), "clear search history failed",
-			"action", history.ClearSearchHistoryAction)
-		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", history.ClearSearchHistoryAction, err))
+			"action", service.ClearSearchHistoryAction)
+		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", service.ClearSearchHistoryAction, err))
 		return
 	}
 
@@ -233,7 +231,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	input := useractivity.RecordEventInput{
+	input := service.RecordEventInput{
 		Type:             eventType,
 		SearchId:         req.SearchID,
 		EventId:          req.EventID,

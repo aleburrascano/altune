@@ -1,11 +1,11 @@
 package search
 
-import providermetrics "altune/go-api/internal/search/internal/adapters/providermetrics"
+import searchtelemetry "altune/go-api/internal/search/internal/adapters/telemetry"
 
-type ProviderMetricsSnapshot = providermetrics.Snapshot
+type ProviderMetricsSnapshot = searchtelemetry.Snapshot
 
 var (
-	NewCountingTransport        = providermetrics.NewCountingTransport
-	ReadProviderMetricsSnapshot = providermetrics.ReadSnapshot
-	ProviderRetryRecorder       = providermetrics.RetryRecorder
+	NewCountingTransport        = searchtelemetry.NewCountingTransport
+	ReadProviderMetricsSnapshot = searchtelemetry.ReadSnapshot
+	ProviderRetryRecorder       = searchtelemetry.RetryRecorder
 )

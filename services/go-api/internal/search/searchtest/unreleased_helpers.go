@@ -2,26 +2,26 @@ package searchtest
 
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/unreleased"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"testing"
 )
 
-type UnreleasedPart func(*unreleased.Wiring)
+type UnreleasedPart func(*service.Wiring)
 
-func UnreleasedWiring(t testing.TB, cache ports.UnreleasedCache, parts ...UnreleasedPart) unreleased.Wiring {
+func UnreleasedWiring(t testing.TB, cache ports.UnreleasedCache, parts ...UnreleasedPart) service.Wiring {
 	t.Helper()
-	storage, err := unreleased.NewCachedStorage(cache)
+	storage, err := service.NewCachedStorage(cache)
 	if err != nil {
 		panic(err)
 	}
-	w := unreleased.Wiring{
-		Trackers: unreleased.NoTrackers{},
+	w := service.Wiring{
+		Trackers: service.NoTrackers{},
 		Storage:  storage,
-		Backend:  unreleased.NoBackground{},
+		Backend:  service.NoBackground{},
 		Shutdown: t.Context().Done(),
 		Jobs:     &background.Tracker{},
 		Timer:    clock.NewTimer,
@@ -34,8 +34,8 @@ func UnreleasedWiring(t testing.TB, cache ports.UnreleasedCache, parts ...Unrele
 }
 
 func UnreleasedStored(store ports.UnreleasedStore) UnreleasedPart {
-	return func(w *unreleased.Wiring) {
-		storage, err := unreleased.NewStoredStorage(store)
+	return func(w *service.Wiring) {
+		storage, err := service.NewStoredStorage(store)
 		if err != nil {
 			panic(err)
 		}
@@ -45,14 +45,14 @@ func UnreleasedStored(store ports.UnreleasedStore) UnreleasedPart {
 }
 
 func UnreleasedLifecycle(ctx context.Context, jobs *background.Tracker) UnreleasedPart {
-	return func(w *unreleased.Wiring) { w.Shutdown, w.Jobs = ctx.Done(), jobs }
+	return func(w *service.Wiring) { w.Shutdown, w.Jobs = ctx.Done(), jobs }
 }
 
 func UnreleasedTrackers(trackers ports.TrackerSongs) UnreleasedPart {
-	return func(w *unreleased.Wiring) { w.Trackers = trackers }
+	return func(w *service.Wiring) { w.Trackers = trackers }
 }
 
-func MustUnreleased(svc *unreleased.Service, err error) *unreleased.Service {
+func MustUnreleased(svc *service.UnreleasedService, err error) *service.UnreleasedService {
 	if err != nil {
 		panic(err)
 	}

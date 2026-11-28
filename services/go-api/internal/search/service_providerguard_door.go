@@ -1,5 +1,5 @@
 package search
 
-import providercall "altune/go-api/internal/search/internal/service/providerguard"
+import "altune/go-api/internal/search/internal/service"
 
-var NewCircuitBreaker = providercall.NewCircuitBreaker
+var NewCircuitBreaker = service.NewCircuitBreaker

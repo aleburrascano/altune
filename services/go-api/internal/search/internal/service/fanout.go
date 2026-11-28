@@ -1,0 +1,297 @@
+package service
+
+import (
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/telemetry"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync/atomic"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+)
+
+const defaultProviderTimeout = 1500 * time.Millisecond
+
+func (s *SearchService) fanOut(
+	ctx context.Context,
+	searchQuery string,
+	kinds domain.ResultKindSet,
+) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
+	return s.fanOutVia(ctx, searchQuery, kinds, newProviderAnswers(s.providerCache, searchQuery, kinds))
+}
+
+func (s *SearchService) fanOutLive(
+	ctx context.Context,
+	searchQuery string,
+	kinds domain.ResultKindSet,
+) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
+	return s.fanOutVia(ctx, searchQuery, kinds, providerAnswers{})
+}
+
+type providerArrival struct {
+	slot    int
+	results []domain.SearchResult
+	status  domain.ProviderSearchResponse
+}
+
+type fanOutRun struct {
+	results  [][]domain.SearchResult
+	statuses []domain.ProviderSearchResponse
+	waiting  map[int]bool
+	arrivals chan providerArrival
+	stop     context.CancelFunc
+	running  atomic.Int32
+}
+
+func newFanOutRun(ctx context.Context, providers int) (*fanOutRun, context.Context) {
+	callCtx, stop := background.DetachCancelable(ctx)
+	if ctx.Err() != nil {
+		stop()
+	}
+	run := &fanOutRun{
+		results:  make([][]domain.SearchResult, providers),
+		statuses: make([]domain.ProviderSearchResponse, providers),
+		waiting:  make(map[int]bool, providers),
+		arrivals: make(chan providerArrival, providers),
+		stop:     stop,
+	}
+	run.running.Store(1)
+	return run, callCtx
+}
+
+func (r *fanOutRun) callDone() {
+	if r.running.Add(-1) == 0 {
+		r.stop()
+	}
+}
+
+func (r *fanOutRun) answered() [][]domain.SearchResult {
+	perProvider := make([][]domain.SearchResult, 0, len(r.results))
+	for _, res := range r.results {
+		if len(res) > 0 {
+			perProvider = append(perProvider, res)
+		}
+	}
+	return perProvider
+}
+
+func (s *SearchService) fanOutVia(
+	ctx context.Context,
+	searchQuery string,
+	kinds domain.ResultKindSet,
+	answers providerAnswers,
+) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
+	run, callCtx := newFanOutRun(ctx, len(s.providers))
+	stopWithCaller := context.AfterFunc(ctx, run.stop)
+	for i, provider := range s.providers {
+		s.startProviderCall(ctx, callCtx, run, i, provider, fanOutRequest{query: searchQuery, kinds: kinds, answers: answers})
+	}
+	run.callDone()
+
+	s.collectArrivals(run)
+	stopWithCaller()
+	return run.answered(), run.statuses
+}
+
+type fanOutRequest struct {
+	query   string
+	kinds   domain.ResultKindSet
+	answers providerAnswers
+}
+
+func (s *SearchService) startProviderCall(ctx, callCtx context.Context, run *fanOutRun, slot int, provider ports.SearchProvider, req fanOutRequest) {
+	if cached, hit := req.answers.get(ctx, provider.Name()); hit {
+		run.results[slot], run.statuses[slot] = cached, cachedStatus(provider.Name(), cached)
+		return
+	}
+	call, ok := AdmitProviderCall(ctx, s.circuitBreaker, provider.Name())
+	if !ok {
+		run.statuses[slot] = domain.ProviderSearchResponse{Provider: provider.Name(), Status: domain.ProviderStatusCircuitOpen}
+		return
+	}
+	run.waiting[slot] = true
+	run.running.Add(1)
+	s.bg.Track(func() { s.callProvider(callCtx, run, slot, call, provider, req) })
+}
+
+func (s *SearchService) callProvider(ctx context.Context, run *fanOutRun, slot int, call BreakerCall, provider ports.SearchProvider, req fanOutRequest) {
+	defer run.callDone()
+	callCtx, stage := telemetry.StartStage(ctx, s.now, "search.provider", attribute.String("provider", provider.Name().String()))
+	res, status := s.searchProviderGuarded(callCtx, call, provider, req.query, req.kinds)
+	stage.Annotate(attribute.String("provider.status", status.Status.String()))
+	stage.End(nil)
+	if status.Status == domain.ProviderStatusOK {
+		req.answers.set(ctx, provider.Name(), res)
+	}
+	run.arrivals <- providerArrival{slot: slot, results: res, status: status}
+}
+
+func (s *SearchService) collectArrivals(run *fanOutRun) {
+	deadline, stopTimer := s.awaitDeadline()
+	defer stopTimer()
+	pastDeadline := false
+
+	for len(run.waiting) > 0 && (!pastDeadline || !anyAnswer(run.results, run.statuses)) {
+		select {
+		case a := <-run.arrivals:
+			run.results[a.slot], run.statuses[a.slot] = a.results, a.status
+			delete(run.waiting, a.slot)
+		case <-deadline:
+			pastDeadline, deadline = true, nil
+		}
+	}
+
+	for slot := range run.waiting {
+		run.statuses[slot] = domain.ProviderSearchResponse{Provider: s.providers[slot].Name(), Status: domain.ProviderStatusPending}
+	}
+}
+
+type deadlineTimer func() (<-chan time.Time, func() bool)
+
+func noDeadline() (<-chan time.Time, func() bool) {
+	return nil, func() bool { return false }
+}
+
+func deadlineAfter(d time.Duration, newTimer clock.TimerFunc) deadlineTimer {
+	return func() (<-chan time.Time, func() bool) {
+		return newTimer(d)
+	}
+}
+
+func anyAnswer(results [][]domain.SearchResult, statuses []domain.ProviderSearchResponse) bool {
+	for i, st := range statuses {
+		if st.Status == domain.ProviderStatusOK && len(results[i]) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *SearchService) searchProvider(
+	ctx context.Context,
+	call BreakerCall,
+	p ports.SearchProvider,
+	searchQuery string,
+	kinds domain.ResultKindSet,
+) (res []domain.SearchResult, status domain.ProviderSearchResponse) {
+	timeout := defaultProviderTimeout
+	if own, ok := s.timeouts[p.Name()]; ok {
+		timeout = own
+	}
+	provCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var latencyMs int64
+	res, err := RunAdmitted(ctx, call,
+		func(err error) error { return searchBreakerOutcome(provCtx, err) },
+		func() ([]domain.SearchResult, error) {
+			start := s.now()
+			defer func() { latencyMs = s.now().Sub(start).Milliseconds() }()
+			return p.Search(provCtx, searchQuery, kinds)
+		})
+
+	if partial := (*domain.PartialKindsError)(nil); errors.As(err, &partial) {
+		st := failureStatus(provCtx, err)
+		slog.WarnContext(ctx, "search.v2.provider_partial",
+			"provider", p.Name().String(), logging.KeyStatus, st.String(), "failed_kinds", partial.Failed,
+			logging.KeyError, redact.Secrets(err.Error()))
+		return res, domain.ProviderSearchResponse{
+			Provider:    p.Name(),
+			Results:     res,
+			Status:      st,
+			LatencyMs:   latencyMs,
+			ResultCount: len(res),
+		}
+	}
+	if err != nil {
+		st := failureStatus(provCtx, err)
+		slog.WarnContext(ctx, "search.v2.provider_failed",
+			"provider", p.Name().String(), logging.KeyStatus, st.String(), logging.KeyError, redact.Secrets(err.Error()))
+		return nil, domain.ProviderSearchResponse{Provider: p.Name(), Status: st, LatencyMs: latencyMs}
+	}
+	return res, domain.ProviderSearchResponse{
+		Provider:    p.Name(),
+		Results:     res,
+		Status:      domain.ProviderStatusOK,
+		LatencyMs:   latencyMs,
+		ResultCount: len(res),
+	}
+}
+
+func (s *SearchService) searchProviderGuarded(
+	ctx context.Context,
+	call BreakerCall,
+	p ports.SearchProvider,
+	searchQuery string,
+	kinds domain.ResultKindSet,
+) (res []domain.SearchResult, status domain.ProviderSearchResponse) {
+	panicked := background.SafeRun(ctx, "search.v2.provider_panic", func() {
+		res, status = s.searchProvider(ctx, call, p, searchQuery, kinds)
+	}, "provider", p.Name().String())
+	if panicked != nil {
+		return nil, domain.ProviderSearchResponse{Provider: p.Name(), Status: domain.ProviderStatusError}
+	}
+	return res, status
+}
+
+func failureStatus(provCtx context.Context, err error) domain.ProviderStatus {
+	if provCtx.Err() != nil || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return domain.ProviderStatusTimeout
+	}
+	return domain.ProviderStatusError
+}
+
+func searchBreakerOutcome(provCtx context.Context, err error) error {
+	var partial *domain.PartialKindsError
+	if errors.As(err, &partial) {
+		return nil
+	}
+	return budgetOutcome(provCtx, err)
+}
+
+func budgetOutcome(provCtx context.Context, err error) error {
+	if err == nil || !errors.Is(provCtx.Err(), context.DeadlineExceeded) ||
+		errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", err, context.DeadlineExceeded)
+}
+
+func anyProviderFailed(statuses []domain.ProviderSearchResponse) bool {
+	for _, st := range statuses {
+		if st.Status != domain.ProviderStatusOK && st.Status != domain.ProviderStatusPending {
+			return true
+		}
+	}
+	return false
+}
+
+func anyProviderPending(statuses []domain.ProviderSearchResponse) bool {
+	for _, st := range statuses {
+		if st.Status == domain.ProviderStatusPending {
+			return true
+		}
+	}
+	return false
+}
+
+func AllProvidersFailed(statuses []domain.ProviderSearchResponse) bool {
+	if len(statuses) == 0 {
+		return false
+	}
+	for _, st := range statuses {
+		if st.Status == domain.ProviderStatusOK {
+			return false
+		}
+	}
+	return true
+}

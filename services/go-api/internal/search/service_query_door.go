@@ -1,9 +1,9 @@
 package search
 
-import search "altune/go-api/internal/search/internal/service/query"
+import "altune/go-api/internal/search/internal/service"
 
 type (
-	SearchOutput  = search.SearchOutput
-	SearchService = search.Service
-	Collaborators = search.Collaborators
+	SearchOutput  = service.SearchOutput
+	SearchService = service.SearchService
+	Collaborators = service.Collaborators
 )

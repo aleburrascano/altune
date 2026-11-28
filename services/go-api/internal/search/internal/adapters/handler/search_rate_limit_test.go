@@ -3,7 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
-	"altune/go-api/internal/search/internal/service/vocabulary"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
@@ -105,7 +105,7 @@ func TestSearchRateLimit_DefaultBudgetsThenRejects(t *testing.T) {
 		},
 		{
 			name:   "suggest",
-			router: buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, handler.DiscoveryServices{Suggest: vocabulary.NewSuggestService(&fakeVocabStore{})})),
+			router: buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, handler.DiscoveryServices{Suggest: service.NewSuggestService(&fakeVocabStore{})})),
 			path:   "/discovery/suggest?q=radio",
 			max:    handler.DefaultDiscoveryRateLimits.Suggest.Max,
 		},
@@ -179,7 +179,7 @@ func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search:  searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now)),
-		Suggest: vocabulary.NewSuggestService(&fakeVocabStore{}),
+		Suggest: service.NewSuggestService(&fakeVocabStore{}),
 	}), time.Now).WithRateLimits(handler.DiscoveryRateLimits{
 		Search:  handler.RequestLimit{Max: 2, Window: time.Hour},
 		Suggest: handler.RequestLimit{Max: 2, Window: time.Hour},

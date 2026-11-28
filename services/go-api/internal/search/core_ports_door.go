@@ -1,6 +1,6 @@
 package search
 
-import ports "altune/go-api/internal/search/internal/core/ports"
+import "altune/go-api/internal/search/internal/ports"
 
 type (
 	ChartProvider              = ports.ChartProvider

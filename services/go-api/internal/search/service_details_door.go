@@ -1,7 +1,7 @@
 package search
 
-import enrich "altune/go-api/internal/search/internal/service/details"
+import "altune/go-api/internal/search/internal/service"
 
 type (
-	NoNameKeyedCache[T any] = enrich.NoNameKeyedCache[T]
+	NoNameKeyedCache[T any] = service.NoNameKeyedCache[T]
 )

@@ -1,9 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/search/internal/adapters/persistence/albumordering"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -65,7 +64,7 @@ func (r *PostgresEventStore) DiscographyQuality(ctx context.Context, since time.
 	if err != nil {
 		return nil, fmt.Errorf("collect discography cases: %w", err)
 	}
-	r0, err := albumordering.Rank(cases, groupBy)
+	r0, err := Rank(cases, groupBy)
 	if err != nil {
 		return r0, fmt.Errorf("rank: %w", err)
 	}

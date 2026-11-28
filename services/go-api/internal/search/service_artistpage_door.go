@@ -1,7 +1,7 @@
 package search
 
-import content "altune/go-api/internal/search/internal/service/artistpage"
+import "altune/go-api/internal/search/internal/service"
 
 type (
-	NoMBFeatured = content.NoMBFeatured
+	NoMBFeatured = service.NoMBFeatured
 )

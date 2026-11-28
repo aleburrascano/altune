@@ -1,9 +1,9 @@
 package search
 
-import vocabulary "altune/go-api/internal/search/internal/service/vocabulary"
+import "altune/go-api/internal/search/internal/service"
 
 type (
-	SpellingHintsRefreshService = vocabulary.SpellingHintsRefreshService
+	SpellingHintsRefreshService = service.SpellingHintsRefreshService
 )
 
-var NewVocabularyRefreshService = vocabulary.NewVocabularyRefreshService
+var NewVocabularyRefreshService = service.NewVocabularyRefreshService

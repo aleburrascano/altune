@@ -3,8 +3,8 @@ package connections
 import (
 	"altune/go-api/internal/search/internal/adapters/cache"
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/phonetics"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/telemetry"
 	"altune/go-api/internal/shared/textnorm"
@@ -58,7 +58,7 @@ func newVocabularyStore(redis *goredis.Client, cacheOps *telemetry.LabeledCounte
 	store, err := cache.NewVocabularyStore(
 		redis,
 		textnorm.NormalizeForMatch,
-		phonetics.MetaphoneKey,
+		domain.MetaphoneKey,
 		cache.WithVocabSignal(cache.NewSignal(cacheOps, clock.Now)),
 	)
 	if err != nil {

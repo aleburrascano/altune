@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/details"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"net/http"
@@ -38,7 +38,7 @@ func paramValidationRouter(t *testing.T) chi.Router {
 		ClearHistory: searchtest.NewClearHistory(t, historyRepo),
 		Album:        searchtest.NewAlbumTracks(t, albumProviders),
 		Artist:       searchtest.NewArtistContent(t, artistProviders),
-		Enrich:       mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})),
+		Enrich:       mustEnrichment(service.NewEnrichmentService(&fakeMetadataEnricher{}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{})),
 	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)

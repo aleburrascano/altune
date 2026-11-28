@@ -1,10 +1,10 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/search/internal/adapters/memory/memorytest"
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"testing"
@@ -49,7 +49,7 @@ func (p postgresUnreleasedUnderContract) NewUnrecordedArtist(*testing.T) ports.U
 
 func TestPostgresUnreleasedStore_KeepsTheStoreContract(t *testing.T) {
 	pool := dbtest.Pool(t)
-	memorytest.UnreleasedStoreContract(t, func(*testing.T) memorytest.UnreleasedStoreUnderTest {
+	contracttest.UnreleasedStoreContract(t, func(*testing.T) contracttest.UnreleasedStoreUnderTest {
 		return postgresUnreleasedUnderContract{PostgresUnreleasedStore: persistence.NewPostgresUnreleasedStore(pool), pool: pool}
 	})
 }

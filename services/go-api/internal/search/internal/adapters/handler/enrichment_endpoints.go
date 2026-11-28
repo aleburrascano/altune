@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/details"
+	"altune/go-api/internal/search/internal/service"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
@@ -63,7 +63,7 @@ func titleAndSubtitle(w http.ResponseWriter, r *http.Request) (string, string, b
 }
 
 func splitDegraded(err error) (bool, error) {
-	if errors.Is(err, details.ErrDegraded) {
+	if errors.Is(err, service.ErrDegraded) {
 		return true, nil
 	}
 	return false, err

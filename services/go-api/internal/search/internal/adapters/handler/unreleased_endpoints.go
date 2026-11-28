@@ -1,10 +1,9 @@
 package handler
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/inlibrary"
-	"altune/go-api/internal/search/internal/service/unreleased"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -52,8 +51,8 @@ func (h *DiscoveryHandler) handleUnreleasedSearch(w http.ResponseWriter, r *http
 	httpserver.WriteJSON(w, http.StatusOK, dto)
 }
 
-func searchOwnableItems(items []UnreleasedSearchItemDTO) []inlibrary.OwnableItem {
-	var out []inlibrary.OwnableItem
+func searchOwnableItems(items []UnreleasedSearchItemDTO) []service.OwnableItem {
+	var out []service.OwnableItem
 	for i := range items {
 		out = append(out, ownableSongItems(items[i].Artist.Name, &items[i].UnreleasedSongDTO)...)
 	}
@@ -89,7 +88,7 @@ type UnreleasedResponseDTO struct {
 	Pending bool                `json:"pending"`
 }
 
-func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
+func unreleasedToDTO(found service.Lookup) UnreleasedResponseDTO {
 	items := make([]UnreleasedSongDTO, len(found.Songs))
 	for i, s := range found.Songs {
 		items[i] = unreleasedSongToDTO(s)
@@ -140,25 +139,25 @@ func versionDTOs(versions []domain.UnreleasedVersion) []UnreleasedVersionDTO {
 	return out
 }
 
-func unreleasedOwnableItems(artistName string, items []UnreleasedSongDTO) []inlibrary.OwnableItem {
-	var out []inlibrary.OwnableItem
+func unreleasedOwnableItems(artistName string, items []UnreleasedSongDTO) []service.OwnableItem {
+	var out []service.OwnableItem
 	for i := range items {
 		out = append(out, ownableSongItems(artistName, &items[i])...)
 	}
 	return out
 }
 
-func ownableSongItems(artistName string, item *UnreleasedSongDTO) []inlibrary.OwnableItem {
+func ownableSongItems(artistName string, item *UnreleasedSongDTO) []service.OwnableItem {
 	track := domain.ResultKindTrack.String()
-	out := []inlibrary.OwnableItem{{Kind: track, Title: item.BestVersionTitle, Artist: artistName, Extras: &item.Extras}}
+	out := []service.OwnableItem{{Kind: track, Title: item.BestVersionTitle, Artist: artistName, Extras: &item.Extras}}
 	for j := range item.Versions {
 		v := &item.Versions[j]
-		out = append(out, inlibrary.OwnableItem{Kind: track, Title: v.Title, Artist: artistName, Extras: &v.Extras})
+		out = append(out, service.OwnableItem{Kind: track, Title: v.Title, Artist: artistName, Extras: &v.Extras})
 	}
 	return out
 }
 
-func (h *DiscoveryHandler) writeUnreleased(w http.ResponseWriter, r *http.Request, artistName string, found unreleased.Lookup) {
+func (h *DiscoveryHandler) writeUnreleased(w http.ResponseWriter, r *http.Request, artistName string, found service.Lookup) {
 	dto := unreleasedToDTO(found)
 	h.stampOwnership(r.Context(), requestuser.UserID(r), unreleasedOwnableItems(artistName, dto.Items))
 	httpserver.WriteJSON(w, http.StatusOK, dto)

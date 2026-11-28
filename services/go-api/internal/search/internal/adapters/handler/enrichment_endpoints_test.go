@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/details"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
@@ -148,7 +148,7 @@ type degradedCase struct {
 }
 
 func mbRouter(t *testing.T, f *scriptedMBEnricher) (chi.Router, *int) {
-	svc := mustEnrichment(details.NewEnrichmentService(f, details.NoArtwork{}, newMemMBCache(), details.NoMBIDIndex{}))
+	svc := mustEnrichment(service.NewEnrichmentService(f, service.NoArtwork{}, newMemMBCache(), service.NoDetailsMBIDIndex{}))
 	return buildEnrichmentRouter(t, svc), &f.calls
 }
 
@@ -373,7 +373,7 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 	}{
 		{
 			name:   "musicbrainz",
-			router: buildEnrichmentRouter(t, mustEnrichment(details.NewEnrichmentService(bareMBEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{}))),
+			router: buildEnrichmentRouter(t, mustEnrichment(service.NewEnrichmentService(bareMBEnricher{}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{}))),
 			path:   "/discovery/enrichment?kind=album&title=Illmatic",
 			want:   map[string]string{"genres": "[]", "secondary_types": "[]", "external_ids": "{}"},
 		},
@@ -478,7 +478,7 @@ func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
 		})
 
 		t.Run(tc.name+" ErrDegraded is 200 with degraded true", func(t *testing.T) {
-			rec := discServe(t, tc.router(details.ErrDegraded), http.MethodGet, tc.path+"?kind=album&title=Illmatic&subtitle=Nas", nil)
+			rec := discServe(t, tc.router(service.ErrDegraded), http.MethodGet, tc.path+"?kind=album&title=Illmatic&subtitle=Nas", nil)
 			discAssertStatus(t, rec, http.StatusOK)
 			var raw map[string]json.RawMessage
 			discDecodeJSON(t, rec, &raw)

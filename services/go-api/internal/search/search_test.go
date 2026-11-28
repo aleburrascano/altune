@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/rank"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/dbtest"
@@ -1034,7 +1034,7 @@ func sourced(kind search.ResultKind, title, credit string, provider search.Provi
 
 func merged(groups ...[]search.SearchResult) []search.SearchResult {
 	var out []search.SearchResult
-	for _, entity := range rank.Merge(groups) {
+	for _, entity := range service.Merge(groups) {
 		out = append(out, entity.Result)
 	}
 	return out
@@ -1102,7 +1102,7 @@ func TestCollapseArtistDuplicates_FoldsCardsWhoseNamesDifferOnlyInCaseAndAccents
 	accented := sourced(search.ResultKindArtist, "Beyoncé", "", search.ProviderDeezer, "1")
 	plain := sourced(search.ResultKindArtist, "BEYONCE", "", search.ProviderSpotify, "2")
 
-	if got := rank.CollapseArtistDuplicates([]search.SearchResult{accented, plain}); len(got) != 1 {
+	if got := service.CollapseArtistDuplicates([]search.SearchResult{accented, plain}); len(got) != 1 {
 		t.Fatalf("got %d artist cards, want one", len(got))
 	}
 }

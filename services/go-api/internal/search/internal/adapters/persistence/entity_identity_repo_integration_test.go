@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"encoding/json"

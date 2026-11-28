@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/search/internal/service/inlibrary"
-	"altune/go-api/internal/search/internal/service/providerguard"
-	"altune/go-api/internal/search/internal/service/query"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
@@ -16,7 +14,7 @@ import (
 func (h *DiscoveryHandler) writeContentFetch(
 	w http.ResponseWriter,
 	r *http.Request,
-	resp *providerguard.ContentFetchResponse,
+	resp *service.ContentFetchResponse,
 ) {
 	if failure := contentFetchFailure(resp); failure != nil {
 		httpserver.HandleServiceError(w, r, fmt.Errorf("%s content: %w", resp.ProviderName, failure))
@@ -28,15 +26,15 @@ func (h *DiscoveryHandler) writeContentFetch(
 }
 
 type OwnershipStamper interface {
-	StampOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem)
-	EnrichAlbumTracks(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) <-chan struct{}
+	StampOwnership(ctx context.Context, userId ids.UserId, items []service.OwnableItem)
+	EnrichAlbumTracks(ctx context.Context, userId ids.UserId, items []service.OwnableItem) <-chan struct{}
 }
 
 type NoOwnership struct{}
 
-func (NoOwnership) StampOwnership(context.Context, ids.UserId, []inlibrary.OwnableItem) {}
+func (NoOwnership) StampOwnership(context.Context, ids.UserId, []service.OwnableItem) {}
 
-func (NoOwnership) EnrichAlbumTracks(context.Context, ids.UserId, []inlibrary.OwnableItem) <-chan struct{} {
+func (NoOwnership) EnrichAlbumTracks(context.Context, ids.UserId, []service.OwnableItem) <-chan struct{} {
 	done := make(chan struct{})
 	close(done)
 	return done
@@ -52,16 +50,16 @@ func (h *DiscoveryHandler) AttachOwnership(stamper OwnershipStamper) error {
 	return nil
 }
 
-func (h *DiscoveryHandler) stampOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) {
+func (h *DiscoveryHandler) stampOwnership(ctx context.Context, userId ids.UserId, items []service.OwnableItem) {
 	h.ownership.StampOwnership(ctx, userId, items)
 }
 
-func (h *DiscoveryHandler) enrichAlbumOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) {
+func (h *DiscoveryHandler) enrichAlbumOwnership(ctx context.Context, userId ids.UserId, items []service.OwnableItem) {
 	_ = h.ownership.EnrichAlbumTracks(ctx, userId, items)
 }
 
-func ownableItems(slates ...[]SearchResultDTO) []inlibrary.OwnableItem {
-	var out []inlibrary.OwnableItem
+func ownableItems(slates ...[]SearchResultDTO) []service.OwnableItem {
+	var out []service.OwnableItem
 	for _, items := range slates {
 		for i := range items {
 			out = append(out, ownableItem(&items[i]))
@@ -70,7 +68,7 @@ func ownableItems(slates ...[]SearchResultDTO) []inlibrary.OwnableItem {
 	return out
 }
 
-func albumTrackItems(albumTitle string, items []SearchResultDTO) []inlibrary.OwnableItem {
+func albumTrackItems(albumTitle string, items []SearchResultDTO) []service.OwnableItem {
 	out := ownableItems(items)
 	for i := range out {
 		out[i].Album = albumTitle
@@ -78,15 +76,15 @@ func albumTrackItems(albumTitle string, items []SearchResultDTO) []inlibrary.Own
 	return out
 }
 
-func ownableItem(dto *SearchResultDTO) inlibrary.OwnableItem {
-	return inlibrary.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, ISRC: dto.isrc, TrackPosition: dto.position, Extras: &dto.Extras}
+func ownableItem(dto *SearchResultDTO) service.OwnableItem {
+	return service.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, ISRC: dto.isrc, TrackPosition: dto.position, Extras: &dto.Extras}
 }
 
 func ownershipTargets(
 	results []SearchResultDTO,
 	topResult *SearchResultDTO,
 	sections []ResultSectionDTO,
-) []inlibrary.OwnableItem {
+) []service.OwnableItem {
 	targets := ownableItems(results)
 	if topResult != nil {
 		targets = append(targets, ownableItem(topResult))
@@ -97,7 +95,7 @@ func ownershipTargets(
 	return targets
 }
 
-func blendedSlateToDTOs(slate query.BlendedSlate) (*SearchResultDTO, []ResultSectionDTO) {
+func blendedSlateToDTOs(slate service.BlendedSlate) (*SearchResultDTO, []ResultSectionDTO) {
 	sections := make([]ResultSectionDTO, 0, len(slate.Sections))
 	for _, s := range slate.Sections {
 		sections = append(sections, ResultSectionDTO{

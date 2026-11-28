@@ -1,12 +1,12 @@
 package search
 
-import unreleased "altune/go-api/internal/search/internal/service/unreleased"
+import "altune/go-api/internal/search/internal/service"
 
 type (
-	UnreleasedConfig   = unreleased.Config
-	UnreleasedService  = unreleased.Service
-	NoUnreleasedCache  = unreleased.NoCache
-	NoUnreleasedGenius = unreleased.NoGenius
+	UnreleasedConfig   = service.UnreleasedConfig
+	UnreleasedService  = service.UnreleasedService
+	NoUnreleasedCache  = service.NoUnreleasedCache
+	NoUnreleasedGenius = service.NoGenius
 )
 
-var NewUnreleasedService = unreleased.NewService
+var NewUnreleasedService = service.NewUnreleasedService

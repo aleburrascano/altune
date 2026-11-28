@@ -4,10 +4,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/artistpage"
-	"altune/go-api/internal/search/internal/service/details"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
@@ -180,12 +179,12 @@ func buildDiscoveryRouter(t *testing.T,
 	historySvc := searchtest.NewListHistory(t, historyRepo)
 	clearHistorySvc := searchtest.NewClearHistory(t, historyRepo)
 
-	var albumSvc *artistpage.GetAlbumTracksService
+	var albumSvc *service.GetAlbumTracksService
 	if albumProviders != nil {
 		albumSvc = searchtest.NewAlbumTracks(t, albumProviders)
 	}
 
-	var artistSvc *artistpage.GetArtistContentService
+	var artistSvc *service.GetArtistContentService
 	if artistProviders != nil {
 		artistSvc = searchtest.NewArtistContent(t, artistProviders)
 	}
@@ -658,7 +657,7 @@ func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ search.ResultKind, _ 
 	return f.enrichment, nil
 }
 
-func mustEnrichment(svc *details.DetailsService, err error) *details.DetailsService {
+func mustEnrichment(svc *service.DetailsService, err error) *service.DetailsService {
 	if err != nil {
 		panic(err)
 	}
@@ -685,7 +684,7 @@ func sampleAlbumEnrichment() domain.MusicBrainzEnrichment {
 
 func TestHandleEnrichment(t *testing.T) {
 	t.Run("valid request returns enrichment DTO", func(t *testing.T) {
-		svc := mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{}))
+		svc := mustEnrichment(service.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{}))
 		router := buildEnrichmentRouter(t, svc)
 
 		rec := discServe(t, router, http.MethodGet,
@@ -707,19 +706,19 @@ func TestHandleEnrichment(t *testing.T) {
 	})
 
 	t.Run("missing kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(t, mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(service.NewEnrichmentService(&fakeMetadataEnricher{}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?title=DAMN.", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("unknown kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(t, mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(service.NewEnrichmentService(&fakeMetadataEnricher{}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=playlistx&title=X", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("blank title and no mbid returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(t, mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(service.NewEnrichmentService(&fakeMetadataEnricher{}, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})

@@ -1,10 +1,10 @@
 package search
 
-import smokeeval "altune/go-api/internal/search/internal/shell/smokeeval"
+import "altune/go-api/internal/search/internal/service"
 
 type (
-	SmokeQueryResult = smokeeval.QueryResult
-	SmokeResult      = smokeeval.Result
+	SmokeQueryResult = service.SmokeQueryResult
+	SmokeResult      = service.SmokeResult
 )
 
-var RunSmokeEval = smokeeval.Run
+var RunSmokeEval = service.RunSmokeEval

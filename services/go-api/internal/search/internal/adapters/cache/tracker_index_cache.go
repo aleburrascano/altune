@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"time"
 

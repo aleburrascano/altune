@@ -2,8 +2,8 @@ package connections
 
 import (
 	"altune/go-api/internal/search/internal/adapters/handler"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/unreleased"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
 	"altune/go-api/internal/shared/telemetry"
@@ -58,7 +58,7 @@ type SearchSettings struct {
 
 type UnreleasedSettings struct {
 	ServeFromCache bool
-	Tuning         unreleased.Config
+	Tuning         service.UnreleasedConfig
 }
 
 type requiredHandle struct {
