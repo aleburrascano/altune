@@ -5,7 +5,7 @@ import { countLabel, Tappable, Text, pressedStyle, radius, spacing, useTheme } f
 import { LibraryGrid } from '@features/library/view/LibraryGrid';
 import { PlaylistCover } from '@features/library/view/PlaylistCover';
 import { useLibraryGridLayout } from '@features/library/view/useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
+import type { ListPaging, ListRefresh } from '@features/library/core/libraryView';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
 

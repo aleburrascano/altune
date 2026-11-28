@@ -11,7 +11,9 @@ import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort
 import { useDiscoverPort, useFavoritesPort } from '@features/discovery';
 import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDiscoverPort';
 import { createMemoryFavoritesPort } from '@testing/fakes/discovery/inMemoryFavoritesPort';
-import { useLibraryPort } from '@features/library';
+import { SidebarPlaylists } from '@features/library';
+import { asPlaylistId } from '@shared/catalog';
+import type { Navigator } from '@shared/navigation';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import { SettingsScreen } from '@features/settings';
 import { createMemorySettingsPort } from '@testing/fakes/settings/inMemorySettingsPort';
@@ -19,7 +21,14 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { retryOptionsWithJitter } from '@testing/retryOptions';
 import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 
-type HookPorts = Omit<FeaturePortSet, 'settings'>;
+type HookPorts = Omit<FeaturePortSet, 'settings' | 'library'>;
+
+const navigator: Navigator = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  back: jest.fn(),
+  canGoBack: () => false,
+};
 
 function useEveryPort(): HookPorts {
   return {
@@ -27,7 +36,6 @@ function useEveryPort(): HookPorts {
     detail: useDetailPort(),
     discover: useDiscoverPort(),
     favorites: useFavoritesPort(),
-    library: useLibraryPort(),
     playlists: usePlaylistsPort(),
   };
 }
@@ -38,7 +46,11 @@ function providing(ports: FeaturePortSet) {
   };
 }
 
-function withoutSettings({ settings: _settings, ...hookPorts }: FeaturePortSet): HookPorts {
+function withoutScreenPorts({
+  settings: _settings,
+  library: _library,
+  ...hookPorts
+}: FeaturePortSet): HookPorts {
   return hookPorts;
 }
 
@@ -46,7 +58,7 @@ describe('FeaturePorts', () => {
   it('hands every feature hook its HTTP adapter from the production port set', () => {
     const { result } = renderHook(useEveryPort, { wrapper: providing(httpFeaturePorts) });
 
-    expect(result.current).toEqual(withoutSettings(httpFeaturePorts));
+    expect(result.current).toEqual(withoutScreenPorts(httpFeaturePorts));
     for (const key of Object.keys(result.current) as (keyof HookPorts)[]) {
       expect(result.current[key]).toBe(httpFeaturePorts[key]);
     }
@@ -88,12 +100,50 @@ describe('FeaturePorts', () => {
     expect(await screen.findByText('Updated 2 of 9 tracks')).toBeTruthy();
   });
 
+  it('hands the library sidebar the library port it was given', async () => {
+    const playlist = {
+      id: asPlaylistId('p1'),
+      name: 'Late Night',
+      track_count: 0,
+      preview_artwork_urls: [],
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+      total_duration_seconds: 0,
+      tracks: [],
+    };
+    const memory = {
+      ...httpFeaturePorts,
+      library: createMemoryLibraryPort({ playlists: [playlist] }),
+      playlists: createMemoryPlaylistsPort(),
+    };
+
+    const Ports = providing(memory);
+    render(<SidebarPlaylists navigator={navigator} />, {
+      wrapper: ({ children }: PropsWithChildren) => (
+        <QueryClientProvider client={new QueryClient()}>
+          <Ports>{children}</Ports>
+        </QueryClientProvider>
+      ),
+    });
+
+    expect(await screen.findByText('Late Night')).toBeTruthy();
+  });
+
+  it('throws for the library port when nothing provides it', () => {
+    expect(() =>
+      render(<SidebarPlaylists navigator={navigator} />, {
+        wrapper: ({ children }: PropsWithChildren) => (
+          <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+        ),
+      }),
+    ).toThrow('no library port provided');
+  });
+
   it.each([
     ['acquisition', useAcquisitionPort],
     ['detail', useDetailPort],
     ['discover', useDiscoverPort],
     ['favorites', useFavoritesPort],
-    ['library', useLibraryPort],
     ['playlists', usePlaylistsPort],
   ])('throws for the %s port when nothing provides it', (name, usePort) => {
     expect(() => renderHook(() => usePort())).toThrow(`no ${name} port provided`);

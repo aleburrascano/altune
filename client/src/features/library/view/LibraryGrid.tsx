@@ -11,7 +11,7 @@ import { useWideWebLayout, doubled } from '@shared/ui';
 import { LibraryEmptyMessage, ListPagingFooter } from '@features/library/view/LibraryListParts';
 import { listContent } from '@features/library/view/listContentStyles';
 import { GRID_GAP } from '@features/library/view/useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
+import type { ListPaging, ListRefresh } from '@features/library/core/libraryView';
 type LibraryGridProps<TItem> = {
   testID: string;
   data: readonly TItem[];

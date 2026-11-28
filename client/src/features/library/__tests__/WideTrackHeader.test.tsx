@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import { WideTrackHeader } from '@features/library';
+import { WideTrackHeader } from '@features/library/view/WideTrackHeader';
 
 describe('WideTrackHeader', () => {
   it('labels every column of the wide tracks table', () => {

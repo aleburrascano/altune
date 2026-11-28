@@ -4,7 +4,7 @@ import type { PlaylistDetailResponse, TrackResponse } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 
-import { usePlaylistPlayback } from '@features/library';
+import { usePlaylistPlayback } from '@features/library/view/usePlaylistPlayback';
 
 const PLAYLIST_ID = asPlaylistId('pl1');
 

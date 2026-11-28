@@ -14,10 +14,10 @@ import { createMemoryAcquisitionPort } from '@testing/fakes/acquisition/inMemory
 import type { TrackStatus, AcquisitionPort } from '@shared/acquisition';
 import { libraryKeys, playlistKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';
-import { LibraryPortProvider } from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import { recordingDialogs } from '@features/library/__tests__/recordingDialogs';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import { trackResponseFactory } from '@testing/factories';
 
 export function track(id: string, overrides: Partial<TrackResponse> = {}): TrackResponse {
@@ -97,9 +97,9 @@ export function setup({ library, acquisition }: PortOverrides = {}) {
   function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <LibraryPortProvider port={libraryPort}>
+        <LibraryProvider port={libraryPort}>
           <AcquisitionPortProvider port={acquisitionPort}>{children}</AcquisitionPortProvider>
-        </LibraryPortProvider>
+        </LibraryProvider>
       </QueryClientProvider>
     );
   }

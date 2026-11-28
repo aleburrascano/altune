@@ -8,14 +8,11 @@ import {
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
-import {
-  type ActiveView,
-  LibraryPortProvider,
-  GROUP_PAGE_SIZE,
-  useAlbumsView,
-  useArtistsView,
-} from '@features/library';
+import type { AlbumGroup, ArtistGroup } from '@features/library/core/libraryGroups';
+import type { ActiveView } from '@features/library/view/LibraryListParts';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { GROUP_PAGE_SIZE } from '@features/library/core/listPaging';
+import { useAlbumsView, useArtistsView } from '@features/library/view/useGroupViews';
 import {
   createMemoryLibraryPort,
   type MemoryLibrarySeed,
@@ -41,9 +38,9 @@ describe('useAlbumsView', () => {
     const port = spiedPort({});
     render(
       <QueryClientProvider client={client}>
-        <LibraryPortProvider port={port}>
+        <LibraryProvider port={port}>
           <WarmUpAlbumsScreen />
-        </LibraryPortProvider>
+        </LibraryProvider>
       </QueryClientProvider>,
     );
     await waitFor(() => expect(port.getLibraryAlbums).toHaveBeenCalledTimes(1));
@@ -86,7 +83,7 @@ describe('useAlbumsView', () => {
     function wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
-          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+          <LibraryProvider port={port}>{children}</LibraryProvider>
         </QueryClientProvider>
       );
     }
@@ -157,7 +154,7 @@ describe('useAlbumsView', () => {
     function wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
-          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+          <LibraryProvider port={port}>{children}</LibraryProvider>
         </QueryClientProvider>
       );
     }
@@ -230,9 +227,9 @@ describe('useArtistsView', () => {
     const port = spiedPort({});
     render(
       <QueryClientProvider client={client}>
-        <LibraryPortProvider port={port}>
+        <LibraryProvider port={port}>
           <WarmUpArtistsScreen />
-        </LibraryPortProvider>
+        </LibraryProvider>
       </QueryClientProvider>,
     );
     await waitFor(() => expect(port.getLibraryArtists).toHaveBeenCalledTimes(1));
@@ -273,7 +270,7 @@ describe('useArtistsView', () => {
     function wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
-          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+          <LibraryProvider port={port}>{children}</LibraryProvider>
         </QueryClientProvider>
       );
     }
@@ -330,7 +327,7 @@ describe('useArtistsView', () => {
     function wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
-          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+          <LibraryProvider port={port}>{children}</LibraryProvider>
         </QueryClientProvider>
       );
     }

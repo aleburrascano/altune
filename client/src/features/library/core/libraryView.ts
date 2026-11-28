@@ -1,18 +1,7 @@
-import type { ReactElement } from 'react';
-import type { LibrarySort } from '@shared/apiClient';
 import { asyncView, type AsyncView } from '@shared/ui';
+import type { LibrarySort } from '@features/library/core/libraryGroups';
 
 export type LibraryChip = 'playlists' | 'tracks' | 'albums' | 'artists';
-
-export type ActiveView = {
-  content: ReactElement;
-  count: number;
-  noun: string;
-  options: { key: SortKey; label: string }[];
-  isLoading: boolean;
-  error: Error | null;
-  onRetry: () => void;
-};
 
 export type SortKey = LibrarySort;
 

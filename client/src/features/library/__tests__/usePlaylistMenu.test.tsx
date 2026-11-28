@@ -4,11 +4,11 @@ import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
 import { createMemoryNavigator } from '@testing/fakes/navigation/inMemoryNavigator';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
 import {
-  LibraryPortProvider,
   usePlaylistDelete,
   usePlaylistOfflineAction,
-} from '@features/library';
+} from '@features/library/view/usePlaylistMenu';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import {
   recordingDialogs,
@@ -41,7 +41,7 @@ function libraryPortAround(dialogs: RecordingDialogs, children: ReactNode) {
     showFailure: dialogs.showFailure,
     confirmDestructive: dialogs.confirmDestructive,
   });
-  return <LibraryPortProvider port={port}>{children}</LibraryPortProvider>;
+  return <LibraryProvider port={port}>{children}</LibraryProvider>;
 }
 
 beforeEach(async () => {

@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { FeaturedArtist, DiscoveryResult } from '@shared/catalog';
+import type { FeaturedArtist, DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 import { libraryKeys, STALE } from '@shared/query';
-import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryProvider';
 import {
   failureLogFields,
   libraryFailureAlert,
   classifyLibraryError,
-} from '@features/library/core/libraryFailure';
+} from '@features/library/core/errors';
 import type { FailureAlert } from '@shared/ui';
 import { detailHref, type Navigator } from '@shared/navigation';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import type { LibraryPort } from '@features/library/ports/ports';
 import type { FeaturingDetailRoute } from '@features/library/core/libraryRoutes';
 
 const DIGITS = /^[0-9]+$/;
@@ -85,7 +85,7 @@ function reportExploreFailure(port: LibraryPort, artist: string, error: unknown)
 function topMatchQuery(artist: string) {
   return {
     q: artist,
-    kinds: ['artist', 'track'] as ('artist' | 'track')[],
+    kinds: ['artist', 'track'] satisfies DiscoveryKind[],
     limit: 1,
     saveHistory: false,
   };

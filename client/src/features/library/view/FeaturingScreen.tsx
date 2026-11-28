@@ -32,10 +32,10 @@ import {
 } from '@features/library/view/useFeaturing';
 import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { useTrackMenu } from '@features/library/view/useTrackMenu';
-import { classifyLibraryError, failureTail } from '@features/library/core/libraryFailure';
+import { classifyLibraryError, failureTail } from '@features/library/core/errors';
 import { TracksList } from '@features/library/view/TracksList';
 
-export type FeaturingParams = {
+type FeaturingParams = {
   name?: string | string[] | undefined;
   mbid?: string | string[] | undefined;
   deezer_id?: string | undefined;

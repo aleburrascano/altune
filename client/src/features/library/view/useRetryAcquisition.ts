@@ -20,15 +20,15 @@ import { useAppMutation } from '@shared/query';
 import { forgetTrack, getTrackFromCaches, patchTrackInCaches } from '@shared/events';
 import type { FailureAlert } from '@shared/ui';
 import { guardedMutationOptions } from '@shared/session';
-import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { useLibraryPort } from '@features/library/view/LibraryProvider';
+import type { LibraryPort } from '@features/library/ports/ports';
 import {
   trackNotFoundAlert,
   logTrackMutationFailure,
   libraryFailureAlert,
   classifyLibraryError,
   type LibraryFailure,
-} from '@features/library/core/libraryFailure';
+} from '@features/library/core/errors';
 import {
   recordRetryRequest,
   recordRetryTapped,
@@ -36,12 +36,7 @@ import {
   type RetrySkipReason,
   useSharedRetryAcquisition,
 } from '@shared/acquisition';
-const trackMutationKeys = {
-  retryAcquisition: ['track', 'retry-acquisition'] as const,
-  reacquire: ['track', 'reacquire'] as const,
-};
-
-type TrackMutationKey = (typeof trackMutationKeys)[keyof typeof trackMutationKeys];
+import { trackMutationKeys, type TrackMutationKey } from '@features/library/core/queryKeys';
 
 export type TrackMutation<TData, TContext> = Omit<
   UseMutationResult<TData, Error, TrackId, TContext>,

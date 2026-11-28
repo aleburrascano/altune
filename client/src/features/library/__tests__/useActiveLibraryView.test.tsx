@@ -2,21 +2,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { asPlaylistId, asTrackId } from '@shared/catalog';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
+import type { AlbumGroup, ArtistGroup } from '@features/library/core/libraryGroups';
 import type { PlaylistResponse, TrackResponse } from '@shared/catalog';
+import type { LibraryPort } from '@features/library/ports/ports';
+import { useActiveLibraryView } from '@features/library/view/useActiveLibraryView';
+import { useSelection } from '@features/library/view/useSelection';
 import {
-  type LibraryPort,
-  useActiveLibraryView,
-  useSelection,
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
   type LibraryChip,
   type SortKey,
-  LibraryPortProvider,
-  useLibraryNavigation,
-} from '@features/library';
+} from '@features/library/core/libraryView';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { useLibraryNavigation } from '@features/library/view/useLibraryNavigation';
 import {
   createMemoryLibraryPort,
   type MemoryLibrarySeed,
@@ -130,9 +130,9 @@ function renderActive(
   }
   render(
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>
+      <LibraryProvider port={port}>
         <Library />
-      </LibraryPortProvider>
+      </LibraryProvider>
     </QueryClientProvider>,
   );
   return () => seen.current!;
@@ -343,7 +343,7 @@ describe('useActiveLibraryView — playlist press', () => {
     function wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
-          <LibraryPortProvider port={createMemoryLibraryPort()}>{children}</LibraryPortProvider>
+          <LibraryProvider port={createMemoryLibraryPort()}>{children}</LibraryProvider>
         </QueryClientProvider>
       );
     }

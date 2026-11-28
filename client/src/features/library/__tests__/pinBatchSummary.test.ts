@@ -3,7 +3,11 @@ import { showFailureAlert } from '@shared/ui';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { reportPinBatch, reportStorageFull, reportUnpinBatch } from '@features/library';
+import {
+  reportPinBatch,
+  reportStorageFull,
+  reportUnpinBatch,
+} from '@features/library/view/useLibraryOffline';
 import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const EVENTS = EVENT_ROUTES;

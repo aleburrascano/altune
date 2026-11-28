@@ -9,7 +9,7 @@ import { PlaybackContext } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { idlePlayback } from '@testing/queryHarness';
-import { PlaylistDetailScreen } from '@features/library';
+import { PlaylistDetailScreen } from '@features/library/view/PlaylistDetailScreen';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { usePinnedStore } from '@shared/offline';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';

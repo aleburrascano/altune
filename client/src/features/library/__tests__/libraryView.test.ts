@@ -1,11 +1,11 @@
-import type { LibrarySort } from '@shared/apiClient';
+import type { LibrarySort } from '@features/library/core/libraryGroups';
 import {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
   librarySection,
-} from '@features/library';
+} from '@features/library/core/libraryView';
 
 const WIRE_VALUES: Record<LibrarySort, true> = { recent: true, az: true, year: true };
 

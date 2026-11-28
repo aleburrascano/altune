@@ -4,7 +4,11 @@ import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore } from '@shared/offline';
 import { trackResponseFactory } from '@testing/factories';
 
-import { offlineEligibility, useLibraryOffline, usePinnedStatus } from '@features/library';
+import {
+  offlineEligibility,
+  useLibraryOffline,
+  usePinnedStatus,
+} from '@features/library/view/useLibraryOffline';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return trackResponseFactory.build({

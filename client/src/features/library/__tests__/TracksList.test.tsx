@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { trackResponseFactory } from '@testing/factories';
-import type { ListRefresh } from '@features/library';
-import { TracksList } from '@features/library';
+import type { ListRefresh } from '@features/library/core/libraryView';
+import { TracksList } from '@features/library/view/TracksList';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 

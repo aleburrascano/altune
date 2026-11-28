@@ -5,7 +5,7 @@ import {
   libraryFailureAlert,
   logTrackMutationFailure,
   trackNotFoundAlert,
-} from '@features/library';
+} from '@features/library/core/errors';
 import { asTrackId, type TrackId } from '@shared/catalog';
 
 const CONFLICT = 409;

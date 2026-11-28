@@ -1,13 +1,13 @@
-import { useEffect } from 'react';
+import { createElement, useEffect } from 'react';
 import type { PlaylistResponse } from '@shared/catalog';
 import type { PlaylistActionsState } from '@features/library/view/usePlaylistActions';
 import {
-  type ActiveView,
   type ListPaging,
   type ListRefresh,
   PLAYLIST_SORT_OPTIONS,
   type SortKey,
-} from '@features/library/view/libraryView';
+} from '@features/library/core/libraryView';
+import { type ActiveView } from '@features/library/view/LibraryListParts';
 import { PlaylistsGrid } from '@features/library/view/PlaylistsGrid';
 
 type PlaylistsViewDeps = {
@@ -64,15 +64,13 @@ export function usePlaylistsView({ pl, sort, onPlaylistPress }: PlaylistsViewDep
       isLoading: false,
       error: pl.playlistsError,
       onRetry: pl.refetchPlaylists,
-      content: (
-        <PlaylistsGrid
-          playlists={playlists}
-          refresh={refresh}
-          onPlaylistPress={onPlaylistPress}
-          onCreatePress={() => pl.setCreateModalVisible(true)}
-          paging={paging}
-        />
-      ),
+      content: createElement(PlaylistsGrid, {
+        playlists,
+        refresh,
+        onPlaylistPress,
+        onCreatePress: () => pl.setCreateModalVisible(true),
+        paging,
+      }),
     },
   };
 }

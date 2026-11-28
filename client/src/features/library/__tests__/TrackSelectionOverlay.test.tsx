@@ -9,8 +9,8 @@ import {
   useTrackSelection,
   type TrackSelectionController,
   type TrackSelectionOptions,
-  TrackSelectionOverlay,
-} from '@features/library';
+} from '@features/library/view/useTrackSelection';
+import { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOverlay';
 import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
 import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');

@@ -13,8 +13,8 @@ import {
 } from '@shared/events';
 import { usePinnedStore } from '@shared/offline';
 import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
-import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { useLibraryPort } from '@features/library/view/LibraryProvider';
+import type { LibraryPort } from '@features/library/ports/ports';
 import {
   logTrackMutationFailure,
   failureLogFields,
@@ -24,7 +24,7 @@ import {
   failureTail,
   type LibraryFailure,
   type LibraryWarn,
-} from '@features/library/core/libraryFailure';
+} from '@features/library/core/errors';
 import { patchTrackStatus, useTrackStatusStore, type TrackStatus } from '@shared/acquisition';
 
 function deleteEndpoint(trackId: TrackId) {
@@ -174,7 +174,7 @@ function logBulkFailure(warn: LibraryWarn) {
 
 function dominantFailure(failures: DeleteTrackFailure[]): LibraryFailure {
   const kinds = failures.map(({ error }) => classifyLibraryError(error));
-  return kinds.includes('auth') ? 'auth' : kinds[0]!;
+  return kinds.includes('auth') ? 'auth' : (kinds[0] ?? 'unknown');
 }
 
 function bulkFailureMessage(requested: number, deleted: number, failures: DeleteTrackFailure[]) {

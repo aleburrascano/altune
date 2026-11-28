@@ -1,5 +1,5 @@
 import { themes } from '@shared/ui';
-import { libraryRowWideStyle } from '@features/library';
+import { libraryRowWideStyle } from '@features/library/view/libraryRowStyle';
 
 const lightTheme = themes.light;
 

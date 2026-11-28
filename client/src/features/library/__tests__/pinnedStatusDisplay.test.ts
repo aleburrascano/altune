@@ -1,4 +1,4 @@
-import { pinnedStatusDisplay } from '@features/library';
+import { pinnedStatusDisplay } from '@features/library/core/pinnedStatusDisplay';
 
 describe('pinnedStatusDisplay — one bucket decides the spoken label, the icon and the menu copy', () => {
   it('pairs a finished download with the check icon and an offer to remove it', () => {

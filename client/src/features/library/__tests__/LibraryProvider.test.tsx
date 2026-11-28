@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { LibraryPortProvider, useLibraryPort } from '@features/library';
+import { LibraryProvider, useLibraryPort } from '@features/library/view/LibraryProvider';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 
 describe('useLibraryPort', () => {
@@ -12,7 +12,7 @@ describe('useLibraryPort', () => {
   it('hands back the port the provider was given', () => {
     const port = createMemoryLibraryPort();
     function wrapper({ children }: { children: ReactNode }) {
-      return <LibraryPortProvider port={port}>{children}</LibraryPortProvider>;
+      return <LibraryProvider port={port}>{children}</LibraryProvider>;
     }
 
     const { result } = renderHook(() => useLibraryPort(), { wrapper });
@@ -25,9 +25,9 @@ describe('useLibraryPort', () => {
     const inner = createMemoryLibraryPort();
     function wrapper({ children }: { children: ReactNode }) {
       return (
-        <LibraryPortProvider port={outer}>
-          <LibraryPortProvider port={inner}>{children}</LibraryPortProvider>
-        </LibraryPortProvider>
+        <LibraryProvider port={outer}>
+          <LibraryProvider port={inner}>{children}</LibraryProvider>
+        </LibraryProvider>
       );
     }
 

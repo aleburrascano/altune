@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import { PlaylistHero } from '@features/library';
+import { PlaylistHero } from '@features/library/view/PlaylistHero';
 
 const playlist = {
   name: 'Late Night',

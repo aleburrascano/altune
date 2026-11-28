@@ -5,7 +5,7 @@ import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline';
 import { trackResponseFactory } from '@testing/factories';
 
-import { LibraryRow } from '@features/library';
+import { LibraryRow } from '@features/library/view/LibraryRow';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 

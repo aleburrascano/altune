@@ -8,7 +8,7 @@ import { canPlay, useQueueStore, PlaybackContext, useQueuePlayback } from '@shar
 import type { PlaybackTrack } from '@shared/playback';
 import { makeIdlePlayback, trackResponseFactory } from '@testing/factories';
 
-import { usePlaylistPlayback } from '@features/library';
+import { usePlaylistPlayback } from '@features/library/view/usePlaylistPlayback';
 
 const INITIAL_STATE = useQueueStore.getState();
 const PLAYLIST_ID = asPlaylistId('pl1');

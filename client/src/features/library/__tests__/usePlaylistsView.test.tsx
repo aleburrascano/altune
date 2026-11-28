@@ -3,14 +3,12 @@ import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library
 import type { ReactElement, ReactNode } from 'react';
 import { asPlaylistId } from '@shared/catalog';
 import type { PlaylistDetailResponse } from '@shared/catalog';
-import {
-  LibraryPortProvider,
-  GROUP_PAGE_SIZE,
-  usePlaylistActions,
-  usePlaylistsView,
-} from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { GROUP_PAGE_SIZE } from '@features/library/core/listPaging';
+import { usePlaylistActions } from '@features/library/view/usePlaylistActions';
+import { usePlaylistsView } from '@features/library/view/usePlaylistsView';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import { SortControl } from '@shared/ui';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { PlaylistsPortProvider } from '@shared/playlists';
@@ -79,7 +77,7 @@ function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <PlaylistsPortProvider port={playlistsPort}>
-        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        <LibraryProvider port={port}>{children}</LibraryProvider>
       </PlaylistsPortProvider>
     </QueryClientProvider>
   );
@@ -105,9 +103,9 @@ warmUpFirstRender(async () => {
   render(
     <QueryClientProvider client={warmUpClient}>
       <PlaylistsPortProvider port={playlistsPort}>
-        <LibraryPortProvider port={warmUpPort}>
+        <LibraryProvider port={warmUpPort}>
           <WarmUpPlaylistsScreen />
-        </LibraryPortProvider>
+        </LibraryProvider>
       </PlaylistsPortProvider>
     </QueryClientProvider>,
   );

@@ -9,7 +9,7 @@ import {
   type UnpinBatchResult,
 } from '@shared/offline';
 import type { FailureAlert } from '@shared/ui';
-import type { ShowFailure } from '@features/library/core/libraryFailure';
+import type { ShowFailure } from '@features/library/core/errors';
 import { isReady } from '@shared/catalog';
 
 export type LibraryOffline = {

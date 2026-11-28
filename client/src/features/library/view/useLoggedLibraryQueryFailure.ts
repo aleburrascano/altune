@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import type { LibrarySort } from '@shared/apiClient';
-import { failureLogFields } from '@features/library/core/libraryFailure';
-import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryChip } from '@features/library/view/libraryView';
+import type { LibrarySort } from '@features/library/core/libraryGroups';
+import { failureLogFields } from '@features/library/core/errors';
+import { useLibraryPort } from '@features/library/view/LibraryProvider';
+import type { LibraryChip } from '@features/library/core/libraryView';
 
 type LibraryQueryChip = LibraryChip;
 

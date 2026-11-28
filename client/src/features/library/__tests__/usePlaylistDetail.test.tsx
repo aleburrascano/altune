@@ -4,9 +4,10 @@ import type { ReactNode } from 'react';
 import { asPlaylistId, NO_PLAYLIST_ID } from '@shared/catalog';
 import type { PlaylistDetailResponse } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
-import { LibraryPortProvider, usePlaylistDetail } from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { usePlaylistDetail } from '@features/library/view/usePlaylistDetail';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 const detail: PlaylistDetailResponse = {
   id: asPlaylistId('p1'),
   name: 'Mix',
@@ -24,7 +25,7 @@ let port: LibraryPort & { getPlaylist: jest.Mock };
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <LibraryProvider port={port}>{children}</LibraryProvider>
     </QueryClientProvider>
   );
 }

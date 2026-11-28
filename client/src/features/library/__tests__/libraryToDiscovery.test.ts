@@ -1,5 +1,8 @@
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
-import { albumToDiscoveryResult, artistToDiscoveryResult } from '@features/library';
+import type { AlbumGroup, ArtistGroup } from '@features/library/core/libraryGroups';
+import {
+  albumToDiscoveryResult,
+  artistToDiscoveryResult,
+} from '@features/library/core/libraryToDiscovery';
 
 function makeAlbum(over: Partial<AlbumGroup> = {}): AlbumGroup {
   return {

@@ -3,10 +3,10 @@ import type { ListRenderItem } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Text, pressedStyle, radius, spacing, useTheme, Tappable } from '@shared/ui';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
+import type { AlbumGroup, ArtistGroup } from '@features/library/core/libraryGroups';
 import { LibraryGrid } from '@features/library/view/LibraryGrid';
 import { useLibraryGridLayout, GRID_GAP } from '@features/library/view/useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
+import type { ListPaging, ListRefresh } from '@features/library/core/libraryView';
 
 type AlbumsGridProps = {
   albums: AlbumGroup[];

@@ -8,11 +8,12 @@ import { ApiError } from '@shared/failure';
 import { PlaybackContext } from '@shared/playback';
 import { libraryKeys } from '@shared/query';
 
-import { LibraryPortProvider, LibraryScreen } from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { LibraryScreen } from '@features/library/view/LibraryScreen';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import { playlist, track } from '@features/library/__tests__/trackMutationFixtures';
 import { idlePlayback } from '@testing/queryHarness';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { PlaylistsPortProvider } from '@shared/playlists';
 import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
@@ -46,7 +47,7 @@ function wrapper({ children }: { children: ReactNode }) {
       <AcquisitionPortProvider port={acquisitionPort}>
         <PlaylistsPortProvider port={playlistsPort}>
           <PlaybackContext.Provider value={idlePlayback}>
-            <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+            <LibraryProvider port={port}>{children}</LibraryProvider>
           </PlaybackContext.Provider>
         </PlaylistsPortProvider>
       </AcquisitionPortProvider>
@@ -69,9 +70,9 @@ warmUpFirstRender(async () => {
       <AcquisitionPortProvider port={acquisitionPort}>
         <PlaylistsPortProvider port={playlistsPort}>
           <PlaybackContext.Provider value={idlePlayback}>
-            <LibraryPortProvider port={createMemoryLibraryPort()}>
+            <LibraryProvider port={createMemoryLibraryPort()}>
               <LibraryScreen navigator={navigator} />
-            </LibraryPortProvider>
+            </LibraryProvider>
           </PlaybackContext.Provider>
         </PlaylistsPortProvider>
       </AcquisitionPortProvider>

@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
-import type { AlbumGroup } from '@shared/apiClient';
-import type { ListRefresh } from '@features/library';
-import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
+import type { AlbumGroup } from '@features/library/core/libraryGroups';
+import type { ListRefresh } from '@features/library/core/libraryView';
+import { AlbumsGrid, ArtistsGrid } from '@features/library/view/GroupGrids';
+import { PlaylistsGrid } from '@features/library/view/PlaylistsGrid';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 

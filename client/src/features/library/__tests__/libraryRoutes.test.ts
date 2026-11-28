@@ -1,4 +1,4 @@
-import { featuringDetailRoute, goBackOrToLibrary } from '@features/library';
+import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/core/libraryRoutes';
 import { createMemoryNavigator } from '@testing/fakes/navigation/inMemoryNavigator';
 
 describe('featuringDetailRoute', () => {

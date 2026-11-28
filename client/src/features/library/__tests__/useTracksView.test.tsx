@@ -10,8 +10,11 @@ import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
 import { asTrackId } from '@shared/catalog';
 import type { TrackResponse } from '@shared/catalog';
-import type { ActiveView, LibraryPort } from '@features/library';
-import { LibraryPortProvider, useSelection, useTracksView } from '@features/library';
+import type { ActiveView } from '@features/library/view/LibraryListParts';
+import type { LibraryPort } from '@features/library/ports/ports';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { useSelection } from '@features/library/view/useSelection';
+import { useTracksView } from '@features/library/view/useTracksView';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import { track } from '@features/library/__tests__/trackMutationFixtures';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
@@ -70,7 +73,7 @@ function renderTracks(port: LibraryPort, queue: unknown = {}) {
   function wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        <LibraryProvider port={port}>{children}</LibraryProvider>
       </QueryClientProvider>
     );
   }
