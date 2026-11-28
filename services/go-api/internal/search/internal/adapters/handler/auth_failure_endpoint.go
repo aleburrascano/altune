@@ -27,11 +27,6 @@ var authFailureReasons = map[string]struct{}{
 
 var authFailureAppVersion = regexp.MustCompile(`^[0-9A-Za-z.+-]{1,32}$`)
 
-type authFailureRequest struct {
-	Reason     *string `json:"reason"`
-	AppVersion *string `json:"app_version"`
-}
-
 func (h *DiscoveryHandler) PublicRoutes(r chi.Router, limit RequestLimit) {
 	r.With(newClientRateLimiter(limit, h.now), httpserver.MaxBodySize(maxAuthFailureBodyBytes)).
 		Post("/public/auth-failures", h.handleAuthFailure)

@@ -185,3 +185,137 @@ func providerStatusesToDTOs(statuses []domain.ProviderSearchResponse) []Provider
 	}
 	return dtos
 }
+
+type ContentFetchResponseDTO struct {
+	Provider string            `json:"provider_name"`
+	Status   string            `json:"status"`
+	Items    []SearchResultDTO `json:"items"`
+	Partial  bool              `json:"partial"`
+	Code     string            `json:"code,omitempty"`
+}
+
+type ArtistContentResponseDTO struct {
+	TopTracks ContentFetchResponseDTO `json:"top_tracks"`
+	Albums    ContentFetchResponseDTO `json:"albums"`
+}
+
+type EnrichmentResponseDTO struct {
+	MBID           string                        `json:"mbid"`
+	Genres         []string                      `json:"genres"`
+	Year           int                           `json:"year"`
+	Rating         float64                       `json:"rating"`
+	RatingVotes    int                           `json:"rating_votes"`
+	PrimaryType    string                        `json:"primary_type"`
+	SecondaryTypes []string                      `json:"secondary_types"`
+	ExternalIDs    map[domain.ProviderKey]string `json:"external_ids"`
+	ArtworkURL     string                        `json:"artwork_url"`
+	HasContent     bool                          `json:"has_content"`
+	Degraded       bool                          `json:"degraded"`
+}
+
+type DeezerEnrichmentResponseDTO struct {
+	BPM             int              `json:"bpm"`
+	Gain            float64          `json:"gain"`
+	Explicit        bool             `json:"explicit"`
+	Label           string           `json:"label"`
+	Genres          []string         `json:"genres"`
+	UPC             string           `json:"upc"`
+	RecordType      string           `json:"record_type"`
+	FeaturedArtists []map[string]any `json:"featured_artists,omitempty"`
+	HasContent      bool             `json:"has_content"`
+	Degraded        bool             `json:"degraded"`
+}
+
+type LyricsResponseDTO struct {
+	Plain       string          `json:"plain"`
+	SyncedLines []SyncedLineDTO `json:"synced_lines"`
+	Writers     []string        `json:"writers"`
+	Copyright   string          `json:"copyright"`
+	Degraded    bool            `json:"degraded"`
+}
+
+type SyncedLineDTO struct {
+	Timecode     string `json:"timecode"`
+	Line         string `json:"line"`
+	Milliseconds int64  `json:"milliseconds"`
+	Duration     int64  `json:"duration"`
+}
+
+type authFailureRequest struct {
+	Reason     *string `json:"reason"`
+	AppVersion *string `json:"app_version"`
+}
+
+type UnreleasedArtistDTO struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
+	Name       string `json:"name"`
+}
+
+type UnreleasedSearchItemDTO struct {
+	UnreleasedSongDTO
+	Artist UnreleasedArtistDTO `json:"artist"`
+}
+
+type UnreleasedSearchResponseDTO struct {
+	Items []UnreleasedSearchItemDTO `json:"items"`
+}
+
+type UnreleasedSongDTO struct {
+	GeniusID         *int                   `json:"genius_id"`
+	Title            string                 `json:"title"`
+	CoverURL         *string                `json:"cover_url"`
+	GeniusURL        *string                `json:"genius_url"`
+	ReleaseDate      *string                `json:"release_date"`
+	HasMedia         *bool                  `json:"has_media"`
+	Quality          *string                `json:"quality"`
+	QualityRank      int                    `json:"quality_rank"`
+	TrackerKey       *string                `json:"tracker_key"`
+	OffStreaming     bool                   `json:"off_streaming"`
+	OpenURL          *string                `json:"open_url,omitempty"`
+	OpenHost         *string                `json:"open_host,omitempty"`
+	Versions         []UnreleasedVersionDTO `json:"versions,omitempty"`
+	AudioLinks       []AudioLinkDTO         `json:"audio_links"`
+	Extras           map[string]any         `json:"extras"`
+	BestVersionTitle string                 `json:"best_version_title"`
+}
+
+type AudioLinkDTO struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
+	URL        string `json:"url"`
+}
+
+type UnreleasedVersionDTO struct {
+	Title      string         `json:"title"`
+	Label      string         `json:"label,omitempty"`
+	Quality    string         `json:"quality,omitempty"`
+	AudioLinks []AudioLinkDTO `json:"audio_links,omitempty"`
+	OpenURL    string         `json:"open_url,omitempty"`
+	OpenHost   string         `json:"open_host,omitempty"`
+	Extras     map[string]any `json:"extras"`
+}
+
+type UnreleasedResponseDTO struct {
+	Items   []UnreleasedSongDTO `json:"items"`
+	Pending bool                `json:"pending"`
+}
+
+type FavoriteDTO struct {
+	Kind     string `json:"kind"`
+	Key      string `json:"key"`
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
+}
+
+type FavoriteRequest struct {
+	Kind     string `json:"kind"`
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle"`
+	ImageURL string `json:"image_url"`
+}
+
+type RecordSearchHistoryRequest struct {
+	Query string `json:"query"`
+}

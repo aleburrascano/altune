@@ -14,14 +14,6 @@ import (
 	"net/http"
 )
 
-type ContentFetchResponseDTO struct {
-	Provider string            `json:"provider_name"`
-	Status   string            `json:"status"`
-	Items    []SearchResultDTO `json:"items"`
-	Partial  bool              `json:"partial"`
-	Code     string            `json:"code,omitempty"`
-}
-
 func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
 	items := make([]SearchResultDTO, len(resp.Items))
 	for i, r := range resp.Items {
@@ -197,11 +189,6 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 
 			h.writeContentFetch(w, r, resp)
 		})
-}
-
-type ArtistContentResponseDTO struct {
-	TopTracks ContentFetchResponseDTO `json:"top_tracks"`
-	Albums    ContentFetchResponseDTO `json:"albums"`
 }
 
 func artistContentFailure(tracks, albums *service.ContentFetchResponse) *apierror.CodedError {

@@ -178,10 +178,6 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	httpserver.WriteJSON(w, http.StatusOK, httpserver.NewList(items))
 }
 
-type RecordSearchHistoryRequest struct {
-	Query string `json:"query"`
-}
-
 func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *http.Request) {
 	userId := requestuser.UserID(r)
 

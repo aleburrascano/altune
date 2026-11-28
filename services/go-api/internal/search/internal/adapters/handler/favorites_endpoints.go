@@ -9,21 +9,6 @@ import (
 	"net/http"
 )
 
-type FavoriteDTO struct {
-	Kind     string `json:"kind"`
-	Key      string `json:"key"`
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
-}
-
-type FavoriteRequest struct {
-	Kind     string `json:"kind"`
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle"`
-	ImageURL string `json:"image_url"`
-}
-
 func (h *DiscoveryHandler) handleListFavorites(w http.ResponseWriter, r *http.Request) {
 	userId := requestuser.UserID(r)
 

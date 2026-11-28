@@ -27,7 +27,7 @@ func NewPostgresUnreleasedStore(pool *pgxpool.Pool) *PostgresUnreleasedStore {
 }
 
 func encodeUnreleasedSong(song domain.UnreleasedSong) ([]byte, error) {
-	b, err := json.Marshal(song)
+	b, err := json.Marshal(storedFromSong(song))
 	if err != nil {
 		return nil, fmt.Errorf("encode unreleased song: %w", err)
 	}
@@ -35,11 +35,11 @@ func encodeUnreleasedSong(song domain.UnreleasedSong) ([]byte, error) {
 }
 
 func decodeUnreleasedSong(raw []byte) (domain.UnreleasedSong, error) {
-	var song domain.UnreleasedSong
+	var song storedSong
 	if err := json.Unmarshal(raw, &song); err != nil {
 		return domain.UnreleasedSong{}, fmt.Errorf("decode unreleased song: %w", err)
 	}
-	return song, nil
+	return song.song(), nil
 }
 
 func encodeKnownIDs(ids map[domain.ProviderName]string) ([]byte, error) {
@@ -328,4 +328,88 @@ func scanDueArtist(row pgx.CollectableRow) (ports.UnreleasedDueArtist, error) {
 		Name:     name,
 		KnownIDs: known,
 	}, nil
+}
+
+type storedLink struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
+	URL        string `json:"url"`
+}
+
+type storedVersion struct {
+	Title      string       `json:"title"`
+	Label      string       `json:"label,omitempty"`
+	Quality    string       `json:"quality,omitempty"`
+	AudioLinks []storedLink `json:"audio_links,omitempty"`
+	OpenURL    string       `json:"open_url,omitempty"`
+	OpenHost   string       `json:"open_host,omitempty"`
+}
+
+type storedSong struct {
+	GeniusID     int          `json:"genius_id"`
+	Title        string       `json:"title"`
+	CoverURL     string       `json:"cover_url,omitempty"`
+	GeniusURL    string       `json:"genius_url"`
+	ReleaseDate  string       `json:"release_date,omitempty"`
+	HasMedia     *bool        `json:"has_media"`
+	Quality      string       `json:"quality,omitempty"`
+	TrackerKey   string       `json:"tracker_key,omitempty"`
+	AudioLinks   []storedLink `json:"audio_links,omitempty"`
+	OffStreaming bool         `json:"off_streaming,omitempty"`
+	OpenURL      string       `json:"open_url,omitempty"`
+	OpenHost     string       `json:"open_host,omitempty"`
+
+	Versions []storedVersion `json:"versions,omitempty"`
+}
+
+func storedLinksOf(links []domain.AudioLink) []storedLink {
+	if links == nil {
+		return nil
+	}
+	out := make([]storedLink, len(links))
+	for i, l := range links {
+		out[i] = storedLink{Provider: string(l.Provider), ExternalID: l.ExternalID, URL: l.URL}
+	}
+	return out
+}
+
+func storedAudioLinks(links []storedLink) []domain.AudioLink {
+	if links == nil {
+		return nil
+	}
+	out := make([]domain.AudioLink, len(links))
+	for i, l := range links {
+		out[i] = domain.AudioLink{Provider: domain.AudioProvider(l.Provider), ExternalID: l.ExternalID, URL: l.URL}
+	}
+	return out
+}
+
+func storedFromSong(s domain.UnreleasedSong) storedSong {
+	out := storedSong{
+		GeniusID: s.GeniusID, Title: s.Title, CoverURL: s.CoverURL, GeniusURL: s.GeniusURL, ReleaseDate: s.ReleaseDate,
+		HasMedia: s.HasMedia, Quality: s.Quality, TrackerKey: s.TrackerKey, AudioLinks: storedLinksOf(s.AudioLinks),
+		OffStreaming: s.OffStreaming, OpenURL: s.OpenURL, OpenHost: s.OpenHost,
+	}
+	if s.Versions != nil {
+		out.Versions = make([]storedVersion, len(s.Versions))
+		for i, v := range s.Versions {
+			out.Versions[i] = storedVersion{Title: v.Title, Label: v.Label, Quality: v.Quality, AudioLinks: storedLinksOf(v.AudioLinks), OpenURL: v.OpenURL, OpenHost: v.OpenHost}
+		}
+	}
+	return out
+}
+
+func (s storedSong) song() domain.UnreleasedSong {
+	out := domain.UnreleasedSong{
+		GeniusID: s.GeniusID, Title: s.Title, CoverURL: s.CoverURL, GeniusURL: s.GeniusURL, ReleaseDate: s.ReleaseDate,
+		HasMedia: s.HasMedia, Quality: s.Quality, TrackerKey: s.TrackerKey, AudioLinks: storedAudioLinks(s.AudioLinks),
+		OffStreaming: s.OffStreaming, OpenURL: s.OpenURL, OpenHost: s.OpenHost,
+	}
+	if s.Versions != nil {
+		out.Versions = make([]domain.UnreleasedVersion, len(s.Versions))
+		for i, v := range s.Versions {
+			out.Versions[i] = domain.UnreleasedVersion{Title: v.Title, Label: v.Label, Quality: v.Quality, AudioLinks: storedAudioLinks(v.AudioLinks), OpenURL: v.OpenURL, OpenHost: v.OpenHost}
+		}
+	}
+	return out
 }

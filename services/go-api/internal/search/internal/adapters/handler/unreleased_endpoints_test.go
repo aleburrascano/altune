@@ -145,7 +145,7 @@ func TestHandleArtistUnreleased_ReturnsAudioLinksAsAlwaysAnArray(t *testing.T) {
 
 	discAssertStatus(t, rec, http.StatusOK)
 	items := decodeUnreleased(t, rec.Body.Bytes()).Items
-	want := domain.AudioLink{Provider: "soundcloud", URL: "https://soundcloud.com/a/b"}
+	want := handler.AudioLinkDTO{Provider: "soundcloud", URL: "https://soundcloud.com/a/b"}
 	if len(items) != 2 || len(items[0].AudioLinks) != 1 || items[0].AudioLinks[0] != want {
 		t.Fatalf("items = %+v, want the soundcloud link on Cancun", items)
 	}
@@ -257,10 +257,16 @@ func TestUnreleasedSongDTO_CarriesEveryDomainField(t *testing.T) {
 		name, _, _ := strings.Cut(dto.Field(i).Tag.Get("json"), ",")
 		wire[name] = true
 	}
+	wireNames := map[string]string{
+		"GeniusID": "genius_id", "Title": "title", "CoverURL": "cover_url", "GeniusURL": "genius_url", "ReleaseDate": "release_date",
+		"HasMedia": "has_media", "Quality": "quality", "TrackerKey": "tracker_key", "AudioLinks": "audio_links",
+		"OffStreaming": "off_streaming", "OpenURL": "open_url", "OpenHost": "open_host", "Versions": "versions",
+	}
 	song := reflect.TypeFor[domain.UnreleasedSong]()
 	for i := range song.NumField() {
-		if name, _, _ := strings.Cut(song.Field(i).Tag.Get("json"), ","); !wire[name] {
-			t.Errorf("domain field %s (json %q) never reaches the response", song.Field(i).Name, name)
+		name := wireNames[song.Field(i).Name]
+		if !wire[name] {
+			t.Errorf("domain field %s (wire %q) never reaches the response", song.Field(i).Name, name)
 		}
 	}
 }
