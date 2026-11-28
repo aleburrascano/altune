@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
@@ -14,16 +15,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type pickingStore struct {
-	upgradeStore
-	picks     []domain.UpgradeCandidate
-	pickErr   error
-	selection domain.UpgradeSelection
-}
-
-func (s *pickingStore) Candidates(_ context.Context, selection domain.UpgradeSelection) ([]domain.UpgradeCandidate, error) {
-	s.selection = selection
-	return s.picks, s.pickErr
+func picking(picks ...domain.UpgradeCandidate) *memory.UpgradeState {
+	store := memory.NewUpgradeState(time.Now)
+	store.PickCandidates(picks, nil)
+	return store
 }
 
 type recordingScheduler struct {
@@ -38,7 +33,7 @@ func (r *recordingScheduler) ScheduleUpgrade(_ context.Context, _ ids.UserId, tr
 
 func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 	trackId := ids.NewTrackId()
-	store := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: trackId, UserID: ids.NewUserId(uuid.New()), Grade: "F"}}}
+	store := picking(domain.UpgradeCandidate{TrackID: trackId, UserID: ids.NewUserId(uuid.New()), Grade: "F"})
 	scheduler := &recordingScheduler{}
 
 	if err := service.NewReplacementPlanner(store, scheduler, 2, 6*time.Hour).PlanNext(context.Background()); err != nil {
@@ -49,8 +44,8 @@ func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 		t.Errorf("scheduled = %v, want the picked track", scheduler.scheduled)
 	}
 	want := domain.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2}
-	if !reflect.DeepEqual(store.selection, want) {
-		t.Errorf("selection = %+v, want %+v", store.selection, want)
+	if !reflect.DeepEqual(store.LastSelection(), want) {
+		t.Errorf("selection = %+v, want %+v", store.LastSelection(), want)
 	}
 }
 
@@ -61,34 +56,34 @@ func (upgradableOnly) Upgradable() []domain.TrackStatus {
 }
 
 func TestPlanner_AsksTheStoreForTheStatusesTheRulesCallUpgradable(t *testing.T) {
-	store := &pickingStore{}
+	store := picking()
 
 	if err := service.NewReplacementPlanner(store, &recordingScheduler{}, 2, time.Hour).UpgradingFrom(upgradableOnly{}).PlanNext(context.Background()); err != nil {
 		t.Fatalf("PlanNext: %v", err)
 	}
 
-	if want := []domain.TrackStatus{domain.TrackReady}; !reflect.DeepEqual(store.selection.Upgradable, want) {
-		t.Errorf("Upgradable = %v, want %v", store.selection.Upgradable, want)
+	if want := []domain.TrackStatus{domain.TrackReady}; !reflect.DeepEqual(store.LastSelection().Upgradable, want) {
+		t.Errorf("Upgradable = %v, want %v", store.LastSelection().Upgradable, want)
 	}
 }
 
 func TestPlanner_CheckingUploadsAsksTheStoreForUnverifiedUserUploadsToo(t *testing.T) {
-	store := &pickingStore{}
+	store := picking()
 
 	if err := service.NewReplacementPlanner(store, &recordingScheduler{}, 2, 6*time.Hour).CheckingUploads().PlanNext(context.Background()); err != nil {
 		t.Fatalf("PlanNext: %v", err)
 	}
 
 	want := domain.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, CheckInPlace: true}
-	if !reflect.DeepEqual(store.selection, want) {
-		t.Errorf("selection = %+v, want %+v", store.selection, want)
+	if !reflect.DeepEqual(store.LastSelection(), want) {
+		t.Errorf("selection = %+v, want %+v", store.LastSelection(), want)
 	}
 }
 
 func TestPlanner_SchedulesNothingWhenNothingIsPicked(t *testing.T) {
 	scheduler := &recordingScheduler{}
 
-	if err := service.NewReplacementPlanner(&pickingStore{}, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
+	if err := service.NewReplacementPlanner(picking(), scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
 		t.Fatalf("PlanNext: %v", err)
 	}
 
@@ -98,20 +93,22 @@ func TestPlanner_SchedulesNothingWhenNothingIsPicked(t *testing.T) {
 }
 
 func TestPlanner_ReportsAFailedPickOrSchedule(t *testing.T) {
-	pickFails := &pickingStore{pickErr: errors.New("db down")}
-	if err := service.NewReplacementPlanner(pickFails, &recordingScheduler{}, 1, time.Hour).PlanNext(context.Background()); !errors.Is(err, pickFails.pickErr) {
+	pickErr := errors.New("db down")
+	pickFails := memory.NewUpgradeState(time.Now)
+	pickFails.PickCandidates(nil, pickErr)
+	if err := service.NewReplacementPlanner(pickFails, &recordingScheduler{}, 1, time.Hour).PlanNext(context.Background()); !errors.Is(err, pickErr) {
 		t.Errorf("PlanNext with a failing pick = %v, want the pick error", err)
 	}
 
 	scheduleErr := errors.New("paused")
-	picks := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	picks := picking(domain.UpgradeCandidate{TrackID: ids.NewTrackId()})
 	if err := service.NewReplacementPlanner(picks, &recordingScheduler{err: scheduleErr}, 1, time.Hour).PlanNext(context.Background()); !errors.Is(err, scheduleErr) {
 		t.Errorf("PlanNext with a failing schedule = %v, want the schedule error", err)
 	}
 }
 
 func TestPlanner_ASchedulerThatIsPausedIsNotAnError(t *testing.T) {
-	picks := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	picks := picking(domain.UpgradeCandidate{TrackID: ids.NewTrackId()})
 	scheduler := &recordingScheduler{err: domain.ErrAcquisitionPaused}
 
 	if err := service.NewReplacementPlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
@@ -129,7 +126,7 @@ func TestInterval_SpreadsTheHourlyBudgetEvenly(t *testing.T) {
 }
 
 func TestPlanner_ATrackWithAJobInFlightIsSkippedNotAFailure(t *testing.T) {
-	picks := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	picks := picking(domain.UpgradeCandidate{TrackID: ids.NewTrackId()})
 	scheduler := &recordingScheduler{err: domain.ErrTrackJobInFlight}
 
 	if err := service.NewReplacementPlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
@@ -138,14 +135,14 @@ func TestPlanner_ATrackWithAJobInFlightIsSkippedNotAFailure(t *testing.T) {
 }
 
 func TestPlanner_RescuingLowBitrateAsksTheStoreForTheFloor(t *testing.T) {
-	store := &pickingStore{}
+	store := picking()
 
 	if err := service.NewReplacementPlanner(store, &recordingScheduler{}, 2, 6*time.Hour).RescuingLowBitrate(112).PlanNext(context.Background()); err != nil {
 		t.Fatalf("PlanNext: %v", err)
 	}
 
 	want := domain.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, LowBitrateFloorKbps: 112}
-	if !reflect.DeepEqual(store.selection, want) {
-		t.Errorf("selection = %+v, want %+v", store.selection, want)
+	if !reflect.DeepEqual(store.LastSelection(), want) {
+		t.Errorf("selection = %+v, want %+v", store.LastSelection(), want)
 	}
 }

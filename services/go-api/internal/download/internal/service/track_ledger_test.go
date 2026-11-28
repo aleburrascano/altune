@@ -10,6 +10,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -21,30 +22,9 @@ type libraryHalf struct {
 
 func (l libraryHalf) EvidenceAccepted(domain.Completion) bool { return l.accepts }
 
-type settleCall struct {
-	fence domain.ClaimNumber
-	keys  []string
-	reset bool
-}
-
-type spyUpgradeState struct {
-	snapshot domain.UpgradeStateSnapshot
-	settled  []settleCall
-	err      error
-}
-
-func (s *spyUpgradeState) State(context.Context, ids.TrackId) (domain.UpgradeStateSnapshot, error) {
-	return s.snapshot, s.err
-}
-
-func (s *spyUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, fence domain.ClaimNumber, keys []string, evidence domain.EvidenceFate) error {
-	s.settled = append(s.settled, settleCall{fence: fence, keys: keys, reset: evidence == domain.ResetEvidence})
-	return s.err
-}
-
 type ledgerFixture struct {
 	library *memory.Ledger
-	state   *spyUpgradeState
+	state   *memory.UpgradeState
 	ledger  *service.TrackLedger
 	id      ids.TrackId
 	user    ids.UserId
@@ -58,7 +38,7 @@ func newLedgerFixture(t *testing.T, accepts bool, seed func(*domain.TrackSnapsho
 		seed(&snapshot)
 	}
 	library := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: snapshot})
-	state := &spyUpgradeState{}
+	state := memory.NewUpgradeState(time.Now)
 	ledger, err := service.NewTrackLedger(libraryHalf{Ledger: library, accepts: accepts}, state)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +50,7 @@ func TestGetOverlaysTheUpgradeStateOnTheTrackEvidence(t *testing.T) {
 	f := newLedgerFixture(t, true, func(s *domain.TrackSnapshot) {
 		s.Evidence = json.RawMessage(`{"grade":"B","upgrade_tries":9}`)
 	})
-	f.state.snapshot = domain.UpgradeStateSnapshot{Evidence: json.RawMessage(`{"upgrade_tries":2}`), RejectedSourceKeys: []string{"bad"}}
+	f.state.Seed(f.id, domain.UpgradeStateSnapshot{Evidence: json.RawMessage(`{"upgrade_tries":2}`), RejectedSourceKeys: []string{"bad"}})
 
 	snap, err := f.ledger.Get(context.Background(), f.id, f.user)
 	if err != nil {
@@ -91,7 +71,7 @@ func TestGetOverlaysTheUpgradeStateOnTheTrackEvidence(t *testing.T) {
 
 func TestGetReturnsTheTrackNotFoundOfTheLibraryHalfWithoutReadingTheState(t *testing.T) {
 	f := newLedgerFixture(t, true, nil)
-	f.state.err = errors.New("state must not be read")
+	f.state.FailWith(errors.New("state must not be read"))
 
 	_, err := f.ledger.Get(context.Background(), f.id, ids.NewUserId(uuid.New()))
 
@@ -108,8 +88,8 @@ func TestCompleteMarksPendingTrackReadyAndSettlesTheRejectedKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(f.state.settled) != 1 || len(f.state.settled[0].keys) != 1 || f.state.settled[0].keys[0] != "bad-key" || !f.state.settled[0].reset {
-		t.Fatalf("upgrade state settled = %+v, want the rejected key and a reset for the replaced evidence", f.state.settled)
+	if len(f.state.Settled()) != 1 || len(f.state.Settled()[0].Keys) != 1 || f.state.Settled()[0].Keys[0] != "bad-key" || !f.state.Settled()[0].Reset {
+		t.Fatalf("upgrade state settled = %+v, want the rejected key and a reset for the replaced evidence", f.state.Settled())
 	}
 	if got, _ := f.library.Track(f.id); got.Status != domain.TrackReady {
 		t.Errorf("status = %v, want ready", got.Status)
@@ -121,18 +101,19 @@ func TestCompleteSettlesNothingWhenThereIsNoRejectionAndNoNewEvidence(t *testing
 
 	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, domain.Completion{AudioRef: "ref-1"})
 
-	if err != nil || len(f.state.settled) != 0 {
-		t.Errorf("Complete = %v, settled = %+v, want success and no state write", err, f.state.settled)
+	if err != nil || len(f.state.Settled()) != 0 {
+		t.Errorf("Complete = %v, settled = %+v, want success and no state write", err, f.state.Settled())
 	}
 }
 
 func TestCompleteReturnsTheStateErrorAndLeavesTheTrackUntouchedSoTheSchedulerRetries(t *testing.T) {
 	f := newLedgerFixture(t, true, nil)
-	f.state.err = errors.New("state unavailable")
+	stateErr := errors.New("state unavailable")
+	f.state.FailWith(stateErr)
 
 	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
 
-	if !errors.Is(err, f.state.err) {
+	if !errors.Is(err, stateErr) {
 		t.Fatalf("Complete = %v, want the state error", err)
 	}
 	if got, _ := f.library.Track(f.id); got.Status != domain.TrackPending {
@@ -153,8 +134,8 @@ func TestCompleteThatFailsAfterTheStateWriteIsRetriedWithTheSameStateWrite(t *te
 		t.Fatalf("retried Complete = %v", err)
 	}
 
-	if len(f.state.settled) != 2 || !reflect.DeepEqual(f.state.settled[0], f.state.settled[1]) {
-		t.Errorf("settled = %+v, want the identical idempotent write twice", f.state.settled)
+	if len(f.state.Settled()) != 2 || !reflect.DeepEqual(f.state.Settled()[0], f.state.Settled()[1]) {
+		t.Errorf("settled = %+v, want the identical idempotent write twice", f.state.Settled())
 	}
 	if got, _ := f.library.Track(f.id); got.Status != domain.TrackReady {
 		t.Errorf("status = %v, want ready after the retry", got.Status)
@@ -163,15 +144,15 @@ func TestCompleteThatFailsAfterTheStateWriteIsRetriedWithTheSameStateWrite(t *te
 
 func TestCompleteHandsTheClaimFenceToTheStateWriteAndReturnsALostLease(t *testing.T) {
 	f := newLedgerFixture(t, true, nil)
-	f.state.err = domain.ErrLeaseLost
+	f.state.FailWith(domain.ErrLeaseLost)
 
 	err := f.ledger.Complete(context.Background(), f.id, f.user, 4, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
 
 	if !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("Complete = %v, want ErrLeaseLost from the fenced state write", err)
 	}
-	if len(f.state.settled) != 1 || f.state.settled[0].fence != 4 {
-		t.Errorf("settled = %+v, want one write carrying fence 4", f.state.settled)
+	if len(f.state.Settled()) != 1 || f.state.Settled()[0].Fence != 4 {
+		t.Errorf("settled = %+v, want one write carrying fence 4", f.state.Settled())
 	}
 	if got, _ := f.library.Track(f.id); got.Status != domain.TrackPending {
 		t.Errorf("status = %v, want pending because the library write never ran", got.Status)
@@ -195,8 +176,8 @@ func TestCompleteResetsTheUpgradeEvidenceOnlyWhenTheLibraryAcceptsTheNewEvidence
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(f.state.settled) != 1 || f.state.settled[0].reset != tc.wantReset {
-				t.Errorf("settled = %+v, want one write with reset = %v", f.state.settled, tc.wantReset)
+			if len(f.state.Settled()) != 1 || f.state.Settled()[0].Reset != tc.wantReset {
+				t.Errorf("settled = %+v, want one write with reset = %v", f.state.Settled(), tc.wantReset)
 			}
 		})
 	}
@@ -210,15 +191,17 @@ func TestCompleteByAnotherOwnerWritesNoUpgradeState(t *testing.T) {
 	if !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Fatalf("Complete = %v, want ErrTrackNotFound", err)
 	}
-	if len(f.state.settled) != 0 {
-		t.Errorf("settled = %+v, want no state write for another owner's track", f.state.settled)
+	if len(f.state.Settled()) != 0 {
+		t.Errorf("settled = %+v, want no state write for another owner's track", f.state.Settled())
 	}
 }
 
 func TestNewTrackLedgerRefusesAMissingLibraryHalfOrUpgradeState(t *testing.T) {
 	library := libraryHalf{Ledger: memory.NewLedger()}
 	cases := map[string]func() (*service.TrackLedger, error){
-		"no library half":  func() (*service.TrackLedger, error) { return service.NewTrackLedger(nil, memory.NewUpgradeState()) },
+		"no library half": func() (*service.TrackLedger, error) {
+			return service.NewTrackLedger(nil, memory.NewUpgradeState(time.Now))
+		},
 		"no upgrade state": func() (*service.TrackLedger, error) { return service.NewTrackLedger(library, nil) },
 	}
 	for name, build := range cases {
@@ -234,7 +217,7 @@ func TestTrackLedgerKeepsTheUpgradeStateOfAMemoryStateAcrossGetAndComplete(t *te
 	user := ids.NewUserId(uuid.New())
 	id := ids.NewTrackId()
 	library := libraryHalf{Ledger: memory.NewLedger(memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{ID: id, UserId: user, Status: domain.TrackPending}}), accepts: true}
-	ledger, err := service.NewTrackLedger(library, memory.NewUpgradeState())
+	ledger, err := service.NewTrackLedger(library, memory.NewUpgradeState(time.Now))
 	if err != nil {
 		t.Fatal(err)
 	}

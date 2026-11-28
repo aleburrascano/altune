@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 type knownTracks struct{ *memory.UpgradeState }
@@ -15,18 +16,18 @@ type knownTracks struct{ *memory.UpgradeState }
 func (knownTracks) AddTrack(*testing.T) ids.TrackId { return ids.NewTrackId() }
 
 func (k knownTracks) SeedEvidence(_ *testing.T, trackID ids.TrackId, evidence json.RawMessage) {
-	k.UpgradeState.SeedEvidence(trackID, evidence)
+	k.Seed(trackID, domain.UpgradeStateSnapshot{Evidence: evidence})
 }
 
 func TestUpgradeState_KeepsTheUpgradeStateRepoContract(t *testing.T) {
 	contracttest.UpgradeStateRepoContract(t, func(*testing.T) contracttest.UpgradeStateRepoUnderTest {
-		return knownTracks{memory.NewUpgradeState()}
+		return knownTracks{memory.NewUpgradeState(time.Now)}
 	})
 }
 
 func TestUpgradeState_SettleKeepsTheRejectedKeysAndResetsEvidenceOnlyWhenAsked(t *testing.T) {
 	ctx := context.Background()
-	state := memory.NewUpgradeState()
+	state := memory.NewUpgradeState(time.Now)
 	id := ids.NewTrackId()
 
 	if err := state.SettleAcquisition(ctx, id, 0, []string{"a"}, domain.KeepEvidence); err != nil {
@@ -46,7 +47,7 @@ func TestUpgradeState_SettleKeepsTheRejectedKeysAndResetsEvidenceOnlyWhenAsked(t
 }
 
 func TestUpgradeState_AnUnknownTrackHasNoState(t *testing.T) {
-	got, err := memory.NewUpgradeState().State(context.Background(), ids.NewTrackId())
+	got, err := memory.NewUpgradeState(time.Now).State(context.Background(), ids.NewTrackId())
 
 	if err != nil || len(got.RejectedSourceKeys) != 0 || got.Evidence != nil {
 		t.Errorf("State = %+v, %v, want empty", got, err)

@@ -78,6 +78,9 @@ func (r *RejectionRepo) Record(ctx context.Context, recs []domain.CandidateRejec
 		r.recorded = append(r.recorded, recs...)
 		return err
 	}
+	if len(recs) == 0 {
+		return nil
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

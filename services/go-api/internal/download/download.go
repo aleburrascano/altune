@@ -316,7 +316,7 @@ type acquireOption = func(*service.AcquireTrackAudioService)
 func (m *Module) startAcquisition(ctx context.Context, d Deps, tools domain.Verification) (*Module, error) {
 	cfg := d.Config
 	sources := d.Sources
-	upgradeState := ports.UpgradeState(memory.NewUpgradeState())
+	upgradeState := ports.UpgradeState(memory.NewUpgradeState(clock.Now))
 	if d.Database != nil {
 		upgradeState = d.Database.UpgradeStore()
 	}

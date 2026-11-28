@@ -79,34 +79,6 @@ func (s *source) Fetch(_ context.Context, _ domain.AudioCandidate, outDir string
 	return domain.FetchedAudio{Path: path}, os.WriteFile(path, []byte("new bytes"), 0o600)
 }
 
-type upgradeStore struct {
-	mu       sync.Mutex
-	tries    int
-	attempts []domain.UpgradeAttempt
-	gaveUp   []string
-}
-
-func (f *upgradeStore) Candidates(context.Context, domain.UpgradeSelection) ([]domain.UpgradeCandidate, error) {
-	return nil, nil
-}
-
-func (f *upgradeStore) NoteAttempt(_ context.Context, _ ids.TrackId, attempt domain.UpgradeAttempt) (int, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.attempts = append(f.attempts, attempt)
-	if attempt.CountsAsTry {
-		f.tries++
-	}
-	return f.tries, nil
-}
-
-func (f *upgradeStore) GiveUp(_ context.Context, _ ids.TrackId, _ int, reason string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.gaveUp = append(f.gaveUp, reason)
-	return nil
-}
-
 type publisher struct {
 	mu        sync.Mutex
 	published int
@@ -123,7 +95,7 @@ type world struct {
 	tracks   *memory.Ledger
 	audio    *audioStore
 	source   *source
-	upgrades *upgradeStore
+	upgrades *memory.UpgradeState
 	userId   ids.UserId
 	trackId  ids.TrackId
 }
@@ -145,7 +117,7 @@ func seed(t *testing.T, stored domain.Grade) *world {
 		tracks:   memory.NewLedger(track),
 		audio:    &audioStore{objects: map[string]string{originalRef: "original bytes"}},
 		source:   &source{},
-		upgrades: &upgradeStore{},
+		upgrades: memory.NewUpgradeState(time.Now),
 		userId:   track.UserId,
 		trackId:  track.ID,
 	}
@@ -308,8 +280,8 @@ func TestRunner_ALowerGradeTrackGetsTheBetterFile(t *testing.T) {
 	if got := w.committedGrade(t); !got.Beats(domain.GradeF) {
 		t.Errorf("stored grade = %q, want the new file's grade above F", got)
 	}
-	if len(w.upgrades.attempts) != 0 || len(w.upgrades.gaveUp) != 0 {
-		t.Errorf("a successful swap recorded attempts %v / give-ups %v, want none", w.upgrades.attempts, w.upgrades.gaveUp)
+	if len(w.upgrades.Attempts()) != 0 || len(w.upgrades.GaveUp()) != 0 {
+		t.Errorf("a successful swap recorded attempts %v / give-ups %v, want none", w.upgrades.Attempts(), w.upgrades.GaveUp())
 	}
 }
 
@@ -327,8 +299,8 @@ func TestRunner_AnEqualGradeKeepsTheOldFileAndRejectsTheTriedSource(t *testing.T
 		t.Errorf("objects = %v, want only the untouched original: the new file is discarded", w.audio.objects)
 	}
 	want := []domain.UpgradeAttempt{{RejectedSourceKey: "youtube:freshAAAAAA", CountsAsTry: true}}
-	if fmt.Sprint(w.upgrades.attempts) != fmt.Sprint(want) {
-		t.Errorf("attempts = %v, want %v: the tried source joins the rejected keys", w.upgrades.attempts, want)
+	if fmt.Sprint(w.upgrades.Attempts()) != fmt.Sprint(want) {
+		t.Errorf("attempts = %v, want %v: the tried source joins the rejected keys", w.upgrades.Attempts(), want)
 	}
 }
 
@@ -377,8 +349,8 @@ func TestRunner_ATrackThatIsGoneOrNotTheCallersIsSkippedWithoutError(t *testing.
 				t.Fatalf("ExecuteUpgrade = %v, want nil: a missing track is skipped, not a failure", err)
 			}
 
-			if w.source.finds != 0 || len(w.upgrades.attempts) != 0 || len(w.upgrades.gaveUp) != 0 {
-				t.Errorf("finds = %d, attempts = %v, give-ups = %v, want nothing done", w.source.finds, w.upgrades.attempts, w.upgrades.gaveUp)
+			if w.source.finds != 0 || len(w.upgrades.Attempts()) != 0 || len(w.upgrades.GaveUp()) != 0 {
+				t.Errorf("finds = %d, attempts = %v, give-ups = %v, want nothing done", w.source.finds, w.upgrades.Attempts(), w.upgrades.GaveUp())
 			}
 			if row := w.committed(); row.AudioRef == nil || *row.AudioRef != originalRef {
 				t.Errorf("audio_ref = %v, want the seeded track untouched", row.AudioRef)
@@ -407,13 +379,13 @@ func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
 		if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, service.ErrKept) {
 			t.Fatalf("ExecuteUpgrade try %d: %v", try, err)
 		}
-		if try < 3 && len(w.upgrades.gaveUp) != 0 {
+		if try < 3 && len(w.upgrades.GaveUp()) != 0 {
 			t.Fatalf("gave up after %d tries, want to keep trying until 3", try)
 		}
 	}
 
-	if len(w.upgrades.gaveUp) != 1 || w.upgrades.gaveUp[0] != "no source graded above D after 3 tries" {
-		t.Errorf("give-ups = %q, want one with the written reason", w.upgrades.gaveUp)
+	if len(w.upgrades.GaveUp()) != 1 || w.upgrades.GaveUp()[0] != "no source graded above D after 3 tries" {
+		t.Errorf("give-ups = %q, want one with the written reason", w.upgrades.GaveUp())
 	}
 	if row := w.committed(); *row.AudioRef != originalRef {
 		t.Errorf("audio_ref = %v, want the old file kept to the end", row.AudioRef)
@@ -435,8 +407,8 @@ func TestRunner_ASwapThatFailsToCommitKeepsTheOldFileAndCountsNoTry(t *testing.T
 	if row := w.committed(); row.Status != domain.TrackReady || *row.AudioRef != originalRef {
 		t.Errorf("track = %v %v, want it ready on the original ref", row.Status, row.AudioRef)
 	}
-	if len(w.upgrades.gaveUp) != 0 || fmt.Sprint(w.upgrades.attempts) != fmt.Sprint([]domain.UpgradeAttempt{{}}) {
-		t.Errorf("attempts = %v, give-ups = %v, want an infrastructure failure to count for nothing", w.upgrades.attempts, w.upgrades.gaveUp)
+	if len(w.upgrades.GaveUp()) != 0 || fmt.Sprint(w.upgrades.Attempts()) != fmt.Sprint([]domain.UpgradeAttempt{{}}) {
+		t.Errorf("attempts = %v, give-ups = %v, want an infrastructure failure to count for nothing", w.upgrades.Attempts(), w.upgrades.GaveUp())
 	}
 }
 
@@ -468,7 +440,7 @@ func TestReplace_IsNotHeldToTheRatchet(t *testing.T) {
 }
 
 type failingGiveUpStore struct {
-	upgradeStore
+	*memory.UpgradeState
 	giveUpCalls int
 }
 
@@ -479,7 +451,7 @@ func (f *failingGiveUpStore) GiveUp(context.Context, ids.TrackId, int, string) e
 
 func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
 	w := seed(t, domain.GradeD)
-	store := &failingGiveUpStore{}
+	store := &failingGiveUpStore{UpgradeState: memory.NewUpgradeState(time.Now)}
 	svc := service.MustNewAcquireTrackAudioService(w.tracks, service.NewSourceRegistry(w.source), w.audio, scratchfiles.New(), replaceNoVerification(), replaceNoStages(w.audio))
 	runner := newRunner(t, w.tracks, service.NewReplaceService(svc), store, service.RunnerConfig{MaxTries: 1})
 
