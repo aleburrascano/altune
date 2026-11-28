@@ -702,6 +702,7 @@ case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
 "run ./scripts/lintdoors"*) exit "\${GO_LINTDOORS_STUB_RC:-0}" ;;
 "run ./scripts/lintdurations"*) exit "\${GO_LINTDURATIONS_STUB_RC:-0}" ;;
+"run ./scripts/lintarch"*) exit "\${GO_LINTARCH_STUB_RC:-0}" ;;
 "run ./scripts/lintsleeps"*) exit "\${GO_LINTSLEEPS_STUB_RC:-0}" ;;
 "run ./scripts/genclientcodes"*) exit "\${GO_GENCLIENTCODES_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
@@ -1089,6 +1090,26 @@ expect_log "go run ./scripts/lintdoors --exports ."
 GO_LINTDOORS_STUB_RC=1 run_with_tools
 expect_rc 1
 expect_out "FAIL  go-api module doors"
+
+CASE="a failing lintarch turns a push red, and --full runs it on the whole tree"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_push_scoped
+expect_rc 0
+expect_log "go run ./scripts/lintarch ."
+GO_LINTARCH_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api table owners"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_with_tools
+expect_rc 0
+expect_log "go run ./scripts/lintarch ."
+GO_LINTARCH_STUB_RC=1 run_with_tools
+expect_rc 1
+expect_out "FAIL  go-api table owners"
 
 CASE="a failing lintsleeps turns a push red, and --full runs it on the whole tree"
 new_repo
