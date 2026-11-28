@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/itunes"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/queuetimeout"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -450,7 +450,7 @@ func TestITunesAdapter_PacesNothingItself(t *testing.T) {
 }
 
 func TestITunesAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing.T) {
-	shed := fmt.Errorf("%w: %w", queuetimeout.Err, context.DeadlineExceeded)
+	shed := fmt.Errorf("%w: %w", resilience.ErrQueueTimeout, context.DeadlineExceeded)
 	lookup := albumTracksLookup(&http.Client{Transport: contracttest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
 		return nil, shed
 	}}})

@@ -2,12 +2,12 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"slices"
 )
 
-func NewRecordedResolver(hits []songfields.RecordingIdentity, isrcRecordings []domain.ISRCRecording, pinned *domain.RecordingFacts) *MusicBrainzResolver {
+func NewRecordedResolver(hits []music.RecordingIdentity, isrcRecordings []domain.ISRCRecording, pinned *domain.RecordingFacts) *MusicBrainzResolver {
 	return MustNewMusicBrainzResolver(ResolverPorts{
 		Search:      recordedSearch(hits),
 		ISRC:        recordedISRCLookup(isrcRecordings),
@@ -45,9 +45,9 @@ func (l recordedLookup) RecordingByMBID(_ context.Context, mbid string) (domain.
 	return l.facts, true, nil
 }
 
-type recordedSearch []songfields.RecordingIdentity
+type recordedSearch []music.RecordingIdentity
 
-func (s recordedSearch) SearchRecordings(context.Context, string, int) ([]songfields.RecordingIdentity, error) {
+func (s recordedSearch) SearchRecordings(context.Context, string, int) ([]music.RecordingIdentity, error) {
 	return slices.Clone(s), nil
 }
 

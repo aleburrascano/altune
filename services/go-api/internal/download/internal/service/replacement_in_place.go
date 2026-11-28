@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
@@ -192,7 +192,7 @@ func inPlaceVerdictOf(track *domain.TrackSnapshot, stored domain.InPlaceEvidence
 	if kind == "" {
 		kind = domain.FanUpload
 	}
-	record.Grade = string(domain.GradeOf(finding.Fingerprint, downloadprovenance.ProvenanceBestEffort, kind))
+	record.Grade = string(domain.GradeOf(finding.Fingerprint, music.ProvenanceBestEffort, kind))
 	record.MayLower = finding.Lowers || finding.Fingerprint == domain.FingerprintContradicts || finding.Fingerprint == domain.FingerprintUnsupported
 	return record
 }

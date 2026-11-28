@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +24,7 @@ const (
 	ytmChallengeBackoffGap = 250 * time.Millisecond
 )
 
-var ytmChallengeBackoff = backoff.MustCapped(ytmChallengeBackoffGap, ytmChallengeBackoffGap)
+var ytmChallengeBackoff = resilience.MustCappedBackoff(ytmChallengeBackoffGap, ytmChallengeBackoffGap)
 
 func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return outbound.MustNewClient(ytmusicTimeout, transport)

@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"strings"
@@ -171,7 +171,7 @@ func assertCollidesOnOneStorageKey(t *testing.T, a, b *domain.Track) {
 		{"title", a.Title(), b.Title()},
 	}
 	for _, s := range segments {
-		if textnorm.NormalizeForMatch(s.a) != textnorm.NormalizeForMatch(s.b) {
+		if music.NormalizeForMatch(s.a) != music.NormalizeForMatch(s.b) {
 			t.Fatalf("%s %q and %q normalize apart, so the keys would differ", s.field, s.a, s.b)
 		}
 	}

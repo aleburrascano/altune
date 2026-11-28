@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"regexp"
@@ -296,8 +296,8 @@ func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
 	}
 
 	got, _ := ledger.Track(track.ID)
-	if got.Status != domain.TrackFailed || got.FailureReason != string(downloadfailure.FailureAcquisitionCancelled) {
-		t.Errorf("track = %v %q, want failed as %q", got.Status, got.FailureReason, downloadfailure.FailureAcquisitionCancelled)
+	if got.Status != domain.TrackFailed || got.FailureReason != string(music.FailureAcquisitionCancelled) {
+		t.Errorf("track = %v %q, want failed as %q", got.Status, got.FailureReason, music.FailureAcquisitionCancelled)
 	}
 }
 

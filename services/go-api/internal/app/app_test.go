@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/shared/background"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"strings"
 	"testing"
 	"time"
@@ -59,7 +59,7 @@ func TestStartupSwitches_ADisabledRankingRefreshSkipsInsteadOfRunning(t *testing
 	assembly := assembleLogging(t, cfg).assembly
 
 	var h background.JobHealth
-	polltest.Within(3*time.Second, func() bool {
+	timingtest.Within(3*time.Second, func() bool {
 		h = jobHealth(t, assembly, jobs.BehavioralRankingRefresh)
 		return h.Skipped != 0
 	})

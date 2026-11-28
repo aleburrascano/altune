@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"regexp"
 	"sort"
 	"strings"
@@ -114,7 +114,7 @@ func differ(a, b string) bool {
 }
 
 func releaseKey(title string) string {
-	base := textnorm.NormalizeForMatch(title)
+	base := music.NormalizeForMatch(title)
 	if base == "" {
 		return ""
 	}
@@ -123,12 +123,12 @@ func releaseKey(title string) string {
 		if creditRe.MatchString(m[1]) {
 			continue
 		}
-		if q := textnorm.NormalizeForMatch(m[1]); q != "" {
+		if q := music.NormalizeForMatch(m[1]); q != "" {
 			qualifiers = append(qualifiers, q)
 		}
 	}
 	sort.Strings(qualifiers)
-	return strings.Join(append([]string{base}, qualifiers...), textnorm.KeySeparator)
+	return strings.Join(append([]string{base}, qualifiers...), music.KeySeparator)
 }
 
 func bestOfRelease(a, b SearchResult) SearchResult {

@@ -1,13 +1,13 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"sort"
 	"strconv"
 )
 
 func TitleSubtitleKey(title, subtitle string) string {
-	return textnorm.NormalizeForMatch(title) + "|" + textnorm.NormalizeForMatch(subtitle)
+	return music.NormalizeForMatch(title) + "|" + music.NormalizeForMatch(subtitle)
 }
 
 func DedupAlbums(results []SearchResult) []SearchResult {

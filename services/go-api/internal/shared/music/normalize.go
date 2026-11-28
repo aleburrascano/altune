@@ -1,0 +1,119 @@
+package music
+
+import (
+	"regexp"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/mozillazg/go-unidecode"
+	"golang.org/x/text/unicode/norm"
+)
+
+var (
+	bracketSuffixRe = regexp.MustCompile(`\s*[\(\[\{][^\)\]\}]*[\)\]\}]`)
+	whitespaceRe    = regexp.MustCompile(`\s+`)
+)
+
+func NormalizeForMatch(text string) string {
+	return finishNormalize(bracketSuffixRe.ReplaceAllString(foldCase(text), " "))
+}
+
+func NormalizeForIdentity(text string) string {
+	return finishNormalize(foldCase(text))
+}
+
+func foldCase(text string) string {
+	return stripDiacritics(strings.ToLower(norm.NFKC.String(text)))
+}
+
+func finishNormalize(s string) string {
+	s = strings.ReplaceAll(s, "&", " and ")
+	s = stripApostrophes(s)
+	s = stripSymbols(s)
+	s = whitespaceRe.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
+}
+
+const KeySeparator = "\x1f"
+
+func MatchKey(parts ...string) string {
+	normalized := make([]string, len(parts))
+	hasIdentity := false
+	for i, part := range parts {
+		normalized[i] = NormalizeForMatch(part)
+		hasIdentity = hasIdentity || normalized[i] != ""
+	}
+	if !hasIdentity {
+		return ""
+	}
+	return strings.Join(normalized, KeySeparator)
+}
+
+func stripSymbols(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.Is(unicode.Cf, r) {
+			continue
+		}
+		if isWordContent(r) {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
+func isWordContent(r rune) bool {
+	if r < utf8.RuneSelf {
+		return isASCIIWordChar(r) || isASCIIWhitespace(r)
+	}
+	return unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
+func isASCIIWordChar(r rune) bool {
+	return (r >= '0' && r <= '9') ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		r == '_'
+}
+
+func isASCIIWhitespace(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\f' || r == '\r'
+}
+
+func stripDiacritics(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(s) {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	withoutCombiningMarks := b.String()
+	return norm.NFC.String(withoutCombiningMarks)
+}
+
+func stripApostrophes(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case '\'', '’', '.', ',':
+			continue
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func FoldName(s string) string {
+	lowered := strings.ToLower(norm.NFKC.String(s))
+	return strings.Join(strings.Fields(norm.NFKC.String(lowered)), " ")
+}
+
+func NFKC(s string) string { return norm.NFKC.String(s) }
+
+func Transliterate(s string) string { return unidecode.Unidecode(s) }

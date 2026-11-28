@@ -3,7 +3,6 @@ package ytdlp
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
@@ -152,7 +151,7 @@ func embeddedStderr(stderr string) string {
 }
 
 func (s *YouTubeAudioSearcher) Available() bool {
-	return binpath.Runnable(ytDlpBinary)
+	return BinaryRunnable(ytDlpBinary)
 }
 
 func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, parent, run context.Context) error {

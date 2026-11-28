@@ -2,13 +2,13 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library/internal/domain"
-	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/music"
 	"testing"
 )
 
 func TestFailureAliasesForwardToShared(t *testing.T) {
 	reason := domain.JoinFailureReason(domain.FailureNoConfidentMatch, "none")
-	if reason != "no_confident_match"+downloadfailure.FailureDetailSeparator+"none" {
+	if reason != "no_confident_match"+music.FailureDetailSeparator+"none" {
 		t.Errorf("JoinFailureReason = %q", reason)
 	}
 	code, detail := domain.SplitFailureReason(reason)

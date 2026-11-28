@@ -3,12 +3,12 @@ package service
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
-	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -27,7 +27,7 @@ const (
 	rollbackDeleteBackoffLimit = time.Second
 )
 
-var rollbackDeleteBackoff = backoff.MustCapped(rollbackDeleteBackoffBase, rollbackDeleteBackoffLimit)
+var rollbackDeleteBackoff = resilience.MustCappedBackoff(rollbackDeleteBackoffBase, rollbackDeleteBackoffLimit)
 
 type StoreStep struct {
 	audioStore  ports.AudioWriter

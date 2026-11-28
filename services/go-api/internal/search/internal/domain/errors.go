@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/queuetimeout"
+	"altune/go-api/internal/shared/resilience"
 	"errors"
 	"fmt"
 )
@@ -63,7 +63,7 @@ var (
 	ErrInvalidSearchOption           = errors.New("search service option is out of range")
 	ErrPartialCatalog                = errors.New("catalog titles are partial")
 	ErrTrackerPartial                = errors.New("tracker sheet read in part")
-	ErrProviderRateLimitQueueTimeout = queuetimeout.Err
+	ErrProviderRateLimitQueueTimeout = resilience.ErrQueueTimeout
 	ErrSourceNotConfigured           = errors.New("unreleased source not configured")
 	ErrUnknownDiscographyGroupBy     = errors.New("unknown discography grouping")
 	ErrYtdlpBusy                     = errors.New("yt-dlp soundcloud search: all slots busy")

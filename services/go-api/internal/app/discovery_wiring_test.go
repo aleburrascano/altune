@@ -9,8 +9,8 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/telemetry"
+	"altune/go-api/internal/shared/timingtest"
 	"bufio"
 	"context"
 	"errors"
@@ -98,7 +98,7 @@ func TestDiscovery_AFailedBehavioralRankingRefreshIsLoggedAndCounted(t *testing.
 	run := assembleLogging(t, cfg)
 
 	var h background.JobHealth
-	polltest.Within(3*time.Second, func() bool {
+	timingtest.Within(3*time.Second, func() bool {
 		h = jobHealth(t, run.assembly, jobs.BehavioralRankingRefresh)
 		return h.Failures != 0
 	})

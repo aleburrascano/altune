@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"reflect"
@@ -44,7 +44,7 @@ func (d *startSignalDB) QueryRow(ctx context.Context, sql string, args ...any) p
 
 func awaitWriteStarted(t *testing.T, d *startSignalDB) {
 	t.Helper()
-	polltest.Until(t, 10*time.Second, "the delayed write to reach its connection pool", func() bool {
+	timingtest.Until(t, 10*time.Second, "the delayed write to reach its connection pool", func() bool {
 		select {
 		case <-d.started:
 			return true
@@ -56,7 +56,7 @@ func awaitWriteStarted(t *testing.T, d *startSignalDB) {
 
 func awaitErasureOlderThan(t *testing.T, ctx context.Context, q persistence.QueueStateDB, userId sharedids.UserId, age time.Duration) {
 	t.Helper()
-	polltest.Until(t, age+10*time.Second, "the erasure to age past the grace", func() bool {
+	timingtest.Until(t, age+10*time.Second, "the erasure to age past the grace", func() bool {
 		var older bool
 		err := q.QueryRow(ctx,
 			`SELECT COALESCE(clock_timestamp() > erased_at + $2::bigint * interval '1 microsecond', false)
@@ -786,7 +786,7 @@ func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 
 func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q persistence.QueueStateDB, blockedFor time.Duration) {
 	t.Helper()
-	polltest.Until(t, blockedFor+2*time.Second, "a writer to wait on the queue row; the contended write was not reproduced", func() bool {
+	timingtest.Until(t, blockedFor+2*time.Second, "a writer to wait on the queue row; the contended write was not reproduced", func() bool {
 		var blocked bool
 		if err := q.QueryRow(ctx,
 			`SELECT EXISTS (

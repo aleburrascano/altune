@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"testing"
@@ -130,7 +130,7 @@ func contractGetReportsEachStatusAndWhetherTheTrackIsStreamable(t *testing.T, l 
 	}
 }
 
-func completeWithLength(t *testing.T, l LedgerUnderTest, prior *float64, length tracklength.TrackLength) domain.TrackSnapshot {
+func completeWithLength(t *testing.T, l LedgerUnderTest, prior *float64, length music.TrackLength) domain.TrackSnapshot {
 	t.Helper()
 	track := contractTrack(domain.TrackPending)
 	track.StoredDurationSeconds = prior
@@ -146,18 +146,18 @@ func completeWithLength(t *testing.T, l LedgerUnderTest, prior *float64, length 
 }
 
 func contractACompletionStoresAKnownLengthAndKeepsTheOldOneOverAnUnknownOne(t *testing.T, l LedgerUnderTest) {
-	known, err := tracklength.TrackLengthOf(201.5)
+	known, err := music.TrackLengthOf(201.5)
 	if err != nil {
 		t.Fatalf("TrackLengthOf(201.5) = %v", err)
 	}
 	if got := completeWithLength(t, l, nil, known); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != 201.5 {
 		t.Errorf("after completing with 201.5 s the stored length is %v, want 201.5", got.StoredDurationSeconds)
 	}
-	if got := completeWithLength(t, l, nil, tracklength.TrackLength{}); got.StoredDurationSeconds != nil {
+	if got := completeWithLength(t, l, nil, music.TrackLength{}); got.StoredDurationSeconds != nil {
 		t.Errorf("after completing with an unknown length the stored length is %v, want it left unknown", *got.StoredDurationSeconds)
 	}
 	prior := 180.0
-	if got := completeWithLength(t, l, &prior, tracklength.TrackLength{}); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != prior {
+	if got := completeWithLength(t, l, &prior, music.TrackLength{}); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != prior {
 		t.Errorf("after completing with an unknown length the stored length is %v, want the old %v kept", got.StoredDurationSeconds, prior)
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"time"
@@ -119,7 +119,7 @@ type RecordingLookup interface {
 }
 
 type RecordingResolver interface {
-	Resolve(ctx context.Context, q songfields.RecordingIdentity) (domain.RecordingIdentity, error)
+	Resolve(ctx context.Context, q music.RecordingIdentity) (domain.RecordingIdentity, error)
 }
 
 type RerecordingFinder interface {
@@ -127,7 +127,7 @@ type RerecordingFinder interface {
 }
 
 type RecordingSearch interface {
-	SearchRecordings(ctx context.Context, query string, limit int) ([]songfields.RecordingIdentity, error)
+	SearchRecordings(ctx context.Context, query string, limit int) ([]music.RecordingIdentity, error)
 }
 
 type ISRCLookup interface {

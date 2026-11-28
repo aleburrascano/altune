@@ -2,8 +2,8 @@ package service
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/breaker"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"log/slog"
 	"sync"
@@ -12,14 +12,14 @@ import (
 )
 
 type (
-	CircuitState = breaker.State
-	Admission    = breaker.Admission
+	CircuitState = resilience.CircuitState
+	Admission    = resilience.CircuitAdmission
 )
 
 const (
-	CircuitClosed   = breaker.Closed
-	CircuitOpen     = breaker.Open
-	CircuitHalfOpen = breaker.HalfOpen
+	CircuitClosed   = resilience.CircuitClosed
+	CircuitOpen     = resilience.CircuitOpen
+	CircuitHalfOpen = resilience.CircuitHalfOpen
 )
 
 const (
@@ -32,7 +32,7 @@ type CircuitBreaker struct {
 	mu       sync.Mutex
 	now      clock.Func
 	skew     atomic.Int64
-	circuits map[domain.ProviderName]*breaker.Breaker
+	circuits map[domain.ProviderName]*resilience.CircuitBreaker
 }
 
 func NewCircuitBreaker(now clock.Func) *CircuitBreaker {
@@ -41,7 +41,7 @@ func NewCircuitBreaker(now clock.Func) *CircuitBreaker {
 	}
 	return &CircuitBreaker{
 		now:      now,
-		circuits: make(map[domain.ProviderName]*breaker.Breaker),
+		circuits: make(map[domain.ProviderName]*resilience.CircuitBreaker),
 	}
 }
 
@@ -62,19 +62,19 @@ func (cb *CircuitBreaker) ReleaseProbe(provider domain.ProviderName, adm Admissi
 }
 
 func (cb *CircuitBreaker) GetStatus(provider domain.ProviderName) domain.ProviderStatus {
-	if cb.circuit(provider).State() == breaker.Open {
+	if cb.circuit(provider).State() == resilience.CircuitOpen {
 		return domain.ProviderStatusCircuitOpen
 	}
 	return domain.ProviderStatusOK
 }
 
-func (cb *CircuitBreaker) circuit(provider domain.ProviderName) *breaker.Breaker {
+func (cb *CircuitBreaker) circuit(provider domain.ProviderName) *resilience.CircuitBreaker {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	b, ok := cb.circuits[provider]
 	if !ok {
-		b = breaker.MustNew(breaker.Config{
+		b = resilience.MustNewCircuitBreaker(resilience.CircuitBreakerConfig{
 			Threshold:  FailureThreshold,
 			OpenFor:    OpenDuration,
 			ProbeLease: probeLease,
@@ -90,16 +90,16 @@ func (cb *CircuitBreaker) clock() time.Time {
 	return cb.now().Add(time.Duration(cb.skew.Load()))
 }
 
-func logChange(provider domain.ProviderName) func(context.Context, breaker.Change) {
-	return func(ctx context.Context, c breaker.Change) {
+func logChange(provider domain.ProviderName) func(context.Context, resilience.CircuitChange) {
+	return func(ctx context.Context, c resilience.CircuitChange) {
 		switch c.Kind {
-		case breaker.Tripped:
+		case resilience.CircuitTripped:
 			slog.WarnContext(ctx, "circuit breaker opened (provider failing)", "provider", provider.String(), "failures", c.Failures)
-		case breaker.Probing:
+		case resilience.CircuitProbing:
 			slog.WarnContext(ctx, "circuit breaker half-open (probing recovery)", "provider", provider.String())
-		case breaker.LeaseExpired:
+		case resilience.ProbeLeaseExpired:
 			slog.WarnContext(ctx, "circuit breaker probe lease expired (re-probing)", "provider", provider.String())
-		case breaker.Recovered:
+		case resilience.CircuitRecovered:
 			slog.InfoContext(ctx, "circuit breaker closed (provider recovered)", "provider", provider.String())
 		}
 	}

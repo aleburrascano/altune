@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"log/slog"
 	"strings"
@@ -38,7 +38,7 @@ type CorrectionResult struct {
 }
 
 func (s *CorrectionService) Correct(ctx context.Context, query string) *CorrectionResult {
-	norm := textnorm.NormalizeForMatch(query)
+	norm := music.NormalizeForMatch(query)
 	if !correctable(norm) {
 		return nil
 	}
@@ -46,7 +46,7 @@ func (s *CorrectionService) Correct(ctx context.Context, query string) *Correcti
 }
 
 func (s *CorrectionService) CorrectAggressive(ctx context.Context, query string) *CorrectionResult {
-	norm := textnorm.NormalizeForMatch(query)
+	norm := music.NormalizeForMatch(query)
 	if !correctable(norm) {
 		return nil
 	}
@@ -96,7 +96,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 		if err != nil {
 			slog.DebugContext(ctx, "correction.prefix_lookup_failed", "token", token, logging.KeyError, err)
 		}
-		if len(matches) > 0 && textnorm.NormalizeForMatch(matches[0].Term) == token {
+		if len(matches) > 0 && music.NormalizeForMatch(matches[0].Term) == token {
 			corrected[i] = token
 			continue
 		}
@@ -123,7 +123,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 			slog.Group("corrected", logging.SearchTextAttr(best.Corrected)),
 			"confidence", best.Confidence,
 		)
-		corrected[i] = textnorm.NormalizeForMatch(best.Corrected)
+		corrected[i] = music.NormalizeForMatch(best.Corrected)
 		anyChanged = true
 		if best.Confidence < minScore {
 			minScore = best.Confidence
@@ -146,10 +146,10 @@ func pickBestCorrection(ctx context.Context, queryNorm string, candidates []doma
 	maxDist := domain.MaxEditDistance(queryNorm)
 
 	for _, c := range candidates {
-		if c.TermNorm == queryNorm || textnorm.NormalizeForMatch(c.Term) == queryNorm {
+		if c.TermNorm == queryNorm || music.NormalizeForMatch(c.Term) == queryNorm {
 			continue
 		}
-		dist := textnorm.LevenshteinDistance(queryNorm, c.TermNorm)
+		dist := music.LevenshteinDistance(queryNorm, c.TermNorm)
 		logCandidate(ctx, queryNorm, c, dist)
 		if dist <= maxDist && (dist < bestDist || (dist == bestDist && best != nil && c.MatchScore > best.Confidence)) {
 			best = &CorrectionResult{

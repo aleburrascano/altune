@@ -3,10 +3,8 @@ package memory_test
 import (
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/downloadfailure"
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"errors"
@@ -39,7 +37,7 @@ func readyTrack() memory.LedgerTrack {
 
 func failedTrack() memory.LedgerTrack {
 	track := pendingTrack()
-	track.Status, track.FailureReason = domain.TrackFailed, string(downloadfailure.FailureNoMatchFound)
+	track.Status, track.FailureReason = domain.TrackFailed, string(music.FailureNoMatchFound)
 	return track
 }
 
@@ -143,7 +141,7 @@ func TestLedger_CompleteMarksAPendingTrackReadyWithEverythingTheCompletionCarrie
 	ledger := memory.NewLedger(track)
 
 	complete(t, ledger, track, domain.Completion{
-		AudioRef: servingRef, Duration: trackLength(t, 201.5), ISRC: "USUG11904206", Provenance: downloadprovenance.ProvenanceVerified,
+		AudioRef: servingRef, Duration: trackLength(t, 201.5), ISRC: "USUG11904206", Provenance: music.ProvenanceVerified,
 		RejectedSourceKeys: []string{"youtube:old", "youtube:new", ""}, SourceURL: "https://music.youtube.com/watch?v=a",
 		Confidence: 0.9, Evidence: json.RawMessage(`{"grade":"a"}`),
 	})
@@ -155,7 +153,7 @@ func TestLedger_CompleteMarksAPendingTrackReadyWithEverythingTheCompletionCarrie
 	if got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != 201.5 || got.ISRC == nil || *got.ISRC != "USUG11904206" {
 		t.Errorf("duration, isrc = %v, %v, want 201.5 and the resolved ISRC", got.StoredDurationSeconds, got.ISRC)
 	}
-	if got.Provenance != downloadprovenance.ProvenanceVerified || got.Confidence != 0.9 || string(got.Evidence) != `{"grade":"a"}` {
+	if got.Provenance != music.ProvenanceVerified || got.Confidence != 0.9 || string(got.Evidence) != `{"grade":"a"}` {
 		t.Errorf("provenance, confidence, evidence = %q, %v, %s", got.Provenance, got.Confidence, got.Evidence)
 	}
 	if !slices.Equal(got.RejectedSourceKeys, []string{"youtube:old", "youtube:new"}) {
@@ -170,7 +168,7 @@ func TestLedger_CompleteLeavesWhatTheCompletionDoesNotCarry(t *testing.T) {
 	track := pendingTrack()
 	isrc, url, seconds := "GBAAA8000001", "https://www.youtube.com/watch?v=kept", 180.0
 	track.ISRC, track.AudioSourceURL, track.StoredDurationSeconds = &isrc, &url, &seconds
-	track.Provenance, track.Confidence, track.Evidence = downloadprovenance.ProvenanceCorroborated, 0.4, json.RawMessage(`{"grade":"b"}`)
+	track.Provenance, track.Confidence, track.Evidence = music.ProvenanceCorroborated, 0.4, json.RawMessage(`{"grade":"b"}`)
 	ledger := memory.NewLedger(track)
 
 	complete(t, ledger, track, domain.Completion{AudioRef: servingRef, ISRC: "USUG11904206", Provenance: "unknown"})
@@ -179,7 +177,7 @@ func TestLedger_CompleteLeavesWhatTheCompletionDoesNotCarry(t *testing.T) {
 	if *got.ISRC != isrc || *got.AudioSourceURL != url || *got.StoredDurationSeconds != seconds {
 		t.Errorf("isrc, url, duration = %s, %s, %v, want the stored values kept", *got.ISRC, *got.AudioSourceURL, *got.StoredDurationSeconds)
 	}
-	if got.Provenance != downloadprovenance.ProvenanceCorroborated || got.Confidence != 0.4 || string(got.Evidence) != `{"grade":"b"}` {
+	if got.Provenance != music.ProvenanceCorroborated || got.Confidence != 0.4 || string(got.Evidence) != `{"grade":"b"}` {
 		t.Errorf("provenance, confidence, evidence = %q, %v, %s, want the stored ones kept", got.Provenance, got.Confidence, got.Evidence)
 	}
 }
@@ -189,7 +187,7 @@ func TestLedger_ACompletionLengthAtTheCatalogsCapIsStored(t *testing.T) {
 	track := pendingTrack()
 	ledger := memory.NewLedger(track)
 
-	atTheCap, err := tracklength.TrackLengthOf(week)
+	atTheCap, err := music.TrackLengthOf(week)
 	if err != nil {
 		t.Fatalf("TrackLengthOf(%v) = %v, want the cap itself accepted", week, err)
 	}
@@ -595,9 +593,9 @@ func TestLedger_ARelabelWithoutATitleOrAnMBIDFailsTheCompletionAndWritesNothing(
 	}
 }
 
-func trackLength(t *testing.T, seconds float64) tracklength.TrackLength {
+func trackLength(t *testing.T, seconds float64) music.TrackLength {
 	t.Helper()
-	length, err := tracklength.TrackLengthOf(seconds)
+	length, err := music.TrackLengthOf(seconds)
 	if err != nil {
 		t.Fatalf("TrackLengthOf(%v) = %v", seconds, err)
 	}

@@ -2,10 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/shared/downloadprovenance"
-	"altune/go-api/internal/shared/songfields"
-	"altune/go-api/internal/shared/textnorm"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"fmt"
 	"maps"
 	"slices"
@@ -197,11 +194,11 @@ func (ev evidence) fingerprint(kind JudgedKind) domain.FingerprintResult {
 	return domain.FingerprintSilent
 }
 
-func (ev evidence) provenance() downloadprovenance.AcquisitionProvenance {
+func (ev evidence) provenance() music.AcquisitionProvenance {
 	if ev.lengthFits {
-		return downloadprovenance.ProvenanceCorroborated
+		return music.ProvenanceCorroborated
 	}
-	return downloadprovenance.ProvenanceBestEffort
+	return music.ProvenanceBestEffort
 }
 
 func (ev *evidence) judgeAcoustID(in VerdictInput) {
@@ -226,7 +223,7 @@ func (ev *evidence) judgeAcoustID(in VerdictInput) {
 		ev.note("acoustid: links %s, a same-title recording whose version could not be verified", sameTitle[unverified].MBID)
 		return
 	}
-	named := slices.IndexFunc(survivors, func(r domain.LinkedRecording) bool { return textnorm.NormalizeForMatch(r.Title) != "" })
+	named := slices.IndexFunc(survivors, func(r domain.LinkedRecording) bool { return music.NormalizeForMatch(r.Title) != "" })
 	if named < 0 {
 		ev.note("acoustid: links only untitled recordings, which name nothing")
 		return
@@ -241,7 +238,7 @@ func (a AudioEvidence) isBound(identity IdentityEvidence, recording domain.Linke
 	}
 	facts, found := a.RecordingFacts[recording.MBID]
 	return found && identity.ISRC != "" && slices.ContainsFunc(facts.ISRCs, func(isrc string) bool {
-		return songfields.CanonicalISRC(isrc) == songfields.CanonicalISRC(identity.ISRC)
+		return music.CanonicalISRC(isrc) == music.CanonicalISRC(identity.ISRC)
 	})
 }
 
@@ -279,7 +276,7 @@ func linkLengthAgrees(audioLength, linkLength float64) bool {
 
 func sameTitleLinks(identity IdentityEvidence, survivors []domain.LinkedRecording) []domain.LinkedRecording {
 	return slices.DeleteFunc(slices.Clone(survivors), func(recording domain.LinkedRecording) bool {
-		return textnorm.NormalizeForMatch(recording.Title) != textnorm.NormalizeForMatch(identity.Title) ||
+		return music.NormalizeForMatch(recording.Title) != music.NormalizeForMatch(identity.Title) ||
 			!sharesArtist(identity.Artist, recording.Artists)
 	})
 }
@@ -299,7 +296,7 @@ func (a AudioEvidence) isDuplicate(identity IdentityEvidence, recording domain.L
 	if found {
 		title = titleWithDisambiguation(facts)
 	}
-	return titlemarkers.ParseTags(title).Equal(titlemarkers.ParseTags(identity.Title))
+	return music.ParseTags(title).Equal(music.ParseTags(identity.Title))
 }
 
 func titleWithDisambiguation(facts domain.RecordingFacts) string {
@@ -312,21 +309,21 @@ func titleWithDisambiguation(facts domain.RecordingFacts) string {
 func mostTitlesDiffer(identity IdentityEvidence, survivors []domain.LinkedRecording) bool {
 	titles := make(map[string]bool)
 	for _, recording := range survivors {
-		if core := textnorm.NormalizeForMatch(recording.Title); core != "" {
+		if core := music.NormalizeForMatch(recording.Title); core != "" {
 			titles[core] = true
 		}
 	}
 	differing := len(titles)
-	if titles[textnorm.NormalizeForMatch(identity.Title)] {
+	if titles[music.NormalizeForMatch(identity.Title)] {
 		differing--
 	}
 	return differing*2 > len(titles)
 }
 
 func sharesArtist(artist string, credits []string) bool {
-	wanted := textnorm.NormalizeForMatch(artist)
+	wanted := music.NormalizeForMatch(artist)
 	return wanted != "" && slices.ContainsFunc(credits, func(credit string) bool {
-		credited := textnorm.NormalizeForMatch(credit)
+		credited := music.NormalizeForMatch(credit)
 		return credited != "" && (strings.Contains(wanted, credited) || strings.Contains(credited, wanted))
 	})
 }
@@ -356,7 +353,7 @@ func (ev *evidence) judgeTags(in VerdictInput) {
 	if in.CandidateTitle == "" {
 		return
 	}
-	identity, candidate := titlemarkers.ParseTags(in.Identity.Title), titlemarkers.ParseTags(in.CandidateTitle)
+	identity, candidate := music.ParseTags(in.Identity.Title), music.ParseTags(in.CandidateTitle)
 	ev.tagsDiffer = !identity.Equal(candidate)
 	if ev.tagsDiffer {
 		ev.note("version tags differ: bound %+v, candidate %+v", identity, candidate)

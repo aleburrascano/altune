@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 )
 
 const (
@@ -23,7 +23,7 @@ func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
 	overflow := make([]domain.SearchResult, 0)
 
 	for _, r := range window {
-		artist := textnorm.NormalizeForMatch(r.Subtitle)
+		artist := music.NormalizeForMatch(r.Subtitle)
 		if artist == "" || artistCount[artist] < maxPerArtistInTop {
 			artistCount[artist]++
 			kept = append(kept, r)
@@ -90,7 +90,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if r.Kind != domain.ResultKindArtist {
 			continue
 		}
-		key := textnorm.NormalizeForMatch(r.Title)
+		key := music.NormalizeForMatch(r.Title)
 		pop := r.Popularity
 		g, exists := groups[key]
 		if !exists {

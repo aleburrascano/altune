@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -94,7 +94,7 @@ func (s *DetailsService) Execute(
 		return s.lookup(ctx, kind, title, subtitle, mbidParam, mbidFromCaller)
 	}
 
-	nameKey := textnorm.NameKey(title, subtitle)
+	nameKey := music.MatchKey(title, subtitle)
 	return CachedLookup(ctx, mbResolutionMemo{cache: s.cache, kind: kind}, nameKey, domain.EmptyEnrichment(),
 		func(ctx context.Context) (domain.MusicBrainzEnrichment, bool, error) {
 			mbid, err := s.enricher.ResolveMBID(ctx, kind, title, subtitle)

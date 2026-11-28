@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"time"
 )
@@ -99,6 +99,6 @@ type noopRecordingResolver struct{}
 
 func NoopRecordingResolver() ports.RecordingResolver { return noopRecordingResolver{} }
 
-func (noopRecordingResolver) Resolve(context.Context, songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
+func (noopRecordingResolver) Resolve(context.Context, music.RecordingIdentity) (domain.RecordingIdentity, error) {
 	return domain.RecordingIdentity{}, nil
 }

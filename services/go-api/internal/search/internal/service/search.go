@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"log/slog"
@@ -297,7 +297,7 @@ func (s *SearchService) execute(
 ) (*SearchOutput, error) {
 	startedAt := s.now().UTC()
 	searchQuery := domain.SearchText(query.Raw)
-	queryNorm := textnorm.NormalizeForMatch(searchQuery)
+	queryNorm := music.NormalizeForMatch(searchQuery)
 
 	slog.InfoContext(ctx, "search.v2.start", logging.SearchTextAttr(query.Raw))
 
@@ -519,7 +519,7 @@ func (s *SearchService) RankVariantsForEval(
 	query *domain.SearchQuery,
 ) (withReshape, withoutReshape []domain.SearchResult) {
 	searchQuery := domain.SearchText(query.Raw)
-	queryNorm := textnorm.NormalizeForMatch(searchQuery)
+	queryNorm := music.NormalizeForMatch(searchQuery)
 	perProvider, _ := s.fanOutLive(ctx, searchQuery, query.Kinds)
 	return RankPipeline(perProvider, queryNorm), RankPipelineNoReshape(perProvider, queryNorm)
 }
@@ -529,7 +529,7 @@ func (s *SearchService) InspectSearchWithStatuses(
 	query *domain.SearchQuery,
 ) ([]domain.SearchResult, []domain.ProviderSearchResponse) {
 	searchQuery := domain.SearchText(query.Raw)
-	queryNorm := textnorm.NormalizeForMatch(searchQuery)
+	queryNorm := music.NormalizeForMatch(searchQuery)
 	perProvider, statuses := s.fanOutLive(ctx, searchQuery, query.Kinds)
 	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm, &stageTimings{})
 	if query.Limit > 0 && len(ranked) > query.Limit {

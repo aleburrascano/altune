@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"io"
@@ -222,7 +222,7 @@ func TestScheduler_ASelectOutageOnTheFinalRunIsNotRetried(t *testing.T) {
 		if outcome.released {
 			t.Errorf("outcome = %+v, want the final run settled, not retried", outcome)
 		}
-		if code := persistedCode(t, ledger, track.ID); code != downloadfailure.FailureSourceUnavailable {
+		if code := persistedCode(t, ledger, track.ID); code != music.FailureSourceUnavailable {
 			t.Errorf("persisted failure code = %q, want source_unavailable", code)
 		}
 	})

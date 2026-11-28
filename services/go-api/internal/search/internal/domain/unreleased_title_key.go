@@ -1,8 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"regexp"
 	"strings"
 )
@@ -16,9 +15,9 @@ func TitleKey(title string) string {
 }
 
 func TitleKeyWithStar(title, star string) string {
-	cleaned := starRunRe.ReplaceAllString(textnorm.Transliterate(unreleasedMarkerRe.ReplaceAllString(title, " ")), star)
-	tokens := titlemarkers.Tokens(titlemarkers.StripFeatureCredits(cleaned))
-	core := strings.Join(titlemarkers.StripVersionPhrases(tokens), " ")
-	labels := strings.Join(titlemarkers.RecordingLabels(cleaned), ",")
+	cleaned := starRunRe.ReplaceAllString(music.Transliterate(unreleasedMarkerRe.ReplaceAllString(title, " ")), star)
+	tokens := music.TitleTokens(music.StripFeatureCredits(cleaned))
+	core := strings.Join(music.StripVersionPhrases(tokens), " ")
+	labels := strings.Join(music.RecordingLabels(cleaned), ",")
 	return core + "|" + labels
 }

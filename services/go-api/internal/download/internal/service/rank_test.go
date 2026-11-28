@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"fmt"
 	"reflect"
 	"slices"
@@ -705,7 +705,7 @@ func FuzzUnrequestedQualifiers(f *testing.F) {
 	f.Add("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
 	f.Add("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
 	f.Add("Song", "Someone", "Song （feat. Other） （Radio Edit） a")
-	labels := titlemarkers.KnownLabels()
+	labels := music.KnownVersionLabels()
 	f.Fuzz(func(t *testing.T, title, artist, candidate string) {
 		veto, qualifiers := service.UnrequestedQualifiers(title, artist, candidate)
 		seen := make(map[string]bool)

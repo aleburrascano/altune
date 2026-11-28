@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,7 +26,7 @@ func cancelOnceFileExists(t *testing.T, path string) context.Context {
 	go func() {
 		defer close(finished)
 		defer cancel()
-		polltest.Within(10*time.Second, func() bool {
+		timingtest.Within(10*time.Second, func() bool {
 			if ctx.Err() != nil {
 				return true
 			}

@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"log/slog"
 	"net/http"
@@ -136,7 +136,7 @@ func TestBackgroundJobs_ALeaderJobThatFailsLogsItsFailureUnderItsName(t *testing
 	run := assembleOn(t, jwksConfig(t), emptyDatabasePool(t), refuseEgress{})
 	const want = `level=WARN msg="deleted identity erasure failed" error=`
 
-	if !polltest.Within(time.Minute, func() bool { return strings.Contains(run.logs.String(), want) }) {
+	if !timingtest.Within(time.Minute, func() bool { return strings.Contains(run.logs.String(), want) }) {
 		t.Fatalf("no %q within a minute of leading a database with no tables:\n%s", want, run.logs.String())
 	}
 }

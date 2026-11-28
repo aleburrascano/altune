@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/ids/idstest"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"encoding/json"
 	"errors"
 	"math"
@@ -1133,9 +1133,9 @@ func TestTrack_RelabelAsRecordingAcceptsAnAlbumAtTheTextLimit(t *testing.T) {
 	}
 }
 
-func audioLength(t *testing.T, seconds float64) tracklength.TrackLength {
+func audioLength(t *testing.T, seconds float64) music.TrackLength {
 	t.Helper()
-	length, err := tracklength.TrackLengthOf(seconds)
+	length, err := music.TrackLengthOf(seconds)
 	if err != nil {
 		t.Fatal(err)
 	}

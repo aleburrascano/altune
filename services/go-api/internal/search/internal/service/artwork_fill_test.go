@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"log/slog"
@@ -380,7 +380,7 @@ func sortedXrefKeys(m map[domain.ProviderKey]string) []string {
 
 func TestArtworkFiller_FillStageCascade(t *testing.T) {
 	deezerSrc := []domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "42"}}
-	key := textnorm.NameKey("Humble", "Kendrick Lamar")
+	key := music.MatchKey("Humble", "Kendrick Lamar")
 
 	type stages struct {
 		durable *scriptedIdentityStore

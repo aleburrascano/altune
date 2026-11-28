@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 )
 
 const (
@@ -31,7 +31,7 @@ func keepAnchoredReleases(g ReleaseGroup, mbTitles map[string]bool) ReleaseGroup
 	_, overlap := anchorOverlap(g, mbTitles)
 	kept := make([]SearchResult, 0, overlap)
 	for _, r := range g.Releases {
-		if mbTitles[textnorm.NormalizeForMatch(r.Title)] {
+		if mbTitles[music.NormalizeForMatch(r.Title)] {
 			kept = append(kept, r)
 		}
 	}
@@ -69,7 +69,7 @@ func FilterMixedPageTracks(mbTitles map[string]bool, albumGroups, trackGroups []
 
 func keepsMixedPageTrack(r SearchResult, mbTitles map[string]bool, mixed map[ProviderName]bool, listedBy map[string]map[ProviderName]bool) bool {
 	p := resultProvider(r)
-	return !mixed[p] || mbTitles[textnorm.NormalizeForMatch(r.Album)] || listedElsewhere(listedBy[textnorm.NormalizeForMatch(r.Title)], p)
+	return !mixed[p] || mbTitles[music.NormalizeForMatch(r.Album)] || listedElsewhere(listedBy[music.NormalizeForMatch(r.Title)], p)
 }
 
 func mixedProviders(mbTitles map[string]bool, albumGroups []ReleaseGroup) map[ProviderName]bool {
@@ -88,7 +88,7 @@ func providersByTrackTitle(trackGroups []ReleaseGroup) map[string]map[ProviderNa
 	listedBy := make(map[string]map[ProviderName]bool)
 	for _, g := range trackGroups {
 		for _, r := range g.Releases {
-			k := textnorm.NormalizeForMatch(r.Title)
+			k := music.NormalizeForMatch(r.Title)
 			if listedBy[k] == nil {
 				listedBy[k] = make(map[ProviderName]bool)
 			}
@@ -121,7 +121,7 @@ func overlapRatio(overlap, total int) float64 {
 func anchorOverlap(g ReleaseGroup, mbTitles map[string]bool) (map[string]bool, int) {
 	titles := make(map[string]bool, len(g.Releases))
 	for _, r := range g.Releases {
-		if k := textnorm.NormalizeForMatch(r.Title); k != "" {
+		if k := music.NormalizeForMatch(r.Title); k != "" {
 			titles[k] = true
 		}
 	}
@@ -145,7 +145,7 @@ func MatchesAnchor(g ReleaseGroup, mbTitles map[string]bool) bool {
 func NormalizeTitleSet(titles []string) map[string]bool {
 	set := make(map[string]bool, len(titles))
 	for _, t := range titles {
-		if k := textnorm.NormalizeForMatch(t); k != "" {
+		if k := music.NormalizeForMatch(t); k != "" {
 			set[k] = true
 		}
 	}

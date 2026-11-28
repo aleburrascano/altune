@@ -3,7 +3,6 @@ package ytdlp
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
-	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
@@ -47,8 +46,8 @@ func NewFfprobeProber(ffmpegLocation string, skips ports.VerifySkipRecorder, opt
 		return nil, ErrSkipRecorderRequired
 	}
 	p := &FfprobeProber{
-		ffprobe:       binpath.Resolve("ffprobe", ffmpegLocation),
-		ffmpeg:        binpath.Resolve("ffmpeg", ffmpegLocation),
+		ffprobe:       ResolveBinary("ffprobe", ffmpegLocation),
+		ffmpeg:        ResolveBinary("ffmpeg", ffmpegLocation),
 		decodeTimeout: defaultDecodeTimeout,
 		skips:         skips,
 	}
@@ -71,7 +70,7 @@ func (p *FfprobeProber) recordSkip(gate string) {
 }
 
 func (p *FfprobeProber) Available() (ffprobe, ffmpeg bool) {
-	return binpath.Runnable(p.ffprobe), binpath.Runnable(p.ffmpeg)
+	return BinaryRunnable(p.ffprobe), BinaryRunnable(p.ffmpeg)
 }
 
 func (p *FfprobeProber) ProbeDuration(ctx context.Context, filePath string) (float64, error) {

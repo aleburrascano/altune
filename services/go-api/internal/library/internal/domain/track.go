@@ -1,9 +1,8 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -104,10 +103,10 @@ type Track struct {
 
 const maxTrackTextLength = 300
 
-func TrackLengthOf(seconds float64) (tracklength.TrackLength, error) {
-	length, err := tracklength.TrackLengthOf(seconds)
+func TrackLengthOf(seconds float64) (music.TrackLength, error) {
+	length, err := music.TrackLengthOf(seconds)
 	if err != nil {
-		return tracklength.TrackLength{}, NewValidationError("duration_seconds must be a finite number of seconds from 0 to 7 days")
+		return music.TrackLength{}, NewValidationError("duration_seconds must be a finite number of seconds from 0 to 7 days")
 	}
 	return length, nil
 }
@@ -230,12 +229,12 @@ func (t *Track) SetAlbumArtist(albumArtist string) {
 	t.albumArtist = &canonical
 }
 
-type AcquisitionProvenance = downloadprovenance.AcquisitionProvenance
+type AcquisitionProvenance = music.AcquisitionProvenance
 
 const (
-	ProvenanceVerified     = downloadprovenance.ProvenanceVerified
-	ProvenanceCorroborated = downloadprovenance.ProvenanceCorroborated
-	ProvenanceBestEffort   = downloadprovenance.ProvenanceBestEffort
+	ProvenanceVerified     = music.ProvenanceVerified
+	ProvenanceCorroborated = music.ProvenanceCorroborated
+	ProvenanceBestEffort   = music.ProvenanceBestEffort
 )
 
 func illegalTransition(op string, from DownloadStatus) error {
@@ -372,7 +371,7 @@ func (t *Track) SetCatalogIdentity(mbid *string, explicit *bool, sources []Catal
 	return nil
 }
 
-func (t *Track) RecordAudioLength(measured tracklength.TrackLength) bool {
+func (t *Track) RecordAudioLength(measured music.TrackLength) bool {
 	catalog := t.catalogLength()
 	if !catalog.Known() || !measured.Known() {
 		return false
@@ -381,13 +380,13 @@ func (t *Track) RecordAudioLength(measured tracklength.TrackLength) bool {
 	return true
 }
 
-func (t *Track) catalogLength() tracklength.TrackLength {
+func (t *Track) catalogLength() music.TrackLength {
 	if t.catalogDurationSeconds == nil {
-		return tracklength.TrackLength{}
+		return music.TrackLength{}
 	}
-	length, err := tracklength.TrackLengthOf(*t.catalogDurationSeconds)
+	length, err := music.TrackLengthOf(*t.catalogDurationSeconds)
 	if err != nil {
-		return tracklength.TrackLength{}
+		return music.TrackLength{}
 	}
 	return length
 }

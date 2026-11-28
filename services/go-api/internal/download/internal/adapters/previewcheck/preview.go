@@ -2,10 +2,10 @@ package previewcheck
 
 import (
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"encoding/json"
 	"errors"
@@ -33,7 +33,7 @@ const (
 	previewFilePrefix = "deezerpreview-"
 )
 
-var deezerPause = backoff.MustCapped(deezerBackoff, deezerBackoff<<(deezerAttempts-1))
+var deezerPause = resilience.MustCappedBackoff(deezerBackoff, deezerBackoff<<(deezerAttempts-1))
 
 var ErrDeezerThrottled = errors.New("deezer is still throttling after retries")
 
@@ -107,7 +107,7 @@ func (c *cooldown) remaining() time.Duration {
 type Previews struct {
 	client  *http.Client
 	baseURL string
-	backoff backoff.Policy
+	backoff resilience.BackoffPolicy
 	pause   cooldown
 	printer RawFingerprint
 	sleep   clock.Sleeper
@@ -149,7 +149,7 @@ type deezerTrackBody struct {
 func trackPath(identity Target) string {
 	switch {
 	case identity.ISRC != "":
-		return "/track/isrc:" + url.PathEscape(songfields.CanonicalISRC(identity.ISRC))
+		return "/track/isrc:" + url.PathEscape(music.CanonicalISRC(identity.ISRC))
 	case identity.DeezerTrackID != "":
 		return "/track/" + url.PathEscape(identity.DeezerTrackID)
 	}

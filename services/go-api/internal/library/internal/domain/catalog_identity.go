@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/filelinks"
+	"altune/go-api/internal/shared/music"
 	"fmt"
 	"net/url"
 	"strings"
@@ -100,10 +100,10 @@ func validateCatalogProvider(s CatalogSource) error {
 	if _, known := knownCatalogProviders[s.Provider]; known {
 		return nil
 	}
-	if !filelinks.IsProvider(s.Provider) {
+	if !music.IsFileHost(s.Provider) {
 		return NewValidationError("sources provider is unknown: " + s.Provider)
 	}
-	if !filelinks.ValidID(s.Provider, s.ExternalID) {
+	if !music.ValidFileHostID(s.Provider, s.ExternalID) {
 		return NewValidationError("sources external_id is not a valid " + s.Provider + " id")
 	}
 	return nil

@@ -1,7 +1,7 @@
 package fansheets
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"net/url"
 	"regexp"
 	"strings"
@@ -28,7 +28,7 @@ func parseHub(body []byte) (map[string]string, error) {
 }
 
 func hubEntry(c gridCell) (name, sheetID string, ok bool) {
-	name = textnorm.NormalizeForIdentity(trimLeadingDecoration(c.FormattedValue))
+	name = music.NormalizeForIdentity(trimLeadingDecoration(c.FormattedValue))
 	if name == "" {
 		return "", "", false
 	}

@@ -9,9 +9,8 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/requestuser"
-	"altune/go-api/internal/shared/slowclienttest"
+	"altune/go-api/internal/shared/timingtest"
 	"bufio"
 	"bytes"
 	"context"
@@ -123,10 +122,10 @@ func newDeadlineRouter(uid ids.UserId, streamRoutes func(chi.Router), bulkErrs c
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
 	sse := newStream(t, eventstream.Deps{Bus: events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))})
-	srv := slowclienttest.NewServer(t, newDeadlineRouter(ids.NewUserId(uuid.New()), sse, bulkErrs))
+	srv := timingtest.NewSmallBufferServer(t, newDeadlineRouter(ids.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
-	slowclienttest.Get(t, srv, "/v1/bulk", nil)
+	timingtest.SendGet(t, srv, "/v1/bulk", nil)
 
 	select {
 	case err := <-bulkErrs:
@@ -145,10 +144,10 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
 	sse := newStream(t, eventstream.Deps{Bus: bus, Heartbeat: routeWriteDeadline / 3})
-	srv := slowclienttest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
+	srv := timingtest.NewSmallBufferServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
 
-	conn, br := slowclienttest.Get(t, srv, "/v1/events", nil)
-	resp := slowclienttest.ReadResponse(t, conn, br)
+	conn, br := timingtest.SendGet(t, srv, "/v1/events", nil)
+	resp := timingtest.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -169,15 +168,15 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 	sse := newStream(t, eventstream.Deps{Bus: bus, WriteTimeout: routeWriteDeadline, Heartbeat: time.Hour})
 	done := make(chan struct{})
 	router := newDeadlineRouter(uid, sse, make(chan error, 1))
-	srv := slowclienttest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := timingtest.NewSmallBufferServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer close(done)
 		router.ServeHTTP(w, r)
 	}))
 
-	slowclienttest.Get(t, srv, "/v1/events", nil)
+	timingtest.SendGet(t, srv, "/v1/events", nil)
 
 	payload := map[string]any{"pad": strings.Repeat("x", 16<<10)}
-	polltest.Until(t, 5*time.Second, "the SSE handler to give up on a stalled client (per-frame deadline applied)", func() bool {
+	timingtest.Until(t, 5*time.Second, "the SSE handler to give up on a stalled client (per-frame deadline applied)", func() bool {
 		select {
 		case <-done:
 			return true

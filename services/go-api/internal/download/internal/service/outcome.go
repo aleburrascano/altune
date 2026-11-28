@@ -4,10 +4,10 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/background"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -120,7 +120,7 @@ func rejectionAwareReason(ctx context.Context, trackId ids.TrackId, err error, a
 	}
 	slog.InfoContext(ctx, "acquisition.rejection_summary",
 		logging.KeyTrackID, trackId.String(), "summary", summary)
-	return downloadfailure.JoinFailureReason(failureCode(err), summary)
+	return music.JoinFailureReason(failureCode(err), summary)
 }
 
 func (o outcomeReporter) completed(ctx context.Context, userId ids.UserId, trackId ids.TrackId, audioRef string) {
@@ -161,11 +161,11 @@ func (o outcomeReporter) failTrack(ctx context.Context, claim domain.ClaimNumber
 func (o outcomeReporter) refuseQueued(ctx context.Context, job domain.AcquisitionJob) {
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
-	if !o.markFailed(settleCtx, job.Claim, job.TrackID, job.UserID, string(downloadfailure.FailureAcquisitionRefused)) {
+	if !o.markFailed(settleCtx, job.Claim, job.TrackID, job.UserID, string(music.FailureAcquisitionRefused)) {
 		return
 	}
 	o.events.Publish(settleCtx, job.UserID, events.TrackAcquisitionFailed{
 		TrackID: job.TrackID.String(),
-		Reason:  string(downloadfailure.FailureAcquisitionRefused),
+		Reason:  string(music.FailureAcquisitionRefused),
 	})
 }

@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 	"strings"
@@ -85,7 +85,7 @@ func allTracks(items []domain.SearchResult) map[int]bool {
 
 func versionlessTitle(title string) string {
 	base, _, _ := strings.Cut(title, " - ")
-	return textnorm.NormalizeForMatch(base)
+	return music.NormalizeForMatch(base)
 }
 
 type featuredByTitle struct {
@@ -97,7 +97,7 @@ func indexFeaturedByTitle(tracks []domain.SearchResult) featuredByTitle {
 	idx := featuredByTitle{exact: map[string]any{}, versionless: map[string]any{}}
 	for _, t := range tracks {
 		feats := t.Extras[domain.ExtraFeaturedArtists]
-		idx.exact[textnorm.NormalizeForMatch(t.Title)] = feats
+		idx.exact[music.NormalizeForMatch(t.Title)] = feats
 		if _, taken := idx.versionless[versionlessTitle(t.Title)]; !taken {
 			idx.versionless[versionlessTitle(t.Title)] = feats
 		}
@@ -106,7 +106,7 @@ func indexFeaturedByTitle(tracks []domain.SearchResult) featuredByTitle {
 }
 
 func (idx featuredByTitle) lookup(title string) (any, bool) {
-	if feats, found := idx.exact[textnorm.NormalizeForMatch(title)]; found {
+	if feats, found := idx.exact[music.NormalizeForMatch(title)]; found {
 		return feats, true
 	}
 	feats, found := idx.versionless[versionlessTitle(title)]

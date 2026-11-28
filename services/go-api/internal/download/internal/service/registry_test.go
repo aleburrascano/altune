@@ -6,8 +6,8 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -302,7 +302,7 @@ func throttledSource() *stubSource {
 	}
 }
 
-func searchFailureCode(t *testing.T, reg *service.SourceRegistry) downloadfailure.FailureCode {
+func searchFailureCode(t *testing.T, reg *service.SourceRegistry) music.FailureCode {
 	t.Helper()
 	track := pendingSong()
 	ledger := memory.NewLedger(track)
@@ -319,8 +319,8 @@ func TestSourceRegistry_FindEmptyWithUnavailableSourceReportsUnavailable(t *test
 	if !domain.IsSourceUnavailable(err) || len(got) != 0 {
 		t.Fatalf("Find = %v, %v; want empty and a source-unavailable error", got, err)
 	}
-	if code := searchFailureCode(t, reg); code != downloadfailure.FailureSourceUnavailable {
-		t.Fatalf("failure code = %s, want %s", code, downloadfailure.FailureSourceUnavailable)
+	if code := searchFailureCode(t, reg); code != music.FailureSourceUnavailable {
+		t.Fatalf("failure code = %s, want %s", code, music.FailureSourceUnavailable)
 	}
 }
 
@@ -343,8 +343,8 @@ func TestSourceRegistry_FindAllEmptyWithoutErrorIsNoMatch(t *testing.T) {
 	if err != nil || len(got) != 0 {
 		t.Fatalf("Find = %v, %v; want empty and nil error", got, err)
 	}
-	if code := searchFailureCode(t, reg); code != downloadfailure.FailureNoMatchFound {
-		t.Fatalf("failure code = %s, want %s", code, downloadfailure.FailureNoMatchFound)
+	if code := searchFailureCode(t, reg); code != music.FailureNoMatchFound {
+		t.Fatalf("failure code = %s, want %s", code, music.FailureNoMatchFound)
 	}
 }
 

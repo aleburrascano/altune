@@ -1,9 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/songfields"
-	"altune/go-api/internal/shared/textnorm"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"regexp"
 	"strconv"
 	"strings"
@@ -84,7 +82,7 @@ func FeaturedArtistFromMap(m map[string]any) FeaturedArtist {
 }
 
 func NormalizeFeaturedName(s string) string {
-	return textnorm.FoldName(s)
+	return music.FoldName(s)
 }
 
 func asString(v any) string {
@@ -99,7 +97,7 @@ var (
 	dashTailRe     = regexp.MustCompile(`\s[-–—]\s+(.*)$`)
 	dashCutRe      = regexp.MustCompile(`\s[-–—]\s.*$`)
 	withCreditRe   = regexp.MustCompile(`(?i)^\s*with\s+(.+)$`)
-	featuredCredit = titlemarkers.FeaturedCredit
+	featuredCredit = music.FeaturedCredit
 )
 
 func FeaturedFromText(title, subtitle string) []FeaturedArtist {
@@ -134,7 +132,7 @@ func creditsIn(text string) []FeaturedArtist {
 
 func featuredNames(credit string) []FeaturedArtist {
 	var out []FeaturedArtist
-	for _, name := range songfields.SplitCredit(credit) {
+	for _, name := range music.SplitCredit(credit) {
 		if name = strings.TrimSpace(name); name != "" {
 			out = append(out, FeaturedArtist{Name: name, Role: RoleFeatured})
 		}

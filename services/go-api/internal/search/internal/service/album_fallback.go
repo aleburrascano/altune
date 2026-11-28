@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 )
@@ -67,11 +67,11 @@ func isRequestedAlbum(candidate domain.SearchResult, albumTitle, albumArtist str
 	if len(candidate.Sources) == 0 {
 		return false
 	}
-	if textnorm.NormalizeForMatch(candidate.Title) != textnorm.NormalizeForMatch(albumTitle) {
+	if music.NormalizeForMatch(candidate.Title) != music.NormalizeForMatch(albumTitle) {
 		return false
 	}
-	wantArtist := textnorm.NormalizeForMatch(albumArtist)
-	return wantArtist == "" || textnorm.NormalizeForMatch(candidate.Subtitle) == wantArtist
+	wantArtist := music.NormalizeForMatch(albumArtist)
+	return wantArtist == "" || music.NormalizeForMatch(candidate.Subtitle) == wantArtist
 }
 
 func (f *SearchAlbumFallback) firstMatchingTracklist(ctx context.Context, deezer ports.AlbumContentProvider, candidates []domain.SearchResult, albumTitle, albumArtist string) []domain.SearchResult {

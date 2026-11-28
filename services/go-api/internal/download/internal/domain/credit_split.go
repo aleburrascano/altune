@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"regexp"
 	"strings"
 )
@@ -22,7 +22,7 @@ func SplitCredit(credit string) []string {
 }
 
 func FeaturedCredits(title string) []string {
-	m := titlemarkers.FeaturedCredit.FindStringSubmatch(title)
+	m := music.FeaturedCredit.FindStringSubmatch(title)
 	if m == nil {
 		return nil
 	}

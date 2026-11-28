@@ -3,7 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"slices"
 	"testing"
@@ -25,7 +25,7 @@ func TestNewRecorded_ServesThePinnedFactsForThePinnedMBIDAlone(t *testing.T) {
 }
 
 func TestNewRecorded_ResolvesFromTheRecordedSearchAndISRCAnswers(t *testing.T) {
-	hits := []songfields.RecordingIdentity{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003", RecordingMBID: "remix-mbid", DurationSeconds: 236}}
+	hits := []music.RecordingIdentity{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003", RecordingMBID: "remix-mbid", DurationSeconds: 236}}
 	isrc := []domain.ISRCRecording{{MBID: "album-version", Duration: 237}}
 
 	identity, err := service.NewRecordedResolver(hits, isrc, nil).Resolve(context.Background(), drinkingQuery)

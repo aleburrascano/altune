@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/queuetimeout"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -632,7 +632,7 @@ func TestDiscogsAdapter_PacesNothingItself(t *testing.T) {
 }
 
 func TestDiscogsAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing.T) {
-	shed := fmt.Errorf("%w: %w", queuetimeout.Err, context.DeadlineExceeded)
+	shed := fmt.Errorf("%w: %w", resilience.ErrQueueTimeout, context.DeadlineExceeded)
 	client := &http.Client{Transport: contracttest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
 		return nil, shed
 	}}}

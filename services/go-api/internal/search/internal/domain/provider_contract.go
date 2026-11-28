@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"strings"
 )
 
@@ -45,8 +45,8 @@ const (
 func BoolPtr(v bool) *bool { return &v }
 
 func ValidISRC(raw string) string {
-	canonical := songfields.CanonicalISRC(raw)
-	if songfields.IsCanonicalISRC(canonical) {
+	canonical := music.CanonicalISRC(raw)
+	if music.IsCanonicalISRC(canonical) {
 		return canonical
 	}
 	return ""

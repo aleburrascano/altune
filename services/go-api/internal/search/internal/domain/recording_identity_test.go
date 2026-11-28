@@ -2,7 +2,7 @@ package domain_test
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"reflect"
 	"testing"
 )
@@ -105,7 +105,7 @@ func TestSearchResult_RecordingIdentityDoesNotShareItsExplicitFlagWithTheResult(
 func TestSearchResult_RecordingIdentityOfABareResultIsTheZeroValue(t *testing.T) {
 	identity := domain.SearchResult{}.RecordingIdentity()
 
-	if !reflect.DeepEqual(identity, songfields.RecordingIdentity{}) {
+	if !reflect.DeepEqual(identity, music.RecordingIdentity{}) {
 		t.Errorf("identity of an empty result = %+v, want the zero value", identity)
 	}
 }

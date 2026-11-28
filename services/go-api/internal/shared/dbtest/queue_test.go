@@ -2,7 +2,7 @@ package dbtest_test
 
 import (
 	"altune/go-api/internal/shared/dbtest"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"fmt"
 	"runtime"
 	"sync"
@@ -52,7 +52,7 @@ func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing
 		}
 	})
 
-	polltest.Until(t, 10*time.Second, "the second test to queue behind the holder", func() bool {
+	timingtest.Until(t, 10*time.Second, "the second test to queue behind the holder", func() bool {
 		return dbtest.BlockedBy(t, pool, holderPID) > alreadyBlocked
 	})
 	select {

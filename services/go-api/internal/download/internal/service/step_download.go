@@ -5,14 +5,13 @@ import (
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
-
-	sharedtracklength "altune/go-api/internal/shared/tracklength"
 )
 
 const (
@@ -466,7 +465,7 @@ func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate domain.AudioC
 type verificationResult struct {
 	duration bool
 	identity bool
-	probed   sharedtracklength.TrackLength
+	probed   music.TrackLength
 	verdict  AudioVerdict
 }
 
@@ -530,11 +529,11 @@ func (s *DownloadStep) verifyDuration(
 	ac *AcquisitionContext,
 	candidate domain.AudioCandidate,
 	filePath string,
-) (bool, sharedtracklength.TrackLength, *downloadRejection) {
+) (bool, music.TrackLength, *downloadRejection) {
 	judge, known := ac.lengths().FileJudge(candidate)
 	if !known {
 		s.recordSkip(domain.SkipNoDuration)
-		return false, sharedtracklength.TrackLength{}, nil
+		return false, music.TrackLength{}, nil
 	}
 	return s.probeDuration(ctx, ac, candidate, filePath, judge)
 }
@@ -545,24 +544,24 @@ func (s *DownloadStep) probeDuration(
 	candidate domain.AudioCandidate,
 	filePath string,
 	judge FileJudge,
-) (bool, sharedtracklength.TrackLength, *downloadRejection) {
+) (bool, music.TrackLength, *downloadRejection) {
 	actual, err := s.prober.ProbeDuration(ctx, filePath)
-	probed, lengthErr := sharedtracklength.TrackLengthOf(actual)
+	probed, lengthErr := music.TrackLengthOf(actual)
 	if err == nil {
 		err = lengthErr
 	}
 	switch {
 	case err != nil && (ctx.Err() != nil || errors.Is(err, domain.ErrNoAudioProber)):
-		return false, sharedtracklength.TrackLength{}, nil
+		return false, music.TrackLength{}, nil
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
 			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"probed_seconds", actual, logging.KeyError, redact.LogError(err))
 		s.recordSkip(domain.SkipProbeFailed)
-		return false, sharedtracklength.TrackLength{}, nil
+		return false, music.TrackLength{}, nil
 	}
 	if acceptable, held := judge.Judge(actual); !acceptable {
-		return false, sharedtracklength.TrackLength{}, durationRejection(ctx, ac, candidate, actual, held)
+		return false, music.TrackLength{}, durationRejection(ctx, ac, candidate, actual, held)
 	}
 	return true, probed, nil
 }

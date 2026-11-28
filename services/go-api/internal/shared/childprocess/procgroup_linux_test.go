@@ -2,7 +2,7 @@ package childprocess_test
 
 import (
 	"altune/go-api/internal/shared/childprocess"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"fmt"
@@ -22,7 +22,7 @@ func grandchildScript(pidFile, tail string) string {
 func readPID(t *testing.T, pidFile string) int {
 	t.Helper()
 	var pid int
-	polltest.Until(t, 5*time.Second, "the grandchild PID to be written to "+pidFile, func() bool {
+	timingtest.Until(t, 5*time.Second, "the grandchild PID to be written to "+pidFile, func() bool {
 		b, err := os.ReadFile(pidFile)
 		if err != nil {
 			return false
@@ -54,7 +54,7 @@ func processAlive(pid int) bool {
 
 func assertGone(t *testing.T, pid int) {
 	t.Helper()
-	polltest.Until(t, 3*time.Second, fmt.Sprintf("grandchild PID %d to be gone after the runner returned", pid), func() bool {
+	timingtest.Until(t, 3*time.Second, fmt.Sprintf("grandchild PID %d to be gone after the runner returned", pid), func() bool {
 		return !processAlive(pid)
 	})
 }

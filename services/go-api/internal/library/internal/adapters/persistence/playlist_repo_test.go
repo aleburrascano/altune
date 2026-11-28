@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"reflect"
@@ -770,7 +770,7 @@ func TestPostgresPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 	go func() { done <- playlistRepo.ReorderTracks(ctx, userId, pl.ID, reversed) }()
 
 	holderPID := int(holder.Conn().PgConn().PID())
-	polltest.Until(t, 10*time.Second, "ReorderTracks to queue behind the playlist lock", func() bool {
+	timingtest.Until(t, 10*time.Second, "ReorderTracks to queue behind the playlist lock", func() bool {
 		return dbtest.BlockedBy(t, pool, holderPID) >= 1
 	})
 	select {

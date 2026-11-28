@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"errors"
 	"log/slog"
@@ -37,7 +37,7 @@ func TestPostgresJobNotifier_LogsWhenItCannotListen(t *testing.T) {
 		close(done)
 	}()
 
-	polltest.Until(t, 10*time.Second, "the notifier to log that it cannot listen", func() bool {
+	timingtest.Until(t, 10*time.Second, "the notifier to log that it cannot listen", func() bool {
 		return strings.Contains(logs.String(), "acquisition.notifier_listen_failed")
 	})
 	cancel()

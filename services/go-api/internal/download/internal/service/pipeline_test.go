@@ -8,9 +8,9 @@ import (
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/random"
 	"bytes"
 	"context"
@@ -152,7 +152,7 @@ func TestProvenance(t *testing.T) {
 	tests := []struct {
 		name string
 		ac   service.AcquisitionContext
-		want downloadprovenance.AcquisitionProvenance
+		want music.AcquisitionProvenance
 	}{
 		{
 			name: "fingerprint match is the strongest claim",
@@ -161,7 +161,7 @@ func TestProvenance(t *testing.T) {
 				DurationVerified: true,
 				Identity:         domain.RecordingIdentity{Duration: 181},
 			},
-			want: downloadprovenance.ProvenanceVerified,
+			want: music.ProvenanceVerified,
 		},
 		{
 			name: "length corroborated by discovery but no fingerprint",
@@ -170,22 +170,22 @@ func TestProvenance(t *testing.T) {
 				Track:            service.TrackRef{CatalogDuration: 181},
 				Identity:         domain.RecordingIdentity{Duration: 181},
 			},
-			want: downloadprovenance.ProvenanceCorroborated,
+			want: music.ProvenanceCorroborated,
 		},
 		{
 			name: "length checked against saved metadata only",
 			ac:   service.AcquisitionContext{DurationVerified: true},
-			want: downloadprovenance.ProvenanceBestEffort,
+			want: music.ProvenanceBestEffort,
 		},
 		{
 			name: "nothing verified",
 			ac:   service.AcquisitionContext{},
-			want: downloadprovenance.ProvenanceBestEffort,
+			want: music.ProvenanceBestEffort,
 		},
 		{
 			name: "a best-effort settlement outranks a fingerprint match",
 			ac:   service.AcquisitionContext{BestEffort: true, IdentityVerified: true},
-			want: downloadprovenance.ProvenanceBestEffort,
+			want: music.ProvenanceBestEffort,
 		},
 	}
 

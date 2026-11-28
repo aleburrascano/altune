@@ -6,8 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadprovenance"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"cmp"
 	"embed"
 	"encoding/json"
@@ -678,7 +677,7 @@ func validateRecordings(c Case) error {
 }
 
 func validateExpectProvenance(c Case) error {
-	if c.ExpectProvenance != "" && !downloadprovenance.AcquisitionProvenance(c.ExpectProvenance).Valid() {
+	if c.ExpectProvenance != "" && !music.AcquisitionProvenance(c.ExpectProvenance).Valid() {
 		return fmt.Errorf("case %q expects unknown provenance %q", c.ID, c.ExpectProvenance)
 	}
 	return nil
@@ -728,7 +727,7 @@ func validateTrackLengths(c Case) error {
 		lengths = append(lengths, c.Stored.Duration)
 	}
 	for _, seconds := range lengths {
-		if _, err := tracklength.TrackLengthOf(seconds); err != nil {
+		if _, err := music.TrackLengthOf(seconds); err != nil {
 			return fmt.Errorf("case %q: %w", c.ID, err)
 		}
 	}
@@ -757,7 +756,7 @@ func validateStoredAndSaved(c Case) error {
 		return fmt.Errorf("case %q records a re-recording without its original mbid, mbid and title", c.ID)
 	}
 	saved := c.ExpectSaved
-	if saved != nil && saved.Provenance != "" && !downloadprovenance.AcquisitionProvenance(saved.Provenance).Valid() {
+	if saved != nil && saved.Provenance != "" && !music.AcquisitionProvenance(saved.Provenance).Valid() {
 		return fmt.Errorf("case %q expects unknown saved provenance %q", c.ID, saved.Provenance)
 	}
 	return nil

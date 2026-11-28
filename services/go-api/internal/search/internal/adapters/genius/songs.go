@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -53,14 +53,14 @@ func (c *SongCatalog) FindArtistID(ctx context.Context, artistName string, known
 		}
 		queries = append(queries, artistName+" "+title)
 	}
-	want := textnorm.NormalizeForIdentity(artistName)
+	want := music.NormalizeForIdentity(artistName)
 	for _, q := range queries {
 		hits, err := c.searchHits(ctx, q)
 		if err != nil {
 			return 0, false, err
 		}
 		for _, hit := range hits {
-			if artist := hit.PrimaryArtist; artist.ID != 0 && textnorm.NormalizeForIdentity(artist.Name) == want {
+			if artist := hit.PrimaryArtist; artist.ID != 0 && music.NormalizeForIdentity(artist.Name) == want {
 				return artist.ID, true, nil
 			}
 		}

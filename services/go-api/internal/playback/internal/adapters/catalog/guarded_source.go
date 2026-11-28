@@ -3,8 +3,8 @@ package catalog
 import (
 	"altune/go-api/internal/playback/internal/domain"
 	"altune/go-api/internal/playback/internal/ports"
-	"altune/go-api/internal/shared/breaker"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -66,7 +66,7 @@ func (g *GuardedSource) NowPlayingTrack(ctx context.Context, userId ids.UserId, 
 	return track, nil
 }
 
-func (g *GuardedSource) recordLookupFailure(ctx context.Context, admission breaker.Admission, err error) {
+func (g *GuardedSource) recordLookupFailure(ctx context.Context, admission resilience.CircuitAdmission, err error) {
 	if ctx.Err() != nil {
 		return
 	}

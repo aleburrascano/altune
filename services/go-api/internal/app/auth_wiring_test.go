@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/platform/auth/authtest"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -207,7 +207,7 @@ func TestAuth_RejectionsAndAnUnreachableKeySetReachLiveMetrics(t *testing.T) {
 	f.keysDown.Store(false)
 	var code int
 	var body []byte
-	polltest.Within(10*time.Second, func() bool {
+	timingtest.Within(10*time.Second, func() bool {
 		code, body = getFrom(t, h, fmt.Sprintf("203.0.%d.%d:1234", unavailable/250, unavailable%250+1), "/observe/metrics/live", operator)
 		if code == http.StatusServiceUnavailable {
 			unavailable++

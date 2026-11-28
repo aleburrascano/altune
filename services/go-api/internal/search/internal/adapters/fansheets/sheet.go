@@ -2,7 +2,7 @@ package fansheets
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/filelinks"
+	"altune/go-api/internal/shared/music"
 	"net/url"
 	"slices"
 	"strings"
@@ -97,7 +97,7 @@ func (c columns) audioLinks(row gridRow, read linkReader) []domain.AudioLink {
 }
 
 func audioLink(raw string) (domain.AudioLink, bool) {
-	if file, ok := filelinks.Parse(raw); ok {
+	if file, ok := music.ParseFileLink(raw); ok {
 		return domain.AudioLink{Provider: domain.AudioProvider(file.Provider), ExternalID: file.ID, URL: file.PageURL}, true
 	}
 	return domain.SoundCloudLink(raw)

@@ -3,7 +3,7 @@ package service
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"cmp"
 	"context"
 	"fmt"
@@ -52,7 +52,7 @@ func (r *MusicBrainzResolver) rerecordingOf(ctx context.Context, original domain
 }
 
 func labelledRerecordings(original domain.RecordingDetail, work []domain.WorkRecording) []domain.WorkRecording {
-	songTitle := titlemarkers.StripVersionPhrases(titlemarkers.Tokens(original.Title))
+	songTitle := music.StripVersionPhrases(music.TitleTokens(original.Title))
 	var kept []domain.WorkRecording
 	for _, rec := range work {
 		if rec.MBID == original.MBID || rec.Live || !sameLeadArtist(rec.ArtistIDs, original.ArtistIDs) {
@@ -70,19 +70,19 @@ func sameLeadArtist(a, b []string) bool {
 }
 
 func rerecordingSongTitle(rec domain.WorkRecording) ([]string, bool) {
-	title, inTitle := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(rec.Title))
-	disambiguation, inDisambiguation := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(rec.Disambiguation))
+	title, inTitle := music.StripRerecordingPhrases(music.TitleTokens(rec.Title))
+	disambiguation, inDisambiguation := music.StripRerecordingPhrases(music.TitleTokens(rec.Disambiguation))
 	if !inTitle && !inDisambiguation {
 		return nil, false
 	}
 	if vetoed(title) || vetoed(disambiguation) {
 		return nil, false
 	}
-	return titlemarkers.StripVersionPhrases(title), true
+	return music.StripVersionPhrases(title), true
 }
 
 func vetoed(tokens []string) bool {
-	return slices.ContainsFunc(titlemarkers.Matches(tokens), func(e titlemarkers.Entry) bool { return e.Veto })
+	return slices.ContainsFunc(music.MatchVersionPhrases(tokens), func(e music.VersionPhrase) bool { return e.Veto })
 }
 
 func (r *MusicBrainzResolver) releasedAfter(ctx context.Context, original domain.RecordingDetail, candidates []domain.WorkRecording) ([]domain.RecordingDetail, error) {

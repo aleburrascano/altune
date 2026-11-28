@@ -6,8 +6,8 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/parallel"
-	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"context"
 	"errors"
@@ -185,7 +185,7 @@ func withoutCatalogMatches(songs []domain.UnreleasedSong, catalogTitles []string
 func albumKeys(catalogTitles []string) map[string]struct{} {
 	keys := make(map[string]struct{}, len(catalogTitles))
 	for _, title := range catalogTitles {
-		keys[textnorm.NormalizeForIdentity(title)] = struct{}{}
+		keys[music.NormalizeForIdentity(title)] = struct{}{}
 	}
 	return keys
 }
@@ -241,7 +241,7 @@ func isReleasedPerGenius(detail domain.GeniusSongDetail, catalogAlbums map[strin
 }
 
 func isCatalogAlbum(albumTitle string, catalogAlbums map[string]struct{}) bool {
-	key := textnorm.NormalizeForIdentity(albumTitle)
+	key := music.NormalizeForIdentity(albumTitle)
 	if key == "" || strings.HasPrefix(key, "unreleased") {
 		return false
 	}

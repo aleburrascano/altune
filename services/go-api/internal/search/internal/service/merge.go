@@ -2,9 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/songfields"
-	"altune/go-api/internal/shared/textnorm"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"math"
 	"slices"
 )
@@ -167,7 +165,7 @@ func sameEntity(ke, kc keyedResult) (domain.EntityResolutionTier, bool) {
 }
 
 func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
-	if eISRC := songfields.CanonicalISRC(e.ISRC); eISRC != "" && eISRC == songfields.CanonicalISRC(c.ISRC) {
+	if eISRC := music.CanonicalISRC(e.ISRC); eISRC != "" && eISRC == music.CanonicalISRC(c.ISRC) {
 		return domain.EntityResolutionISRC, true
 	}
 	if e.Kind == domain.ResultKindAlbum && e.UPC != "" && e.UPC == c.UPC {
@@ -177,12 +175,12 @@ func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) 
 }
 
 func hasConflictingISRCs(a, b domain.SearchResult) bool {
-	aISRC, bISRC := songfields.CanonicalISRC(a.ISRC), songfields.CanonicalISRC(b.ISRC)
+	aISRC, bISRC := music.CanonicalISRC(a.ISRC), music.CanonicalISRC(b.ISRC)
 	return aISRC != "" && bISRC != "" && aISRC != bISRC
 }
 
 func differentVersions(a, b domain.SearchResult) bool {
-	return hasConflictingISRCs(a, b) && !slices.Equal(titlemarkers.Labels(a.Title), titlemarkers.Labels(b.Title))
+	return hasConflictingISRCs(a, b) && !slices.Equal(music.VersionLabels(a.Title), music.VersionLabels(b.Title))
 }
 
 func sameName(kind domain.ResultKind, e, c matchKey) bool {
@@ -263,7 +261,7 @@ func alignExplicitWithISRC(merged *domain.SearchResult, canonical, other domain.
 		return
 	}
 	source := canonical
-	if songfields.CanonicalISRC(merged.ISRC) == songfields.CanonicalISRC(other.ISRC) {
+	if music.CanonicalISRC(merged.ISRC) == music.CanonicalISRC(other.ISRC) {
 		source = other
 	}
 	merged.Explicit = source.Explicit
@@ -347,8 +345,8 @@ const (
 )
 
 func sameVersionIdentity(a, b domain.SearchResult) bool {
-	title := textnorm.NormalizeForIdentity(a.Title)
-	if title == "" || title != textnorm.NormalizeForIdentity(b.Title) {
+	title := music.NormalizeForIdentity(a.Title)
+	if title == "" || title != music.NormalizeForIdentity(b.Title) {
 		return false
 	}
 	if a.Duration == 0 || b.Duration == 0 {

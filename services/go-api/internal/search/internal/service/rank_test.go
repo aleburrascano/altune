@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"testing"
 )
 
@@ -316,7 +316,7 @@ func dzArtist(name string, pop float64) domain.SearchResult {
 	return memory.WithPop(memory.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil), pop)
 }
 
-func norm(raw string) string { return textnorm.NormalizeForMatch(raw) }
+func norm(raw string) string { return music.NormalizeForMatch(raw) }
 
 func indexOfTitle(results []domain.SearchResult, title string) int {
 	for i, r := range results {

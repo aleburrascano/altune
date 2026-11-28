@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"log/slog"
 )
@@ -18,7 +18,7 @@ func NewSuggestService(vocab ports.SpellingHintsReader) *SuggestService {
 }
 
 func (s *SuggestService) Execute(ctx context.Context, partial string, limit int) ([]domain.SpellingHintsEntry, error) {
-	norm := textnorm.NormalizeForMatch(partial)
+	norm := music.NormalizeForMatch(partial)
 	if norm == "" {
 		return []domain.SpellingHintsEntry{}, nil
 	}

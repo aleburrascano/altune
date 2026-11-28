@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"strings"
 	"unicode"
 )
@@ -26,7 +26,7 @@ func normalizeForDedup(s string) string {
 }
 
 func canonicalizeField(s string) string {
-	s = textnorm.NFKC(s)
+	s = music.NFKC(s)
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.TrimSpace(s)
 }

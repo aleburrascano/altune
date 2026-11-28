@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/platform/auth/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/timingtest"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -421,7 +421,7 @@ func TestSupabaseJWTVerifier_CheckHealthDegradesAfterSustainedBackgroundRefreshF
 	}
 
 	jwks.down.Store(true)
-	polltest.Until(t, 10*time.Second, "two failed background refreshes", func() bool { return metrics.jwksFailures.Load() >= 2 })
+	timingtest.Until(t, 10*time.Second, "two failed background refreshes", func() bool { return metrics.jwksFailures.Load() >= 2 })
 	if _, err := verifier.Verify(t.Context(), f.validToken(t)); err != nil {
 		t.Fatalf("stale-but-usable key set stopped verifying: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestSupabaseJWTVerifier_CheckHealthDegradesAfterSustainedBackgroundRefreshF
 	assertErrorSays(t, err, "consecutive background refresh failures")
 
 	jwks.down.Store(false)
-	polltest.Until(t, 10*time.Second, "a background refresh to clear staleness", func() bool {
+	timingtest.Until(t, 10*time.Second, "a background refresh to clear staleness", func() bool {
 		return verifier.CheckHealth(t.Context()) == nil
 	})
 }
@@ -479,7 +479,7 @@ func TestSupabaseJWTVerifier_UnprimedConcurrentVerifyCoalescesFetches(t *testing
 			errs <- err
 		})
 	}
-	polltest.Until(t, 10*time.Second, "every caller to be in flight behind the first fetch", func() bool {
+	timingtest.Until(t, 10*time.Second, "every caller to be in flight behind the first fetch", func() bool {
 		return hits.Load() >= 1 && started.Load() == callers
 	})
 	close(release)
@@ -518,7 +518,7 @@ func TestSupabaseJWTVerifier_CanceledCallerIsReleasedFromSharedFetch(t *testing.
 	verifier := newVerifier(t, server.URL, time.Now, withJWKSFetchTimeout(2*time.Second))
 
 	go func() { _, _ = verifier.Verify(context.Background(), "any-token") }()
-	polltest.Until(t, 10*time.Second, "the first fetch to reach the JWKS server", func() bool { return hits.Load() >= 1 })
+	timingtest.Until(t, 10*time.Second, "the first fetch to reach the JWKS server", func() bool { return hits.Load() >= 1 })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -792,7 +792,7 @@ func TestSupabaseJWTVerifier_CountsBackgroundJWKSRefreshFailures(t *testing.T) {
 
 	jwks.down.Store(true)
 
-	polltest.Until(t, 10*time.Second, "failed background refreshes to be counted", func() bool { return metrics.jwksFailures.Load() >= 2 })
+	timingtest.Until(t, 10*time.Second, "failed background refreshes to be counted", func() bool { return metrics.jwksFailures.Load() >= 2 })
 }
 
 func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T) {
@@ -803,7 +803,7 @@ func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T)
 	token := f.validToken(t)
 
 	jwks.down.Store(true)
-	polltest.Until(t, 10*time.Second, "a failed background refresh", func() bool { return metrics.jwksFailures.Load() >= 1 })
+	timingtest.Until(t, 10*time.Second, "a failed background refresh", func() bool { return metrics.jwksFailures.Load() >= 1 })
 	clock.advance(staleAfter + time.Minute)
 
 	_, err := verifier.Verify(t.Context(), token)
@@ -832,7 +832,7 @@ func TestSupabaseJWTVerifier_VerifyAcceptsAgainOnceKeySetRefreshes(t *testing.T)
 	assertErrorIs(t, err, supabase.ErrJWKSStale)
 
 	jwks.down.Store(false)
-	polltest.Until(t, 10*time.Second, "Verify to accept after the endpoint recovers", func() bool {
+	timingtest.Until(t, 10*time.Second, "Verify to accept after the endpoint recovers", func() bool {
 		_, err := verifier.Verify(t.Context(), token)
 		return err == nil
 	})
@@ -1009,7 +1009,7 @@ func TestSupabaseJWTVerifier_StalledBackgroundRefreshFailsWithinTheFetchTimeout(
 
 	jwks.stall.Store(true)
 
-	polltest.Until(t, 15*time.Second, "a stalled background refresh to time out", func() bool { return metrics.jwksFailures.Load() >= 1 })
+	timingtest.Until(t, 15*time.Second, "a stalled background refresh to time out", func() bool { return metrics.jwksFailures.Load() >= 1 })
 }
 
 func warnRecords(t *testing.T, buf *logging.Capture) []map[string]any {

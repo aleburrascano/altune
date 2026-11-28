@@ -5,8 +5,8 @@ import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"sync/atomic"
@@ -48,7 +48,7 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 	existsErr := errors.New("transient s3 hiccup")
 	writeErr := errors.New("db down")
 	ref := reacquireRef
-	noMatch := string(downloadfailure.FailureNoMatchFound)
+	noMatch := string(music.FailureNoMatchFound)
 
 	tests := []struct {
 		name        string

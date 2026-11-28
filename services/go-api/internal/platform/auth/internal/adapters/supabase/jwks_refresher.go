@@ -2,8 +2,8 @@ package supabase
 
 import (
 	"altune/go-api/internal/shared/background"
-	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/resilience"
 	"context"
 	"errors"
 	"fmt"
@@ -151,4 +151,4 @@ func (r *jwksRefresher) checkFresh() error {
 	return err
 }
 
-var jwksRefreshBackoff = backoff.MustCapped(jwksRefreshBackoffBase, jwksRefreshBackoffCap)
+var jwksRefreshBackoff = resilience.MustCappedBackoff(jwksRefreshBackoffBase, jwksRefreshBackoffCap)

@@ -1,9 +1,9 @@
 package domain
 
-import "altune/go-api/internal/shared/songfields"
+import "altune/go-api/internal/shared/music"
 
-func (r SearchResult) RecordingIdentity() songfields.RecordingIdentity {
-	return songfields.RecordingIdentity{
+func (r SearchResult) RecordingIdentity() music.RecordingIdentity {
+	return music.RecordingIdentity{
 		Title:            r.Title,
 		Artist:           r.Subtitle,
 		Album:            r.Album,
@@ -17,7 +17,7 @@ func (r SearchResult) RecordingIdentity() songfields.RecordingIdentity {
 		ArtistMBID:       r.ArtistMBID,
 		UPC:              r.UPC,
 		DeezerAlbumID:    r.DeezerAlbumID,
-		Position:         songfields.TrackPosition{Disc: r.TrackPosition.Disc, Track: r.TrackPosition.Track},
+		Position:         music.TrackPosition{Disc: r.TrackPosition.Disc, Track: r.TrackPosition.Track},
 		TrackCount:       r.TrackCount,
 		Contributors:     contributorsOf(r.Contributors),
 		Explicit:         explicitOf(r.Explicit),
@@ -27,13 +27,13 @@ func (r SearchResult) RecordingIdentity() songfields.RecordingIdentity {
 	}
 }
 
-func contributorsOf(found []Contributor) []songfields.Contributor {
+func contributorsOf(found []Contributor) []music.Contributor {
 	if len(found) == 0 {
 		return nil
 	}
-	out := make([]songfields.Contributor, len(found))
+	out := make([]music.Contributor, len(found))
 	for i, c := range found {
-		out[i] = songfields.Contributor{ProviderID: c.ProviderID, Name: c.Name, Role: string(c.Role)}
+		out[i] = music.Contributor{ProviderID: c.ProviderID, Name: c.Name, Role: string(c.Role)}
 	}
 	return out
 }
@@ -46,13 +46,13 @@ func explicitOf(flag *bool) *bool {
 	return &copied
 }
 
-func sourcesOf(links []ProviderLink) []songfields.ProviderRef {
+func sourcesOf(links []ProviderLink) []music.ProviderRef {
 	if len(links) == 0 {
 		return nil
 	}
-	out := make([]songfields.ProviderRef, len(links))
+	out := make([]music.ProviderRef, len(links))
 	for i, l := range links {
-		out[i] = songfields.ProviderRef{Provider: l.Provider.String(), ExternalID: l.ExternalID, URL: l.URL}
+		out[i] = music.ProviderRef{Provider: l.Provider.String(), ExternalID: l.ExternalID, URL: l.URL}
 	}
 	return out
 }

@@ -9,8 +9,8 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/queuetimeout"
 	"altune/go-api/internal/shared/requestuser"
+	"altune/go-api/internal/shared/resilience"
 	"altune/go-api/internal/shared/telemetry"
 	"bytes"
 	"context"
@@ -1129,12 +1129,12 @@ func depsWithProviderTimeout(timeout time.Duration) search.Deps {
 }
 
 func TestDeps_RefusesAProviderTimeoutThatCannotOutlastTheLongestRateLimitQueueWait(t *testing.T) {
-	for _, timeout := range []time.Duration{queuetimeout.MaxWait / 2, queuetimeout.MaxWait} {
+	for _, timeout := range []time.Duration{resilience.MaxQueueWait / 2, resilience.MaxQueueWait} {
 		if _, err := search.New(t.Context(), depsWithProviderTimeout(timeout)); err == nil || !strings.Contains(err.Error(), "ProviderTimeout") {
 			t.Errorf("ProviderTimeout %v: New = %v, want a refusal naming ProviderTimeout", timeout, err)
 		}
 	}
-	if _, err := search.New(t.Context(), depsWithProviderTimeout(queuetimeout.MaxWait+time.Second)); err != nil {
+	if _, err := search.New(t.Context(), depsWithProviderTimeout(resilience.MaxQueueWait+time.Second)); err != nil {
 		t.Errorf("a ProviderTimeout past the queue wait was refused: %v", err)
 	}
 }

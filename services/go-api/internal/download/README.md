@@ -4,7 +4,7 @@ It owns the tables `acquisition_cooldowns`, `acquisition_jobs`, `acquisition_out
 
 ## Must not
 
-- Import another feature. `library` and `search` reach it only through `app/bridges`, and what `search` hands it for a recording is the shared `songfields.RecordingIdentity`, whole.
+- Import another feature. `library` and `search` reach it only through `app/bridges`, and what `search` hands it for a recording is the shared `music.RecordingIdentity`, whole.
 - Read config or the environment. `app` hands it `Deps`, and the audio sources come in as `Deps.Sources`; `app` builds the live ones with `download.LiveSources`.
 - Do I/O in `domain`, `service` or `ports`. Time, randomness and every outside system come in through a port.
 - Let `service` or `domain` know a wire format. HTTP codes live in `adapters/handler/errors.go` and stored JSON shapes in `adapters/evidence`.

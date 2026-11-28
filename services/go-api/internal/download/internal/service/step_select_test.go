@@ -5,8 +5,8 @@ import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"errors"
@@ -97,7 +97,7 @@ func healthyButRejected() *searchSource {
 func TestSelectStep_SearchOutageWithAllRejected_IsTransient(t *testing.T) {
 	err := searchOutageThenSelect(t, throttled(), healthyButRejected())
 
-	if !domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(downloadfailure.FailureSourceUnavailable) {
+	if !domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(music.FailureSourceUnavailable) {
 		t.Fatalf("err = %v, want a transient source-unavailable failure", err)
 	}
 }
@@ -119,7 +119,7 @@ func TestSearchStep_OutageWithOnlyStoredFileMatch_IsSourceUnavailable(t *testing
 func TestSelectStep_PlainSourceErrorWithAllRejected_StaysPermanent(t *testing.T) {
 	err := searchOutageThenSelect(t, &searchSource{name: "down", err: errors.New("exit 1")}, healthyButRejected())
 
-	if domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(downloadfailure.FailureNoMatchFound) {
+	if domain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(music.FailureNoMatchFound) {
 		t.Fatalf("err = %v, want a permanent failure", err)
 	}
 }

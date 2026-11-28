@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"fmt"
@@ -204,7 +204,7 @@ func scArtworkMatches(kind domain.ResultKind, title, subtitle string, r domain.S
 }
 
 func coversTokensOf(haystack, needle string) bool {
-	want := strings.Fields(textnorm.NormalizeForMatch(needle))
+	want := strings.Fields(music.NormalizeForMatch(needle))
 	if len(want) == 0 {
 		return false
 	}
@@ -219,7 +219,7 @@ func coversTokensOf(haystack, needle string) bool {
 
 func tokenSet(s string) map[string]bool {
 	tokens := map[string]bool{}
-	for _, token := range strings.Fields(textnorm.NormalizeForMatch(s)) {
+	for _, token := range strings.Fields(music.NormalizeForMatch(s)) {
 		tokens[token] = true
 	}
 	return tokens

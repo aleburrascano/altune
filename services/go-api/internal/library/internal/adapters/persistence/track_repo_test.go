@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/tracklength"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"encoding/json"
 	"errors"
@@ -980,7 +980,7 @@ func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.
 		t.Fatal(err)
 	}
 	stored.AdoptISRC("GBAYE0601498")
-	audioLength, err := tracklength.TrackLengthOf(137)
+	audioLength, err := music.TrackLengthOf(137)
 	if err != nil {
 		t.Fatal(err)
 	}

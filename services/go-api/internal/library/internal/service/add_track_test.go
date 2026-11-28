@@ -6,9 +6,9 @@ import (
 	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -248,14 +248,14 @@ func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	if stored == nil || stored.DownloadStatus() != domain.AcquisitionFailed {
 		t.Fatalf("stored track = %+v, want failed (not stranded pending)", stored)
 	}
-	if stored.FailureReason() == nil || *stored.FailureReason() != string(downloadfailure.FailureAcquisitionRefused) {
-		t.Errorf("failure reason = %v, want %q", stored.FailureReason(), downloadfailure.FailureAcquisitionRefused)
+	if stored.FailureReason() == nil || *stored.FailureReason() != string(music.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", stored.FailureReason(), music.FailureAcquisitionRefused)
 	}
 	if stored.AcquisitionStartedAt() != nil {
 		t.Error("in-flight marker left set on a track whose job was never queued")
 	}
-	if got := pub.LastFields(events.TypeTrackAcquisitionFailed); got == nil || got["reason"] != string(downloadfailure.FailureAcquisitionRefused) {
-		t.Errorf("track_acquisition_failed payload = %v, want reason %q", got, downloadfailure.FailureAcquisitionRefused)
+	if got := pub.LastFields(events.TypeTrackAcquisitionFailed); got == nil || got["reason"] != string(music.FailureAcquisitionRefused) {
+		t.Errorf("track_acquisition_failed payload = %v, want reason %q", got, music.FailureAcquisitionRefused)
 	}
 }
 
@@ -588,8 +588,8 @@ func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
 	if out.Track.DownloadStatus() != domain.AcquisitionFailed {
 		t.Errorf("status = %v, want failed after a timed-out schedule", out.Track.DownloadStatus())
 	}
-	if out.Track.FailureReason() == nil || *out.Track.FailureReason() != string(downloadfailure.FailureAcquisitionRefused) {
-		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason(), downloadfailure.FailureAcquisitionRefused)
+	if out.Track.FailureReason() == nil || *out.Track.FailureReason() != string(music.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason(), music.FailureAcquisitionRefused)
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"errors"
 	"fmt"
@@ -58,9 +58,9 @@ func CachedLookup[T any](
 }
 
 func kindNameKey(kind domain.ResultKind, artist, title string) string {
-	nameKey := textnorm.NameKey(artist, title)
+	nameKey := music.MatchKey(artist, title)
 	if nameKey == "" {
 		return ""
 	}
-	return kind.String() + textnorm.KeySeparator + nameKey
+	return kind.String() + music.KeySeparator + nameKey
 }

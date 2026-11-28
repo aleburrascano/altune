@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/songfields"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"log/slog"
 	"time"
@@ -98,7 +98,7 @@ func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
 }
 
 func ownedMatch(item OwnableItem, owned map[string]ports.OwnedTrack) (ports.OwnedTrack, bool) {
-	itemISRC := songfields.CanonicalISRC(item.ISRC)
+	itemISRC := music.CanonicalISRC(item.ISRC)
 	if itemISRC != "" {
 		if match, ok := owned[domain.OwnershipISRCKey(itemISRC)]; ok {
 			return match, true
@@ -185,8 +185,8 @@ func pendingTrackNumbers(items []OwnableItem, owned map[string]ports.OwnedTrack)
 }
 
 func matchesByISRC(track ports.OwnedTrack, itemISRC string) bool {
-	stored := songfields.CanonicalISRC(track.ISRC)
-	return songfields.IsCanonicalISRC(stored) && stored == songfields.CanonicalISRC(itemISRC)
+	stored := music.CanonicalISRC(track.ISRC)
+	return music.IsCanonicalISRC(stored) && stored == music.CanonicalISRC(itemISRC)
 }
 
 func isSameNamedAlbum(storedAlbum, pageAlbum string) bool {

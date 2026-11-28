@@ -1,34 +1,34 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/downloadfailure"
+	"altune/go-api/internal/shared/music"
 )
 
-type FailureCode = downloadfailure.FailureCode
+type FailureCode = music.FailureCode
 
 const (
-	FailureNoMatchFound           = downloadfailure.FailureNoMatchFound
-	FailureNoConfidentMatch       = downloadfailure.FailureNoConfidentMatch
-	FailureSourceUnavailable      = downloadfailure.FailureSourceUnavailable
-	FailureDownloadFailed         = downloadfailure.FailureDownloadFailed
-	FailureStorageFailed          = downloadfailure.FailureStorageFailed
-	FailureAcquisitionCancelled   = downloadfailure.FailureAcquisitionCancelled
-	FailureAcquisitionFailed      = downloadfailure.FailureAcquisitionFailed
-	FailureYtdlpError             = downloadfailure.FailureYtdlpError
-	FailureAcquisitionInterrupted = downloadfailure.FailureAcquisitionInterrupted
-	FailureAcquisitionRefused     = downloadfailure.FailureAcquisitionRefused
+	FailureNoMatchFound           = music.FailureNoMatchFound
+	FailureNoConfidentMatch       = music.FailureNoConfidentMatch
+	FailureSourceUnavailable      = music.FailureSourceUnavailable
+	FailureDownloadFailed         = music.FailureDownloadFailed
+	FailureStorageFailed          = music.FailureStorageFailed
+	FailureAcquisitionCancelled   = music.FailureAcquisitionCancelled
+	FailureAcquisitionFailed      = music.FailureAcquisitionFailed
+	FailureYtdlpError             = music.FailureYtdlpError
+	FailureAcquisitionInterrupted = music.FailureAcquisitionInterrupted
+	FailureAcquisitionRefused     = music.FailureAcquisitionRefused
 )
 
-const FailureDetailSeparator = downloadfailure.FailureDetailSeparator
+const FailureDetailSeparator = music.FailureDetailSeparator
 
 func JoinFailureReason(code FailureCode, detail string) string {
-	return downloadfailure.JoinFailureReason(code, detail)
+	return music.JoinFailureReason(code, detail)
 }
 
 func SplitFailureReason(reason string) (FailureCode, string) {
-	return downloadfailure.SplitFailureReason(reason)
+	return music.SplitFailureReason(reason)
 }
 
 func FailureMessage(reason *string) string {
-	return downloadfailure.FailureMessage(reason)
+	return music.FailureMessage(reason)
 }

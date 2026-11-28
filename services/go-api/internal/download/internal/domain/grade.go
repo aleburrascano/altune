@@ -1,6 +1,6 @@
 package domain
 
-import "altune/go-api/internal/shared/downloadprovenance"
+import "altune/go-api/internal/shared/music"
 
 const PipelineGeneration = 2
 
@@ -27,7 +27,7 @@ const (
 	FingerprintUnsupported
 )
 
-func GradeOf(fingerprint FingerprintResult, provenance downloadprovenance.AcquisitionProvenance, kind SourceKind) Grade {
+func GradeOf(fingerprint FingerprintResult, provenance music.AcquisitionProvenance, kind SourceKind) Grade {
 	switch fingerprint {
 	case FingerprintContradicts:
 		return GradeF
@@ -42,7 +42,7 @@ func GradeOf(fingerprint FingerprintResult, provenance downloadprovenance.Acquis
 		return GradeD
 	case FingerprintSilent:
 	}
-	if provenance == downloadprovenance.ProvenanceVerified || provenance == downloadprovenance.ProvenanceCorroborated {
+	if provenance == music.ProvenanceVerified || provenance == music.ProvenanceCorroborated {
 		return GradeC
 	}
 	return GradeD

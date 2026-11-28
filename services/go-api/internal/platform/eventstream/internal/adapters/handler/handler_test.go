@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/requestuser"
+	"altune/go-api/internal/shared/timingtest"
 	"bufio"
 	"context"
 	"errors"
@@ -226,7 +226,7 @@ func TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp(t *testing.T) {
 func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
 	t.Helper()
 	var found logging.CapturedRecord
-	polltest.Until(t, 2*time.Second, fmt.Sprintf("the %q log line", msg), func() bool {
+	timingtest.Until(t, 2*time.Second, fmt.Sprintf("the %q log line", msg), func() bool {
 		for _, r := range ring.Snapshot() {
 			if r.Message == msg {
 				found = r
@@ -755,7 +755,7 @@ func assertStreamsStillLive(t *testing.T, bus *events.InProcessBus, users []ids.
 
 func waitForSlotRelease(t *testing.T, url string) {
 	t.Helper()
-	polltest.Until(t, 2*time.Second, "closing an open stream to free a global slot", func() bool {
+	timingtest.Until(t, 2*time.Second, "closing an open stream to free a global slot", func() bool {
 		status, body := openUserStream(t, url, ids.NewUserId(uuid.New()))
 		if status == http.StatusOK {
 			return true

@@ -3,7 +3,7 @@ package musicbrainz
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"fmt"
 	"net/url"
@@ -64,11 +64,11 @@ func (a *MusicBrainzAdapter) Lookup(ctx context.Context, kind domain.ResultKind,
 }
 
 func (a *MusicBrainzAdapter) ResolveMBID(ctx context.Context, kind domain.ResultKind, title, subtitle string) (string, error) {
-	titleNorm := textnorm.NormalizeForMatch(title)
+	titleNorm := music.NormalizeForMatch(title)
 	if titleNorm == "" {
 		return "", nil
 	}
-	subtitleNorm := textnorm.NormalizeForMatch(subtitle)
+	subtitleNorm := music.NormalizeForMatch(subtitle)
 
 	switch kind {
 	case domain.ResultKindArtist:
@@ -89,7 +89,7 @@ func (a *MusicBrainzAdapter) findArtistMBID(ctx context.Context, title, titleNor
 		return "", err
 	}
 	for _, art := range artists {
-		if textnorm.NormalizeForMatch(art.Name) == titleNorm {
+		if music.NormalizeForMatch(art.Name) == titleNorm {
 			return art.ID, nil
 		}
 	}
@@ -102,7 +102,7 @@ func (a *MusicBrainzAdapter) findAlbumMBID(ctx context.Context, title, titleNorm
 		return "", err
 	}
 	for _, rg := range groups {
-		if textnorm.NormalizeForMatch(rg.Title) != titleNorm {
+		if music.NormalizeForMatch(rg.Title) != titleNorm {
 			continue
 		}
 		if subtitleNorm != "" && !creditMatches(rg.ArtistCredit, subtitleNorm) {
@@ -119,7 +119,7 @@ func (a *MusicBrainzAdapter) findTrackMBID(ctx context.Context, title, titleNorm
 		return "", err
 	}
 	for _, rec := range recs {
-		if textnorm.NormalizeForMatch(rec.Title) != titleNorm {
+		if music.NormalizeForMatch(rec.Title) != titleNorm {
 			continue
 		}
 		if subtitleNorm != "" && !creditMatches(rec.ArtistCredit, subtitleNorm) {
@@ -134,7 +134,7 @@ func creditMatches(credit []mbArtistRef, wantNorm string) bool {
 	if len(credit) == 0 {
 		return false
 	}
-	return textnorm.NormalizeForMatch(credit[0].Name) == wantNorm
+	return music.NormalizeForMatch(credit[0].Name) == wantNorm
 }
 
 func sortedGenres(genres []mbGenre) []string {

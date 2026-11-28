@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/music"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"fmt"
@@ -90,7 +90,7 @@ func (s *SpellingHintsRefreshService) normalizeAndStore(
 	entries []domain.SpellingHintsEntry,
 ) error {
 	for i := range entries {
-		entries[i].TermNorm = textnorm.NormalizeForMatch(entries[i].Term)
+		entries[i].TermNorm = music.NormalizeForMatch(entries[i].Term)
 	}
 	slog.InfoContext(ctx, "vocabulary refresh", "entries", len(entries))
 	return s.vocab.BulkAdd(ctx, entries)

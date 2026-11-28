@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/titlemarkers"
+	"altune/go-api/internal/shared/music"
 	"regexp"
 	"strings"
 	"unicode"
@@ -22,17 +22,17 @@ func wildcardKey(title string) string {
 }
 
 func baseKey(title string) string {
-	if len(titlemarkers.RecordingLabels(title)) > 0 {
+	if len(music.RecordingLabels(title)) > 0 {
 		return ""
 	}
-	base, _ := titlemarkers.BaseTitle(title)
+	base, _ := music.BaseTitle(title)
 	return titleKey(base)
 }
 
 func demoBaseKey(title string) string {
-	base, label := titlemarkers.BaseTitle(title)
+	base, label := music.BaseTitle(title)
 	isDemo := label == "Voice Memo" || label == "Demo" || strings.HasPrefix(label, "Demo ")
-	if !isDemo || len(titlemarkers.RecordingLabels(base)) > 0 {
+	if !isDemo || len(music.RecordingLabels(base)) > 0 {
 		return ""
 	}
 	return titleKey(base)
@@ -80,8 +80,8 @@ func nearMatch(a, b string) bool {
 }
 
 func looseBase(title string) (base, versionLabel string, ok bool) {
-	base, versionLabel = titlemarkers.BaseTitle(title)
-	return base, versionLabel, len(titlemarkers.RecordingLabels(title)) == 0
+	base, versionLabel = music.BaseTitle(title)
+	return base, versionLabel, len(music.RecordingLabels(title)) == 0
 }
 
 func letterCount(s string) int {

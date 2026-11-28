@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/music"
 	"context"
 	"log/slog"
 	"time"
@@ -81,7 +81,7 @@ func resultVocabEntries(r domain.SearchResult) []domain.SpellingHintsEntry {
 func newVocabEntry(term string, kind domain.SpellingHintsKind, popularity float64) domain.SpellingHintsEntry {
 	return domain.SpellingHintsEntry{
 		Term:       term,
-		TermNorm:   textnorm.NormalizeForMatch(term),
+		TermNorm:   music.NormalizeForMatch(term),
 		Kind:       kind,
 		Popularity: int64(popularity),
 	}
