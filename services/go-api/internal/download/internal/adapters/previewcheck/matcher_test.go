@@ -2,7 +2,7 @@ package previewcheck_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/previewcheck"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"

@@ -1,6 +1,6 @@
 package ytdlp
 
-import "altune/go-api/internal/download/internal/core/ports"
+import "altune/go-api/internal/download/internal/ports"
 
 func searchQueries(req ports.FindRequest) []string {
 	var queries []string

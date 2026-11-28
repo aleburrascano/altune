@@ -1,1 +1,0 @@
-`tracklength` owns how long a track should be and whether a file's length is acceptable. It weighs the saved catalog length against the resolved recording's length, and it hides which tolerance window applies.

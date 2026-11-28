@@ -1,7 +1,7 @@
 package download
 
 import (
-	domain "altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/domain"
 )
 
 var ErrLeaseLost = domain.ErrLeaseLost

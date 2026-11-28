@@ -2,9 +2,8 @@ package youtubemusic
 
 import (
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
@@ -12,8 +11,8 @@ import (
 )
 
 const (
-	SourceName  acqdomain.SourceName = "ytmusic"
-	identityKey                      = ports.ProviderYouTube
+	SourceName  domain.SourceName = "ytmusic"
+	identityKey                   = ports.ProviderYouTube
 )
 
 type audioFetcher interface {
@@ -35,14 +34,14 @@ func NewSource(fetcher audioFetcher, lookup videoLookup) *Source {
 	return &Source{fetcher: fetcher, lookup: lookup}
 }
 
-func (s *Source) Name() acqdomain.SourceName { return SourceName }
+func (s *Source) Name() domain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	videoID, fromCatalogPin := pinnedVideoID(req)
 	if videoID == "" {
 		return nil, nil
 	}
-	if !sourcekey.IsYouTubeVideoID(videoID) {
+	if !domain.IsYouTubeVideoID(videoID) {
 		slog.WarnContext(ctx, "acquisition.ytmusic_video_id_rejected",
 			"video_id", videoID, "title", req.Title)
 		return nil, nil
@@ -78,7 +77,7 @@ func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) po
 		Title:       observed.Title,
 		Artists:     observed.Artists,
 		Explicit:    observed.Explicit,
-		URL:         sourcekey.YouTubeMusicWatchURL(videoID),
+		URL:         domain.YouTubeMusicWatchURL(videoID),
 		Categories:  []string{"Music"},
 		Kind:        kind,
 		ObservedOMV: observed.Type == ytmsearch.VideoTypeOfficialVideo,

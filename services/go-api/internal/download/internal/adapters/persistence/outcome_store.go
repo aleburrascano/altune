@@ -1,7 +1,7 @@
 package persistence
 
 import (
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"context"
 	"fmt"
 	"time"

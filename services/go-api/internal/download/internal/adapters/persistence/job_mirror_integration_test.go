@@ -2,14 +2,15 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/persistence"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/dbtest"
-	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
 	"slices"
 	"testing"
 	"time"
+
+	sharedids "altune/go-api/internal/shared/ids"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

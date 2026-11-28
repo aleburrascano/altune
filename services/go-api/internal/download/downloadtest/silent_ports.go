@@ -1,7 +1,7 @@
 package downloadtest
 
 import (
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/songfields"
 	"context"

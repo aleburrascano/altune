@@ -3,8 +3,8 @@ package fakesources
 import (
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"bytes"
 	"context"
 	"fmt"
@@ -14,21 +14,21 @@ import (
 )
 
 const (
-	SourceName       acqdomain.SourceName = "fixture"
-	UploadSourceName acqdomain.SourceName = "fixture-upload"
-	ArtTrackURL                           = "https://fixture.invalid/art-track.mp3"
-	UploadURL                             = "https://fixture.invalid/upload.mp3"
-	uploadChannel                         = "Fixture Uploads"
-	unknownLength                         = 180
-	clipSeconds                           = 1.032
-	maxClipRepeats                        = 1200
-	fetchedName                           = "fixture.mp3"
+	SourceName       domain.SourceName = "fixture"
+	UploadSourceName domain.SourceName = "fixture-upload"
+	ArtTrackURL                        = "https://fixture.invalid/art-track.mp3"
+	UploadURL                          = "https://fixture.invalid/upload.mp3"
+	uploadChannel                      = "Fixture Uploads"
+	unknownLength                      = 180
+	clipSeconds                        = 1.032
+	maxClipRepeats                     = 1200
+	fetchedName                        = "fixture.mp3"
 )
 
 var _ ports.AudioSource = (*Source)(nil)
 
 type Source struct {
-	name acqdomain.SourceName
+	name domain.SourceName
 	emit func(ports.FindRequest) ports.AudioCandidate
 	clip []byte
 }
@@ -41,7 +41,7 @@ func NewUploadSource(clip []byte) *Source {
 	return &Source{name: UploadSourceName, emit: uploadCandidate, clip: clip}
 }
 
-func (s *Source) Name() acqdomain.SourceName { return s.name }
+func (s *Source) Name() domain.SourceName { return s.name }
 
 func (s *Source) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return []ports.AudioCandidate{s.emit(req)}, nil

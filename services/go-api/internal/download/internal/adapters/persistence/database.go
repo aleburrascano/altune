@@ -1,7 +1,7 @@
 package persistence
 
 import (
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 
 	"github.com/jackc/pgx/v5/pgxpool"

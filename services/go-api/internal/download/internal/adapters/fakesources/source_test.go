@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/fakesources"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"

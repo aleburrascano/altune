@@ -1,8 +1,8 @@
 package download
 
 import (
-	"altune/go-api/internal/download/internal/core/ports"
-	service "altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/service"
 )
 
 type (

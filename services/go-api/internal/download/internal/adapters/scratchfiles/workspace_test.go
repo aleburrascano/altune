@@ -2,7 +2,7 @@ package scratchfiles_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"

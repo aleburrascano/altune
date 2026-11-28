@@ -1,8 +1,8 @@
 package downloadtest
 
 import (
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 )
 
 type CandidateOption func(*ports.AudioCandidate)
@@ -44,7 +44,7 @@ func WithViewCount(views int64) CandidateOption {
 	return func(c *ports.AudioCandidate) { c.ViewCount = views }
 }
 
-func WithSource(source acqdomain.SourceName) CandidateOption {
+func WithSource(source domain.SourceName) CandidateOption {
 	return func(c *ports.AudioCandidate) { c.Source = source }
 }
 

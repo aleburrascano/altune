@@ -1,9 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/download/internal/core/audioquality"
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -57,7 +56,7 @@ ORDER BY array_position($7::text[], COALESCE(t.acquisition_evidence->>'grade', $
 LIMIT $1`
 
 func worstFirstGrades() []string {
-	grades := audioquality.WorstFirst()
+	grades := domain.WorstFirst()
 	names := make([]string, len(grades))
 	for i, g := range grades {
 		names[i] = string(g)
@@ -66,7 +65,7 @@ func worstFirstGrades() []string {
 }
 
 func settledGrades() []string {
-	grades := acqdomain.SettledGrades()
+	grades := domain.SettledGrades()
 	names := make([]string, len(grades))
 	for i, g := range grades {
 		names[i] = string(g)
@@ -86,7 +85,7 @@ func (s *PostgresUpgradeStore) Candidates(ctx context.Context, selection ports.U
 	rows, err := s.pool.Query(ctx, upgradeCandidatesSQL,
 		selection.Limit, selection.Generation, selection.RetryAfter.Seconds(), selection.MaxQueued, selection.CheckInPlace,
 		selection.LowBitrateFloorKbps, worstFirstGrades(),
-		ports.StatusWires(selection.Upgradable), string(audioquality.Ungraded), settledGrades(), string(audioquality.A), acqdomain.LowBitrateSourceFormatID)
+		ports.StatusWires(selection.Upgradable), string(domain.Ungraded), settledGrades(), string(domain.A), domain.LowBitrateSourceFormatID)
 	if err != nil {
 		return nil, fmt.Errorf("select upgrade candidates: %w", err)
 	}
@@ -234,7 +233,7 @@ func checkJobFence(ctx context.Context, tx pgx.Tx, trackID ids.TrackId, fence po
 		return fmt.Errorf("read job fence: %w", err)
 	}
 	if fence > 0 && current > 0 && current != int(fence) {
-		return fmt.Errorf("track %s claimed by attempt %d, caller holds %d: %w", trackID, current, fence, acqdomain.ErrLeaseLost)
+		return fmt.Errorf("track %s claimed by attempt %d, caller holds %d: %w", trackID, current, fence, domain.ErrLeaseLost)
 	}
 	return nil
 }

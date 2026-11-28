@@ -2,7 +2,7 @@ package ytmsearch_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"

@@ -5,9 +5,9 @@ import (
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/songfields"
 	"context"
 	"errors"
@@ -73,9 +73,9 @@ func (p *casePorts) sources() []*evalSource {
 	return sources
 }
 
-var flatTierOrder = []acqdomain.SourceName{ytmsearch.SourceName, youtubemusic.SourceName, savedlink.SourceName, ytdlp.SourceName}
+var flatTierOrder = []domain.SourceName{ytmsearch.SourceName, youtubemusic.SourceName, savedlink.SourceName, ytdlp.SourceName}
 
-func flatTierOf(c Candidate) acqdomain.SourceName {
+func flatTierOf(c Candidate) domain.SourceName {
 	switch ports.CandidateKind(c.Kind) {
 	case ports.KindArtTrack:
 		return ytmsearch.SourceName
@@ -124,12 +124,12 @@ type evalSource struct {
 	shared *casePorts
 }
 
-func (s *evalSource) Name() acqdomain.SourceName { return acqdomain.SourceName(s.spec.Name) }
+func (s *evalSource) Name() domain.SourceName { return domain.SourceName(s.spec.Name) }
 
 func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	s.shared.clock.recordSearch(req.Tier == ports.TierFallbackOnly, s.spec.searchSeconds())
 	if s.spec.Fails {
-		return nil, &acqdomain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
+		return nil, &domain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
 	}
 	if s.spec.recordsObservations() {
 		return s.recordedFind(ctx, req)

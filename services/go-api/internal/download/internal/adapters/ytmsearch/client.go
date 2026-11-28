@@ -1,7 +1,7 @@
 package ytmsearch
 
 import (
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"bytes"
@@ -104,7 +104,7 @@ func (c *Client) outage(ctx context.Context, err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = fmt.Errorf("ytmsearch: timed out after %v", c.timeout)
 	}
-	return &acqdomain.SourceUnavailableError{Source: SourceName, Err: err}
+	return &domain.SourceUnavailableError{Source: SourceName, Err: err}
 }
 
 func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {

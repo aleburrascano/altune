@@ -1,11 +1,11 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/persistence"
-	"altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/internal/contracttest"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -61,7 +61,7 @@ func TestPostgresCooldownStore_Contract(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	acquisitiontest.CooldownContract(t, func(*testing.T) acquisitiontest.CooldownUnderTest {
+	contracttest.CooldownContract(t, func(*testing.T) contracttest.CooldownUnderTest {
 		return contractPgxCooldowns{PostgresCooldownStore: persistence.NewPostgresCooldownStore(pool), pool: pool}
 	})
 }

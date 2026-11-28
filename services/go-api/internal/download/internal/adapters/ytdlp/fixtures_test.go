@@ -2,8 +2,8 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
-	"altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/polltest"

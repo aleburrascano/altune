@@ -1,7 +1,7 @@
 package downloadtest
 
-import contract "altune/go-api/internal/download/internal/adapters/acquisitiontest"
+import "altune/go-api/internal/download/internal/contracttest"
 
-type LedgerUnderTest = contract.LedgerUnderTest
+type LedgerUnderTest = contracttest.LedgerUnderTest
 
-var LedgerContract = contract.LedgerContract
+var LedgerContract = contracttest.LedgerContract

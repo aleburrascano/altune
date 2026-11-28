@@ -1,7 +1,7 @@
 package ytdlp
 
 import (
-	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/download/internal/domain"
 	"net/url"
 	"strings"
 )
@@ -18,10 +18,10 @@ func ytDlpURL(raw string) string {
 		return raw
 	}
 	id := youTubeWatchID(parsed)
-	if !sourcekey.IsYouTubeVideoID(id) {
+	if !domain.IsYouTubeVideoID(id) {
 		return raw
 	}
-	return sourcekey.YouTubeMusicWatchURL(id)
+	return domain.YouTubeMusicWatchURL(id)
 }
 
 func youTubeWatchID(u *url.URL) string {

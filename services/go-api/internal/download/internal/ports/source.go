@@ -1,0 +1,75 @@
+package ports
+
+import (
+	"altune/go-api/internal/download/internal/domain"
+	"context"
+	"errors"
+)
+
+type FindRequest struct {
+	Title    string
+	Artist   string
+	Album    string
+	ISRC     string
+	Duration float64
+	Identity RecordingIdentity
+
+	CatalogSources  []CatalogSource
+	CatalogExplicit *bool
+
+	KnownSourceURL string
+
+	Tier SourceTier
+}
+
+type SourceTier int
+
+const (
+	TierFirstThenFallback SourceTier = iota
+	TierFallbackOnly
+)
+
+func PrefersExplicit(catalogExplicit *bool) bool {
+	return catalogExplicit == nil || *catalogExplicit
+}
+
+type AudioSource interface {
+	Name() domain.SourceName
+
+	Find(ctx context.Context, req FindRequest) ([]AudioCandidate, error)
+
+	Fetch(ctx context.Context, candidate AudioCandidate, outDir string) (FetchedAudio, error)
+}
+
+type PreviewingSource interface {
+	AudioSource
+	PreviewFetcher
+}
+
+type FetchedAudio struct {
+	Path   string
+	Format SourceFormat
+}
+
+type SourceFormat struct {
+	ID    string
+	Codec string
+	Kbps  int
+}
+
+const MuxedFallbackFormatID = "18"
+
+func (f SourceFormat) IsLowBitrate(floorKbps int) bool {
+	if floorKbps <= 0 {
+		return false
+	}
+	return f.ID == MuxedFallbackFormatID || (f.Kbps > 0 && f.Kbps < floorKbps)
+}
+
+type PreviewFetcher interface {
+	FetchPreview(ctx context.Context, candidate AudioCandidate, outDir string, seconds int) (filePath string, err error)
+}
+
+func RunTimedOut(parent, run context.Context) bool {
+	return parent.Err() == nil && errors.Is(run.Err(), context.DeadlineExceeded)
+}

@@ -1,14 +1,14 @@
 package download
 
 import (
-	"altune/go-api/internal/download/internal/core/ports"
-	recordingresolver "altune/go-api/internal/download/service/musicbrainzmatch"
+	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/service"
 )
 
-type RecordingResolverPorts = recordingresolver.Ports
+type RecordingResolverPorts = service.ResolverPorts
 
 var (
-	NewRecordingResolver  = recordingresolver.New
+	NewRecordingResolver  = service.NewMusicBrainzResolver
 	NoopISRCLookup        = ports.NoopISRCLookup
 	NoopRerecordingLookup = ports.NoopRerecordingLookup
 )

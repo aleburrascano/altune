@@ -1,9 +1,8 @@
 package ytmsearch
 
 import (
-	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
@@ -11,7 +10,7 @@ import (
 	"math"
 )
 
-const SourceName acqdomain.SourceName = "ytmsearch"
+const SourceName domain.SourceName = "ytmsearch"
 
 const topResults = 5
 
@@ -34,7 +33,7 @@ func NewSource(search songSearch, downloader audioDownloader) *Source {
 	return &Source{search: search, downloader: downloader}
 }
 
-func (s *Source) Name() acqdomain.SourceName { return SourceName }
+func (s *Source) Name() domain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	if req.Title == "" || req.Artist == "" {
@@ -58,7 +57,7 @@ func CandidateFor(hit Song) ports.AudioCandidate {
 	return ports.AudioCandidate{
 		Title:    hit.Title,
 		Duration: float64(hit.DurationSeconds),
-		URL:      sourcekey.YouTubeMusicWatchURL(hit.VideoID),
+		URL:      domain.YouTubeMusicWatchURL(hit.VideoID),
 		Explicit: hit.Explicit,
 		Artists:  hit.Artists,
 		Album:    hit.Album,
@@ -78,7 +77,7 @@ func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {
 	var best Song
 	found := false
 	for _, song := range songs[:min(len(songs), topResults)] {
-		if !sourcekey.IsYouTubeVideoID(song.VideoID) || !matches(song, req) {
+		if !domain.IsYouTubeVideoID(song.VideoID) || !matches(song, req) {
 			continue
 		}
 		if !found || better(song, best, req) {
@@ -109,11 +108,11 @@ func lengthGap(song Song, savedLength float64) float64 {
 func matches(song Song, req ports.FindRequest) bool {
 	return song.Type == VideoTypeAudioOnly &&
 		comparableTitle(song.Title) == comparableTitle(req.Title) &&
-		acqdomain.Credits(song.Artists, req.Artist)
+		domain.Credits(song.Artists, req.Artist)
 }
 
-func CreditsArtist(artists []string, artist string) bool { return acqdomain.Credits(artists, artist) }
+func CreditsArtist(artists []string, artist string) bool { return domain.Credits(artists, artist) }
 
 func comparableTitle(title string) string {
-	return textnorm.NormalizeForIdentity(acqdomain.CreditBrackets.ReplaceAllString(title, ""))
+	return textnorm.NormalizeForIdentity(domain.CreditBrackets.ReplaceAllString(title, ""))
 }

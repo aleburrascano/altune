@@ -1,10 +1,10 @@
 package downloadtest
 
-import "altune/go-api/internal/download/internal/adapters/inmemoryledger"
+import "altune/go-api/internal/download/internal/adapters/memory"
 
 type (
-	Ledger      = inmemoryledger.Ledger
-	LedgerTrack = inmemoryledger.LedgerTrack
+	Ledger      = memory.Ledger
+	LedgerTrack = memory.LedgerTrack
 )
 
-var NewLedger = inmemoryledger.NewLedger
+var NewLedger = memory.NewLedger

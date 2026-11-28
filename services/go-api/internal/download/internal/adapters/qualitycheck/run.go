@@ -1,12 +1,11 @@
 package qualitycheck
 
 import (
-	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
+	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
-	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/download/service"
-	"altune/go-api/internal/download/service/musicbrainzmatch"
-	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -45,7 +44,7 @@ type Outcome struct {
 func Run(ctx context.Context, now clock.Func, newIDs ids.Source, kase Case) Outcome {
 	p := newCasePorts(kase)
 	track := seededTrack(newIDs, kase)
-	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
+	ledger := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: track})
 
 	var observed *service.AcquisitionContext
 	wiring := service.VerificationPorts{
@@ -153,7 +152,7 @@ func optional(s string) *string {
 func rejectedKeys(urls []string) []string {
 	var keys []string
 	for _, rawURL := range urls {
-		key := sourcekey.SourceKey(rawURL)
+		key := domain.SourceKey(rawURL)
 		if key != "" && !slices.Contains(keys, key) {
 			keys = append(keys, key)
 			keys = keys[max(0, len(keys)-maxRejectedSourceKeys):]
@@ -171,7 +170,7 @@ func resolverFor(kase Case) ports.RecordingResolver {
 	for _, rec := range res.ISRCRecordings {
 		isrcRecordings = append(isrcRecordings, ports.ISRCRecording{MBID: rec.MBID, Duration: float64(rec.Duration)})
 	}
-	return musicbrainzmatch.NewRecorded(searchHitsFor(res), isrcRecordings, pinnedFactsFor(res))
+	return service.NewRecordedResolver(searchHitsFor(res), isrcRecordings, pinnedFactsFor(res))
 }
 
 func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
@@ -357,7 +356,7 @@ type SavedTrack struct {
 
 const unreadableEvidence = "unreadable-evidence"
 
-func savedTrackOf(ledger *inmemoryledger.Ledger, id ids.TrackId) SavedTrack {
+func savedTrackOf(ledger *memory.Ledger, id ids.TrackId) SavedTrack {
 	saved, ok := ledger.Track(id)
 	if !ok {
 		return SavedTrack{}
