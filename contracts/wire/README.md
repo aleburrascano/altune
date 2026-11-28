@@ -24,10 +24,10 @@ A Go test must be named `TestWire_*` for the script to rewrite its fixture. Afte
 
 Go side, through `jsoncontract.AssertWire` (every key and JSON kind must match, and an unexpected key fails) and `AssertWireExact` (the whole content must match, for lists such as error codes, routes and stages):
 
-- the `wire_contract_test.go` and `*_wire_contract_test.go` files under `services/go-api/internal`, one set per module that has a wire shape. List them with `git grep -l AssertWire services/go-api`.
-- `services/go-api/internal/search/internal/adapters/handler/endpoint_limits_contract_test.go`, which reads `endpoint_limits.json` directly.
+- the `*wire*contract_test.go` files under `services/go-api/internal`, one set per module that has a wire shape. List them with `git grep -l AssertWire services/go-api`.
+- two tests that read one fixture directly with `os.ReadFile`, so `AssertWire` does not find them: `services/go-api/internal/search/internal/adapters/handler/endpoint_limits_contract_test.go` (`endpoint_limits.json`) and `TestEveryDeclaredEventTypeHasAWireFixture` in `services/go-api/internal/shared/events/event_type_test.go` (`events_types.json`).
 
-Client side, through `wireFixture(name)` in `client/jest/wireFixtures.ts`, which looks for `contracts/wire` in the parent folders of the test:
+Client side, through `wireFixture(name)` in `client/jest/wireFixtures.ts`, which walks up from its own folder (at most 12 levels) to find `contracts/wire`:
 
 - the `*Contract.test.ts` and `*.contract.test.ts` files under `client/src`. List them with `git grep -l wireFixture client/src`. Run them from `client/`:
 
