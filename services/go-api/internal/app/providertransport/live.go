@@ -9,7 +9,7 @@ import (
 )
 
 func New(metrics *telemetry.Registry) (http.RoundTripper, error) {
-	live, err := outbound.NewLiveTransport(search.ProviderRetryRecorder(metrics))
+	live, err := outbound.New(search.ProviderRetryRecorder(metrics))
 	if err != nil {
 		return nil, fmt.Errorf("provider transport: %w", err)
 	}

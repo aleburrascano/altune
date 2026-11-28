@@ -46,7 +46,7 @@ func newSources(t *testing.T) sources {
 	}
 	return sources{
 		Sources: livemetrics.Sources{
-			Latency:      requestmetrics.NewRegistry(),
+			Latency:      requestmetrics.New(),
 			PoolStats:    func() database.PoolStats { return database.PoolStats{} },
 			EventBus:     bus,
 			EventTap:     tap,
@@ -62,7 +62,7 @@ func newSources(t *testing.T) sources {
 func served(t *testing.T, s livemetrics.Sources) []byte {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.Live(s) }}).Register(r)
+	monitoring.New(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.Live(s) }}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))
 	if rec.Code != http.StatusOK {
@@ -90,7 +90,9 @@ func TestLive_CarriesEverySourceUnderItsOwnKey(t *testing.T) {
 			t.Errorf("live metrics missing key %q", key)
 		}
 	}
-	var l leader.Counters
+	var l struct {
+		Failures int64 `json:"acquire_failures_total"`
+	}
 	decode(t, out["leader"], &l)
 	if l.Failures != 7 {
 		t.Errorf("leader failures = %d, want 7", l.Failures)

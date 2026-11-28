@@ -377,6 +377,9 @@ if touches '^services/go-api/'; then
         if touches "^$m/(.*\.go|architecture\.json|migrations/.*\.sql)\$"; then
           check "go-api table owners: only the owning module writes a table, every written table has an owner (lintarch)" $m go run ./scripts/lintarch .
         fi
+        if touches "^$m/(.*\.go|README\.md|internal/.*/README\.md)\$"; then
+          check "go-api module shape: root, door, layers, file map, setters, globals, names and README line 1 (lintdoors --shape)" $m go run ./scripts/lintdoors --shape .
+        fi
         if touches "^$m/go\.(mod|sum)\$"; then
           check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
         fi
@@ -424,6 +427,7 @@ if touches '^services/go-api/'; then
       check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
       need go-arch-lint "go-api architecture" && check "go-api architecture: every module imports only what its role may (go-arch-lint, whole tree)" $m go-arch-lint check
       check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports, whole tree)" $m go run ./scripts/lintdoors --exports .
+      check "go-api module shape: root, door, layers, file map, setters, globals, names and README line 1 (lintdoors --shape, whole tree)" $m go run ./scripts/lintdoors --shape .
       check "go-api no inline duration literals: name each as a const or take it from config (lintdurations, whole tree)" $m go run ./scripts/lintdurations internal
       check "go-api no sleeping to wait in a test: wait on the event, a condition or a synctest bubble (lintsleeps, whole tree)" $m go run ./scripts/lintsleeps .
       check "go-api table owners: only the owning module writes a table, every written table has an owner (lintarch, whole tree)" $m go run ./scripts/lintarch .

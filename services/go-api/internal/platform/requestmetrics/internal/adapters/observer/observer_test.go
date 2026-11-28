@@ -2,7 +2,7 @@ package observer_test
 
 import (
 	"altune/go-api/internal/platform/requestmetrics/internal/adapters/observer"
-	"altune/go-api/internal/platform/requestmetrics/internal/domain"
+	"altune/go-api/internal/platform/requestmetrics/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
@@ -128,7 +128,7 @@ func capturingObserver(r *http.Request) (*http.Request, func(httpserver.Outcome)
 }
 
 func TestObserver_RecordingIntoTheRegistryAllocatesNothingBeyondTheMeasurement(t *testing.T) {
-	recording := routerWith(httpserver.ObserveRequests(clock.Now, observer.New(domain.New().Observe)), http.StatusOK)
+	recording := routerWith(httpserver.ObserveRequests(clock.Now, observer.New(service.New().Observe)), http.StatusOK)
 	measuringOnly := routerWith(httpserver.ObserveRequests(clock.Now, capturingObserver), http.StatusOK)
 	serveTrack(recording)
 

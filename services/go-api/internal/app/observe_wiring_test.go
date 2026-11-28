@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
-	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
@@ -321,7 +320,11 @@ func TestObserveLiveMetrics_CarriesTheLatencyTheAssembledRouterRecorded(t *testi
 		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Latency requestmetrics.Snapshot `json:"latency"`
+		Latency struct {
+			Routes map[string]struct {
+				Count uint64 `json:"count"`
+			} `json:"routes"`
+		} `json:"latency"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)

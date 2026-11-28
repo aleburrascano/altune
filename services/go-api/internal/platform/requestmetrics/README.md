@@ -2,9 +2,9 @@
 
 ## Must not
 
-- Serve a route: `app/livemetrics` serializes `Snapshot`, so the json tags on it are the `/observe/metrics/live` wire shape.
+- Serve a route or tag a type for JSON: `Snapshot` has no json tags, and `app/livemetrics` maps it to the `/observe/metrics/live` wire shape.
 - Keep a global registry: `app` creates the one `Registry` and passes it in.
 
 ## Shape
 
-The door is `requestmetrics.go`. Under `internal/`: `domain/` (the registry, its histogram bounds and the tagged snapshot) and `adapters/observer` (the `httpserver` hook that records a finished request). `requestmetricstest/` holds `RouteLatency` for the alert tests in `app`.
+The door is `requestmetrics.go`, with `New`. Under `internal/`: `service/` (the registry, its histogram bounds and the snapshot; the module has no business rules, so no `domain/`) and `adapters/observer` (the `httpserver` hook that records a finished request). `requestmetricstest/` holds `RouteLatency` for the alert tests in `app`.

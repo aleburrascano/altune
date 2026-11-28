@@ -1,6 +1,6 @@
 `outbound` owns which outbound addresses the backend may dial.
 
-`NewLiveTransport` retries only requests that are safe to send twice: GET, HEAD, OPTIONS, TRACE, PUT and DELETE. A POST is sent once unless its context went through `shared/retrysafe.Mark`, which a caller applies only to a POST that reads, such as a search or lookup.
+`New(onRetry)` builds the live transport (`NewLiveTransport` in `adapters/egress`). It retries only requests that are safe to send twice: GET, HEAD, OPTIONS, TRACE, PUT and DELETE. A POST is sent once unless its context went through `shared/retrysafe.Mark`, which a caller applies only to a POST that reads, such as a search or lookup.
 
 Three layers retry, and each handles a different class of failure, so none repeats another (ruling 2026-11-27):
 

@@ -1,5 +1,5 @@
 package requestmetricstest
 
-import "altune/go-api/internal/platform/requestmetrics/internal/domain"
+import "altune/go-api/internal/platform/requestmetrics/internal/service"
 
-type RouteLatency = domain.RouteLatency
+type RouteLatency = service.RouteLatency

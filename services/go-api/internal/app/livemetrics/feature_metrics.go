@@ -16,6 +16,6 @@ func FeatureMetrics(metrics *telemetry.Registry, latency *requestmetrics.Registr
 		"catalog":   library.ReadSnapshot(metrics),
 		"playback":  playback.ReadSnapshot(metrics),
 		"providers": search.ReadProviderMetricsSnapshot(metrics),
-		"latency":   latency.Snapshot(),
+		"latency":   latencyWire(latency.Snapshot()),
 	}
 }

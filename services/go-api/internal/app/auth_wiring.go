@@ -12,7 +12,7 @@ import (
 )
 
 func newAuthVerifier(ctx context.Context, cfg *config.Config, metrics *telemetry.Registry) (*auth.SupabaseJWTVerifier, error) {
-	r0, err := auth.NewSupabaseJWTVerifier(
+	r0, err := auth.New(
 		ctx,
 		cfg.SupabaseJWTJWKSURL,
 		cfg.SupabaseProjectURL,

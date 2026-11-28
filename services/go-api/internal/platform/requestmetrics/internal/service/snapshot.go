@@ -1,4 +1,4 @@
-package domain
+package service
 
 import (
 	"strconv"
@@ -6,25 +6,25 @@ import (
 )
 
 type BucketCount struct {
-	LeMs  string `json:"le_ms"`
-	Count uint64 `json:"count"`
+	LeMs  string
+	Count uint64
 }
 
 type StatusClasses struct {
-	Count2xx uint64 `json:"2xx"`
-	Count4xx uint64 `json:"4xx"`
-	Count5xx uint64 `json:"5xx"`
+	Count2xx uint64
+	Count4xx uint64
+	Count5xx uint64
 }
 
 type RouteLatency struct {
-	Count   uint64        `json:"count"`
-	SumMs   uint64        `json:"sum_ms"`
-	Buckets []BucketCount `json:"buckets"`
-	Status  StatusClasses `json:"status"`
+	Count   uint64
+	SumMs   uint64
+	Buckets []BucketCount
+	Status  StatusClasses
 }
 
 type Snapshot struct {
-	Routes map[string]RouteLatency `json:"routes"`
+	Routes map[string]RouteLatency
 }
 
 func (reg *Registry) Snapshot() Snapshot {

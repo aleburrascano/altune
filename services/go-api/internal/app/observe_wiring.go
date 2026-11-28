@@ -32,7 +32,7 @@ func (a *application) wireObserve(ctx context.Context, r *chi.Mux, verifier auth
 		Discography: monitoringfromsearch.NewDiscographyQualityReader(search.NewPostgresEventStore(a.pool, clock.Now)),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, a.metrics, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps))
+	mountObserve(r, verifier, a.metrics, a.cfg.OverseerPrincipalID, monitoring.New(clock.Now, clock.NewTicker, deps))
 	return nil
 }
 

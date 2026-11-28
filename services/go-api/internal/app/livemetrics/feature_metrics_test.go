@@ -17,7 +17,7 @@ import (
 )
 
 func TestFeatureMetrics_NamesEveryFeaturesSnapshot(t *testing.T) {
-	got := livemetrics.FeatureMetrics(telemetry.NewRegistry(), requestmetrics.NewRegistry())
+	got := livemetrics.FeatureMetrics(telemetry.NewRegistry(), requestmetrics.New())
 
 	for _, key := range []string{"auth", "catalog", "playback", "providers", "latency"} {
 		if got[key] == nil {
@@ -30,10 +30,10 @@ func TestFeatureMetrics_NamesEveryFeaturesSnapshot(t *testing.T) {
 }
 
 func TestContract_MetricsLiveMatchesFixture(t *testing.T) {
-	latency := requestmetrics.NewRegistry()
+	latency := requestmetrics.New()
 	latency.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.FeatureMetrics(telemetry.NewRegistry(), latency) }}).Register(r)
+	monitoring.New(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.FeatureMetrics(telemetry.NewRegistry(), latency) }}).Register(r)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))

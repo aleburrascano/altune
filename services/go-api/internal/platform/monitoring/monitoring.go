@@ -14,6 +14,7 @@ import (
 
 type (
 	Alert                    = domain.Alert
+	AlertStatus              = service.AlertStatus
 	Condition                = domain.Condition
 	AcquisitionJob           = ports.AcquisitionJob
 	AcquisitionReader        = ports.AcquisitionReader
@@ -56,10 +57,13 @@ var (
 	NewEvalMeter                = service.NewEvalMeter
 	NewEventFeed                = service.NewEventFeed
 	NewEventTap                 = service.NewEventTap
-	NewObserveHandler           = handler.NewObserveHandler
 	NewPostgresClientEventStore = persistence.NewPostgresClientEventStore
 	NewWebhookNotifier          = notifier.NewWebhookNotifier
 )
+
+func New(now clock.Func, newTicker clock.TickerFunc, d Deps) *Handler {
+	return handler.NewObserveHandler(now, newTicker, d)
+}
 
 func NewClientEventRoutes(store ClientEventStore, sink handler.ClientEventSink, now clock.Func) (http.Handler, error) {
 	recorder, err := service.NewRecorder(store, now)

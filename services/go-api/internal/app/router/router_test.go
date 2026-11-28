@@ -41,7 +41,7 @@ func newRouter(s router.Settings) *chi.Mux {
 	if s.WriteTimeout == 0 {
 		s.WriteTimeout = productionWriteTimeout
 	}
-	s.Latency = requestmetrics.NewRegistry()
+	s.Latency = requestmetrics.New()
 	return router.New(s)
 }
 
@@ -382,7 +382,7 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 	previous := otel.GetTracerProvider()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
 	t.Cleanup(func() { otel.SetTracerProvider(previous) })
-	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: requestmetrics.NewRegistry()})
+	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: requestmetrics.New()})
 	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
 	r.Get("/health", ok)
 	router.MountV1(r, time.Minute, router.V1{
@@ -420,7 +420,7 @@ func TestRouter_TheRequestCompleteLineCarriesTheTraceIdOfTracedRoutesOnly(t *tes
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
 	t.Cleanup(func() { otel.SetTracerProvider(previous) })
 	logs := logging.CaptureJSON(t, slog.LevelInfo)
-	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: requestmetrics.NewRegistry()})
+	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: requestmetrics.New()})
 	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
 	router.MountV1(r, time.Minute, router.V1{
 		Bounded:   func(r chi.Router) { r.Get("/library", ok) },
@@ -452,7 +452,7 @@ func TestRouter_TheRequestCompleteLineCarriesTheTraceIdOfTracedRoutesOnly(t *tes
 }
 
 func TestRouter_RecordsEachRequestsLatencyByRouteAndStatusClass(t *testing.T) {
-	latency := requestmetrics.NewRegistry()
+	latency := requestmetrics.New()
 	r := router.New(router.Settings{WriteTimeout: time.Minute, Latency: latency})
 	const route = "/v1/latency-probe/{status}"
 	r.Get(route, func(w http.ResponseWriter, req *http.Request) {

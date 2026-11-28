@@ -18,6 +18,25 @@ type tapEventDTO struct {
 	CorrID    string    `json:"corr_id,omitempty"`
 }
 
+type evalQueryDTO struct {
+	Query    string `json:"query"`
+	Expect   string `json:"expect"`
+	Passed   bool   `json:"passed"`
+	Position int    `json:"position"`
+}
+
+type evalStatusDTO struct {
+	Enabled  bool           `json:"enabled"`
+	Paused   bool           `json:"paused"`
+	State    string         `json:"state"`
+	Score    *float64       `json:"score,omitempty"`
+	Baseline *float64       `json:"baseline,omitempty"`
+	Errored  int            `json:"errored,omitempty"`
+	LastRun  *time.Time     `json:"last_run,omitempty"`
+	Error    string         `json:"error,omitempty"`
+	Queries  []evalQueryDTO `json:"queries,omitempty"`
+}
+
 type acquisitionToolsDTO struct {
 	Ffprobe bool `json:"ffprobe"`
 	Ffmpeg  bool `json:"ffmpeg"`
