@@ -12,9 +12,10 @@ import {
   TrackSelectionOverlay,
 } from '@features/library';
 import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const PLAYLISTS = 'GET /v1/playlists';
 const ADD_TO_P1 = 'POST /v1/playlists/p1/tracks/batch';
 

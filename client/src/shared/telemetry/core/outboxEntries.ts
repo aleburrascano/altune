@@ -1,18 +1,18 @@
-import type { DiscoveryEvent } from '@shared/telemetry/core/discoveryEvent';
+import type { ClientEvent, ClientEventType } from '@shared/telemetry/core/operationalEvent';
 
-export type OutboxEntry = DiscoveryEvent & {
+export type OutboxEntry = ClientEvent & {
   event_id: string;
   client_occurred_at: string;
   owner_user_id?: string;
 };
 
-const DIAGNOSTIC_TYPES: ReadonlySet<DiscoveryEvent['type']> = new Set([
+const DIAGNOSTIC_TYPES: ReadonlySet<ClientEventType> = new Set<ClientEventType>([
   'acquisition_ui',
   'client_error',
 ]);
 
 export function withEnvelope(
-  event: DiscoveryEvent,
+  event: ClientEvent,
   eventId: string,
   clientOccurredAt: string,
 ): OutboxEntry {

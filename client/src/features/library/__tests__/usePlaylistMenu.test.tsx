@@ -21,11 +21,12 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { PlaylistsPortProvider } from '@shared/playlists';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
 const DELETE_ROUTE = 'DELETE /v1/playlists/pl1';
-const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
+const TELEMETRY_ROUTE = EVENT_ROUTES;
 const HTTP_NO_CONTENT = 204;
 const HTTP_ACCEPTED = 202;
 

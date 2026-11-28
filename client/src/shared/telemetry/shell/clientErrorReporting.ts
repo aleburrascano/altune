@@ -1,6 +1,7 @@
 import { correlationIdOf } from '@shared/failure';
 
-import type { DiscoveryEvent, EventPayload } from '@shared/telemetry/core/discoveryEvent';
+import type { EventPayload } from '@shared/telemetry/core/discoveryEvent';
+import type { ClientEvent } from '@shared/telemetry/core/operationalEvent';
 import type { TelemetryClock } from '@shared/telemetry/ports/telemetry';
 
 const MAX_MESSAGE_LENGTH = 500;
@@ -19,7 +20,7 @@ export type ChainUnhandledRejections = (onRejection: (reason: unknown) => void) 
 type ClientErrorReporterDeps = {
   clock: TelemetryClock;
   appVersion: () => string;
-  enqueueCritical: (event: DiscoveryEvent) => Promise<void>;
+  enqueueCritical: (event: ClientEvent) => Promise<void>;
 };
 
 type ClientErrorPayload = EventPayload;

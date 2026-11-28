@@ -12,6 +12,7 @@ import {
   retryFailureOutcome,
 } from '@shared/acquisition';
 import { flushPromises } from '@testing/flushPromises';
+import { isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -20,6 +21,7 @@ const TWO_MESSAGES = 2;
 
 interface SentEvent {
   type: string;
+  correlation_id?: string;
   payload: Record<string, unknown>;
 }
 
@@ -30,7 +32,7 @@ interface HttpRequest {
 
 function sentEvents(): SentEvent[] {
   return (__http.requests as HttpRequest[])
-    .filter((request) => request.path === '/v1/discovery/events')
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as SentEvent);
 }
 
@@ -45,7 +47,9 @@ async function lastPayload(): Promise<Record<string, unknown>> {
   if (last === undefined) throw new Error('no event was delivered');
   const payload = { ...last.payload };
   delete payload.session_id;
-  return payload;
+  return last.correlation_id === undefined
+    ? payload
+    : { ...payload, correlation_id: last.correlation_id };
 }
 
 beforeEach(async () => {

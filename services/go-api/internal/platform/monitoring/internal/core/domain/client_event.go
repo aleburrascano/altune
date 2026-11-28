@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 	"unicode/utf8"
 )
@@ -37,6 +38,15 @@ var clientEventTypes = map[string]ClientEventType{
 	string(ClientEventDownloadFailed):    ClientEventDownloadFailed,
 	string(ClientEventScreenView):        ClientEventScreenView,
 	string(ClientEventPlayStart):         ClientEventPlayStart,
+}
+
+func ClientEventTypeNames() []string {
+	names := make([]string, 0, len(clientEventTypes))
+	for name := range clientEventTypes {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func ParseClientEventType(s string) (ClientEventType, bool) {

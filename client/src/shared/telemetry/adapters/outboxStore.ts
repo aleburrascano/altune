@@ -7,14 +7,14 @@ import {
   type SchemaSpec,
   type StoredDirectory,
 } from '@shared/files';
-import type { DiscoveryEventType } from '@shared/telemetry/core/discoveryEvent';
+import type { ClientEventType } from '@shared/telemetry/core/operationalEvent';
 import type { OutboxEntry } from '@shared/telemetry/core/outboxEntries';
 import type { OutboxStore, TelemetryLog } from '@shared/telemetry/ports/telemetry';
 
 const OUTBOX_DIR = 'telemetry';
 const OUTBOX_FILE = 'critical-outbox.json';
 
-const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
+const CLIENT_EVENT_TYPES: Record<ClientEventType, true> = {
   results_shown: true,
   result_clicked: true,
   play: true,
@@ -37,14 +37,14 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
   play_start: true,
 };
 
-function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {
-  return typeof value === 'string' && Object.hasOwn(DISCOVERY_EVENT_TYPES, value);
+function isClientEventType(value: unknown): value is ClientEventType {
+  return typeof value === 'string' && Object.hasOwn(CLIENT_EVENT_TYPES, value);
 }
 
 function isPersistedEntry(e: unknown): e is OutboxEntry {
   if (typeof e !== 'object' || e === null) return false;
   const record = e as Record<string, unknown>;
-  if (!isDiscoveryEventType(record['type'])) return false;
+  if (!isClientEventType(record['type'])) return false;
   if (typeof record['event_id'] !== 'string' || record['event_id'].length === 0) return false;
   if (record['owner_user_id'] !== undefined && typeof record['owner_user_id'] !== 'string') {
     return false;

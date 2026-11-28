@@ -41,6 +41,7 @@ import {
 import { appAuthParts, createAuthClient } from '@/mobile/authClient';
 import { appAuthConfig } from '@testing/appAuthConfig';
 import { scriptedAuth, type ScriptedAuth, type SignOutOutcome } from '@testing/scriptedAuth';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 const secureStore = require('expo-secure-store') as typeof import('expo-secure-store') & {
@@ -51,7 +52,7 @@ const { __fs: outboxFs } = require('expo-file-system') as { __fs: never };
 const USER_A = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } as Session['user'];
 const USER_B = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } as Session['user'];
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 
 function sessionFor(user: Session['user'], token: string = `token-${user.id}`): Session {
   return {
@@ -409,7 +410,7 @@ describe('acquisition and telemetry state across an account switch', () => {
         body: unknown;
       }[]
     )
-      .filter((r) => `${r.method} ${r.path}` === EVENTS)
+      .filter((r) => EVENTS.includes(`${r.method} ${r.path}`))
       .map((r) => ({
         token: r.headers['Authorization']?.replace('Bearer ', ''),
         body: JSON.parse(String(r.body)) as Record<string, unknown>,

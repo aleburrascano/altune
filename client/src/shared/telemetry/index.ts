@@ -25,6 +25,12 @@ export type {
   DiscoveryEvent,
   DiscoveryEventType,
 } from '@shared/telemetry/core/discoveryEvent';
+export type {
+  ClientEvent,
+  ClientEventType,
+  OperationalEvent,
+  OperationalEventType,
+} from '@shared/telemetry/core/operationalEvent';
 export type { UserActionPayload } from '@shared/telemetry/shell/userTelemetry';
 export type { OutboxEntry } from '@shared/telemetry/core/outboxEntries';
 export { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/core/outboxEntries';

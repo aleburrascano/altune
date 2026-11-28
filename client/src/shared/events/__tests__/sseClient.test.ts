@@ -3,6 +3,7 @@ import type { ServerEvent, StreamIO, StreamRequest } from '@shared/events';
 import { clearSessionExpired, getSessionExpired, renewSessionCredentials } from '@shared/auth';
 
 import { signInTestUser } from '@testing/signInTestUser';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -18,7 +19,6 @@ const TOO_MANY_REQUESTS = 429;
 const PAST_SECOND_BACKOFF_MS = 10_000;
 const PAST_WATCHDOG_MS = 120_000;
 const MAX_RESPONSE_BYTES = 524_288;
-const EVENTS_PATH = '/v1/discovery/events';
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const MIDDLE_JITTER = 0.5;
 const NEAR_FULL_JITTER = 0.99;
@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 function reconnectEventsSent(): number {
-  return __http.requests.filter((r: SentRequest) => r.path === EVENTS_PATH).length;
+  return __http.requests.filter((r: SentRequest) => isEventPath(r.path)).length;
 }
 
 type Handler = () => void;
@@ -1242,7 +1242,7 @@ describe('SSEClient reconnect telemetry', () => {
     FakeXHR.instances = [];
     jest.useFakeTimers();
     await signInTestUser();
-    __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
   });
 
   afterEach(() => {
@@ -1270,7 +1270,7 @@ describe('SSEClient reconnect telemetry', () => {
   });
 
   it('swallows a failed telemetry send so the reconnect still happens', async () => {
-    __http.fail(`POST ${EVENTS_PATH}`, __http.transportError());
+    __http.fail(EVENT_ROUTES, __http.transportError());
     const { client } = makeClient();
     await client.connect();
 

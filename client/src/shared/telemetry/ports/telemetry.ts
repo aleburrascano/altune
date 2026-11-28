@@ -1,4 +1,4 @@
-import type { DiscoveryEvent } from '@shared/telemetry/core/discoveryEvent';
+import type { ClientEvent } from '@shared/telemetry/core/operationalEvent';
 import type { OutboxEntry } from '@shared/telemetry/core/outboxEntries';
 
 export interface TelemetryClock {
@@ -8,7 +8,7 @@ export interface TelemetryClock {
   newId: () => string;
 }
 
-export type SendEvent = (event: DiscoveryEvent) => Promise<void>;
+export type SendEvent = (event: ClientEvent) => Promise<void>;
 
 export interface OutboxStore {
   load: () => OutboxEntry[];

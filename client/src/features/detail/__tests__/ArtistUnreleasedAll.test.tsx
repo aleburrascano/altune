@@ -11,11 +11,12 @@ import {
 
 import { handoffFor } from '@features/detail/__tests__/screenHandoff';
 import { recordingNavigator } from '@features/detail/__tests__/recordingNavigator';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
 const UNRELEASED = 'GET /v1/discovery/artists/spotify/artist-1/unreleased';
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const TRACK_COUNT = 25;
 const GENIUS_ID_BASE = 9000;
 const OFF_STREAMING_ID = 9101;
@@ -69,7 +70,7 @@ function shownTitles(): string[] {
 
 function recordedActions(): unknown[] {
   return (__http.requests as { path: string; body: string }[])
-    .filter((request) => request.path === '/v1/discovery/events')
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body))
     .filter((event) => event.type === 'user_action')
     .map((event) => event.payload.action);

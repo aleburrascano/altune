@@ -36,6 +36,7 @@ import {
   type DownloadedFile,
 } from '@testing/fakes/files/expoFileSystemDouble';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const __fs = fileSystemDouble;
 
@@ -825,7 +826,7 @@ describe('a download left unfinished by a killed app', () => {
 describe('prefetch health tally', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
   const { __http } = require('@testing/doubles/fetch.js');
-  const HEALTH_ROUTE = 'POST /v1/discovery/events';
+  const HEALTH_ROUTE = EVENT_ROUTES;
   const HTTP_ACCEPTED = 202;
 
   async function tally(): Promise<Record<string, number>> {

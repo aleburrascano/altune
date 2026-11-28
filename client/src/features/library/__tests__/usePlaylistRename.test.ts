@@ -9,13 +9,14 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { usePlaylistRename } from '@features/library';
 import { PlaylistsPortProvider } from '@shared/playlists';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
 const PLAYLIST_ID = asPlaylistId('pl1');
 const CURRENT_NAME = 'Old';
 const RENAME_ROUTE = 'PATCH /v1/playlists/pl1';
-const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
+const TELEMETRY_ROUTE = EVENT_ROUTES;
 const HTTP_OK = 200;
 const HTTP_ACCEPTED = 202;
 

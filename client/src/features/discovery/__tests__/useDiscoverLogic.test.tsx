@@ -17,14 +17,14 @@ import { signInTestUser } from '@testing/signInTestUser';
 import type { DiscoverPort } from '@features/discovery';
 import type { DiscoverySearchResponse } from '@shared/catalog';
 import { discoverEnv, type TestEnv } from '@features/discovery/__tests__/discoverEnv';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
 let fake: TestEnv;
 
 const CLEAR_HISTORY = 'DELETE /v1/discovery/search-history';
-const EVENTS = 'POST /v1/discovery/events';
-const EVENTS_PATH = '/v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const BAD_REQUEST = 400;
 const SERVER_ERROR = 500;
 const TWO_SEARCHES = 2;
@@ -266,7 +266,7 @@ describe('useDiscoverLogic recovers from failures', () => {
 
   function clearFailureEvents() {
     return (__http.requests as { path: string; body: string }[])
-      .filter((request) => request.path === EVENTS_PATH)
+      .filter((request) => isEventPath(request.path))
       .map((request) => JSON.parse(request.body) as { payload?: { source?: string } })
       .filter((event) => event.payload?.source === 'clear_history');
   }

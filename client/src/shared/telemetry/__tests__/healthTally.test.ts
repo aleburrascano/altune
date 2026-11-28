@@ -6,10 +6,11 @@ import {
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 const SETTLE_TICKS = 5;
 
@@ -36,7 +37,7 @@ type SentEvent = { type: string; payload: Record<string, unknown> };
 async function sentEvents(): Promise<SentEvent[]> {
   await settle();
   return (__http.requests as { path: string; method: string; body: string }[])
-    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .filter((request) => request.method === 'POST' && isEventPath(request.path))
     .map((request) => {
       const event = JSON.parse(request.body) as {
         type: string;

@@ -19,8 +19,9 @@ import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlayb
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
-const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HEALTH_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 
 const leaky = () =>

@@ -11,10 +11,11 @@ import {
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const SEARCH = 'GET /v1/discovery/search';
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 
 type SentRequest = { path: string; query: string };
 

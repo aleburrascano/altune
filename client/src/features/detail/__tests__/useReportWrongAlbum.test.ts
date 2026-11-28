@@ -6,14 +6,15 @@ import { DetailHandoffProvider, useReportWrongAlbum } from '@features/detail';
 import type { DiscoveryResult } from '@shared/catalog';
 import { signInTestUser } from '@testing/queryHarness';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 
 function postedEvents(): Record<string, unknown>[] {
   return (__http.requests as { method: string; path: string; body: string }[])
-    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .filter((request) => request.method === 'POST' && isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as Record<string, unknown>);
 }
 

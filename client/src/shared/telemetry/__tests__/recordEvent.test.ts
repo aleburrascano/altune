@@ -9,6 +9,7 @@ import {
   type DiscoveryEvent,
   getSessionId,
 } from '@shared/telemetry';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
 function sentBody(): DiscoveryEvent {
@@ -25,7 +26,7 @@ afterEach(() => {
 
 describe('recordEvent(): payload merge with the stamped session_id', () => {
   it('stamps session_id alone when payload is absent', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     await recordEvent({ type: 'play' });
 
@@ -33,7 +34,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
   });
 
   it('stamps session_id alone when payload is explicitly undefined', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     const event = { type: 'play', payload: undefined } as unknown as DiscoveryEvent;
 
@@ -43,7 +44,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
   });
 
   it('stamps session_id alone when payload is null', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const event = { type: 'play', payload: null } as unknown as DiscoveryEvent;
 
     await recordEvent(event);
@@ -52,7 +53,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
   });
 
   it('stamps session_id alone when payload is an empty object', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     await recordEvent({ type: 'play', payload: {} });
 
@@ -60,7 +61,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
   });
 
   it('adds session_id to a populated payload without dropping the caller keys', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     await recordEvent({ type: 'play', payload: { video_id: 'abc', dwell_ms: 1500 } });
 
@@ -72,7 +73,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
   });
 
   it('the stamped session_id wins over a caller-supplied session_id in payload', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     await recordEvent({ type: 'play', payload: { session_id: 'caller-supplied' } });
 
@@ -82,7 +83,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
 
 describe('recordEvent(): public interface — InteractionEvent submission', () => {
   it('POSTs to /v1/discovery/events with JSON content-type and the authenticated bearer token', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     await recordEvent({ type: 'skip' });
 
@@ -94,7 +95,7 @@ describe('recordEvent(): public interface — InteractionEvent submission', () =
   });
 
   it('passes type, search_id, event_id and client_occurred_at through unchanged', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     await recordEvent({
       type: 'result_clicked',
@@ -112,7 +113,7 @@ describe('recordEvent(): public interface — InteractionEvent submission', () =
   });
 
   it('resolves with no value on success, as its Promise<void> contract promises', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     await expect(recordEvent({ type: 'completed' })).resolves.toBeUndefined();
   });
@@ -120,26 +121,26 @@ describe('recordEvent(): public interface — InteractionEvent submission', () =
 
 describe('recordEvent(): adversarial server responses', () => {
   it('rejects with ApiError(400) on a rejected/malformed event', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 400, json: { message: 'bad request' } });
+    __http.reply(EVENT_ROUTES, { status: 400, json: { message: 'bad request' } });
 
     await expect(recordEvent({ type: 'play' })).rejects.toBeInstanceOf(ApiError);
     await expect(recordEvent({ type: 'play' })).rejects.toMatchObject({ status: 400 });
   });
 
   it('rejects with ApiError(401) on a server-side session rejection (expired/replayed token)', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 401, json: { message: 'revoked' } });
+    __http.reply(EVENT_ROUTES, { status: 401, json: { message: 'revoked' } });
 
     await expect(recordEvent({ type: 'play' })).rejects.toMatchObject({ status: 401 });
   });
 
   it('rejects with ApiError(500) on a backend fault', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 500, json: { message: 'boom' } });
+    __http.reply(EVENT_ROUTES, { status: 500, json: { message: 'boom' } });
 
     await expect(recordEvent({ type: 'play' })).rejects.toMatchObject({ status: 500 });
   });
 
   it('rejects with NetworkError(transport) on a malformed/truncated 200 body', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 200, malformed: true });
+    __http.reply(EVENT_ROUTES, { status: 200, malformed: true });
 
     await expect(recordEvent({ type: 'play' })).rejects.toBeInstanceOf(NetworkError);
     await expect(recordEvent({ type: 'play' })).rejects.toMatchObject({ failure: 'transport' });
@@ -147,7 +148,7 @@ describe('recordEvent(): adversarial server responses', () => {
 
   it('rejects with NetworkError(timeout) when the request hangs past the 15s deadline', async () => {
     jest.useFakeTimers();
-    __http.hang('POST /v1/discovery/events');
+    __http.hang(EVENT_ROUTES);
 
     const pending = recordEvent({ type: 'play' });
     const caught = pending.catch((e: Error) => e);
@@ -161,7 +162,7 @@ describe('recordEvent(): adversarial server responses', () => {
   });
 
   it('rejects with NetworkError(transport) on a raw transport failure', async () => {
-    __http.fail('POST /v1/discovery/events', __http.transportError());
+    __http.fail(EVENT_ROUTES, __http.transportError());
 
     await expect(recordEvent({ type: 'play' })).rejects.toBeInstanceOf(NetworkError);
     await expect(recordEvent({ type: 'play' })).rejects.toMatchObject({ failure: 'transport' });

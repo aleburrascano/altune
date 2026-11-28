@@ -18,8 +18,9 @@ import {
 } from '@features/player';
 import { libraryTrack } from '@features/player/__tests__/fixtures';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
-const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HEALTH_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 
 const FAILED_KEY = trackKey(libraryTrack());

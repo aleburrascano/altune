@@ -1,3 +1,4 @@
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { getConfig } = require('@testing-library/react-native/build/config');
 
 const { __http } = require('../doubles/fetch.js');
@@ -23,14 +24,14 @@ describe('setup-after-env', () => {
     const { enqueueCritical } = require('../../src/shared/telemetry');
 
     beforeAll(async () => {
-      __http.fail('POST /v1/discovery/events');
+      __http.fail(EVENT_ROUTES);
       await enqueueCritical({ type: 'user_action' });
     });
 
     it('starts the next test with no backoff suppressing the flush', async () => {
-      __http.reply('POST /v1/discovery/events', { status: 204 });
+      __http.reply(EVENT_ROUTES, { status: 204 });
       await enqueueCritical({ type: 'user_action' });
-      expect(__http.countFor('POST /v1/discovery/events')).toBe(1);
+      expect(__http.countFor(EVENT_ROUTES)).toBe(1);
     });
   });
 

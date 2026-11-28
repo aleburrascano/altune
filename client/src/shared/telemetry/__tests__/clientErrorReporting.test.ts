@@ -4,6 +4,7 @@ import { ApiError } from '@shared/failure';
 import { createAppTelemetry, type Telemetry } from '@shared/telemetry';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { flushPromises } from '@testing/flushPromises';
+import { isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -31,11 +32,15 @@ function installGlobalErrorReporting(
   telemetry.installGlobalErrorReporting(chain, rejections);
 }
 
-type DeliveredEvent = { type: string; payload: Record<string, unknown> };
+type DeliveredEvent = {
+  type: string;
+  correlation_id?: string;
+  payload: Record<string, unknown>;
+};
 
 function delivered(): DeliveredEvent[] {
   return (__http.requests as { method: string; path: string; body: string }[])
-    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .filter((request) => request.method === 'POST' && isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as DeliveredEvent)
     .filter((event) => event.type === 'client_error');
 }
@@ -123,14 +128,15 @@ describe('reportClientError', () => {
     );
 
     await settle();
-    expect(lastPayload()['correlation_id']).toBe('abc123');
+    expect(delivered().at(-1)?.correlation_id).toBe('abc123');
+    expect('correlation_id' in lastPayload()).toBe(false);
   });
 
   it('leaves correlation_id out when the error has none', async () => {
     reportClientError(new Error('boom'), 'uncaught');
 
     await settle();
-    expect('correlation_id' in lastPayload()).toBe(false);
+    expect(delivered().at(-1)).not.toHaveProperty('correlation_id');
   });
 
   it('carries the configured app version', async () => {

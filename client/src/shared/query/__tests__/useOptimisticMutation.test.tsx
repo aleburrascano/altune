@@ -9,16 +9,15 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import { useOptimisticMutation } from '@shared/query';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-const EVENTS_PATH = '/v1/discovery/events';
 
 type SentRequest = { path: string; body: string };
 
 beforeEach(async () => {
   await signInTestUser();
-  __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });
+  __http.reply(EVENT_ROUTES, { status: 202 });
 });
 
 type Counter = { count: number };
@@ -442,7 +441,7 @@ describe('useOptimisticMutation(): failure_shown surface', () => {
       await flushPromises();
     });
     const failureShown = (__http.requests as SentRequest[])
-      .filter((request) => request.path === EVENTS_PATH)
+      .filter((request) => isEventPath(request.path))
       .map((request) => JSON.parse(request.body) as { type: string; payload: object })
       .filter((event) => event.type === 'failure_shown');
     expect(failureShown).toHaveLength(1);

@@ -25,6 +25,7 @@ import { runSignOutCleanups } from '@shared/session';
 import { flushOutbox } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
 import { flushPromises } from '@testing/flushPromises';
+import { isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -43,7 +44,7 @@ async function delivered(): Promise<SentEvent[]> {
   await flushOutbox();
   await flushPromises();
   return (__http.requests as HttpRequest[])
-    .filter((request) => request.path === '/v1/discovery/events')
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as SentEvent);
 }
 

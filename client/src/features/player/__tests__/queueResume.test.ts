@@ -17,6 +17,7 @@ import {
   resolveResumeStartIndex,
   showSavedTrackWhileRehydrating,
 } from '@features/player';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 describe('currentTrackId — resolving the saved cursor to an id', () => {
   it('returns the id at the saved index when it is in range', () => {
     expect(currentTrackId(['a', 'b', 'c'], 1)).toBe('b');
@@ -200,7 +201,7 @@ describe('isSavedCurrentResumable — the resolveResumeStartIndex found flag', (
 });
 
 const { __http } = require('@testing/doubles/fetch.js');
-const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HEALTH_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 
 const INITIAL_STATE = useQueueStore.getState();

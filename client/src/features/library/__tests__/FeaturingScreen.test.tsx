@@ -23,10 +23,11 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
 import { apiClientAcquisitionPort } from '@testing/apiClientPorts';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();

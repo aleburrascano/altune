@@ -9,11 +9,11 @@ import { signInTestUser } from '@testing/signInTestUser';
 import type { ViewToken } from 'react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
-const EVENTS_PATH = '/v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const TWO_EVENTS = 2;
 
 interface RecordedRequest {
@@ -29,7 +29,7 @@ interface RecordedEvent {
 
 function sentEvents(): RecordedEvent[] {
   return (__http.requests as RecordedRequest[])
-    .filter((request) => request.path === EVENTS_PATH)
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as RecordedEvent);
 }
 

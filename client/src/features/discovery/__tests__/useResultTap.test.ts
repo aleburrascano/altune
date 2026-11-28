@@ -9,11 +9,11 @@ import { runSignOutCleanups } from '@shared/session';
 import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
-const EVENTS_PATH = '/v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const TWO_EVENTS = 2;
 const TWO_PUSHES = 2;
 const TOP_RESULT_RANK = 2;
@@ -31,7 +31,7 @@ interface RecordedEvent {
 
 function sentEvents(): RecordedEvent[] {
   return (__http.requests as RecordedRequest[])
-    .filter((request) => request.path === EVENTS_PATH)
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as RecordedEvent);
 }
 

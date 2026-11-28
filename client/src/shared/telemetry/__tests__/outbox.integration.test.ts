@@ -2,6 +2,7 @@ import { createAppTelemetry, type DiscoveryEvent, type OutboxEntry } from '@shar
 import { driveAppState } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { signInTestUser } from '@testing/signInTestUser';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -16,7 +17,7 @@ interface FakeFsDouble {
 }
 
 const OUTBOX_URI = 'file:///document/telemetry/critical-outbox.json';
-const EVENTS_PATH = 'POST /v1/discovery/events';
+const EVENTS_PATH = EVENT_ROUTES;
 
 function currentFs(): FakeFsDouble {
   return (require('expo-file-system') as { __fs: FakeFsDouble }).__fs;
@@ -56,7 +57,7 @@ function readOutboxFile(): OutboxEntry[] | undefined {
 function deliveryRequests(): { body: unknown }[] {
   return (__http.requests as { path: string; body: unknown }[]).filter(
     (request) =>
-      request.path !== '/v1/discovery/events' ||
+      !isEventPath(request.path) ||
       (JSON.parse(String(request.body)) as OutboxEntry).type !== 'outbox_flush_failed',
   );
 }

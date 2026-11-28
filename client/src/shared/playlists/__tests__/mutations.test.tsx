@@ -31,6 +31,7 @@ import { ObservedQueryClient } from '@testing/observedQueryClient';
 import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { signInTestUser } from '@testing/signInTestUser';
 import { runSignOutCleanups } from '@shared/session';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -40,7 +41,7 @@ const COULDNT_REMOVE_PREFIX = /^Couldn't remove the /;
 
 const REFUSED_STATUS = 422;
 
-const EVENTS_ROUTE = 'POST /v1/discovery/events';
+const EVENTS_ROUTE = EVENT_ROUTES;
 
 beforeEach(async () => {
   await signInTestUser();
@@ -1971,7 +1972,7 @@ describe('failure_shown surfaces recorded by the playlist mutations', () => {
   type SentRequest = { path: string; body: string };
   function surfacesOf(): string[] {
     return (__http.requests as SentRequest[])
-      .filter((request) => request.path === '/v1/discovery/events')
+      .filter((request) => isEventPath(request.path))
       .map((request) => JSON.parse(request.body) as { type: string; payload: { surface: string } })
       .filter((event) => event.type === 'failure_shown')
       .map((event) => event.payload.surface);

@@ -9,18 +9,7 @@ export type DiscoveryEventType =
   | 'library_add'
   | 'wrong_album'
   | 'search_failed'
-  | 'search_degraded'
-  | 'playback_health'
-  | 'detail_health'
-  | 'acquisition_ui'
-  | 'client_error'
-  | 'user_action'
-  | 'failure_shown'
-  | 'sse_reconnect'
-  | 'outbox_flush_failed'
-  | 'download_failed'
-  | 'screen_view'
-  | 'play_start';
+  | 'search_degraded';
 
 export type EventPayload = JsonObject;
 

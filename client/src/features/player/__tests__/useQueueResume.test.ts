@@ -31,6 +31,7 @@ import {
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { withNativePlayback } from '@features/player/__tests__/withNativePlayback';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 function renderHook<T>(callback: () => T) {
   return renderHookBare(callback, { wrapper: withNativePlayback });
@@ -42,7 +43,7 @@ beforeAll(() => {
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS_ROUTE = 'POST /v1/discovery/events';
+const EVENTS_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 
 interface SentEvent {
@@ -55,7 +56,7 @@ async function sentEvents(): Promise<SentEvent[]> {
     await flushPromises();
   });
   return (__http.requests as { path: string; body: string }[])
-    .filter((request) => request.path === '/v1/discovery/events')
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body));
 }
 

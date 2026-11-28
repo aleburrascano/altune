@@ -9,10 +9,11 @@ import {
   notePlaybackState,
   resetPlayStartTiming,
 } from '@features/player';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const SILENT_MS = 1200;
 const GIVE_UP_MS = 60_000;
 
@@ -29,7 +30,7 @@ interface SentEvent {
 
 function sentPlayStarts(): Record<string, unknown>[] {
   return __http.requests
-    .filter((r: SentRequest) => r.method === 'POST' && r.path === '/v1/discovery/events')
+    .filter((r: SentRequest) => r.method === 'POST' && isEventPath(r.path))
     .map((r: SentRequest) => JSON.parse(r.body ?? '{}'))
     .filter((body: SentEvent) => body.type === 'play_start')
     .map((body: SentEvent) => body.payload);
@@ -37,7 +38,7 @@ function sentPlayStarts(): Record<string, unknown>[] {
 
 function sentHealth(): Record<string, unknown>[] {
   return __http.requests
-    .filter((r: SentRequest) => r.method === 'POST' && r.path === '/v1/discovery/events')
+    .filter((r: SentRequest) => r.method === 'POST' && isEventPath(r.path))
     .map((r: SentRequest) => JSON.parse(r.body ?? '{}'))
     .filter((body: SentEvent) => body.type === 'playback_health')
     .map((body: SentEvent) => body.payload);

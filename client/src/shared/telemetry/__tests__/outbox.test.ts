@@ -21,6 +21,7 @@ import {
   driveAppState,
   type AppStateDriver,
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
+import { isEventPath } from '@testing/eventRoutes';
 
 const { fakeFetch, FakeResponse, __http } = require('@testing/doubles/fetch.js');
 
@@ -47,9 +48,9 @@ function setOutboxOwner(userId: string | null): void {
 }
 
 type Reply = number | 'unreachable';
-type Responder = (entry: OutboxEntry) => Reply | Promise<Reply>;
+type SearchTaggedEntry = OutboxEntry & { search_id?: string | undefined };
+type Responder = (entry: SearchTaggedEntry) => Reply | Promise<Reply>;
 
-const EVENTS_PATH = '/v1/discovery/events';
 const HTTP_ACCEPTED = 202;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
@@ -65,7 +66,7 @@ function acceptAll(): Reply {
   return HTTP_ACCEPTED;
 }
 
-let received: OutboxEntry[] = [];
+let received: SearchTaggedEntry[] = [];
 let alwaysReply: Responder = acceptAll;
 let onceReplies: Responder[] = [];
 
@@ -96,10 +97,10 @@ function resetServer(): void {
 }
 
 async function fakeServerFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (init?.method !== 'POST' || !String(input).endsWith(EVENTS_PATH)) {
+  if (init?.method !== 'POST' || !isEventPath(new URL(String(input)).pathname)) {
     return fakeFetch(input, init);
   }
-  const entry = JSON.parse(String(init.body)) as OutboxEntry;
+  const entry = JSON.parse(String(init.body)) as SearchTaggedEntry;
   received.push(entry);
   const scripted = entry.type === 'outbox_flush_failed' ? undefined : onceReplies.shift();
   const reply = await (scripted ?? alwaysReply)(entry);
@@ -144,11 +145,11 @@ function event(overrides: Partial<DiscoveryEvent> = {}): DiscoveryEvent {
   return { type: 'library_add', ...overrides };
 }
 
-function sentEntries(): OutboxEntry[] {
+function sentEntries(): SearchTaggedEntry[] {
   return received.filter((entry) => entry.type !== 'outbox_flush_failed');
 }
 
-function lastPersisted(): readonly OutboxEntry[] {
+function lastPersisted(): readonly SearchTaggedEntry[] {
   return store.load();
 }
 
@@ -896,7 +897,8 @@ describe('Replacing the installed telemetry stops the instance it replaces', () 
 
     runSignOutCleanups();
 
-    expect(oldStore.load().map((e) => e.search_id)).toEqual(['a']);
+    const stored: readonly SearchTaggedEntry[] = oldStore.load();
+    expect(stored.map((e) => e.search_id)).toEqual(['a']);
     expect(lastPersisted()).toEqual([]);
   });
 });
@@ -1041,7 +1043,7 @@ describe('pure helpers', () => {
         payload: { rank: 2 },
       };
 
-      const result = withEnvelope(event, 'id-1', '2026-01-01T00:00:00.000Z');
+      const result: SearchTaggedEntry = withEnvelope(event, 'id-1', '2026-01-01T00:00:00.000Z');
 
       expect(result.search_id).toBe('q');
       expect(result.payload).toEqual({ rank: 2 });
@@ -1091,7 +1093,7 @@ describe('capOutbox keeps diagnostics from evicting label-critical entries', () 
 });
 
 describe('outbox_flush_failed telemetry', () => {
-  function flushFailures(): DiscoveryEvent[] {
+  function flushFailures(): SearchTaggedEntry[] {
     return received.filter((e) => e.type === 'outbox_flush_failed');
   }
 

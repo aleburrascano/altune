@@ -5,6 +5,7 @@ import { useTrackStatusStore } from '@shared/acquisition';
 import { useAlbumDetailState } from '@features/detail';
 import { createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 import { playbackWithNavigator } from '@features/detail/__tests__/recordingNavigator';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -88,7 +89,7 @@ beforeEach(async () => {
     json: { items: [], total: 0, limit: 200, offset: 0, has_more: false },
   });
   __http.reply('POST /v1/tracks', { status: 201, json: savedTrack() });
-  __http.reply('POST /v1/discovery/events', { status: 202 });
+  __http.reply(EVENT_ROUTES, { status: 202 });
   useTrackStatusStore.getState().reset();
 });
 

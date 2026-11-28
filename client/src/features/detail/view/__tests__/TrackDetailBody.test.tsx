@@ -30,6 +30,7 @@ import {
   playbackWithNavigator,
   recordingNavigator,
 } from '@features/detail/__tests__/recordingNavigator';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -307,7 +308,7 @@ describe('TrackDetailBody retry after a failed save', () => {
   it('saves again on Retry and clears the failure once the retry is accepted', async () => {
     __http.replyOnce('POST /v1/tracks', { status: 503 });
     __http.reply('POST /v1/tracks', { status: 200, json: savedTrackResponse('pending') });
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     renderDetail();
 
     await pressSave();
