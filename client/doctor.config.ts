@@ -72,7 +72,7 @@ const closeGuardsClearOnlyOnceTheParentHasClosedTheSurface = {
 };
 
 const remainingPlaylistsLoadFollowsLoadedPages = {
-  files: ['src/features/library/view/usePlaylistsView.tsx'],
+  files: ['src/features/library/view/usePlaylistsView.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 
