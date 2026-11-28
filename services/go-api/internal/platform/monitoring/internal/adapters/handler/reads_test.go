@@ -1,7 +1,9 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/handler"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
+	"altune/go-api/internal/platform/monitoring/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
@@ -15,23 +17,23 @@ import (
 )
 
 type fakeAcquisitionReader struct {
-	status monitoring.DownloadStatusReport
+	status ports.DownloadStatusReport
 }
 
-func (f fakeAcquisitionReader) Status(_ context.Context) monitoring.DownloadStatusReport {
+func (f fakeAcquisitionReader) Status(_ context.Context) ports.DownloadStatusReport {
 	return f.status
 }
 
 type fakeDiscographyReader struct {
 	gotSince    time.Time
-	gotGroupBy  monitoring.DiscographyGroupBy
+	gotGroupBy  ports.DiscographyGroupBy
 	gotLimit    int
 	gotDeadline time.Time
-	cases       []monitoring.DiscographyCase
-	suspect     monitoring.DiscographySuspectRate
+	cases       []ports.DiscographyCase
+	suspect     ports.DiscographySuspectRate
 }
 
-func (f *fakeDiscographyReader) DiscographyQuality(ctx context.Context, since time.Time, groupBy monitoring.DiscographyGroupBy, limit int) ([]monitoring.DiscographyCase, error) {
+func (f *fakeDiscographyReader) DiscographyQuality(ctx context.Context, since time.Time, groupBy ports.DiscographyGroupBy, limit int) ([]ports.DiscographyCase, error) {
 	f.gotSince = since
 	f.gotGroupBy = groupBy
 	f.gotLimit = limit
@@ -41,7 +43,7 @@ func (f *fakeDiscographyReader) DiscographyQuality(ctx context.Context, since ti
 	return f.cases, nil
 }
 
-func (f *fakeDiscographyReader) SuspectRate(_ context.Context, _ time.Time) (monitoring.DiscographySuspectRate, error) {
+func (f *fakeDiscographyReader) SuspectRate(_ context.Context, _ time.Time) (ports.DiscographySuspectRate, error) {
 	return f.suspect, nil
 }
 
@@ -82,18 +84,18 @@ type evalStatus struct {
 	State   string `json:"state"`
 }
 
-func serveRead(t *testing.T, deps monitoring.Deps, path string) *httptest.ResponseRecorder {
+func serveRead(t *testing.T, deps handler.Deps, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps).Register(r)
+	handler.NewObserveHandler(clock.Now, clock.NewTicker, deps).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	return rec
 }
 
 func TestReadsMetricsLive_ServesTheSource(t *testing.T) {
-	rec := serveRead(t, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics {
-		return monitoring.LiveMetrics{"latency": map[string]any{"routes": map[string]any{}}}
+	rec := serveRead(t, handler.Deps{LiveMetrics: func() handler.LiveMetrics {
+		return handler.LiveMetrics{"latency": map[string]any{"routes": map[string]any{}}}
 	}}, "/metrics/live")
 
 	if rec.Code != http.StatusOK {
@@ -109,7 +111,7 @@ func TestReadsMetricsLive_ServesTheSource(t *testing.T) {
 }
 
 func TestReadsMetricsLive_NilSourceAnswersEmptyObject(t *testing.T) {
-	rec := serveRead(t, monitoring.Deps{}, "/metrics/live")
+	rec := serveRead(t, handler.Deps{}, "/metrics/live")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -120,13 +122,13 @@ func TestReadsMetricsLive_NilSourceAnswersEmptyObject(t *testing.T) {
 }
 
 func TestReadsEval_ServesTheMeterStatus(t *testing.T) {
-	meter, err := monitoring.NewEvalMeter(clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
-		return monitoring.EvalMeterResult{}, nil
+	meter, err := service.NewEvalMeter(clock.Now, func(context.Context) (service.EvalMeterResult, error) {
+		return service.EvalMeterResult{}, nil
 	}, func() bool { return false })
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := serveRead(t, monitoring.Deps{Eval: meter}, "/eval")
+	rec := serveRead(t, handler.Deps{Eval: meter}, "/eval")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -141,7 +143,7 @@ func TestReadsEval_ServesTheMeterStatus(t *testing.T) {
 }
 
 func TestReadsEval_NilMeterAnswersDisabled(t *testing.T) {
-	rec := serveRead(t, monitoring.Deps{}, "/eval")
+	rec := serveRead(t, handler.Deps{}, "/eval")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -157,15 +159,15 @@ func TestReadsEval_NilMeterAnswersDisabled(t *testing.T) {
 
 func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	reader := fakeAcquisitionReader{status: monitoring.DownloadStatusReport{
+	reader := fakeAcquisitionReader{status: ports.DownloadStatusReport{
 		InFlight:      2,
 		Succeeded:     10,
 		Failed:        3,
 		Rejected:      7,
 		QueueDepth:    5,
 		QueueCapacity: 16,
-		Tools:         monitoring.AcquisitionTools{Ffprobe: true, YtDlp: true},
-		ActiveJobs: []monitoring.AcquisitionJob{{
+		Tools:         ports.AcquisitionTools{Ffprobe: true, YtDlp: true},
+		ActiveJobs: []ports.AcquisitionJob{{
 			TrackID:     "trk-1",
 			Title:       "Title One",
 			State:       "running",
@@ -173,7 +175,7 @@ func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 		}},
 	}}
 
-	rec := serveRead(t, monitoring.Deps{Acquisition: reader}, "/acquisition")
+	rec := serveRead(t, handler.Deps{Acquisition: reader}, "/acquisition")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -191,13 +193,13 @@ func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 }
 
 func TestReadsAcquisition_ServesOldestPendingAgeAndDepthKnown(t *testing.T) {
-	reader := fakeAcquisitionReader{status: monitoring.DownloadStatusReport{
+	reader := fakeAcquisitionReader{status: ports.DownloadStatusReport{
 		QueueDepth:       5,
 		OldestPendingAge: 90 * time.Second,
 		QueueDepthKnown:  true,
 	}}
 
-	rec := serveRead(t, monitoring.Deps{Acquisition: reader}, "/acquisition")
+	rec := serveRead(t, handler.Deps{Acquisition: reader}, "/acquisition")
 
 	body := decodeObject(t, rec.Body.Bytes())
 	if got := string(body["oldest_pending_age_ms"]); got != "90000" {
@@ -212,7 +214,7 @@ func TestReadsAcquisition_ServesOldestPendingAgeAndDepthKnown(t *testing.T) {
 }
 
 func TestReadsAcquisition_NilReaderAnswers200WithEmptyStatus(t *testing.T) {
-	rec := serveRead(t, monitoring.Deps{}, "/acquisition")
+	rec := serveRead(t, handler.Deps{}, "/acquisition")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -235,7 +237,7 @@ func TestReadsAcquisition_NilReaderAnswers200WithEmptyStatus(t *testing.T) {
 func TestReadsQuality_AnUnknownGroupingIsABadRequestAndNeverReachesTheReader(t *testing.T) {
 	reader := &fakeDiscographyReader{}
 
-	rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography?by=genre")
+	rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography?by=genre")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
@@ -251,27 +253,27 @@ func TestReadsQuality_AnUnknownGroupingIsABadRequestAndNeverReachesTheReader(t *
 func TestReadsQuality_NoGroupingMeansByArtist(t *testing.T) {
 	reader := &fakeDiscographyReader{}
 
-	rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography")
+	rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography")
 
-	if rec.Code != http.StatusOK || reader.gotGroupBy != monitoring.GroupByArtist {
-		t.Fatalf("status = %d, grouping = %q, want 200 and %q", rec.Code, reader.gotGroupBy, monitoring.GroupByArtist)
+	if rec.Code != http.StatusOK || reader.gotGroupBy != ports.GroupByArtist {
+		t.Fatalf("status = %d, grouping = %q, want 200 and %q", rec.Code, reader.gotGroupBy, ports.GroupByArtist)
 	}
 }
 
 func TestReadsQuality_ServesTheWindowedCases(t *testing.T) {
 	seen := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	reader := &fakeDiscographyReader{
-		cases: []monitoring.DiscographyCase{{
+		cases: []ports.DiscographyCase{{
 			ArtistRef:      "spotify:artist",
 			Releases:       4,
 			SingleProvider: 1,
 			ProviderCounts: map[string]int{"spotify": 4},
 			LastSeen:       seen,
 		}},
-		suspect: monitoring.DiscographySuspectRate{Rate: 0.5, LastSample: seen},
+		suspect: ports.DiscographySuspectRate{Rate: 0.5, LastSample: seen},
 	}
 
-	rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography?window_days=7&by=provider")
+	rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography?window_days=7&by=provider")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -280,7 +282,7 @@ func TestReadsQuality_ServesTheWindowedCases(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.WindowDays != 7 || got.GroupBy != string(monitoring.GroupByProvider) {
+	if got.WindowDays != 7 || got.GroupBy != string(ports.GroupByProvider) {
 		t.Errorf("window_days/group_by = %d/%q, want 7/provider", got.WindowDays, got.GroupBy)
 	}
 	if len(got.Cases) != 1 || got.Cases[0].ArtistRef != "spotify:artist" {
@@ -303,7 +305,7 @@ func TestReadsQuality_ServesTheWindowedCases(t *testing.T) {
 func TestReadsQuality_QueryDeadlineIsFiveSeconds(t *testing.T) {
 	reader := &fakeDiscographyReader{}
 	before := time.Now()
-	rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography")
+	rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography")
 	after := time.Now()
 
 	if rec.Code != http.StatusOK {
@@ -320,8 +322,8 @@ func TestReadsQuality_QueryDeadlineIsFiveSeconds(t *testing.T) {
 }
 
 func TestReadsQuality_NilProviderCountsBecomesAnEmptyObject(t *testing.T) {
-	reader := &fakeDiscographyReader{cases: []monitoring.DiscographyCase{{ArtistRef: "spotify:artist"}}}
-	rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography")
+	reader := &fakeDiscographyReader{cases: []ports.DiscographyCase{{ArtistRef: "spotify:artist"}}}
+	rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -341,7 +343,7 @@ func TestReadsQuality_NilProviderCountsBecomesAnEmptyObject(t *testing.T) {
 }
 
 func TestReadsQuality_NilReaderAnswersEmptyCases(t *testing.T) {
-	rec := serveRead(t, monitoring.Deps{}, "/quality/discography")
+	rec := serveRead(t, handler.Deps{}, "/quality/discography")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -359,7 +361,7 @@ func TestReadsQuality_ABadWindowDaysIsA400ProblemNotADefault(t *testing.T) {
 	for _, raw := range []string{"-5", "0", "not-a-number", "1.5", "%20"} {
 		t.Run(raw, func(t *testing.T) {
 			reader := &fakeDiscographyReader{}
-			rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography?window_days="+raw)
+			rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography?window_days="+raw)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
@@ -378,7 +380,7 @@ func TestReadsQuality_WindowDaysPastTheMaximumIsRejected(t *testing.T) {
 	for _, raw := range []string{"999999999", "366"} {
 		t.Run(raw, func(t *testing.T) {
 			reader := &fakeDiscographyReader{}
-			rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography?window_days="+raw)
+			rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography?window_days="+raw)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
@@ -404,7 +406,7 @@ func TestReadsQuality_WindowDaysWithinTheBoundsIsUsed(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {
 			reader := &fakeDiscographyReader{}
-			rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography?window_days="+tc.raw)
+			rec := serveRead(t, handler.Deps{Discography: reader}, "/quality/discography?window_days="+tc.raw)
 
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -422,7 +424,7 @@ func TestReadsQuality_WindowDaysWithinTheBoundsIsUsed(t *testing.T) {
 
 func TestReadsRoutes_NoPostRoute(t *testing.T) {
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{}).Register(r)
+	handler.NewObserveHandler(clock.Now, clock.NewTicker, handler.Deps{}).Register(r)
 
 	for _, path := range []string{"/metrics/live", "/eval", "/acquisition", "/quality/discography"} {
 		rec := httptest.NewRecorder()
@@ -435,14 +437,14 @@ func TestReadsRoutes_NoPostRoute(t *testing.T) {
 
 func TestReadsAcquisition_StripsCredentialsAndQueryFromSourceURL(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	job := monitoring.AcquisitionJob{TrackID: "trk-1", State: "running", ScheduledAt: scheduledAt, SourceURL: "https://u:p@host.example/a/b?token=abc#f"}
-	malformed := monitoring.AcquisitionJob{TrackID: "trk-2", State: "failed", ScheduledAt: scheduledAt, SourceURL: "http://[::1"}
-	reader := fakeAcquisitionReader{status: monitoring.DownloadStatusReport{
-		ActiveJobs: []monitoring.AcquisitionJob{job},
-		Recent:     []monitoring.AcquisitionJob{job, malformed},
+	job := ports.AcquisitionJob{TrackID: "trk-1", State: "running", ScheduledAt: scheduledAt, SourceURL: "https://u:p@host.example/a/b?token=abc#f"}
+	malformed := ports.AcquisitionJob{TrackID: "trk-2", State: "failed", ScheduledAt: scheduledAt, SourceURL: "http://[::1"}
+	reader := fakeAcquisitionReader{status: ports.DownloadStatusReport{
+		ActiveJobs: []ports.AcquisitionJob{job},
+		Recent:     []ports.AcquisitionJob{job, malformed},
 	}}
 
-	rec := serveRead(t, monitoring.Deps{Acquisition: reader}, "/acquisition")
+	rec := serveRead(t, handler.Deps{Acquisition: reader}, "/acquisition")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())

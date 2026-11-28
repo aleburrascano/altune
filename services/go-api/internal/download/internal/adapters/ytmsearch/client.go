@@ -3,7 +3,6 @@ package ytmsearch
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/youtubemusicapi"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,7 +14,7 @@ import (
 )
 
 const (
-	DefaultMusicURL  = youtubemusicapi.MusicURL
+	DefaultMusicURL  = outbound.YouTubeMusicBaseURL
 	DefaultOEmbedURL = "https://www.youtube.com/oembed"
 
 	songsFilterParams = "EgWKAQIIAWoMEA4QChADEAQQCRAF"
@@ -111,7 +110,7 @@ func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {
 	query := url.Values{"url": {watchURLPrefix + videoID}, "format": {"json"}}
 	target := c.oembedURL + "?" + query.Encode()
 	raw, err := c.call(ctx, "/oembed", func(ctx context.Context) (int, []byte, error) {
-		return outbound.GetBytesCapped(ctx, c.http, target, responseBodyCap, outbound.WithHeader("User-Agent", youtubemusicapi.UserAgent))
+		return outbound.GetBytesCapped(ctx, c.http, target, responseBodyCap, outbound.WithHeader("User-Agent", outbound.YouTubeMusicUserAgent))
 	})
 	if err != nil {
 		return OEmbed{}, err
@@ -120,11 +119,11 @@ func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {
 }
 
 func (c *Client) postInnerTube(ctx context.Context, endpoint string, fields map[string]any) ([]byte, error) {
-	payload, err := json.Marshal(youtubemusicapi.Body(fields))
+	payload, err := json.Marshal(outbound.YouTubeMusicBody(fields))
 	if err != nil {
 		return nil, fmt.Errorf("ytmsearch: marshal %s: %w", endpoint, err)
 	}
-	target := youtubemusicapi.URL(c.musicURL, endpoint)
+	target := outbound.YouTubeMusicEndpointURL(c.musicURL, endpoint)
 	return c.call(ctx, endpoint, func(ctx context.Context) (int, []byte, error) {
 		return c.postOnce(ctx, target, payload)
 	})
@@ -137,7 +136,7 @@ func (c *Client) postOnce(ctx context.Context, target string, payload []byte) (i
 	}
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Referer", DefaultMusicURL+"/")
-	req.Header.Set("User-Agent", youtubemusicapi.UserAgent)
+	req.Header.Set("User-Agent", outbound.YouTubeMusicUserAgent)
 	status, raw, err := outbound.DoCapped(c.http, req, responseBodyCap)
 	if err == nil && status != http.StatusOK {
 		err = outbound.StatusError{Status: status}
@@ -146,7 +145,7 @@ func (c *Client) postOnce(ctx context.Context, target string, payload []byte) (i
 }
 
 func (c *Client) call(ctx context.Context, label string, fetch func(context.Context) (int, []byte, error)) ([]byte, error) {
-	ctx, err := youtubemusicapi.ReserveSlot(ctx, c.http)
+	ctx, err := outbound.ReserveYouTubeMusicSlot(ctx, c.http)
 	if err != nil {
 		return nil, fmt.Errorf("reserve slot: %w", err)
 	}

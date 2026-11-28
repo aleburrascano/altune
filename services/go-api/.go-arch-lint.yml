@@ -49,8 +49,6 @@ components:
   shared_textnorm: { in: shared/textnorm/** }
   shared_titlemarkers: { in: shared/titlemarkers/** }
   shared_tracklength: { in: shared/tracklength/** }
-  shared_youtubemusicapi: { in: shared/youtubemusicapi/** }
-  shared_ytdlprunner: { in: shared/ytdlprunner/** }
 commonComponents:
   - platform_outbound
   - shared_apierror
@@ -88,8 +86,6 @@ commonComponents:
   - shared_textnorm
   - shared_titlemarkers
   - shared_tracklength
-  - shared_youtubemusicapi
-  - shared_ytdlprunner
 deps:
   app: { anyVendorDeps: true, mayDependOn: [app, download, library, platform_auth, platform_eventstream, platform_leader, platform_monitoring, platform_outbound, platform_requestmetrics, playback, search] }
   download: { anyVendorDeps: true, mayDependOn: [download] }
@@ -137,5 +133,3 @@ deps:
   shared_textnorm: { anyVendorDeps: true, mayDependOn: [] }
   shared_titlemarkers: { anyVendorDeps: true, mayDependOn: [] }
   shared_tracklength: { anyVendorDeps: true, mayDependOn: [] }
-  shared_youtubemusicapi: { anyVendorDeps: true, mayDependOn: [] }
-  shared_ytdlprunner: { anyVendorDeps: true, mayDependOn: [] }

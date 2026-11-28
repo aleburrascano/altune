@@ -1,14 +1,11 @@
 package handler
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/core/ports"
-	"altune/go-api/internal/platform/monitoring/internal/shell/eventwatch"
-	"altune/go-api/internal/platform/monitoring/service/searchqualitycheck"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
+	"altune/go-api/internal/platform/monitoring/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type LiveMetrics map[string]any
@@ -18,12 +15,13 @@ type LiveMetricsSource func() LiveMetrics
 type Deps struct {
 	Health      HealthProbe
 	Logs        *logging.RingBuffer
-	Events      *eventwatch.WatchedEvents
-	Eval        *searchqualitycheck.Meter
+	Events      *service.EventFeed
+	Eval        *service.EvalMeter
 	Acquisition ports.AcquisitionReader
 	LiveMetrics LiveMetricsSource
 	Discography ports.DiscographyQualityReader
 	Shutdown    <-chan struct{}
+	Streams     StreamBounds
 }
 
 type Handler struct {
@@ -41,16 +39,13 @@ func NewObserveHandler(now clock.Func, newTicker clock.TickerFunc, d Deps) *Hand
 	if newTicker == nil {
 		panic("handler.NewObserveHandler: a nil ticker")
 	}
-	return &Handler{now: now, newTicker: newTicker, deps: d, probeTimeout: defaultProbeTimeout, streams: DefaultStreamBounds()}
-}
-
-func (h *Handler) WithStreamBounds(bounds StreamBounds) *Handler {
-	h.streams = StreamBounds{
-		WriteIdle:   positiveOr(bounds.WriteIdle, h.streams.WriteIdle),
-		Heartbeat:   positiveOr(bounds.Heartbeat, h.streams.Heartbeat),
-		MaxLifetime: positiveOr(bounds.MaxLifetime, h.streams.MaxLifetime),
+	defaults := DefaultStreamBounds()
+	streams := StreamBounds{
+		WriteIdle:   positiveOr(d.Streams.WriteIdle, defaults.WriteIdle),
+		Heartbeat:   positiveOr(d.Streams.Heartbeat, defaults.Heartbeat),
+		MaxLifetime: positiveOr(d.Streams.MaxLifetime, defaults.MaxLifetime),
 	}
-	return h
+	return &Handler{now: now, newTicker: newTicker, deps: d, probeTimeout: defaultProbeTimeout, streams: streams}
 }
 
 func positiveOr(d, fallback time.Duration) time.Duration {
@@ -58,10 +53,4 @@ func positiveOr(d, fallback time.Duration) time.Duration {
 		return d
 	}
 	return fallback
-}
-
-func (h *Handler) Register(r chi.Router) {
-	r.Get("/health", h.serveHealth)
-	h.registerReads(r)
-	h.registerStreams(r)
 }

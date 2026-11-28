@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/monitoringtest"
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
@@ -38,7 +39,7 @@ type sources struct {
 func newSources(t *testing.T) sources {
 	t.Helper()
 	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	tap := monitoring.MustNewEventTap(bus, time.Now)
+	tap := monitoringtest.MustNewEventTap(bus, time.Now)
 	alertMonitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, time.Now)
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)

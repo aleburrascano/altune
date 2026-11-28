@@ -1,7 +1,8 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/handler"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
@@ -14,18 +15,18 @@ import (
 
 type stubAcquisitionReader struct {
 	calls  int
-	status func(call int) monitoring.DownloadStatusReport
+	status func(call int) ports.DownloadStatusReport
 }
 
-func (s *stubAcquisitionReader) Status(_ context.Context) monitoring.DownloadStatusReport {
+func (s *stubAcquisitionReader) Status(_ context.Context) ports.DownloadStatusReport {
 	s.calls++
 	return s.status(s.calls)
 }
 
-func serveAcquisition(t *testing.T, reader monitoring.AcquisitionReader) map[string]json.RawMessage {
+func serveAcquisition(t *testing.T, reader ports.AcquisitionReader) map[string]json.RawMessage {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{Acquisition: reader}).Register(r)
+	handler.NewObserveHandler(clock.Now, clock.NewTicker, handler.Deps{Acquisition: reader}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/acquisition", nil))
 	if rec.Code != http.StatusOK {
@@ -39,8 +40,8 @@ func serveAcquisition(t *testing.T, reader monitoring.AcquisitionReader) map[str
 }
 
 func TestAcquisitionStatus_OneJobGivesOneEntryAndAnEmptyRecentList(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(int) monitoring.DownloadStatusReport {
-		return monitoring.DownloadStatusReport{ActiveJobs: []monitoring.AcquisitionJob{{TrackID: "t1", State: "running"}}}
+	r := &stubAcquisitionReader{status: func(int) ports.DownloadStatusReport {
+		return ports.DownloadStatusReport{ActiveJobs: []ports.AcquisitionJob{{TrackID: "t1", State: "running"}}}
 	}}
 
 	body := serveAcquisition(t, r)
@@ -61,8 +62,8 @@ func TestAcquisitionStatus_OneJobGivesOneEntryAndAnEmptyRecentList(t *testing.T)
 }
 
 func TestAcquisitionStatus_EveryRequestReadsAFreshStatus(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(call int) monitoring.DownloadStatusReport {
-		return monitoring.DownloadStatusReport{InFlight: call}
+	r := &stubAcquisitionReader{status: func(call int) ports.DownloadStatusReport {
+		return ports.DownloadStatusReport{InFlight: call}
 	}}
 
 	if got := string(serveAcquisition(t, r)["in_flight"]); got != "1" {
@@ -74,8 +75,8 @@ func TestAcquisitionStatus_EveryRequestReadsAFreshStatus(t *testing.T) {
 }
 
 func TestAcquisitionStatus_VerificationNamesOnlyLiveTools(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(int) monitoring.DownloadStatusReport {
-		return monitoring.DownloadStatusReport{Tools: monitoring.AcquisitionTools{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
+	r := &stubAcquisitionReader{status: func(int) ports.DownloadStatusReport {
+		return ports.DownloadStatusReport{Tools: ports.AcquisitionTools{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
 	}}
 
 	raw := serveAcquisition(t, r)["verification"]

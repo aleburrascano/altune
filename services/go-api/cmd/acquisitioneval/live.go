@@ -2,7 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/shared/youtubemusicapi"
+	"altune/go-api/internal/platform/outbound"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -124,7 +124,7 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 }
 
 func budgetedClient(ctx context.Context, getenv func(string) string, timeout time.Duration, out io.Writer) (*http.Client, error) {
-	budgeted, budget, err := youtubemusicapi.ToolClient(ctx, getenv, timeout)
+	budgeted, budget, err := outbound.YouTubeMusicToolClient(ctx, getenv, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("tool client: %w", err)
 	}

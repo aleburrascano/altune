@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/youtubemusicapi"
+	"altune/go-api/internal/platform/outbound"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -25,9 +25,9 @@ func ytMusicProvider() provider {
 	return provider{
 		adapter:    adapterRoot + "ytmusic",
 		decodedAs:  decodedTypes(ytMusicEndpoints),
-		sharedDirs: []string{"services/go-api/internal/shared/youtubemusicapi"},
+		sharedDirs: []string{"services/go-api/internal/platform/outbound/internal/adapters/youtubemusic"},
 		source: func(client *http.Client) (source, error) {
-			return newYTMusicSource(client, youtubemusicapi.MusicURL), nil
+			return newYTMusicSource(client, outbound.YouTubeMusicBaseURL), nil
 		},
 	}
 }
@@ -36,18 +36,18 @@ func newYTMusicSource(client *http.Client, base string) liveSource {
 	fetchers := liveSource{}
 	for entity, endpoint := range ytMusicEndpoints {
 		fetchers[entity] = func(ctx context.Context, query string) (json.RawMessage, error) {
-			body, err := json.Marshal(youtubemusicapi.Body(ytMusicSearchFields(query, endpoint.filter)))
+			body, err := json.Marshal(outbound.YouTubeMusicBody(ytMusicSearchFields(query, endpoint.filter)))
 			if err != nil {
 				return nil, fmt.Errorf("marshal: %w", err)
 			}
 			return fetch(ctx, client, request{
 				method: http.MethodPost,
-				url:    youtubemusicapi.URL(base, "search"),
+				url:    outbound.YouTubeMusicEndpointURL(base, "search"),
 				body:   body,
 				header: map[string]string{
 					"Content-Type": "application/json; charset=utf-8",
 					"Referer":      ytMusicReferer,
-					"User-Agent":   youtubemusicapi.UserAgent,
+					"User-Agent":   outbound.YouTubeMusicUserAgent,
 				},
 			})
 		}

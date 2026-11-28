@@ -1,7 +1,9 @@
 package notifier_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/notifier"
+	"altune/go-api/internal/platform/monitoring/internal/domain"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
 	"context"
 	"encoding/json"
 	"errors"
@@ -61,17 +63,17 @@ func (s *resendStub) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(routed)
 }
 
-func (s *resendStub) notifier() monitoring.AlertNotifier {
-	return monitoring.NewEmailNotifier(testResendKey, "ops@example.com", s)
+func (s *resendStub) notifier() ports.AlertNotifier {
+	return notifier.NewEmailNotifier(testResendKey, "ops@example.com", s)
 }
 
 func TestEmailNotifier_PostsTheAlertToResendAsOneEmail(t *testing.T) {
 	stub := newResendStub(t, http.StatusOK, `{"id":"49a3999c-0ce1-4ea6-ab68-afcd6dc2e794"}`)
 
-	err := stub.notifier().Notify(context.Background(), monitoring.Alert{
+	err := stub.notifier().Notify(context.Background(), domain.Alert{
 		Title:    "altune dependency down",
 		Message:  "dependencies down: db",
-		Severity: monitoring.SeverityWatch,
+		Severity: domain.SeverityWatch,
 	})
 	if err != nil {
 		t.Fatalf("Notify = %v, want nil", err)
@@ -102,18 +104,18 @@ func TestEmailNotifier_PostsTheAlertToResendAsOneEmail(t *testing.T) {
 
 func TestEmailNotifier_NamesEachSeverityInWords(t *testing.T) {
 	cases := []struct {
-		severity monitoring.Severity
+		severity domain.Severity
 		want     string
 	}{
-		{severity: monitoring.SeverityActNow, want: "m\n\nSeverity: fix"},
-		{severity: monitoring.SeverityRecord, want: "m\n\nSeverity: log"},
-		{severity: monitoring.SeverityWatch, want: "m\n\nSeverity: signal"},
-		{severity: monitoring.Severity(7), want: "m\n\nSeverity: unknown (7)"},
+		{severity: domain.SeverityActNow, want: "m\n\nSeverity: fix"},
+		{severity: domain.SeverityRecord, want: "m\n\nSeverity: log"},
+		{severity: domain.SeverityWatch, want: "m\n\nSeverity: signal"},
+		{severity: domain.Severity(7), want: "m\n\nSeverity: unknown (7)"},
 	}
 	for _, tc := range cases {
 		stub := newResendStub(t, http.StatusOK, `{}`)
 
-		if err := stub.notifier().Notify(context.Background(), monitoring.Alert{Title: "t", Message: "m", Severity: tc.severity}); err != nil {
+		if err := stub.notifier().Notify(context.Background(), domain.Alert{Title: "t", Message: "m", Severity: tc.severity}); err != nil {
 			t.Fatalf("Notify = %v, want nil", err)
 		}
 		if got := stub.sent[0].body["text"]; got != tc.want {
@@ -164,7 +166,7 @@ func TestEmailNotifier_ARejectionNamesResendsReasonWithoutTheKey(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			stub := newResendStub(t, tc.status, tc.reply)
 
-			err := stub.notifier().Notify(context.Background(), monitoring.Alert{Title: "t", Message: "m"})
+			err := stub.notifier().Notify(context.Background(), domain.Alert{Title: "t", Message: "m"})
 
 			if err == nil {
 				t.Fatalf("Notify on %d = nil, want an error", tc.status)
@@ -182,7 +184,7 @@ func TestEmailNotifier_ARejectionNamesResendsReasonWithoutTheKey(t *testing.T) {
 func TestEmailNotifier_ARejectionReadsWholeWhenTheKeyIsEmpty(t *testing.T) {
 	stub := newResendStub(t, http.StatusUnauthorized, `{"name":"missing_api_key","message":"Missing API key in the authorization header"}`)
 
-	err := monitoring.NewEmailNotifier("", "ops@example.com", stub).Notify(context.Background(), monitoring.Alert{})
+	err := notifier.NewEmailNotifier("", "ops@example.com", stub).Notify(context.Background(), domain.Alert{})
 
 	want := "send alert email: status 401: missing_api_key: Missing API key in the authorization header"
 	if err == nil || err.Error() != want {
@@ -194,7 +196,7 @@ func TestEmailNotifier_AnyTwoHundredStatusIsADelivery(t *testing.T) {
 	for _, status := range []int{http.StatusOK, http.StatusAccepted, 299} {
 		stub := newResendStub(t, status, "")
 
-		if err := stub.notifier().Notify(context.Background(), monitoring.Alert{}); err != nil {
+		if err := stub.notifier().Notify(context.Background(), domain.Alert{}); err != nil {
 			t.Errorf("Notify on %d = %v, want nil", status, err)
 		}
 	}
@@ -204,7 +206,7 @@ func TestEmailNotifier_AnOverlongRejectionIsCutBeforeItIsRead(t *testing.T) {
 	reply := `{"name":"validation_error","message":"` + strings.Repeat("x", 8<<10) + `"}`
 	stub := newResendStub(t, http.StatusUnprocessableEntity, reply)
 
-	err := stub.notifier().Notify(context.Background(), monitoring.Alert{})
+	err := stub.notifier().Notify(context.Background(), domain.Alert{})
 
 	if err == nil || err.Error() != "send alert email: status 422" {
 		t.Errorf("error = %v, want the bare status once the reply is cut", err)
@@ -216,7 +218,7 @@ func TestEmailNotifier_AnUnreachableResendFailsWithoutTheKey(t *testing.T) {
 		return nil, errors.New("dial tcp: connection refused")
 	})
 
-	err := monitoring.NewEmailNotifier(testResendKey, "ops@example.com", failing).Notify(context.Background(), monitoring.Alert{})
+	err := notifier.NewEmailNotifier(testResendKey, "ops@example.com", failing).Notify(context.Background(), domain.Alert{})
 
 	if err == nil {
 		t.Fatal("Notify with no connection = nil, want an error")
@@ -237,7 +239,7 @@ func TestEmailNotifier_GivesUpOnAResendThatNeverAnswersAfterTenSeconds(t *testin
 		})
 		start := time.Now()
 
-		err := monitoring.NewEmailNotifier(testResendKey, "ops@example.com", hanging).Notify(context.Background(), monitoring.Alert{})
+		err := notifier.NewEmailNotifier(testResendKey, "ops@example.com", hanging).Notify(context.Background(), domain.Alert{})
 
 		if err == nil {
 			t.Fatal("Notify against a silent Resend = nil, want an error")
@@ -251,7 +253,7 @@ func TestEmailNotifier_GivesUpOnAResendThatNeverAnswersAfterTenSeconds(t *testin
 func TestEmailNotifier_RetriesOfOneFiringShareAnIdempotencyKeyAndANewFiringGetsANewOne(t *testing.T) {
 	stub := newResendStub(t, http.StatusOK, `{}`)
 	firedAt := time.Date(2026, 11, 20, 9, 30, 0, 0, time.UTC)
-	sends := []monitoring.Alert{
+	sends := []domain.Alert{
 		{Key: "dependency_down", FiredAt: firedAt, Message: "dependencies down: db"},
 		{Key: "dependency_down", FiredAt: firedAt, Message: "dependencies down: db"},
 		{Key: "dependency_down", FiredAt: firedAt.In(time.FixedZone("CET", 3600)), Message: "dependencies down: db"},
@@ -286,7 +288,7 @@ func TestEmailNotifier_RetriesOfOneFiringShareAnIdempotencyKeyAndANewFiringGetsA
 }
 
 func TestEmailNotifier_AnAlertThatNamesNoFiringSendsNoIdempotencyKey(t *testing.T) {
-	cases := map[string]monitoring.Alert{
+	cases := map[string]domain.Alert{
 		"no condition key": {FiredAt: time.Date(2026, 11, 20, 9, 30, 0, 0, time.UTC)},
 		"no firing time":   {Key: "dependency_down"},
 	}

@@ -1,28 +1,12 @@
 package handler
 
 import (
-	"altune/go-api/internal/platform/monitoring/internal/core/ports"
+	"altune/go-api/internal/platform/monitoring/internal/ports"
 	"context"
 	"errors"
 	"fmt"
 	"time"
 )
-
-type discographyCaseDTO struct {
-	Artist             string         `json:"artist"`
-	ArtistRef          string         `json:"artist_ref"`
-	Releases           int            `json:"releases"`
-	SingleProvider     int            `json:"single_provider"`
-	SingleProviderNoID int            `json:"single_provider_no_id"`
-	ProviderCounts     map[string]int `json:"provider_counts"`
-	LastSeen           time.Time      `json:"last_seen"`
-}
-
-type discographyQualityResult struct {
-	cases       []discographyCaseDTO
-	suspectRate float64
-	lastSample  time.Time
-}
 
 func queryDiscographyQuality(ctx context.Context, reader ports.DiscographyQualityReader, since time.Time, groupBy ports.DiscographyGroupBy, limit int) (discographyQualityResult, error) {
 	cases, err := reader.DiscographyQuality(ctx, since, groupBy, limit)

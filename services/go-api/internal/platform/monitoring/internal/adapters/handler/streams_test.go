@@ -1,7 +1,8 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/handler"
+	"altune/go-api/internal/platform/monitoring/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/events/eventstest"
@@ -41,42 +42,42 @@ const (
 var observeStreamPaths = []string{"/events/stream", "/logs/stream"}
 
 type streamFixture struct {
-	tap  *monitoring.EventTap
+	tap  *service.EventTap
 	ring *logging.RingBuffer
-	deps monitoring.Deps
+	deps handler.Deps
 }
 
 func newStreamFixture(t *testing.T) streamFixture {
 	t.Helper()
 	ring := logging.CaptureRing(t, "error")
-	tap := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
-	feed := monitoring.NewEventFeed()
+	tap := service.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	feed := service.NewEventFeed()
 	ctx, stopFeed := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)
 	t.Cleanup(func() {
 		stopFeed()
 		feed.Shutdown(context.Background())
 	})
-	return streamFixture{tap: tap, ring: ring, deps: monitoring.Deps{Events: feed, Logs: ring}}
+	return streamFixture{tap: tap, ring: ring, deps: handler.Deps{Events: feed, Logs: ring}}
 }
 
-func streamRouter(deps monitoring.Deps, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
-	return routerFor(monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps), middlewares...)
+func streamRouter(deps handler.Deps, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
+	return routerFor(handler.NewObserveHandler(clock.Now, clock.NewTicker, deps), middlewares...)
 }
 
-func boundedRouter(deps monitoring.Deps, bounds monitoring.StreamBounds, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
-	return routerFor(monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps).WithStreamBounds(bounds), middlewares...)
+func boundedRouter(deps handler.Deps, bounds handler.StreamBounds, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
+	return routerFor(handler.NewObserveHandler(clock.Now, clock.NewTicker, withStreams(deps, bounds)), middlewares...)
 }
 
-func routerFor(h *monitoring.Handler, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
+func routerFor(h *handler.Handler, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middlewares...)
 	h.Register(r)
 	return r
 }
 
-func shortBounds(change func(*monitoring.StreamBounds)) monitoring.StreamBounds {
-	bounds := monitoring.DefaultStreamBounds()
+func shortBounds(change func(*handler.StreamBounds)) handler.StreamBounds {
+	bounds := handler.DefaultStreamBounds()
 	change(&bounds)
 	return bounds
 }
@@ -182,7 +183,7 @@ func assertCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wa
 	}
 }
 
-func serveOnce(deps monitoring.Deps, path string) *httptest.ResponseRecorder {
+func serveOnce(deps handler.Deps, path string) *httptest.ResponseRecorder {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	rec := httptest.NewRecorder()
@@ -278,14 +279,14 @@ func TestStreamLogs_FrameIsTheRedactedRecordWithItsCorrID(t *testing.T) {
 func TestStreamEvents_AbsentOrIdleFeedIsUnavailable(t *testing.T) {
 	cases := []struct {
 		name string
-		feed *monitoring.EventFeed
+		feed *service.EventFeed
 	}{
 		{"no feed wired", nil},
-		{"feed never started", monitoring.NewEventFeed()},
+		{"feed never started", service.NewEventFeed()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := serveOnce(monitoring.Deps{Events: tc.feed}, "/events/stream")
+			rec := serveOnce(handler.Deps{Events: tc.feed}, "/events/stream")
 
 			assertCode(t, rec, http.StatusServiceUnavailable, "observe.event_feed_unavailable")
 		})
@@ -293,7 +294,7 @@ func TestStreamEvents_AbsentOrIdleFeedIsUnavailable(t *testing.T) {
 }
 
 func TestStreamLogs_AbsentRingIsUnavailable(t *testing.T) {
-	rec := serveOnce(monitoring.Deps{}, "/logs/stream")
+	rec := serveOnce(handler.Deps{}, "/logs/stream")
 
 	assertCode(t, rec, http.StatusServiceUnavailable, "observe.stream_unavailable")
 	if !strings.Contains(rec.Body.String(), `"detail":"logs stream unavailable"`) {
@@ -350,14 +351,14 @@ func TestStreams_OpenWritesOneObserveReadAuditLine(t *testing.T) {
 func TestStreams_AuditNamesAnUnknownActorWhenNoSubjectReachedIt(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelInfo)
 
-	serveOnce(monitoring.Deps{}, "/logs/stream")
+	serveOnce(handler.Deps{}, "/logs/stream")
 
 	if !strings.Contains(logs.String(), `"actor":"unknown"`) {
 		t.Errorf("audit line %s does not name the actor unknown", logs.String())
 	}
 }
 
-func serveStream(t *testing.T, deps monitoring.Deps, req *http.Request) <-chan struct{} {
+func serveStream(t *testing.T, deps handler.Deps, req *http.Request) <-chan struct{} {
 	t.Helper()
 	return serveStreamOn(t, streamRouter(deps), req)
 }
@@ -398,7 +399,7 @@ func assertStillOpen(t *testing.T, returned <-chan struct{}, why string) {
 
 func TestStreams_EndAtMaxLifetime(t *testing.T) {
 	fx := newStreamFixture(t)
-	router := boundedRouter(fx.deps, shortBounds(func(b *monitoring.StreamBounds) { b.MaxLifetime = 50 * time.Millisecond }))
+	router := boundedRouter(fx.deps, shortBounds(func(b *handler.StreamBounds) { b.MaxLifetime = 50 * time.Millisecond }))
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
 			returned := serveStreamOn(t, router, httptest.NewRequest(http.MethodGet, path, nil))
@@ -409,7 +410,7 @@ func TestStreams_EndAtMaxLifetime(t *testing.T) {
 }
 
 func TestStreams_DefaultBoundsMatchTheAdminStreams(t *testing.T) {
-	defaults := monitoring.DefaultStreamBounds()
+	defaults := handler.DefaultStreamBounds()
 	bounds := []struct {
 		name string
 		got  time.Duration
@@ -546,14 +547,14 @@ func TestStreams_SubscriberPastTheCeilingGets429(t *testing.T) {
 }
 
 func TestStreams_SubscribeFailureOtherThanTheCeilingIs503(t *testing.T) {
-	tap := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
-	feed := monitoring.NewEventFeed()
+	tap := service.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	feed := service.NewEventFeed()
 	feed.Start(context.Background(), tap)
 	feed.Shutdown(context.Background())
 	feed.Start(context.Background(), tap)
 	t.Cleanup(func() { feed.Shutdown(context.Background()) })
 
-	rec := serveOnce(monitoring.Deps{Events: feed}, "/events/stream")
+	rec := serveOnce(handler.Deps{Events: feed}, "/events/stream")
 
 	assertCode(t, rec, http.StatusServiceUnavailable, "observe.stream_unavailable")
 }
@@ -635,8 +636,8 @@ func TestStreams_EndOnAWriteFailure(t *testing.T) {
 	assertEndsWithin(t, returned, 2*time.Second, "stream held its slot after every write failed")
 }
 
-func idleBounds(idle, heartbeat time.Duration) monitoring.StreamBounds {
-	return shortBounds(func(b *monitoring.StreamBounds) {
+func idleBounds(idle, heartbeat time.Duration) handler.StreamBounds {
+	return shortBounds(func(b *handler.StreamBounds) {
 		b.WriteIdle = idle
 		b.Heartbeat = heartbeat
 	})
@@ -682,7 +683,7 @@ func TestStreams_IdleStreamEmitsKeepalives(t *testing.T) {
 
 func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
 	fx := newStreamFixture(t)
-	bounds := monitoring.StreamBounds{WriteIdle: -time.Second, Heartbeat: 0, MaxLifetime: -time.Second}
+	bounds := handler.StreamBounds{WriteIdle: -time.Second, Heartbeat: 0, MaxLifetime: -time.Second}
 	srv := httptest.NewServer(boundedRouter(fx.deps, bounds))
 	t.Cleanup(srv.Close)
 	conn := openStream(t, srv, "/events/stream")
@@ -696,7 +697,7 @@ func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
 func TestStreams_ANonPositiveMaxLifetimeKeepsTheStreamOpen(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fx := newStreamFixture(t)
-		bounds := monitoring.StreamBounds{WriteIdle: -time.Second, Heartbeat: 0, MaxLifetime: -time.Second}
+		bounds := handler.StreamBounds{WriteIdle: -time.Second, Heartbeat: 0, MaxLifetime: -time.Second}
 		returned := serveStreamOn(t, boundedRouter(fx.deps, bounds), httptest.NewRequest(http.MethodGet, "/events/stream", nil))
 
 		time.Sleep(time.Second)
@@ -739,7 +740,7 @@ func openStalledStream(t *testing.T, srv *httptest.Server) {
 	}
 }
 
-func stallClients(tap *monitoring.EventTap) {
+func stallClients(tap *service.EventTap) {
 	user := ids.NewUserId(uuid.New())
 	payload := map[string]any{"track_id": strings.Repeat("x", 16<<10)}
 	for i := 0; i < 4*eventFeedCeiling; i++ {
@@ -779,10 +780,10 @@ func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {
 	}
 }
 
-func stoppableEventsDeps(t *testing.T) (monitoring.Deps, *monitoring.EventTap, func()) {
+func stoppableEventsDeps(t *testing.T) (handler.Deps, *service.EventTap, func()) {
 	t.Helper()
-	tap := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
-	feed := monitoring.NewEventFeed()
+	tap := service.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	feed := service.NewEventFeed()
 	ctx, cancel := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)
 	stop := func() {
@@ -790,7 +791,7 @@ func stoppableEventsDeps(t *testing.T) (monitoring.Deps, *monitoring.EventTap, f
 		feed.Shutdown(context.Background())
 	}
 	t.Cleanup(stop)
-	return monitoring.Deps{Events: feed}, tap, stop
+	return handler.Deps{Events: feed}, tap, stop
 }
 
 func TestStreamEvents_EndsWhenTheFeedStopsWhileIdle(t *testing.T) {
@@ -859,4 +860,9 @@ func TestStreamEvents_EveryOpenStreamEndsWhenTheFeedStops(t *testing.T) {
 			assertEndsWithin(t, returned, 2*time.Second, "one of the open events streams outlived its feed")
 		}
 	})
+}
+
+func withStreams(deps handler.Deps, bounds handler.StreamBounds) handler.Deps {
+	deps.Streams = bounds
+	return deps
 }

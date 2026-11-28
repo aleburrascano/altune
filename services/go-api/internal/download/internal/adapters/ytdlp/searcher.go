@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/clock"
@@ -22,8 +23,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	sharedytdlp "altune/go-api/internal/shared/ytdlprunner"
 )
 
 const (
@@ -158,7 +157,7 @@ func (s *YouTubeAudioSearcher) Available() bool {
 }
 
 func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, parent, run context.Context) error {
-	if s.Available() && !ports.RunTimedOut(parent, run) && !sharedytdlp.OutputShowsSourceUnavailable(stderr) {
+	if s.Available() && !ports.RunTimedOut(parent, run) && !outbound.YtdlpOutputShowsSourceUnavailable(stderr) {
 		return err
 	}
 	return &domain.SourceUnavailableError{Source: SourceName, Err: err}
@@ -281,7 +280,7 @@ func (s *YouTubeAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec st
 	defer cookies.cleanup()
 	args = s.authFlags(args, cookies.path)
 
-	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
+	lines, stderr, err := outbound.YtdlpDumpJSON(searchCtx, args)
 	cookies.settle(ctx, err, stderr)
 	if err != nil {
 		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ctx, searchCtx)

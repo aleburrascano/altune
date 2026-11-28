@@ -1,7 +1,8 @@
 package notifier_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/notifier"
+	"altune/go-api/internal/platform/monitoring/internal/domain"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
@@ -13,7 +14,7 @@ import (
 )
 
 func TestNopNotifier(t *testing.T) {
-	if err := (monitoring.NopNotifier{}).Notify(context.Background(), monitoring.Alert{}); err != nil {
+	if err := (notifier.NopNotifier{}).Notify(context.Background(), domain.Alert{}); err != nil {
 		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
 	}
 }
@@ -21,7 +22,7 @@ func TestNopNotifier(t *testing.T) {
 func TestNopNotifier_LogsFiringAlertAtError(t *testing.T) {
 	buf := logging.CaptureText(t, slog.LevelInfo)
 
-	if err := (monitoring.NopNotifier{}).Notify(context.Background(), monitoring.Alert{Title: "dep down", Message: "state down"}); err != nil {
+	if err := (notifier.NopNotifier{}).Notify(context.Background(), domain.Alert{Title: "dep down", Message: "state down"}); err != nil {
 		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
 	}
 
@@ -50,14 +51,14 @@ func TestWebhookNotifier_PostsAlertJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := monitoring.NewWebhookNotifier(srv.URL).Notify(context.Background(), monitoring.Alert{Title: "t", Message: "m", Severity: monitoring.SeverityWatch})
+	err := notifier.NewWebhookNotifier(srv.URL).Notify(context.Background(), domain.Alert{Title: "t", Message: "m", Severity: domain.SeverityWatch})
 	if err != nil {
 		t.Fatalf("Notify = %v, want nil", err)
 	}
 	if method != http.MethodPost || contentType != "application/json" {
 		t.Errorf("method %q content-type %q", method, contentType)
 	}
-	if got.Title != "t" || got.Message != "m" || got.Severity != int(monitoring.SeverityWatch) {
+	if got.Title != "t" || got.Message != "m" || got.Severity != int(domain.SeverityWatch) {
 		t.Errorf("payload = %+v", got)
 	}
 }
@@ -68,7 +69,7 @@ func TestWebhookNotifier_ErrorsOnNon2xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := monitoring.NewWebhookNotifier(srv.URL).Notify(context.Background(), monitoring.Alert{}); err == nil {
+	if err := notifier.NewWebhookNotifier(srv.URL).Notify(context.Background(), domain.Alert{}); err == nil {
 		t.Fatal("Notify on 500 = nil, want error")
 	}
 }
@@ -78,7 +79,7 @@ func TestWebhookNotifier_ErrorsWhenUnreachable(t *testing.T) {
 	url := srv.URL
 	srv.Close()
 
-	if err := monitoring.NewWebhookNotifier(url).Notify(context.Background(), monitoring.Alert{}); err == nil {
+	if err := notifier.NewWebhookNotifier(url).Notify(context.Background(), domain.Alert{}); err == nil {
 		t.Fatal("Notify to a closed server = nil, want error")
 	}
 }
@@ -88,7 +89,7 @@ func TestWebhookNotifier_ErrorNeverContainsWebhookURL(t *testing.T) {
 	hookURL := srv.URL + "/hook/SECRET123"
 	srv.Close()
 
-	err := monitoring.NewWebhookNotifier(hookURL).Notify(context.Background(), monitoring.Alert{})
+	err := notifier.NewWebhookNotifier(hookURL).Notify(context.Background(), domain.Alert{})
 	if err == nil {
 		t.Fatal("Notify to a closed server = nil, want error")
 	}
@@ -98,7 +99,7 @@ func TestWebhookNotifier_ErrorNeverContainsWebhookURL(t *testing.T) {
 }
 
 func TestWebhookNotifier_BadURLErrorNeverContainsWebhookURL(t *testing.T) {
-	err := monitoring.NewWebhookNotifier("http://host/hook/SECRET123\x7f").Notify(context.Background(), monitoring.Alert{})
+	err := notifier.NewWebhookNotifier("http://host/hook/SECRET123\x7f").Notify(context.Background(), domain.Alert{})
 	if err == nil {
 		t.Fatal("Notify to a malformed URL = nil, want error")
 	}

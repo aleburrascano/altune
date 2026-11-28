@@ -2,7 +2,6 @@ package router_test
 
 import (
 	"altune/go-api/internal/app/router"
-	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/eventstream"
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/shared/clock"
@@ -11,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/polltest"
+	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/slowclienttest"
 	"bufio"
 	"bytes"
@@ -85,7 +85,18 @@ func TestRouter_PanickingHandlerLogsOneErrorAndRequestCompleteAt500(t *testing.T
 	}
 }
 
-func newDeadlineRouter(uid ids.UserId, sse *eventstream.EventStreamHandler, bulkErrs chan<- error) *chi.Mux {
+func newStream(t *testing.T, d eventstream.Deps) func(chi.Router) {
+	t.Helper()
+	d.Now = clock.Now
+	d.NewTicker = clock.NewTicker
+	routes, err := eventstream.New(d)
+	if err != nil {
+		t.Fatalf("eventstream.New: %v", err)
+	}
+	return routes.LongLived
+}
+
+func newDeadlineRouter(uid ids.UserId, streamRoutes func(chi.Router), bulkErrs chan<- error) *chi.Mux {
 	r := newRouter(router.Settings{WriteTimeout: routeWriteDeadline})
 	r.Get("/v1/bulk", func(w http.ResponseWriter, _ *http.Request) {
 		chunk := bytes.Repeat([]byte("x"), 16<<10)
@@ -98,15 +109,20 @@ func newDeadlineRouter(uid ids.UserId, sse *eventstream.EventStreamHandler, bulk
 		}
 		bulkErrs <- nil
 	})
-	r.Handle("/v1/events", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		sse.ServeHTTP(w, req.WithContext(auth.ContextWithUserID(req.Context(), uid)))
-	}))
+	r.Route("/v1", func(r chi.Router) {
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				next.ServeHTTP(w, req.WithContext(requestuser.ContextWithUserID(req.Context(), uid)))
+			})
+		})
+		streamRoutes(r)
+	})
 	return r
 }
 
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
-	sse := eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
+	sse := newStream(t, eventstream.Deps{Bus: events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))})
 	srv := slowclienttest.NewServer(t, newDeadlineRouter(ids.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
@@ -128,7 +144,7 @@ func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
-	sse := eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, bus, 0).WithHeartbeat(routeWriteDeadline / 3)
+	sse := newStream(t, eventstream.Deps{Bus: bus, Heartbeat: routeWriteDeadline / 3})
 	srv := slowclienttest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
 
 	conn, br := slowclienttest.Get(t, srv, "/v1/events", nil)
@@ -150,7 +166,7 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 
 	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
-	sse := eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
+	sse := newStream(t, eventstream.Deps{Bus: bus, WriteTimeout: routeWriteDeadline, Heartbeat: time.Hour})
 	done := make(chan struct{})
 	router := newDeadlineRouter(uid, sse, make(chan error, 1))
 	srv := slowclienttest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

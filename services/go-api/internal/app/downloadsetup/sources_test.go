@@ -3,9 +3,10 @@ package downloadsetup_test
 import (
 	"altune/go-api/internal/app/downloadsetup"
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/platform/outbound"
+	"altune/go-api/internal/platform/outbound/outboundtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
 	"encoding/json"
 	"errors"
@@ -277,7 +278,7 @@ func TestCanaryYTMClient_BoundsEveryCall(t *testing.T) {
 func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches(t *testing.T) {
 	redis := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { _ = redis.Close() })
-	otherInstance, err := youtubemusicapi.NewBudget(redis, youtubemusicapi.Settings{Cooldown: time.Hour}, clock.Now, clock.Sleep)
+	otherInstance, err := outbound.NewYouTubeMusicBudget(redis, outbound.YouTubeMusicBudgetSettings{Cooldown: time.Hour}, clock.Now, clock.Sleep)
 	if err != nil {
 		t.Fatalf("budget for the other instance: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches
 	defer cancel()
 	_, err = client.SearchSongs(ctx, "fixture query")
 
-	if !errors.Is(err, youtubemusicapi.ErrBudgetRefused) {
-		t.Errorf("SearchSongs during a shared cooldown: err = %v, want %v before any request leaves", err, youtubemusicapi.ErrBudgetRefused)
+	if !errors.Is(err, outboundtest.ErrYouTubeMusicBudgetRefused) {
+		t.Errorf("SearchSongs during a shared cooldown: err = %v, want %v before any request leaves", err, outboundtest.ErrYouTubeMusicBudgetRefused)
 	}
 }

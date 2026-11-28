@@ -1,9 +1,9 @@
 package soundcloud
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/parallel"
-	"altune/go-api/internal/shared/ytdlprunner"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,7 +21,7 @@ type SoundCloudAdapter struct {
 type YtdlpRunner func(ctx context.Context, args []string) ([][]byte, string, error)
 
 func NewSoundCloudAdapter() *SoundCloudAdapter {
-	return NewSoundCloudAdapterWithRunner(ytdlprunner.DumpJSON)
+	return NewSoundCloudAdapterWithRunner(outbound.YtdlpDumpJSON)
 }
 
 func NewSoundCloudAdapterWithRunner(run YtdlpRunner) *SoundCloudAdapter {

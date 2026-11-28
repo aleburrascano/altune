@@ -2,7 +2,7 @@ package providertransport_test
 
 import (
 	"altune/go-api/internal/app/providertransport"
-	"altune/go-api/internal/platform/outbound"
+	"altune/go-api/internal/platform/outbound/outboundtest"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/telemetry"
 	"errors"
@@ -52,7 +52,7 @@ func TestLive_RefusesALoopbackUpstreamAndCountsTheCall(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatal("a loopback upstream was fetched through the live provider transport")
 	}
-	if !errors.Is(err, outbound.ErrNonPublicAddr) {
+	if !errors.Is(err, outboundtest.ErrNonPublicAddr) {
 		t.Errorf("error = %v, want the non-public address refusal", err)
 	}
 	if connections.Load() != 0 {

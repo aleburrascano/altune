@@ -1,7 +1,7 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/monitoring/internal/adapters/handler"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
@@ -14,12 +14,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func everyDependencyDown(context.Context) monitoring.DependencyHealth {
-	return monitoring.DependencyHealth{
-		DB:    monitoring.DepDown,
-		Redis: monitoring.DepDown,
-		Auth:  monitoring.DepDown,
-		Detail: monitoring.DependencyDetail{
+func everyDependencyDown(context.Context) handler.DependencyHealth {
+	return handler.DependencyHealth{
+		DB:    handler.DepDown,
+		Redis: handler.DepDown,
+		Auth:  handler.DepDown,
+		Detail: handler.DependencyDetail{
 			DBError:    "db refused",
 			RedisError: "redis refused",
 			AuthError:  "jwks refused",
@@ -28,10 +28,10 @@ func everyDependencyDown(context.Context) monitoring.DependencyHealth {
 	}
 }
 
-func serveObserveHealth(t *testing.T, probe func(context.Context) monitoring.DependencyHealth) *httptest.ResponseRecorder {
+func serveObserveHealth(t *testing.T, probe func(context.Context) handler.DependencyHealth) *httptest.ResponseRecorder {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{Health: probe}).Register(r)
+	handler.NewObserveHandler(clock.Now, clock.NewTicker, handler.Deps{Health: probe}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	return rec
@@ -57,7 +57,7 @@ func TestNewObserveHandler_RefusesAMissingClock(t *testing.T) {
 			t.Errorf("panic = %q, want a refusal naming NewObserveHandler", msg)
 		}
 	}()
-	monitoring.NewObserveHandler(nil, clock.NewTicker, monitoring.Deps{})
+	handler.NewObserveHandler(nil, clock.NewTicker, handler.Deps{})
 }
 
 func TestNewObserveHandler_RefusesAMissingTicker(t *testing.T) {
@@ -66,5 +66,5 @@ func TestNewObserveHandler_RefusesAMissingTicker(t *testing.T) {
 			t.Errorf("panic = %q, want a refusal naming the ticker", msg)
 		}
 	}()
-	monitoring.NewObserveHandler(clock.Now, nil, monitoring.Deps{})
+	handler.NewObserveHandler(clock.Now, nil, handler.Deps{})
 }

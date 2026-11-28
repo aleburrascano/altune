@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/platform/leader"
+	"altune/go-api/internal/platform/leader/leadertest"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -63,7 +64,7 @@ func (f *fakeElection) lose() {
 	defer f.mu.Unlock()
 	f.leader = false
 	for _, cancel := range f.cancels {
-		cancel(leader.ErrLeadershipLost)
+		cancel(leadertest.ErrLeadershipLost)
 	}
 	f.cancels = nil
 }
@@ -456,7 +457,7 @@ func TestTicker_AStaleLeadersWriteIsNotApplied(t *testing.T) {
 	<-newDone
 
 	close(proceed)
-	if err := <-staleErr; !errors.Is(err, leader.ErrLeadershipLost) {
+	if err := <-staleErr; !errors.Is(err, leadertest.ErrLeadershipLost) {
 		t.Fatalf("stale leader's write returned %v, want it refused with ErrLeadershipLost", err)
 	}
 	mu.Lock()
@@ -565,7 +566,7 @@ func TestTicker_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 
 	select {
 	case err := <-stoppedBecause:
-		if !errors.Is(err, leader.ErrLeadershipLost) {
+		if !errors.Is(err, leadertest.ErrLeadershipLost) {
 			t.Fatalf("in-flight eval ended with %v, want it canceled with ErrLeadershipLost", err)
 		}
 	case <-time.After(2 * time.Second):

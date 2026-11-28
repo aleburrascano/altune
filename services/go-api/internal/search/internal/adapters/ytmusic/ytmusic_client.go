@@ -2,7 +2,6 @@ package ytmusic
 
 import (
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/shared/youtubemusicapi"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -92,17 +91,17 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 	if filter != ytmNoFilter {
 		fields["params"] = string(filter)
 	}
-	body := youtubemusicapi.Body(fields)
+	body := outbound.YouTubeMusicBody(fields)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic marshal: %w", err)
 	}
 
-	_, raw, err := outbound.PostBytesCappedOK(ctx, client, youtubemusicapi.URL(youtubemusicapi.MusicURL, "search"), bytes.NewReader(payload), ytmResponseBodyCap,
+	_, raw, err := outbound.PostBytesCappedOK(ctx, client, outbound.YouTubeMusicEndpointURL(outbound.YouTubeMusicBaseURL, "search"), bytes.NewReader(payload), ytmResponseBodyCap,
 		outbound.WithHeader("Content-Type", "application/json; charset=utf-8"),
 		outbound.WithHeader("Referer", "https://music.youtube.com/search"),
-		outbound.WithHeader("User-Agent", youtubemusicapi.UserAgent))
+		outbound.WithHeader("User-Agent", outbound.YouTubeMusicUserAgent))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic do: %w", err)
 	}
@@ -234,7 +233,7 @@ func parseYTMTrack(mr any) *ytmTrack {
 	if len(t.Artists) == 0 {
 		t.Artists = fallbackByline(info2)
 	}
-	t.IsExplicit = youtubemusicapi.HasExplicitBadge(ytmGet(mr, ytmPath{"badges"}))
+	t.IsExplicit = outbound.YouTubeMusicHasExplicitBadge(ytmGet(mr, ytmPath{"badges"}))
 	t.Thumbnails = parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
 	return t
 }
@@ -268,7 +267,7 @@ func parseYTMAlbum(mr any) *ytmAlbum {
 		}
 		a.Year = ytmStr(runs[len(runs)-1], ytmPath{"text"})
 	}
-	a.IsExplicit = youtubemusicapi.HasExplicitBadge(ytmGet(mr, ytmPath{"badges"}))
+	a.IsExplicit = outbound.YouTubeMusicHasExplicitBadge(ytmGet(mr, ytmPath{"badges"}))
 	a.Thumbnails = parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
 	return a
 }

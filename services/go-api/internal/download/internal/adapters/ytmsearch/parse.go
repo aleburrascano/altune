@@ -1,7 +1,7 @@
 package ytmsearch
 
 import (
-	"altune/go-api/internal/shared/youtubemusicapi"
+	"altune/go-api/internal/platform/outbound"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -125,7 +125,7 @@ func watchFromPanelVideo(video node) Watch {
 		Title:    joinedRuns(video.at("title", "runs")),
 		Artists:  bylineArtists(video.at("longBylineText", "runs").items()),
 		Type:     VideoType(video.at("navigationEndpoint", "watchEndpoint", "watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").text()),
-		Explicit: youtubemusicapi.HasExplicitBadge(video.at("badges").value),
+		Explicit: outbound.YouTubeMusicHasExplicitBadge(video.at("badges").value),
 	}
 }
 
@@ -162,7 +162,7 @@ func songFromListItem(item node) (Song, bool) {
 		Album:           bylineAlbum(byline),
 		DurationSeconds: bylineDuration(byline),
 		Type:            VideoType(play.at("watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").text()),
-		Explicit:        youtubemusicapi.HasExplicitBadge(item.at("badges").value),
+		Explicit:        outbound.YouTubeMusicHasExplicitBadge(item.at("badges").value),
 	}, true
 }
 

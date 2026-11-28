@@ -3,8 +3,9 @@ package ytmsearch_test
 import (
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/platform/outbound"
+	"altune/go-api/internal/platform/outbound/outboundtest"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
 	"encoding/json"
 	"errors"
@@ -359,7 +360,7 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	redisClient := goredis.NewClient(&goredis.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
-	budget, err := youtubemusicapi.NewBudget(redisClient, youtubemusicapi.Settings{MinInterval: interval}, clock.Now, clock.Sleep)
+	budget, err := outbound.NewYouTubeMusicBudget(redisClient, outbound.YouTubeMusicBudgetSettings{MinInterval: interval}, clock.Now, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +382,7 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 	}
 
 	if _, err := client.SearchSongs(context.Background(), "waits for the shared budget"); err != nil {
-		if errors.Is(err, youtubemusicapi.ErrBudgetRefused) {
+		if errors.Is(err, outboundtest.ErrYouTubeMusicBudgetRefused) {
 			t.Fatalf("slot %v out under a %v timeout was refused: %v", interval, timeout, err)
 		}
 		t.Fatalf("search err = %v, want the slot wait outside the %v request timeout", err, timeout)

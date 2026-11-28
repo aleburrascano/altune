@@ -2,7 +2,7 @@ package app_test
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/auth/authtest"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/polltest"
@@ -146,14 +146,14 @@ func getFrom(t *testing.T, h http.Handler, client, path, token string) (int, []b
 	return rec.Code, body
 }
 
-func liveAuthMetrics(t *testing.T, h http.Handler, token string) auth.MetricsSnapshot {
+func liveAuthMetrics(t *testing.T, h http.Handler, token string) authtest.MetricsSnapshot {
 	t.Helper()
 	code, body := getAs(t, h, "/observe/metrics/live", token)
 	if code != http.StatusOK {
 		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Auth auth.MetricsSnapshot `json:"auth"`
+		Auth authtest.MetricsSnapshot `json:"auth"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
@@ -197,7 +197,7 @@ func TestAuth_RejectionsAndAnUnreachableKeySetReachLiveMetrics(t *testing.T) {
 	f.keysDown.Store(true)
 	h := assembledHandler(t, f.cfg)
 	operator := signedToken(t, f.key, f.operator)
-	before := auth.MetricsSnapshot{}
+	before := authtest.MetricsSnapshot{}
 
 	const firstClient, forgingClient = "198.51.100.7:1234", "198.51.100.8:1234"
 	if code, body := getFrom(t, h, firstClient, "/observe/metrics/live", operator); code != http.StatusServiceUnavailable {
@@ -226,7 +226,7 @@ func TestAuth_RejectionsAndAnUnreachableKeySetReachLiveMetrics(t *testing.T) {
 	if after.TokenRejections != before.TokenRejections+1 {
 		t.Errorf("auth.token_rejections_total %d, want %d", after.TokenRejections, before.TokenRejections+1)
 	}
-	reason := string(auth.ReasonSignatureInvalid)
+	reason := string(authtest.ReasonSignatureInvalid)
 	if want := before.TokenRejectionsByReason[reason] + 1; after.TokenRejectionsByReason[reason] != want {
 		t.Errorf("auth.token_rejections_by_reason_total[%s] %d, want %d", reason, after.TokenRejectionsByReason[reason], want)
 	}
