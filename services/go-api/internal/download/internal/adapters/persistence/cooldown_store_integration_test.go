@@ -1,11 +1,11 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *download.TrackSnapshot {
+func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *ports.TrackSnapshot {
 	t.Helper()
 	track := failedTrack(t)
 	_, err := pool.Exec(context.Background(),
@@ -62,7 +62,7 @@ func TestPostgresCooldownStore_Contract(t *testing.T) {
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	acquisitiontest.CooldownContract(t, func(*testing.T) acquisitiontest.CooldownUnderTest {
-		return contractPgxCooldowns{PostgresCooldownStore: download.NewPostgresCooldownStore(pool), pool: pool}
+		return contractPgxCooldowns{PostgresCooldownStore: persistence.NewPostgresCooldownStore(pool), pool: pool}
 	})
 }
 
@@ -74,10 +74,10 @@ func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
 	track := insertFailedTrack(t, first)
 	ctx := context.Background()
 
-	if err := download.NewRetryAdmission(download.NewPostgresCooldownStore(first)).Admit(ctx, track, queued); err != nil {
+	if err := service.NewRetryAdmission(persistence.NewPostgresCooldownStore(first)).Admit(ctx, track, queued); err != nil {
 		t.Fatalf("first Admit = %v, want nil", err)
 	}
-	err := download.NewRetryAdmission(download.NewPostgresCooldownStore(second)).Admit(ctx, track, queued)
+	err := service.NewRetryAdmission(persistence.NewPostgresCooldownStore(second)).Admit(ctx, track, queued)
 	if !errors.Is(err, domain.ErrCooldownActive) {
 		t.Errorf("Admit from restarted process = %v, want ErrCooldownActive", err)
 	}
@@ -87,7 +87,7 @@ func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresCooldownStore(pool)
+	store := persistence.NewPostgresCooldownStore(pool)
 	track := insertFailedTrack(t, pool)
 	ctx := context.Background()
 
@@ -133,7 +133,7 @@ func TestPostgresCooldownStore_ConcurrentReservesAdmitOne(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			store := download.NewPostgresCooldownStore(pool)
+			store := persistence.NewPostgresCooldownStore(pool)
 			_, ok, _, err := store.Reserve(context.Background(), track.ID, ports.CooldownRetry, time.Minute)
 			if err != nil {
 				t.Errorf("Reserve: %v", err)

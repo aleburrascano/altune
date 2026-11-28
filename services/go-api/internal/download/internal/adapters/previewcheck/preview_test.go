@@ -1,7 +1,6 @@
 package previewcheck_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/previewcheck"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -91,7 +90,7 @@ type previewSource interface {
 }
 
 func (s *deezerStub) serve() previewSource {
-	return download.MustNewDeezerPreview(&http.Client{Transport: s}, deezer, fixedPrinter{print: []uint32{7, 8, 9}}, clock.Sleep, time.Now)
+	return previewcheck.MustNew(&http.Client{Transport: s}, deezer, fixedPrinter{print: []uint32{7, 8, 9}}, clock.Sleep, time.Now)
 }
 
 func TestNewDeezerPreview_RefusesAMissingClock(t *testing.T) {
@@ -209,7 +208,7 @@ func TestDeezerPreviews_GivesUpAfterFiveAttemptsWhenQuotaNeverLifts(t *testing.T
 func TestDeezerPreviews_AnHTTP429EndsTheCallAtOnceAndHoldsTheNextCallerToTheCooldown(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stub := &throttlingOnce{deezerStub: deezerStub{trackBody: func(int) string { return noPreview }}}
-		previews := download.MustNewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{}, clock.Sleep, time.Now)
+		previews := previewcheck.MustNew(&http.Client{Transport: stub}, deezer, fixedPrinter{}, clock.Sleep, time.Now)
 		started := time.Now()
 
 		_, err := previews.Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
@@ -279,7 +278,7 @@ func TestDeezerPreviews_HoldsEveryRequestWhileAnotherCallerIsBackingOff(t *testi
 func TestFpcalcPrinter_ReadsTheRawFingerprint(t *testing.T) {
 	fpcalc := writeFakeFpcalc(t, "#!/bin/sh\nprintf '{\"duration\": 30, \"fingerprint\": [1936120799,4058316077,3]}'\n")
 
-	got, err := download.NewFpcalcPrinter(fpcalc).Print(context.Background(), os.DevNull)
+	got, err := previewcheck.NewFpcalcPrinter(fpcalc).Print(context.Background(), os.DevNull)
 
 	if err != nil || len(got) != 3 || got[0] != 1936120799 || got[1] != 4058316077 {
 		t.Errorf("print = %v, err = %v, want the three raw items", got, err)
@@ -290,10 +289,10 @@ func TestFpcalcPrinter_RefusesAnEmptyOrFailedFingerprint(t *testing.T) {
 	empty := writeFakeFpcalc(t, "#!/bin/sh\nprintf '{\"duration\": 30, \"fingerprint\": []}'\n")
 	failing := writeFakeFpcalc(t, fpcalcFails)
 
-	if _, err := download.NewFpcalcPrinter(empty).Print(context.Background(), os.DevNull); !errors.Is(err, previewcheck.ErrEmptyPrint) {
+	if _, err := previewcheck.NewFpcalcPrinter(empty).Print(context.Background(), os.DevNull); !errors.Is(err, previewcheck.ErrEmptyPrint) {
 		t.Errorf("empty err = %v, want ErrEmptyPrint", err)
 	}
-	if _, err := download.NewFpcalcPrinter(failing).Print(context.Background(), os.DevNull); err == nil {
+	if _, err := previewcheck.NewFpcalcPrinter(failing).Print(context.Background(), os.DevNull); err == nil {
 		t.Error("failing fpcalc returned no error")
 	}
 }

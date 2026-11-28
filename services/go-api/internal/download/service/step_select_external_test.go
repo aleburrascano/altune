@@ -1,9 +1,11 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/scratchfiles"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"os"
@@ -16,26 +18,26 @@ import (
 
 type artTracks struct {
 	mu      sync.Mutex
-	found   []download.AudioCandidate
+	found   []ports.AudioCandidate
 	fetched []string
 }
 
-func (s *artTracks) Name() download.SourceName { return "art-tracks" }
+func (s *artTracks) Name() domain.SourceName { return "art-tracks" }
 
-func (s *artTracks) Find(context.Context, download.FindRequest) ([]download.AudioCandidate, error) {
+func (s *artTracks) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return s.found, nil
 }
 
-func (s *artTracks) Fetch(_ context.Context, c download.AudioCandidate, outDir string) (download.FetchedAudio, error) {
+func (s *artTracks) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	s.mu.Lock()
 	s.fetched = append(s.fetched, c.URL)
 	s.mu.Unlock()
 	path := filepath.Join(outDir, "audio.mp3")
-	return download.FetchedAudio{Path: path}, os.WriteFile(path, []byte("downloaded bytes"), 0o600)
+	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("downloaded bytes"), 0o600)
 }
 
 func TestSelect_RanksArtTracksByTheResolvedLengthWhenTheTrackHasNone(t *testing.T) {
-	artTrack := func(url string, duration float64) download.AudioCandidate {
+	artTrack := func(url string, duration float64) ports.AudioCandidate {
 		return downloadtest.Candidate(
 			url,
 			downloadtest.WithTitle("Phone (Interlude)"),
@@ -45,16 +47,16 @@ func TestSelect_RanksArtTracksByTheResolvedLengthWhenTheTrackHasNone(t *testing.
 			downloadtest.WithKind(ports.KindArtTrack),
 		)
 	}
-	source := &artTracks{found: []download.AudioCandidate{
+	source := &artTracks{found: []ports.AudioCandidate{
 		artTrack("https://music.youtube.com/watch?v=aaaaaaaaaaa", 112),
 		artTrack("https://music.youtube.com/watch?v=bbbbbbbbbbb", 128),
 	}}
-	track := download.TrackSnapshot{
+	track := ports.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
-		Title: "Phone (Interlude)", Artist: "SLAYR", Album: "Phone", Status: download.TrackPending,
+		Title: "Phone (Interlude)", Artist: "SLAYR", Album: "Phone", Status: ports.TrackPending,
 	}
-	svc := download.MustNewAcquireTrackAudioService(&pendingLedger{track: track}, download.NewSourceRegistry(source), storedAudio{},
-		download.NewTempWorkspace(),
+	svc := service.MustNewAcquireTrackAudioService(&pendingLedger{track: track}, service.NewSourceRegistry(source), storedAudio{},
+		scratchfiles.New(),
 		resolving(&resolver{identity: ports.RecordingIdentity{Duration: 128}}, noVerification()), noStages())
 
 	_ = svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})

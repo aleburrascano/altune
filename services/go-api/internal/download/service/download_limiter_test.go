@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/service"
 	"context"
 	"errors"
@@ -9,7 +8,7 @@ import (
 )
 
 func TestDownloadLimiter_AcquireReturnsCtxErrWhenCancelledWhileFull(t *testing.T) {
-	limiter := download.MustLimitedTo(1)
+	limiter := service.MustLimitedTo(1)
 	if err := limiter.Acquire(context.Background()); err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
@@ -22,7 +21,7 @@ func TestDownloadLimiter_AcquireReturnsCtxErrWhenCancelledWhileFull(t *testing.T
 }
 
 func TestDownloadLimiter_ReleaseFreesASlot(t *testing.T) {
-	limiter := download.MustLimitedTo(1)
+	limiter := service.MustLimitedTo(1)
 	if err := limiter.Acquire(context.Background()); err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
@@ -34,7 +33,7 @@ func TestDownloadLimiter_ReleaseFreesASlot(t *testing.T) {
 }
 
 func TestDownloadLimiter_UnlimitedNeverBlocks(t *testing.T) {
-	limiter := download.Unlimited()
+	limiter := service.Unlimited()
 
 	for range 100 {
 		if err := limiter.Acquire(context.Background()); err != nil {

@@ -1,7 +1,7 @@
 package musicbrainzmatch_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service/musicbrainzmatch"
 	"altune/go-api/internal/shared/songfields"
 	"context"
@@ -26,7 +26,7 @@ func TestNewRecorded_ServesThePinnedFactsForThePinnedMBIDAlone(t *testing.T) {
 
 func TestNewRecorded_ResolvesFromTheRecordedSearchAndISRCAnswers(t *testing.T) {
 	hits := []songfields.RecordingIdentity{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003", RecordingMBID: "remix-mbid", DurationSeconds: 236}}
-	isrc := []download.ISRCRecording{{MBID: "album-version", Duration: 237}}
+	isrc := []ports.ISRCRecording{{MBID: "album-version", Duration: 237}}
 
 	identity, err := musicbrainzmatch.NewRecorded(hits, isrc, nil).Resolve(context.Background(), drinkingQuery)
 

@@ -1,8 +1,9 @@
 package ytdlp_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/polltest"
@@ -170,11 +171,11 @@ func isSourceUnavailable(err error) bool {
 	return errors.As(err, &unavailable)
 }
 
-func downloadWithScript(t *testing.T, body string) (download.FetchedAudio, error) {
+func downloadWithScript(t *testing.T, body string) (ports.FetchedAudio, error) {
 	t.Helper()
 	outDir := t.TempDir()
 	installYtDlp(t, strings.ReplaceAll(body, "OUT", outDir))
-	return download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, outDir)
+	return ytdlp.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, outDir)
 }
 
 func stubDownload(outDir string) string {

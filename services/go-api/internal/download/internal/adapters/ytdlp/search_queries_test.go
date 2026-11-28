@@ -1,7 +1,8 @@
 package ytdlp_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"os"
@@ -27,10 +28,10 @@ func fakeYtDlpLoggingArgs(t *testing.T) string {
 	return log
 }
 
-func searchedQueries(t *testing.T, req download.FindRequest) []string {
+func searchedQueries(t *testing.T, req ports.FindRequest) []string {
 	t.Helper()
 	log := fakeYtDlpLoggingArgs(t)
-	source := download.NewYtDlpSource(download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
+	source := ytdlp.NewSource(ytdlp.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
 	if _, err := source.Find(context.Background(), req); err != nil {
 		t.Fatalf("Find: %v", err)
 	}
@@ -50,13 +51,13 @@ func searchedQueries(t *testing.T, req download.FindRequest) []string {
 func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 	tests := []struct {
 		name        string
-		req         download.FindRequest
+		req         ports.FindRequest
 		wantQueries []string
 		wantMin     int
 	}{
 		{
 			name: "basic track produces title+artist queries",
-			req:  download.FindRequest{Title: "Blinding Lights", Artist: "The Weeknd"},
+			req:  ports.FindRequest{Title: "Blinding Lights", Artist: "The Weeknd"},
 			wantQueries: []string{
 				"Blinding Lights The Weeknd",
 				"Blinding Lights The Weeknd audio",
@@ -65,7 +66,7 @@ func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 		},
 		{
 			name: "track with album adds album query",
-			req:  download.FindRequest{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"},
+			req:  ports.FindRequest{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"},
 			wantQueries: []string{
 				"Circles Post Malone",
 				"Circles Post Malone Hollywood's Bleeding",
@@ -75,7 +76,7 @@ func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 		},
 		{
 			name: "track with ISRC includes ISRC as first query",
-			req:  download.FindRequest{Title: "HUMBLE.", Artist: "Kendrick Lamar", ISRC: "USUM71700626"},
+			req:  ports.FindRequest{Title: "HUMBLE.", Artist: "Kendrick Lamar", ISRC: "USUM71700626"},
 			wantQueries: []string{
 				"USUM71700626",
 				"HUMBLE. Kendrick Lamar",
@@ -84,7 +85,7 @@ func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 		},
 		{
 			name:    "empty album skips album query",
-			req:     download.FindRequest{Title: "Song", Artist: "Artist", Album: ""},
+			req:     ports.FindRequest{Title: "Song", Artist: "Artist", Album: ""},
 			wantMin: 2,
 		},
 	}

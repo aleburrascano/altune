@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/songfields"
 	"context"
@@ -27,12 +26,12 @@ func resolvedTo(mbid string) *resolver {
 
 type identifier struct {
 	mu    sync.Mutex
-	match download.RecordingMatch
+	match ports.RecordingMatch
 	err   error
 	calls int
 }
 
-func (i *identifier) Identify(context.Context, string, float64) (download.RecordingMatch, error) {
+func (i *identifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.calls++

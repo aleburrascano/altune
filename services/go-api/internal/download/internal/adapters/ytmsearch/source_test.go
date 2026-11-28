@@ -1,8 +1,8 @@
 package ytmsearch_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"context"
@@ -14,32 +14,32 @@ import (
 )
 
 type fakeSongSearch struct {
-	songs   []download.YouTubeMusicSong
+	songs   []ytmsearch.Song
 	err     error
 	queries []string
 }
 
-func (f *fakeSongSearch) SearchSongs(_ context.Context, query string) ([]download.YouTubeMusicSong, error) {
+func (f *fakeSongSearch) SearchSongs(_ context.Context, query string) ([]ytmsearch.Song, error) {
 	f.queries = append(f.queries, query)
 	return f.songs, f.err
 }
 
 type recordingDownloader struct{ gotURL string }
 
-func (d *recordingDownloader) Download(_ context.Context, url, outDir string) (download.FetchedAudio, error) {
+func (d *recordingDownloader) Download(_ context.Context, url, outDir string) (ports.FetchedAudio, error) {
 	d.gotURL = url
-	return download.FetchedAudio{Path: outDir + "/a.m4a"}, nil
+	return ports.FetchedAudio{Path: outDir + "/a.m4a"}, nil
 }
 
-func atv(id, title string, artists []string, seconds int, explicit bool) download.YouTubeMusicSong {
-	return download.YouTubeMusicSong{VideoID: id, Title: title, Artists: artists, DurationSeconds: seconds, Type: download.VideoTypeAudioOnly, Explicit: explicit}
+func atv(id, title string, artists []string, seconds int, explicit bool) ytmsearch.Song {
+	return ytmsearch.Song{VideoID: id, Title: title, Artists: artists, DurationSeconds: seconds, Type: ytmsearch.VideoTypeAudioOnly, Explicit: explicit}
 }
 
-var vibesRequest = download.FindRequest{Title: "2021 Vibes", Artist: "LUCKI", Duration: 125}
+var vibesRequest = ports.FindRequest{Title: "2021 Vibes", Artist: "LUCKI", Duration: 125}
 
-func find(t *testing.T, songs []download.YouTubeMusicSong, req download.FindRequest) []download.AudioCandidate {
+func find(t *testing.T, songs []ytmsearch.Song, req ports.FindRequest) []ports.AudioCandidate {
 	t.Helper()
-	got, err := download.NewYtmSearchSource(&fakeSongSearch{songs: songs}, &recordingDownloader{}).Find(context.Background(), req)
+	got, err := ytmsearch.NewSource(&fakeSongSearch{songs: songs}, &recordingDownloader{}).Find(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Find: %v", err)
 	}
@@ -47,8 +47,8 @@ func find(t *testing.T, songs []download.YouTubeMusicSong, req download.FindRequ
 }
 
 func TestSource_AStrongArtTrackHitIsOneResolvedCandidate(t *testing.T) {
-	search := &fakeSongSearch{songs: []download.YouTubeMusicSong{atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}}
-	got, err := download.NewYtmSearchSource(search, &recordingDownloader{}).Find(context.Background(), vibesRequest)
+	search := &fakeSongSearch{songs: []ytmsearch.Song{atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}}
+	got, err := ytmsearch.NewSource(search, &recordingDownloader{}).Find(context.Background(), vibesRequest)
 	if err != nil {
 		t.Fatalf("Find: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestSource_AStrongArtTrackHitIsOneResolvedCandidate(t *testing.T) {
 }
 
 func TestSource_AHitWithoutAValidVideoIDIsNeverTheCandidate(t *testing.T) {
-	songs := []download.YouTubeMusicSong{
+	songs := []ytmsearch.Song{
 		atv("short", "2021 Vibes", []string{"LUCKI"}, 125, true),
 		atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true),
 	}
@@ -77,16 +77,16 @@ func TestSource_AHitWithoutAValidVideoIDIsNeverTheCandidate(t *testing.T) {
 }
 
 func TestSource_NoCandidateUnlessEveryCheckPasses(t *testing.T) {
-	cases := map[string]download.YouTubeMusicSong{
-		"music video":        {VideoID: "u4GAeAYGAqE", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: download.VideoTypeOfficialVideo},
-		"user upload":        {VideoID: "abcdefghijk", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: download.VideoTypeUserUpload},
+	cases := map[string]ytmsearch.Song{
+		"music video":        {VideoID: "u4GAeAYGAqE", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: ytmsearch.VideoTypeOfficialVideo},
+		"user upload":        {VideoID: "abcdefghijk", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: ytmsearch.VideoTypeUserUpload},
 		"other title":        atv("aaaaaaaaaaa", "Karma A Bitch", []string{"LUCKI"}, 125, true),
 		"remix of the title": atv("bbbbbbbbbbb", "2021 Vibes (Remix)", []string{"LUCKI"}, 125, true),
 		"other artist":       atv("ccccccccccc", "2021 Vibes", []string{"Someone Else"}, 125, true),
 	}
 	for name, song := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got := find(t, []download.YouTubeMusicSong{song}, vibesRequest); len(got) != 0 {
+			if got := find(t, []ytmsearch.Song{song}, vibesRequest); len(got) != 0 {
 				t.Errorf("candidates = %+v, want none", got)
 			}
 		})
@@ -94,7 +94,7 @@ func TestSource_NoCandidateUnlessEveryCheckPasses(t *testing.T) {
 }
 
 func TestSource_ExplicitBeatsCleanWhenBothMatch(t *testing.T) {
-	got := find(t, []download.YouTubeMusicSong{
+	got := find(t, []ytmsearch.Song{
 		atv("88oFlVnMEsc", "2021 Vibes", []string{"LUCKI"}, 125, false),
 		atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true),
 	}, vibesRequest)
@@ -107,7 +107,7 @@ func TestSource_TheCatalogsCleanFlagPicksTheCleanTwin(t *testing.T) {
 	clean := false
 	req := vibesRequest
 	req.CatalogExplicit = &clean
-	got := find(t, []download.YouTubeMusicSong{
+	got := find(t, []ytmsearch.Song{
 		atv("88oFlVnMEsc", "2021 Vibes", []string{"LUCKI"}, 125, false),
 		atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true),
 	}, req)
@@ -118,29 +118,29 @@ func TestSource_TheCatalogsCleanFlagPicksTheCleanTwin(t *testing.T) {
 
 func TestSource_CreditAndTitleQuirksStillMatch(t *testing.T) {
 	cases := map[string]struct {
-		req  download.FindRequest
-		song download.YouTubeMusicSong
+		req  ports.FindRequest
+		song ytmsearch.Song
 	}{
 		"dollar sign in the credit": {
-			req:  download.FindRequest{Title: "Teen Bean", Artist: "Ken Carson", Duration: 119},
+			req:  ports.FindRequest{Title: "Teen Bean", Artist: "Ken Carson", Duration: 119},
 			song: atv("eeeeeeeeeee", "Teen Bean", []string{"Ken Car$on"}, 120, true),
 		},
 		"bonus tag on the title": {
-			req:  download.FindRequest{Title: "Y NOT?", Artist: "LUCKI", Duration: 148},
+			req:  ports.FindRequest{Title: "Y NOT?", Artist: "LUCKI", Duration: 148},
 			song: atv("fffffffffff", "Y NOT? (Bonus)", []string{"LUCKI"}, 149, true),
 		},
 		"featured artist in the title": {
-			req:  download.FindRequest{Title: "Syrup Sandwiches", Artist: "Cordae", Duration: 173},
+			req:  ports.FindRequest{Title: "Syrup Sandwiches", Artist: "Cordae", Duration: 173},
 			song: atv("ggggggggggg", "Syrup Sandwiches (feat. Joey Bada$$)", []string{"Cordae"}, 173, true),
 		},
 		"second credited artist": {
-			req:  download.FindRequest{Title: "Our 25th Birthday", Artist: "Central Cee", Duration: 308},
+			req:  ports.FindRequest{Title: "Our 25th Birthday", Artist: "Central Cee", Duration: 308},
 			song: atv("hhhhhhhhhhh", "Our 25th Birthday", []string{"Dave", "Central Cee"}, 308, true),
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got := find(t, []download.YouTubeMusicSong{tc.song}, tc.req); len(got) != 1 {
+			if got := find(t, []ytmsearch.Song{tc.song}, tc.req); len(got) != 1 {
 				t.Errorf("candidates = %+v, want the one match", got)
 			}
 		})
@@ -149,7 +149,7 @@ func TestSource_CreditAndTitleQuirksStillMatch(t *testing.T) {
 
 func TestSource_OnlyTheTopFiveResultsAreConsidered(t *testing.T) {
 	filler := atv("iiiiiiiiiii", "Other", []string{"LUCKI"}, 100, true)
-	songs := []download.YouTubeMusicSong{filler, filler, filler, filler, filler, atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}
+	songs := []ytmsearch.Song{filler, filler, filler, filler, filler, atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}
 	if got := find(t, songs, vibesRequest); len(got) != 0 {
 		t.Errorf("candidates = %+v, want none past the top five", got)
 	}
@@ -162,8 +162,8 @@ func TestSource_TheSavedLengthDoesNotGateTheMatch(t *testing.T) {
 	}
 	for name, saved := range cases {
 		t.Run(name, func(t *testing.T) {
-			req := download.FindRequest{Title: "Demigod", Artist: "SLAYR", Duration: saved}
-			if got := find(t, []download.YouTubeMusicSong{atv("jjjjjjjjjjj", "Demigod", []string{"slayr"}, 168, true)}, req); len(got) != 1 {
+			req := ports.FindRequest{Title: "Demigod", Artist: "SLAYR", Duration: saved}
+			if got := find(t, []ytmsearch.Song{atv("jjjjjjjjjjj", "Demigod", []string{"slayr"}, 168, true)}, req); len(got) != 1 {
 				t.Errorf("candidates = %+v, want the official track", got)
 			}
 		})
@@ -171,10 +171,10 @@ func TestSource_TheSavedLengthDoesNotGateTheMatch(t *testing.T) {
 }
 
 func TestSource_TheClosestLengthBreaksATie(t *testing.T) {
-	got := find(t, []download.YouTubeMusicSong{
+	got := find(t, []ytmsearch.Song{
 		atv("kkkkkkkkkkk", "Human", []string{"The Human League"}, 300, false),
 		atv("lllllllllll", "Human", []string{"The Human League"}, 266, false),
-	}, download.FindRequest{Title: "Human", Artist: "The Human League", Duration: 264})
+	}, ports.FindRequest{Title: "Human", Artist: "The Human League", Duration: 264})
 	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=lllllllllll" {
 		t.Errorf("candidates = %+v, want the 266 s track closest to the saved length", got)
 	}
@@ -185,16 +185,16 @@ func TestSource_TheCatalogAlbumBreaksATie(t *testing.T) {
 	compilation.Album = "Greatest Hits"
 	original := atv("nnnnnnnnnnn", "Human", []string{"The Human League"}, 300, false)
 	original.Album = "Crash"
-	req := download.FindRequest{Title: "Human", Artist: "The Human League", Album: "crash", Duration: 264}
+	req := ports.FindRequest{Title: "Human", Artist: "The Human League", Album: "crash", Duration: 264}
 
-	got := find(t, []download.YouTubeMusicSong{compilation, original}, req)
+	got := find(t, []ytmsearch.Song{compilation, original}, req)
 	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=nnnnnnnnnnn" {
 		t.Errorf("candidates = %+v, want the hit on the catalog album over the closer length", got)
 	}
 }
 
 func TestSource_SearchErrorsAreReturned(t *testing.T) {
-	src := download.NewYtmSearchSource(&fakeSongSearch{err: errors.New("innertube 503")}, &recordingDownloader{})
+	src := ytmsearch.NewSource(&fakeSongSearch{err: errors.New("innertube 503")}, &recordingDownloader{})
 	if _, err := src.Find(context.Background(), vibesRequest); err == nil {
 		t.Fatal("Find error = nil, want the search error so the fallback runs and the outage is recorded")
 	}
@@ -202,7 +202,7 @@ func TestSource_SearchErrorsAreReturned(t *testing.T) {
 
 func TestSource_FetchDownloadsTheCandidateURL(t *testing.T) {
 	downloader := &recordingDownloader{}
-	src := download.NewYtmSearchSource(&fakeSongSearch{}, downloader)
+	src := ytmsearch.NewSource(&fakeSongSearch{}, downloader)
 	if _, err := src.Fetch(context.Background(), downloadtest.Candidate("https://music.youtube.com/watch?v=LMDLNLM6Ji8"), t.TempDir()); err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -214,9 +214,9 @@ func TestSource_FetchDownloadsTheCandidateURL(t *testing.T) {
 func TestSource_TheArtTrackCarriesWhatTheSearchObserved(t *testing.T) {
 	song := atv("abc12345678", "Finesse", []string{"Bruno Mars"}, 191, false)
 	song.Album = "24K Magic"
-	req := download.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
+	req := ports.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
 
-	got := find(t, []download.YouTubeMusicSong{song}, req)
+	got := find(t, []ytmsearch.Song{song}, req)
 	if len(got) != 1 {
 		t.Fatalf("candidates = %v, want 1", got)
 	}
@@ -233,12 +233,12 @@ func TestSource_AnOutageIsSourceUnavailable(t *testing.T) {
 	t.Cleanup(slow.Close)
 	t.Cleanup(func() { close(hung) })
 
-	for name, client := range map[string]*download.YouTubeMusicSearchClient{
+	for name, client := range map[string]*ytmsearch.Client{
 		"a 503":                clientFor(down, time.Second),
 		"the client timed out": clientFor(slow, 30*time.Millisecond),
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := download.NewYtmSearchSource(client, &recordingDownloader{}).Find(context.Background(), vibesRequest)
+			_, err := ytmsearch.NewSource(client, &recordingDownloader{}).Find(context.Background(), vibesRequest)
 
 			if !isSourceUnavailable(err) {
 				t.Errorf("Find err = %v, want source unavailable", err)
@@ -272,7 +272,7 @@ func TestSource_ACancelledCallerIsNotAnOutage(t *testing.T) {
 		}
 	}()
 
-	_, err := download.NewYtmSearchSource(clientFor(slow, time.Minute), &recordingDownloader{}).Find(ctx, vibesRequest)
+	_, err := ytmsearch.NewSource(clientFor(slow, time.Minute), &recordingDownloader{}).Find(ctx, vibesRequest)
 
 	if !errors.Is(err, context.Canceled) || isSourceUnavailable(err) {
 		t.Errorf("Find err = %v, want the caller's cancellation, not an outage", err)
@@ -283,16 +283,16 @@ func TestSource_AnOutageNamesYtmsearch(t *testing.T) {
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) }))
 	t.Cleanup(down.Close)
 
-	_, err := download.NewYtmSearchSource(clientFor(down, time.Second), &recordingDownloader{}).Find(context.Background(), vibesRequest)
+	_, err := ytmsearch.NewSource(clientFor(down, time.Second), &recordingDownloader{}).Find(context.Background(), vibesRequest)
 
 	var unavailable *domain.SourceUnavailableError
-	if !errors.As(err, &unavailable) || unavailable.Source != download.SourceName("ytmsearch") {
+	if !errors.As(err, &unavailable) || unavailable.Source != domain.SourceName("ytmsearch") {
 		t.Errorf("Find err = %v, want SourceUnavailableError{Source: ytmsearch}", err)
 	}
 }
 
 func TestSource_TheArtTrackCarriesNoPlaceholderText(t *testing.T) {
-	got := find(t, []download.YouTubeMusicSong{atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}, vibesRequest)
+	got := find(t, []ytmsearch.Song{atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}, vibesRequest)
 	if len(got) != 1 {
 		t.Fatalf("candidates = %v, want 1", got)
 	}
@@ -303,9 +303,9 @@ func TestSource_TheArtTrackCarriesNoPlaceholderText(t *testing.T) {
 
 func TestSource_AFeaturingBracketIsACreditNotATitle(t *testing.T) {
 	song := atv("abc12345678", "Finesse (featuring Cardi B)", []string{"Bruno Mars"}, 191, false)
-	req := download.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
+	req := ports.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
 
-	if got := find(t, []download.YouTubeMusicSong{song}, req); len(got) != 1 {
+	if got := find(t, []ytmsearch.Song{song}, req); len(got) != 1 {
 		t.Fatalf("candidates = %v, want the featuring art track taken as a strong hit", got)
 	}
 }

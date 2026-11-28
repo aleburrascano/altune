@@ -1,9 +1,9 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
+	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/domain"
@@ -172,17 +172,17 @@ func (tornerWatch) Watch(context.Context, string) (ytmsearch.Watch, error) {
 		VideoID: "UeGkPDoLKjI",
 		Title:   "Tornerò",
 		Artists: []string{"I Santo California"},
-		Type:    download.VideoTypeAudioOnly,
+		Type:    ytmsearch.VideoTypeAudioOnly,
 	}, nil
 }
 
 func TestScoreConfidence_ATopicChannelTrackSixSecondsShortClearsTheFloor(t *testing.T) {
-	req := download.FindRequest{
+	req := ports.FindRequest{
 		Title:          "Tornerò",
 		Artist:         "I Santo California",
-		CatalogSources: []download.CatalogSource{{Provider: "youtube", ExternalID: "UeGkPDoLKjI"}},
+		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "UeGkPDoLKjI"}},
 	}
-	found, err := download.NewYtMusicSource(nil, tornerWatch{}).Find(context.Background(), req)
+	found, err := youtubemusic.NewSource(nil, tornerWatch{}).Find(context.Background(), req)
 	if err != nil || len(found) != 1 {
 		t.Fatalf("Find = %+v, %v", found, err)
 	}

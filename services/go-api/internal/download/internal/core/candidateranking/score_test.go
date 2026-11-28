@@ -1,7 +1,6 @@
 package candidateranking_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/core/candidateranking"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -25,7 +24,7 @@ const (
 	scorePrecision = 0.01
 )
 
-func metadataRank(t *testing.T, track candidateranking.Track, c download.AudioCandidate) float64 {
+func metadataRank(t *testing.T, track candidateranking.Track, c ports.AudioCandidate) float64 {
 	t.Helper()
 	return number(t, evaluation(t, track, c), "metadata_rank")
 }
@@ -131,7 +130,7 @@ func TestRank_ChannelScoreTrustsTopicAndArtistThenVevo(t *testing.T) {
 	tests := []struct {
 		name      string
 		artist    string
-		candidate download.AudioCandidate
+		candidate ports.AudioCandidate
 		want      float64
 	}{
 		{"topic class", "The Weeknd", downloadtest.Candidate("", downloadtest.WithChannel("The Weeknd - Topic")), 1.0},
@@ -197,7 +196,7 @@ func TestRank_ViewScoreIsAShareOfTheMostViewedCandidate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var candidates []download.AudioCandidate
+			var candidates []ports.AudioCandidate
 			for i, views := range tt.views {
 				candidates = append(candidates, downloadtest.Candidate(
 					string(rune('a'+i)),
@@ -290,7 +289,7 @@ func TestRank_EvaluationCarriesScoresAndTheCandidate(t *testing.T) {
 		downloadtest.WithCategories([]string{"Music"}),
 	)
 
-	_, _, evaluated := candidateranking.Rank(track, []download.AudioCandidate{c})
+	_, _, evaluated := candidateranking.Rank(track, []ports.AudioCandidate{c})
 
 	if len(evaluated) != 1 {
 		t.Fatalf("evaluated %d candidates, want 1", len(evaluated))
@@ -311,7 +310,7 @@ func TestRank_UnplayableCandidatesAreNotEvaluated(t *testing.T) {
 	track := song("Song", "Artist", 200)
 	drm := downloadtest.Candidate("", downloadtest.WithTitle("Song"), downloadtest.WithUnplayable("drm"))
 
-	_, refused, evaluated := candidateranking.Rank(track, []download.AudioCandidate{drm})
+	_, refused, evaluated := candidateranking.Rank(track, []ports.AudioCandidate{drm})
 
 	if len(evaluated) != 0 || len(refused) != 1 {
 		t.Fatalf("evaluated %d, refused %d, want 0 and 1", len(evaluated), len(refused))

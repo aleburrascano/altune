@@ -1,7 +1,7 @@
 package ytdlp_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -97,7 +97,7 @@ func TestCookieJar_AWriteBackGivesUpAndWarnsWhenTheRunEndsWhileTheJarIsLocked(t 
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).Download(ctx, youTubeWatchURL, outDir)
+		_, err := ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).Download(ctx, youTubeWatchURL, outDir)
 		done <- err
 	}()
 	waitFor(t, "a try at the jar lock another process holds", done, func() bool { return opens.seen(t) >= 1 })
@@ -123,7 +123,7 @@ func TestCookieJar_AWriteBackForACallerWithNoDeadlineGivesUpOnALockThatIsNeverRe
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, outDir)
+		_, err := ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, outDir)
 		done <- err
 	}()
 

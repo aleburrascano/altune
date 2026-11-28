@@ -1,10 +1,12 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/scratchfiles"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"bufio"
@@ -23,23 +25,23 @@ const loggedCap = 5
 
 type pendingLedger struct {
 	acquisitiontest.Rules
-	track download.TrackSnapshot
+	track ports.TrackSnapshot
 }
 
-func (l *pendingLedger) Get(context.Context, ids.TrackId, ids.UserId) (*download.TrackSnapshot, error) {
+func (l *pendingLedger) Get(context.Context, ids.TrackId, ids.UserId) (*ports.TrackSnapshot, error) {
 	track := l.track
 	return &track, nil
 }
 
-func (l *pendingLedger) Complete(context.Context, ids.TrackId, ids.UserId, download.ClaimNumber, download.Completion) error {
+func (l *pendingLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
 	return nil
 }
 
-func (l *pendingLedger) Fail(context.Context, ids.TrackId, ids.UserId, download.ClaimNumber, string) error {
+func (l *pendingLedger) Fail(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, string) error {
 	return nil
 }
 
-func (l *pendingLedger) RevertAt(context.Context, download.TrackSnapshot) error { return nil }
+func (l *pendingLedger) RevertAt(context.Context, ports.TrackSnapshot) error { return nil }
 
 func (l *pendingLedger) Requeue(context.Context, ids.TrackId) error {
 	return nil
@@ -51,10 +53,10 @@ func (l *pendingLedger) AudioRefInUse(context.Context, string, ids.TrackId) (boo
 
 type topicUpload struct{}
 
-func (topicUpload) Name() download.SourceName { return "topic-upload" }
+func (topicUpload) Name() domain.SourceName { return "topic-upload" }
 
-func (topicUpload) Find(context.Context, download.FindRequest) ([]download.AudioCandidate, error) {
-	return []download.AudioCandidate{downloadtest.Candidate(
+func (topicUpload) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return []ports.AudioCandidate{downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=boysdontcry",
 		downloadtest.WithTitle("Boys Don't Cry"),
 		downloadtest.WithChannel("The Cure - Topic"),
@@ -62,20 +64,20 @@ func (topicUpload) Find(context.Context, download.FindRequest) ([]download.Audio
 	)}, nil
 }
 
-func (topicUpload) Fetch(_ context.Context, _ download.AudioCandidate, outDir string) (download.FetchedAudio, error) {
+func (topicUpload) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	path := filepath.Join(outDir, "audio.mp3")
-	return download.FetchedAudio{Path: path}, os.WriteFile(path, []byte("downloaded bytes"), 0o600)
+	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("downloaded bytes"), 0o600)
 }
 
 func acquireIdentifiedAs(t *testing.T, results []ports.AcoustIDResult) {
 	t.Helper()
-	track := download.TrackSnapshot{
+	track := ports.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
-		Title: "Boys Don't Cry", Artist: "The Cure", Album: "Three Imaginary Boys", Status: download.TrackPending,
+		Title: "Boys Don't Cry", Artist: "The Cure", Album: "Three Imaginary Boys", Status: ports.TrackPending,
 	}
-	svc := download.MustNewAcquireTrackAudioService(&pendingLedger{track: track}, download.NewSourceRegistry(topicUpload{}), storedAudio{},
-		download.NewTempWorkspace(),
-		resolving(resolvedTo("mbid-a"), verifiedBy(&identifier{match: download.RecordingMatch{AcoustID: "ac-1", Results: results}})), noStages())
+	svc := service.MustNewAcquireTrackAudioService(&pendingLedger{track: track}, service.NewSourceRegistry(topicUpload{}), storedAudio{},
+		scratchfiles.New(),
+		resolving(resolvedTo("mbid-a"), verifiedBy(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: results}})), noStages())
 
 	_ = svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }

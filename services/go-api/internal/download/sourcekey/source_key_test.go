@@ -1,7 +1,8 @@
 package sourcekey_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/sourcekey"
 	"context"
 	"strings"
@@ -10,16 +11,16 @@ import (
 	"pgregory.net/rapid"
 )
 
-type answeringSongs []download.YouTubeMusicSong
+type answeringSongs []ytmsearch.Song
 
-func (a answeringSongs) SearchSongs(context.Context, string) ([]download.YouTubeMusicSong, error) {
+func (a answeringSongs) SearchSongs(context.Context, string) ([]ytmsearch.Song, error) {
 	return a, nil
 }
 
 func ytMusicWatchURL(t *testing.T, videoID string) string {
 	t.Helper()
-	song := download.YouTubeMusicSong{VideoID: videoID, Type: download.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}}
-	found, err := download.NewYtmSearchSource(answeringSongs{song}, nil).Find(context.Background(), download.FindRequest{Title: "Song", Artist: "Artist"})
+	song := ytmsearch.Song{VideoID: videoID, Type: ytmsearch.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}}
+	found, err := ytmsearch.NewSource(answeringSongs{song}, nil).Find(context.Background(), ports.FindRequest{Title: "Song", Artist: "Artist"})
 	if err != nil || len(found) != 1 {
 		t.Fatalf("found %v err %v, want one candidate", found, err)
 	}
@@ -51,7 +52,7 @@ func TestIsYouTubeVideoID_AcceptsExactlyElevenURLSafeCharacters(t *testing.T) {
 		{"dQw4w9WgXc\n", false},
 	}
 	for _, tc := range cases {
-		if got := download.IsYouTubeVideoID(tc.id); got != tc.want {
+		if got := sourcekey.IsYouTubeVideoID(tc.id); got != tc.want {
 			t.Fatalf("IsYouTubeVideoID(%q) = %v, want %v", tc.id, got, tc.want)
 		}
 	}

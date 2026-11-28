@@ -1,8 +1,8 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
+	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -24,7 +24,7 @@ const (
 )
 
 func identifiedAs(recordings ...ports.LinkedRecording) *identifier {
-	return &identifier{match: download.RecordingMatch{
+	return &identifier{match: ports.RecordingMatch{
 		AcoustID: "ac-1",
 		Results:  []ports.AcoustIDResult{{ID: "ac-1", Score: 0.97, Recordings: recordings}},
 	}}
@@ -58,29 +58,29 @@ func judgedPreview(bitErrorRate float64) *previewMatcher {
 }
 
 type versionLookup struct {
-	facts map[string]download.RecordingFacts
+	facts map[string]ports.RecordingFacts
 }
 
-func (l versionLookup) RecordingByMBID(_ context.Context, mbid string) (download.RecordingFacts, bool, error) {
+func (l versionLookup) RecordingByMBID(_ context.Context, mbid string) (ports.RecordingFacts, bool, error) {
 	facts, found := l.facts[mbid]
 	return facts, found, nil
 }
 
 func liveVersionLookup() versionLookup {
-	return versionLookup{facts: map[string]download.RecordingFacts{
+	return versionLookup{facts: map[string]ports.RecordingFacts{
 		"live-mbid": {MBID: "live-mbid", Title: "Boys Don't Cry", Disambiguation: "live"},
 	}}
 }
 
 type inPlaceWiring struct {
-	identifier download.AudioIdentifier
+	identifier ports.AudioIdentifier
 	resolver   *resolver
-	previews   download.PreviewMatcher
-	lookup     download.RecordingLookup
+	previews   ports.PreviewMatcher
+	lookup     ports.RecordingLookup
 	provenCut  float64
 }
 
-func inPlaceChecker(w inPlaceWiring) *download.InPlaceChecker {
+func inPlaceChecker(w inPlaceWiring) *service.InPlaceChecker {
 	if w.resolver == nil {
 		w.resolver = resolvedTo(pinnedBoysDontCry)
 	}
@@ -97,34 +97,34 @@ func inPlaceChecker(w inPlaceWiring) *download.InPlaceChecker {
 	if w.lookup != nil {
 		wiring.RecordingLookup = w.lookup
 	}
-	return download.NewInPlaceChecker(download.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(), download.NewSourceRegistry(), storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
-		download.WithProvenMaxBitErrorRate(w.provenCut)))
+	return service.NewInPlaceChecker(service.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(), service.NewSourceRegistry(), storedAudio{}, scratchfiles.New(), wiring, noStages(readingStoredFrom(storedAudio{})),
+		service.WithProvenMaxBitErrorRate(w.provenCut)))
 }
 
-func inPlaceTrack() *download.TrackSnapshot {
+func inPlaceTrack() *ports.TrackSnapshot {
 	ref, isrc, seconds := inPlaceRef, "GBAAA8000001", 155.0
-	return &download.TrackSnapshot{
+	return &ports.TrackSnapshot{
 		ID: ids.TrackIdFromUUID(uuid.New()), Title: "Boys Don't Cry", Artist: "The Cure",
 		AudioRef: &ref, ISRC: &isrc, StoredDurationSeconds: &seconds,
-		CatalogSources: []download.CatalogSource{{Provider: "deezer", ExternalID: "913"}},
+		CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "913"}},
 	}
 }
 
-func pinnedInPlaceTrack() *download.TrackSnapshot {
+func pinnedInPlaceTrack() *ports.TrackSnapshot {
 	track := inPlaceTrack()
 	pin := pinnedBoysDontCry
 	track.CatalogMBID = &pin
 	return track
 }
 
-func fromSource(track *download.TrackSnapshot, evidence string) *download.TrackSnapshot {
+func fromSource(track *ports.TrackSnapshot, evidence string) *ports.TrackSnapshot {
 	url := "https://music.youtube.com/watch?v=artAAAAAAAA"
 	track.AudioSourceURL = &url
 	track.Evidence = []byte(evidence)
 	return track
 }
 
-func checkInPlace(t *testing.T, w inPlaceWiring, track *download.TrackSnapshot) replacement.Finding {
+func checkInPlace(t *testing.T, w inPlaceWiring, track *ports.TrackSnapshot) replacement.Finding {
 	t.Helper()
 	finding, err := inPlaceChecker(w).CheckInPlace(context.Background(), track)
 	if err != nil {
@@ -134,7 +134,7 @@ func checkInPlace(t *testing.T, w inPlaceWiring, track *download.TrackSnapshot) 
 }
 
 func TestRecordingIdentity_SourceFor(t *testing.T) {
-	id := ports.RecordingIdentity{Sources: []download.ProviderRef{
+	id := ports.RecordingIdentity{Sources: []ports.ProviderRef{
 		{Provider: "deezer", ExternalID: "123"},
 		{Provider: "youtube", ExternalID: "abc"},
 	}}
@@ -369,9 +369,9 @@ func TestCheckInPlace_AFailedFingerprintIsAnErrorNotAnAnswer(t *testing.T) {
 }
 
 func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.T) {
-	svc := download.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(), download.NewSourceRegistry(), storedAudio{}, download.NewTempWorkspace(), noVerification(), noStages())
+	svc := service.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(), service.NewSourceRegistry(), storedAudio{}, scratchfiles.New(), noVerification(), noStages())
 
-	finding, err := download.NewInPlaceChecker(svc).CheckInPlace(context.Background(), inPlaceTrack())
+	finding, err := service.NewInPlaceChecker(svc).CheckInPlace(context.Background(), inPlaceTrack())
 
 	if !errors.Is(err, service.ErrInPlaceUnavailable) || finding.Answered() {
 		t.Errorf("CheckInPlace = %+v, %v, want ErrInPlaceUnavailable", finding, err)
@@ -422,7 +422,7 @@ func TestCheckInPlace_AnAcoustIDAnswerNamingAnotherRecordingIsOneSourceAndNeverL
 
 func TestCheckInPlace_AContradictionNeedsASecondIndependentSource(t *testing.T) {
 	cases := map[string]struct {
-		previews download.PreviewMatcher
+		previews ports.PreviewMatcher
 		evidence string
 		want     bool
 	}{

@@ -1,7 +1,6 @@
 package inmemoryqueue_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/domain"
@@ -50,14 +49,14 @@ func claimUpgrade(t *testing.T, q *inmemoryqueue.Queue) ports.Job {
 
 func wantNothingToClaim(t *testing.T, q *inmemoryqueue.Queue, when string) {
 	t.Helper()
-	if job, err := q.Claim(context.Background(), lease); !errors.Is(err, download.ErrNoJobAvailable) {
+	if job, err := q.Claim(context.Background(), lease); !errors.Is(err, domain.ErrNoJobAvailable) {
 		t.Fatalf("Claim %s = %+v, %v, want ErrNoJobAvailable", when, job, err)
 	}
 }
 
 func wantNoUpgradeToClaim(t *testing.T, q *inmemoryqueue.Queue, when string) {
 	t.Helper()
-	if job, err := q.ClaimUpgrade(context.Background(), lease); !errors.Is(err, download.ErrNoJobAvailable) {
+	if job, err := q.ClaimUpgrade(context.Background(), lease); !errors.Is(err, domain.ErrNoJobAvailable) {
 		t.Fatalf("ClaimUpgrade %s = %+v, %v, want ErrNoJobAvailable", when, job, err)
 	}
 }
@@ -82,7 +81,7 @@ func woken(wake <-chan struct{}) bool {
 func TestQueue_AnExpiringLeaseIsReclaimedOnlyOnceItHasLapsed(t *testing.T) {
 	q, c := newQueue()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	first := claim(t, q)
 
 	c.Advance(lease - time.Nanosecond)
@@ -99,20 +98,20 @@ func TestQueue_AReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *tes
 	q, c := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	var stale ports.Job
 	for range 3 {
 		stale = claim(t, q)
 		c.Advance(2 * lease)
 	}
 
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	job := claim(t, q)
 
 	if job.Run != 1 || job.ClaimNumber != 5 {
 		t.Errorf("Run/Fence = %d/%d, want 1/5", job.Run, job.ClaimNumber)
 	}
-	if err := q.Settle(ctx, trackID, stale.ClaimNumber); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.Settle(ctx, trackID, stale.ClaimNumber); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
 	}
 }
@@ -120,7 +119,7 @@ func TestQueue_AReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *tes
 func TestQueue_AJobEnqueuedWithADelayIsClaimableOnceTheDelayHasPassed(t *testing.T) {
 	q, c := newQueue()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 10*time.Second)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 10*time.Second)
 
 	c.Advance(10*time.Second - time.Nanosecond)
 	wantNothingToClaim(t, q, "a moment before the delay passed")
@@ -135,7 +134,7 @@ func TestQueue_ReleaseWithADelayIsClaimableOnlyOnceTheClockPassesIt(t *testing.T
 	q, c := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	job := claim(t, q)
 	if err := q.Release(ctx, trackID, job.ClaimNumber, 10*time.Second); err != nil {
 		t.Fatalf("Release = %v", err)
@@ -155,7 +154,7 @@ func TestQueue_ReleaseOfAnUnknownTrackIsAnErrorButNotALostLease(t *testing.T) {
 
 	err := q.Release(context.Background(), ids.NewTrackId(), 1, 0)
 
-	if err == nil || errors.Is(err, download.ErrLeaseLost) {
+	if err == nil || errors.Is(err, domain.ErrLeaseLost) {
 		t.Errorf("Release of a track never enqueued = %v, want a not-found error", err)
 	}
 }
@@ -164,10 +163,10 @@ func TestQueue_ReleaseWithAStaleFenceLeavesTheOwnersLeaseLive(t *testing.T) {
 	q, _ := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	owner := claim(t, q)
 
-	if err := q.Release(ctx, trackID, owner.ClaimNumber+1, 0); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.Release(ctx, trackID, owner.ClaimNumber+1, 0); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("Release with a stale fence = %v, want ErrLeaseLost", err)
 	}
 
@@ -181,7 +180,7 @@ func TestQueue_SettleRemovesTheJob(t *testing.T) {
 	q, c := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	job := claim(t, q)
 
 	if err := q.Settle(ctx, trackID, job.ClaimNumber); err != nil {
@@ -191,7 +190,7 @@ func TestQueue_SettleRemovesTheJob(t *testing.T) {
 	c.Advance(2 * lease)
 	wantNothingToClaim(t, q, "after Settle")
 	wantDepth(t, q, 0, 0)
-	if err := q.Release(ctx, trackID, job.ClaimNumber, 0); err == nil || errors.Is(err, download.ErrLeaseLost) {
+	if err := q.Release(ctx, trackID, job.ClaimNumber, 0); err == nil || errors.Is(err, domain.ErrLeaseLost) {
 		t.Errorf("Release after Settle = %v, want the not-found error of a removed job", err)
 	}
 	if err := q.Settle(ctx, trackID, job.ClaimNumber); err != nil {
@@ -201,7 +200,7 @@ func TestQueue_SettleRemovesTheJob(t *testing.T) {
 
 func TestQueue_ClaimReportsHowLongTheJobWaited(t *testing.T) {
 	q, c := newQueue()
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, 0)
 
 	c.Advance(45 * time.Second)
 
@@ -219,7 +218,7 @@ func TestQueue_ClaimTakesTheEarliestJobAmongEquallyBusyUsers(t *testing.T) {
 		q.RememberUser(tracks[i], user)
 	}
 	for _, i := range []int{2, 0, 3, 1} {
-		enqueue(t, q, tracks[i], download.JobKindAcquire, time.Duration(i)*time.Second)
+		enqueue(t, q, tracks[i], ports.JobKindAcquire, time.Duration(i)*time.Second)
 	}
 	c.Advance(time.Minute)
 
@@ -236,7 +235,7 @@ func TestQueue_ClaimPrefersTheUserWithFewerLiveLeases(t *testing.T) {
 	add := func(user ids.UserId) ids.TrackId {
 		trackID := ids.NewTrackId()
 		q.RememberUser(trackID, user)
-		enqueue(t, q, trackID, download.JobKindAcquire, 0)
+		enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 		c.Advance(time.Second)
 		return trackID
 	}
@@ -257,7 +256,7 @@ func TestQueue_ClaimPrefersTheUserWithFewerLiveLeases(t *testing.T) {
 func TestQueue_RememberUserNamesTheOwnerOfAJobAlreadyQueued(t *testing.T) {
 	q, _ := newQueue()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	user := ids.NewUserId(uuid.New())
 
 	q.RememberUser(trackID, user)
@@ -273,8 +272,8 @@ func TestQueue_EnqueueWakesTheWorkersWithoutBlockingOnAFullWakeChannel(t *testin
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
 
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, 0)
 	if !woken(wake) {
 		t.Fatal("no wake after Enqueue")
 	}
@@ -283,7 +282,7 @@ func TestQueue_EnqueueWakesTheWorkersWithoutBlockingOnAFullWakeChannel(t *testin
 	if woken(wake) {
 		t.Fatal("Claim woke the workers, want only enqueues to wake them")
 	}
-	if err := q.Enqueue(ctx, job.TrackID, download.JobKindAcquire, 0); err != nil {
+	if err := q.Enqueue(ctx, job.TrackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue over the live lease: %v", err)
 	}
 	if !woken(wake) {
@@ -295,12 +294,12 @@ func TestQueue_AnEnqueueOverALiveLeaseRestartsTheRunCountForTheNextClaim(t *test
 	q, c := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	claim(t, q)
 	c.Advance(2 * lease)
 	owner := claim(t, q)
 
-	enqueue(t, q, trackID, download.JobKindAcquire, 5*time.Second)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 5*time.Second)
 	if err := q.Settle(ctx, trackID, owner.ClaimNumber); err != nil {
 		t.Fatalf("owner Settle = %v", err)
 	}
@@ -317,9 +316,9 @@ func TestQueue_AReleaseClearsAReEnqueueSoTheNextSettleRemovesTheJob(t *testing.T
 	q, c := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 	owner := claim(t, q)
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
 
 	if err := q.Release(ctx, trackID, owner.ClaimNumber, 0); err != nil {
 		t.Fatalf("Release = %v", err)
@@ -338,7 +337,7 @@ func TestQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	ctx := context.Background()
 	upgrading, added := ids.NewTrackId(), ids.NewTrackId()
 	enqueue(t, q, upgrading, ports.JobKindUpgrade, 0)
-	enqueue(t, q, added, download.JobKindAcquire, 0)
+	enqueue(t, q, added, ports.JobKindAcquire, 0)
 
 	wantNoUpgradeToClaim(t, q, "while a user add waits")
 	userJob := claim(t, q)
@@ -374,7 +373,7 @@ func TestQueue_ClaimUpgradeSkipsUpgradesThatAreDelayedOrLeased(t *testing.T) {
 func TestQueue_AUserJobThatIsNotDueYetDoesNotHoldBackUpgrades(t *testing.T) {
 	q, _ := newQueue()
 	upgrading := ids.NewTrackId()
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, time.Hour)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, time.Hour)
 	enqueue(t, q, upgrading, ports.JobKindUpgrade, 0)
 
 	if got := claimUpgrade(t, q); got.TrackID != upgrading {
@@ -386,23 +385,23 @@ func TestQueue_PendingDepthCountsWaitingUserJobsAndAgesTheOldestDueOne(t *testin
 	q, c := newQueue()
 	wantDepth(t, q, 0, 0)
 
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, time.Hour)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, time.Hour)
 	wantDepth(t, q, 1, 0)
 
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, 0)
 	c.Advance(10 * time.Second)
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, 0)
 	c.Advance(5 * time.Second)
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, -20*time.Second)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, -20*time.Second)
 	wantDepth(t, q, 4, 20*time.Second)
 
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, -time.Second)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, -time.Second)
 	wantDepth(t, q, 5, 20*time.Second)
 }
 
 func TestQueue_PendingDepthLeavesOutALiveLeaseButCountsALapsedOne(t *testing.T) {
 	q, c := newQueue()
-	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, 0)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindAcquire, 0)
 	claim(t, q)
 	wantDepth(t, q, 0, 0)
 
@@ -422,16 +421,16 @@ func TestQueue_AnUpgradeNeverOverwritesAQueuedUserJob(t *testing.T) {
 	q, _ := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindReplace, 0)
+	enqueue(t, q, trackID, ports.JobKindReplace, 0)
 
 	if err := q.Enqueue(ctx, trackID, ports.JobKindUpgrade, 0); !errors.Is(err, domain.ErrJobKindConflict) {
 		t.Fatalf("Enqueue upgrade over a queued replace = %v, want ErrJobKindConflict", err)
 	}
 
-	if job := claim(t, q); job.Kind != download.JobKindReplace {
+	if job := claim(t, q); job.Kind != ports.JobKindReplace {
 		t.Errorf("Claim = %+v, want the user's replace still queued", job)
 	}
-	enqueue(t, q, trackID, download.JobKindReplace, 0)
+	enqueue(t, q, trackID, ports.JobKindReplace, 0)
 }
 
 func TestQueue_AnUpgradeOverAQueuedUpgradeIsAccepted(t *testing.T) {
@@ -467,14 +466,14 @@ func TestQueue_AUserJobTakesOverARunningUpgrade(t *testing.T) {
 	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
 	upgrade := claimUpgrade(t, q)
 
-	if err := q.Enqueue(ctx, trackID, download.JobKindReplace, 0); err != nil {
+	if err := q.Enqueue(ctx, trackID, ports.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue replace over a running upgrade = %v, want the user's job to win", err)
 	}
 
-	if err := q.Heartbeat(ctx, trackID, upgrade.ClaimNumber, lease); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.Heartbeat(ctx, trackID, upgrade.ClaimNumber, lease); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Errorf("upgrade Heartbeat = %v, want ErrLeaseLost so the upgrade stops", err)
 	}
-	if job := claim(t, q); job.Kind != download.JobKindReplace || job.Run != 1 {
+	if job := claim(t, q); job.Kind != ports.JobKindReplace || job.Run != 1 {
 		t.Errorf("Claim = %+v, want the user's replace at run 1", job)
 	}
 }
@@ -483,11 +482,11 @@ func TestQueue_VerifyLeaseHoldsOnlyForTheCurrentFenceOfALiveLease(t *testing.T) 
 	q, c := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	if err := q.VerifyLease(ctx, trackID, 1); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.VerifyLease(ctx, trackID, 1); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("VerifyLease before any enqueue = %v, want ErrLeaseLost", err)
 	}
 	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
-	if err := q.VerifyLease(ctx, trackID, 1); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.VerifyLease(ctx, trackID, 1); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("VerifyLease before the claim = %v, want ErrLeaseLost", err)
 	}
 	job := claimUpgrade(t, q)
@@ -495,12 +494,12 @@ func TestQueue_VerifyLeaseHoldsOnlyForTheCurrentFenceOfALiveLease(t *testing.T) 
 	if err := q.VerifyLease(ctx, trackID, job.ClaimNumber); err != nil {
 		t.Fatalf("VerifyLease on the claimed fence = %v, want nil", err)
 	}
-	if err := q.VerifyLease(ctx, trackID, job.ClaimNumber+1); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.VerifyLease(ctx, trackID, job.ClaimNumber+1); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Errorf("VerifyLease on another fence = %v, want ErrLeaseLost", err)
 	}
 
 	c.Advance(lease)
-	if err := q.VerifyLease(ctx, trackID, job.ClaimNumber); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.VerifyLease(ctx, trackID, job.ClaimNumber); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Errorf("VerifyLease once the lease lapsed = %v, want ErrLeaseLost", err)
 	}
 }
@@ -509,11 +508,11 @@ func TestQueue_HeartbeatExtendsTheLeaseFromNow(t *testing.T) {
 	q, c := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	if err := q.Heartbeat(ctx, trackID, 1, lease); !errors.Is(err, download.ErrLeaseLost) {
+	if err := q.Heartbeat(ctx, trackID, 1, lease); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("Heartbeat of a track never enqueued = %v, want ErrLeaseLost", err)
 	}
-	enqueue(t, q, trackID, download.JobKindAcquire, 0)
-	if err := q.Heartbeat(ctx, trackID, 0, lease); !errors.Is(err, download.ErrLeaseLost) {
+	enqueue(t, q, trackID, ports.JobKindAcquire, 0)
+	if err := q.Heartbeat(ctx, trackID, 0, lease); !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("Heartbeat of a job not yet claimed = %v, want ErrLeaseLost", err)
 	}
 	job := claim(t, q)

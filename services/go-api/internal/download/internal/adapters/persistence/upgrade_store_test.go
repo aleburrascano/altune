@@ -1,7 +1,6 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/audioquality"
@@ -21,7 +20,7 @@ func TestPostgresUpgradeStore_RandomRowsAreSelectedExactlyWhenTheGoSpecification
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	store := download.NewPostgresUpgradeStore(pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
 
 	rapid.Check(t, func(rt *rapid.T) {
 		now := time.Now()
@@ -65,7 +64,7 @@ func TestPostgresUpgradeStore_RandomRowsAreSelectedExactlyWhenTheGoSpecification
 
 func TestPostgresUpgradeStore_ASelectionWithoutUpgradableStatusesIsRefusedNotEmpty(t *testing.T) {
 	dbtest.RequireIntegration(t)
-	store := download.NewPostgresUpgradeStore(dbtest.Pool(t))
+	store := persistence.NewPostgresUpgradeStore(dbtest.Pool(t))
 
 	_, err := store.Candidates(context.Background(), ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration})
 

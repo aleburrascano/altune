@@ -1,7 +1,6 @@
 package audioverdict_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/audioverdict"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -188,10 +187,10 @@ func TestJudge_CallerFacts(t *testing.T) {
 		{"a merged MBID is the bound recording", identity, audioverdict.Audio{AcoustID: []ports.AcoustIDResult{linked("mb-merged", "Song", 200, "Artist")}, Length: 200}, audioverdict.Proven, false},
 		{"a link with no MBID names nothing, so it neither proves nor contradicts", identity, audioverdict.Audio{AcoustID: []ports.AcoustIDResult{linked("", "Other Song", 200, "Someone")}, Preview: preview(0.40), Length: 200}, audioverdict.Unknown, false},
 		{"links that carry no title name nothing", identity, audioverdict.Audio{AcoustID: []ports.AcoustIDResult{linked("mb-untitled", "", 200, "Someone")}, Preview: preview(0.40), Length: 200}, audioverdict.Unknown, false},
-		{"a recording whose looked-up ISRCs include the bound one is the bound recording", identity, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]download.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", ISRCs: []string{"usrc10000001"}}}}, audioverdict.Proven, false},
-		{"a looked-up recording with another ISRC is another recording", identity, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]download.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", ISRCs: []string{"USRC19999999"}}}}, audioverdict.Unknown, false},
-		{"a looked-up duplicate with no ISRC and the same version is likely", identity, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]download.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song"}}}, audioverdict.Likely, false},
-		{"a looked-up duplicate whose disambiguation says live is another version", noISRC, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]download.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", Disambiguation: "live"}}}, audioverdict.Unknown, false},
+		{"a recording whose looked-up ISRCs include the bound one is the bound recording", identity, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", ISRCs: []string{"usrc10000001"}}}}, audioverdict.Proven, false},
+		{"a looked-up recording with another ISRC is another recording", identity, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", ISRCs: []string{"USRC19999999"}}}}, audioverdict.Unknown, false},
+		{"a looked-up duplicate with no ISRC and the same version is likely", identity, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song"}}}, audioverdict.Likely, false},
+		{"a looked-up duplicate whose disambiguation says live is another version", noISRC, audioverdict.Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", Disambiguation: "live"}}}, audioverdict.Unknown, false},
 		{"a same-title link whose version cannot be looked up is not a duplicate when lookups are required", noISRC, audioverdict.Audio{AcoustID: dup, Length: 200, RequireVersionFacts: true}, audioverdict.Unknown, false},
 		{"a same-title link is a duplicate by its own title when lookups are not required", noISRC, audioverdict.Audio{AcoustID: dup, Length: 200}, audioverdict.Likely, false},
 		{"most surviving links naming other songs outvote one same-title duplicate", noISRC, audioverdict.Audio{AcoustID: []ports.AcoustIDResult{

@@ -1,10 +1,12 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/handler"
 	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -55,7 +57,7 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	repo.Seed(track)
 	manual := clocktest.NewManual(time.Now())
 	store := acquisitiontest.MustNewCooldownStore(manual.Func())
-	h := download.NewRetryHandler(repo, &retryFakeScheduler{}, download.NewRetryAdmission(store))
+	h := handler.NewRetryHandler(repo, &retryFakeScheduler{}, service.NewRetryAdmission(store))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -161,7 +163,7 @@ func assertShuttingDown(t *testing.T, status int, body []byte) {
 
 type admitAlways struct{}
 
-func (admitAlways) Admit(_ context.Context, _ *download.TrackSnapshot, schedule func() error) error {
+func (admitAlways) Admit(_ context.Context, _ *ports.TrackSnapshot, schedule func() error) error {
 	return schedule()
 }
 
@@ -170,7 +172,7 @@ func TestHandleRetryAcquisition_UsesTheInjectedAdmission(t *testing.T) {
 	track := pendingTrack(retryTestUserId)
 	repo.Seed(track)
 	scheduler := &retryFakeScheduler{}
-	h := download.NewRetryHandler(repo, scheduler, admitAlways{})
+	h := handler.NewRetryHandler(repo, scheduler, admitAlways{})
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -188,7 +190,7 @@ func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
 	track := pendingTrack(reacquireTestUserId)
 	repo.Seed(track)
 	scheduler := &reacquireFakeScheduler{}
-	h := download.NewReacquireHandler(repo, scheduler, admitAlways{})
+	h := handler.NewReacquireHandler(repo, scheduler, admitAlways{})
 	router := chi.NewRouter()
 	router.Use(signedInAs(reacquireTestUserId))
 	router.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -220,7 +222,7 @@ func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ ids.UserId
 }
 
 func buildReacquireRouter(trackRepo *inmemoryledger.Ledger, scheduler *reacquireFakeScheduler) chi.Router {
-	h := download.NewReacquireHandler(trackRepo, scheduler, download.NewReacquireAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
+	h := handler.NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
 	r := chi.NewRouter()
 	r.Use(signedInAs(reacquireTestUserId))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -363,21 +365,21 @@ func signedInAs(userID ids.UserId) func(http.Handler) http.Handler {
 }
 
 func pendingTrack(userId ids.UserId) inmemoryledger.LedgerTrack {
-	return inmemoryledger.LedgerTrack{TrackSnapshot: download.TrackSnapshot{
-		ID: ids.NewTrackId(), UserId: userId, Title: "Song", Artist: "Artist", Album: "Album", Status: download.TrackPending,
+	return inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+		ID: ids.NewTrackId(), UserId: userId, Title: "Song", Artist: "Artist", Album: "Album", Status: ports.TrackPending,
 	}}
 }
 
 func failedTrack(userId ids.UserId) inmemoryledger.LedgerTrack {
 	track := pendingTrack(userId)
-	track.Status = download.TrackFailed
+	track.Status = ports.TrackFailed
 	return track
 }
 
 func readyTrack(userId ids.UserId) inmemoryledger.LedgerTrack {
 	track := pendingTrack(userId)
 	audioRef := "audio/ready.opus"
-	track.AudioRef, track.Status, track.Streamable = &audioRef, download.TrackReady, true
+	track.AudioRef, track.Status, track.Streamable = &audioRef, ports.TrackReady, true
 	return track
 }
 
@@ -411,7 +413,7 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 }
 
 func buildRetryRouter(trackRepo *inmemoryledger.Ledger, scheduler *retryFakeScheduler) chi.Router {
-	h := download.NewRetryHandler(trackRepo, scheduler, download.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
+	h := handler.NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
 	r := chi.NewRouter()
 	r.Use(signedInAs(retryTestUserId))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -420,14 +422,14 @@ func buildRetryRouter(trackRepo *inmemoryledger.Ledger, scheduler *retryFakeSche
 
 type unreachableLedger struct{ *inmemoryledger.Ledger }
 
-func (unreachableLedger) Get(context.Context, ids.TrackId, ids.UserId) (*download.TrackSnapshot, error) {
+func (unreachableLedger) Get(context.Context, ids.TrackId, ids.UserId) (*ports.TrackSnapshot, error) {
 	return nil, errors.New("database unavailable")
 }
 
 func TestHandleRetryAcquisition_ALedgerFailureIsA500AndSchedulesNothing(t *testing.T) {
 	track := failedTrack(retryTestUserId)
 	scheduler := &retryFakeScheduler{}
-	h := download.NewRetryHandler(unreachableLedger{inmemoryledger.NewLedger(track)}, scheduler, download.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
+	h := handler.NewRetryHandler(unreachableLedger{inmemoryledger.NewLedger(track)}, scheduler, service.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -529,7 +531,7 @@ func ownedRoutes() []ownedRoute {
 				scheduler := &retryFakeScheduler{}
 				r := chi.NewRouter()
 				r.Use(signedInAs(as))
-				r.Post("/tracks/{trackId}/retry", download.NewRetryHandler(ledger, scheduler, download.NewRetryAdmission(cooldowns)).HandleRetryAcquisition)
+				r.Post("/tracks/{trackId}/retry", handler.NewRetryHandler(ledger, scheduler, service.NewRetryAdmission(cooldowns)).HandleRetryAcquisition)
 				return r, func() int { return len(scheduler.scheduled) }
 			},
 		},
@@ -541,7 +543,7 @@ func ownedRoutes() []ownedRoute {
 				scheduler := &reacquireFakeScheduler{}
 				r := chi.NewRouter()
 				r.Use(signedInAs(as))
-				r.Post("/tracks/{trackId}/reacquire", download.NewReacquireHandler(ledger, scheduler, download.NewReacquireAdmission(cooldowns)).HandleReacquire)
+				r.Post("/tracks/{trackId}/reacquire", handler.NewReacquireHandler(ledger, scheduler, service.NewReacquireAdmission(cooldowns)).HandleReacquire)
 				return r, func() int { return len(scheduler.replaced) }
 			},
 		},
@@ -639,7 +641,7 @@ func logRecords(t *testing.T, out *logging.Capture) []map[string]any {
 func TestHandleRetryAcquisition_ALedgerFailureIsLoggedOnceByTheBoundaryWithTheTrack(t *testing.T) {
 	out := captureDefaultLog(t)
 	track := failedTrack(retryTestUserId)
-	h := download.NewRetryHandler(unreachableLedger{inmemoryledger.NewLedger(track)}, &retryFakeScheduler{}, download.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
+	h := handler.NewRetryHandler(unreachableLedger{inmemoryledger.NewLedger(track)}, &retryFakeScheduler{}, service.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)

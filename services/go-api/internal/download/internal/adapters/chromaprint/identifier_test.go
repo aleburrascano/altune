@@ -1,7 +1,6 @@
 package chromaprint_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/chromaprint"
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -93,7 +92,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-func matchFromBody(t *testing.T, body string) download.RecordingMatch {
+func matchFromBody(t *testing.T, body string) ports.RecordingMatch {
 	t.Helper()
 	srv := lookupServerServing(body)
 	t.Cleanup(srv.Close)
@@ -697,7 +696,7 @@ func TestIdentify_AThrottledAnswerSurfacesErrIdentifyThrottledWithoutAnAdapterRe
 
 	_, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 
-	if !errors.Is(err, download.ErrIdentifyThrottled) {
+	if !errors.Is(err, domain.ErrIdentifyThrottled) {
 		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
 	}
 	if *hits != 1 {
@@ -719,7 +718,7 @@ func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 	defer failing.Close()
 	id = newIdentifier(t, fakeFpcalcDir(t, 130), "real-key", chromaprint.WithEndpoint(failing.URL))
 	_, err = id.Identify(context.Background(), "/tmp/a.mp3", 0)
-	if err == nil || errors.Is(err, download.ErrIdentifyThrottled) {
+	if err == nil || errors.Is(err, domain.ErrIdentifyThrottled) {
 		t.Errorf("500 err = %v, want a non-throttled error", err)
 	}
 }

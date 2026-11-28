@@ -1,7 +1,6 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/dbtest"
@@ -42,13 +41,13 @@ func TestPostgresJobQueue_EveryQueueStepLeavesTheJobRowEqualToTheTrackColumns(t 
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
 	dbtest.ExclusiveAcquisitionQueue(t, pool)
-	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
+	queue := persistence.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
 	track := insertFailedTrack(t, pool)
 	requireJobRowMirrorsTrack(t, pool, track.ID, "the insert")
 
-	if err := queue.Enqueue(ctx, track.ID, download.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	requireJobRowMirrorsTrack(t, pool, track.ID, "enqueue")

@@ -1,7 +1,6 @@
 package ytmsearch_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"context"
 	"errors"
@@ -30,23 +29,23 @@ func TestClientWatch_ReadsTypeTitleArtistsAndExplicitBadge(t *testing.T) {
 	}{
 		"official audio is ATV and explicit": {
 			videoID: "XDC3uH1FSgw",
-			want:    ytmsearch.Watch{VideoID: "XDC3uH1FSgw", Title: "remember them days", Artists: []string{"slayr"}, Type: download.VideoTypeAudioOnly, Explicit: true},
+			want:    ytmsearch.Watch{VideoID: "XDC3uH1FSgw", Title: "remember them days", Artists: []string{"slayr"}, Type: ytmsearch.VideoTypeAudioOnly, Explicit: true},
 		},
 		"music video is OMV and carries no badge": {
 			videoID: "u4GAeAYGAqE",
-			want:    ytmsearch.Watch{VideoID: "u4GAeAYGAqE", Title: "remember them days", Artists: []string{"slayr"}, Type: download.VideoTypeOfficialVideo},
+			want:    ytmsearch.Watch{VideoID: "u4GAeAYGAqE", Title: "remember them days", Artists: []string{"slayr"}, Type: ytmsearch.VideoTypeOfficialVideo},
 		},
 		"clean edit is ATV without the badge": {
 			videoID: "88oFlVnMEsc",
-			want:    ytmsearch.Watch{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: download.VideoTypeAudioOnly},
+			want:    ytmsearch.Watch{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: ytmsearch.VideoTypeAudioOnly},
 		},
 		"an id YouTube Music redirects to its canonical track": {
 			videoID: "B2alaIE1f5A",
-			want:    ytmsearch.Watch{VideoID: "OFqIZypoMBY", Title: "New Life", Artists: []string{"Lucki", "Chuck L.I."}, Type: download.VideoTypeAudioOnly, Explicit: true},
+			want:    ytmsearch.Watch{VideoID: "OFqIZypoMBY", Title: "New Life", Artists: []string{"Lucki", "Chuck L.I."}, Type: ytmsearch.VideoTypeAudioOnly, Explicit: true},
 		},
 		"explicit master is ATV with the badge": {
 			videoID: "LMDLNLM6Ji8",
-			want:    ytmsearch.Watch{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: download.VideoTypeAudioOnly, Explicit: true},
+			want:    ytmsearch.Watch{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: ytmsearch.VideoTypeAudioOnly, Explicit: true},
 		},
 	}
 
@@ -64,7 +63,7 @@ func TestClientWatch_ReadsTypeTitleArtistsAndExplicitBadge(t *testing.T) {
 	}
 }
 
-func watchAnswering(t *testing.T, body string) *download.YouTubeMusicSearchClient {
+func watchAnswering(t *testing.T, body string) *ytmsearch.Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
 	t.Cleanup(srv.Close)
@@ -86,7 +85,7 @@ func TestClientWatch_NonJSONIsAnError(t *testing.T) {
 }
 
 func TestParseSongs_ReturnsCleanAndExplicitTwinsInRankOrder(t *testing.T) {
-	songs, err := download.ParseYtmSongs(fixture(t, "search_lucki_2021_vibes.json"))
+	songs, err := ytmsearch.ParseSongs(fixture(t, "search_lucki_2021_vibes.json"))
 	if err != nil {
 		t.Fatalf("ParseSongs: %v", err)
 	}
@@ -94,8 +93,8 @@ func TestParseSongs_ReturnsCleanAndExplicitTwinsInRankOrder(t *testing.T) {
 		t.Fatalf("songs = %d, want at least the clean/explicit pair", len(songs))
 	}
 
-	wantClean := download.YouTubeMusicSong{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Album: "s*x m*ney dr*gs", DurationSeconds: 125, Type: download.VideoTypeAudioOnly}
-	wantExplicit := download.YouTubeMusicSong{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Album: "s*x m*ney dr*gs", DurationSeconds: 125, Type: download.VideoTypeAudioOnly, Explicit: true}
+	wantClean := ytmsearch.Song{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Album: "s*x m*ney dr*gs", DurationSeconds: 125, Type: ytmsearch.VideoTypeAudioOnly}
+	wantExplicit := ytmsearch.Song{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Album: "s*x m*ney dr*gs", DurationSeconds: 125, Type: ytmsearch.VideoTypeAudioOnly, Explicit: true}
 	if !reflect.DeepEqual(songs[0], wantClean) {
 		t.Errorf("songs[0] = %+v, want %+v", songs[0], wantClean)
 	}
@@ -105,7 +104,7 @@ func TestParseSongs_ReturnsCleanAndExplicitTwinsInRankOrder(t *testing.T) {
 }
 
 func TestParseSongs_NonJSONIsAnError(t *testing.T) {
-	if _, err := download.ParseYtmSongs([]byte("not json")); err == nil {
+	if _, err := ytmsearch.ParseSongs([]byte("not json")); err == nil {
 		t.Fatal("want a decode error")
 	}
 }
