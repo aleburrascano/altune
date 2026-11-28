@@ -35,6 +35,12 @@ func HistoryRepoContract(t *testing.T, newRepo func(t *testing.T) HistoryRepoUnd
 	}
 }
 
+const (
+	historyApart      = 2 * time.Minute
+	historyFarApart   = 4 * time.Minute
+	historyWithinSend = 20 * time.Second
+)
+
 func historyBase() time.Time { return time.Now().Truncate(time.Second).Add(-time.Hour) }
 
 func insertHistoryOrFail(t *testing.T, r HistoryRepoUnderTest, user ids.UserId, query string, at time.Time) {
@@ -61,8 +67,8 @@ func recentQueries(t *testing.T, r HistoryRepoUnderTest, user ids.UserId, limit 
 func contractHistoryListsDistinctNewestFirst(t *testing.T, r HistoryRepoUnderTest) {
 	user, base := r.NewUser(t), historyBase()
 	insertHistoryOrFail(t, r, user, "a", base)
-	insertHistoryOrFail(t, r, user, "b", base.Add(2*time.Minute))
-	insertHistoryOrFail(t, r, user, "a", base.Add(4*time.Minute))
+	insertHistoryOrFail(t, r, user, "b", base.Add(historyApart))
+	insertHistoryOrFail(t, r, user, "a", base.Add(historyFarApart))
 
 	if got, want := recentQueries(t, r, user, 10), []string{"a", "b"}; !slices.Equal(got, want) {
 		t.Errorf("recent = %v, want %v", got, want)
@@ -83,7 +89,7 @@ func contractHistoryHonoursTheLimit(t *testing.T, r HistoryRepoUnderTest) {
 func contractHistoryIgnoresAResend(t *testing.T, r HistoryRepoUnderTest) {
 	user, base := r.NewUser(t), historyBase()
 	insertHistoryOrFail(t, r, user, "x", base)
-	insertHistoryOrFail(t, r, user, "x", base.Add(20*time.Second))
+	insertHistoryOrFail(t, r, user, "x", base.Add(historyWithinSend))
 
 	entries, err := r.ListDistinctRecent(t.Context(), user, 10)
 	if err != nil || len(entries) != 1 || !entries[0].ExecutedAt.Equal(base) {
@@ -94,10 +100,10 @@ func contractHistoryIgnoresAResend(t *testing.T, r HistoryRepoUnderTest) {
 func contractHistoryKeepsALaterRepeat(t *testing.T, r HistoryRepoUnderTest) {
 	user, base := r.NewUser(t), historyBase()
 	insertHistoryOrFail(t, r, user, "x", base)
-	insertHistoryOrFail(t, r, user, "x", base.Add(2*time.Minute))
+	insertHistoryOrFail(t, r, user, "x", base.Add(historyApart))
 
 	entries, err := r.ListDistinctRecent(t.Context(), user, 10)
-	if err != nil || len(entries) != 1 || !entries[0].ExecutedAt.Equal(base.Add(2*time.Minute)) {
+	if err != nil || len(entries) != 1 || !entries[0].ExecutedAt.Equal(base.Add(historyApart)) {
 		t.Errorf("recent = %v, %v, want the later send", entries, err)
 	}
 }

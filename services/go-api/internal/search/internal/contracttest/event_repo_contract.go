@@ -71,7 +71,9 @@ func countsFor(t *testing.T, counts []ports.QueryCount, err error, queries ...st
 	return mine
 }
 
-func eventWindow() time.Time { return time.Now().Add(-time.Hour) }
+const eventWindowSpan = time.Hour
+
+func eventWindow() time.Time { return time.Now().Add(-eventWindowSpan) }
 
 func contractNoResultSearchesAreCounted(t *testing.T, r EventRepoUnderTest) {
 	user, now := r.NewUser(t), time.Now()
@@ -113,7 +115,7 @@ func contractFoundSearchIsNotNoResult(t *testing.T, r EventRepoUnderTest) {
 
 func contractOldSearchIsOutsideTheWindow(t *testing.T, r EventRepoUnderTest) {
 	user, query := r.NewUser(t), uniqueQuery()
-	appendEventOrFail(t, r, searchEvent(user, query, true, time.Now().Add(-2*time.Hour)))
+	appendEventOrFail(t, r, searchEvent(user, query, true, time.Now().Add(-2*eventWindowSpan)))
 
 	counts, err := r.NoResultSearches(t.Context(), eventWindow(), eventQueryLimit)
 
