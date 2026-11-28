@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/songfields"
@@ -64,23 +65,23 @@ func MustNewMusicBrainzResolver(p ResolverPorts) *MusicBrainzResolver {
 	return r
 }
 
-func (r *MusicBrainzResolver) RecordingByMBID(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+func (r *MusicBrainzResolver) RecordingByMBID(ctx context.Context, mbid string) (domain.RecordingFacts, bool, error) {
 	return r.lookup.RecordingByMBID(ctx, mbid)
 }
 
-func (r *MusicBrainzResolver) Resolve(ctx context.Context, q songfields.RecordingIdentity) (ports.RecordingIdentity, error) {
+func (r *MusicBrainzResolver) Resolve(ctx context.Context, q songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
 	if q.RecordingMBID != "" {
 		return r.resolvePinned(ctx, q), nil
 	}
 	identity, err := r.resolveFromSearch(ctx, q)
 	anchored := r.anchorToISRC(ctx, q, identity)
 	if err != nil && anchored.MBID == "" {
-		return ports.RecordingIdentity{}, err
+		return domain.RecordingIdentity{}, err
 	}
 	return anchored, nil
 }
 
-func (r *MusicBrainzResolver) resolvePinned(ctx context.Context, q songfields.RecordingIdentity) ports.RecordingIdentity {
+func (r *MusicBrainzResolver) resolvePinned(ctx context.Context, q songfields.RecordingIdentity) domain.RecordingIdentity {
 	identity := r.pinnedIdentity(ctx, q.RecordingMBID)
 	searched, err := r.resolveFromSearch(ctx, q)
 	if err != nil {
@@ -97,8 +98,8 @@ func (r *MusicBrainzResolver) resolvePinned(ctx context.Context, q songfields.Re
 	return identity
 }
 
-func (r *MusicBrainzResolver) pinnedIdentity(ctx context.Context, pin string) ports.RecordingIdentity {
-	identity := ports.RecordingIdentity{MBID: pin, MBIDs: []string{pin}}
+func (r *MusicBrainzResolver) pinnedIdentity(ctx context.Context, pin string) domain.RecordingIdentity {
+	identity := domain.RecordingIdentity{MBID: pin, MBIDs: []string{pin}}
 	facts, found := r.pinnedFacts(ctx, pin)
 	if !found {
 		return identity
@@ -111,11 +112,11 @@ func (r *MusicBrainzResolver) pinnedIdentity(ctx context.Context, pin string) po
 	return identity
 }
 
-func (r *MusicBrainzResolver) pinnedFacts(ctx context.Context, pin string) (ports.RecordingFacts, bool) {
+func (r *MusicBrainzResolver) pinnedFacts(ctx context.Context, pin string) (domain.RecordingFacts, bool) {
 	facts, found, err := r.RecordingByMBID(ctx, pin)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.pinned_recording_lookup_failed", "pinned_mbid", pin, logging.KeyError, err)
-		return ports.RecordingFacts{}, false
+		return domain.RecordingFacts{}, false
 	}
 	if !found {
 		slog.InfoContext(ctx, "acquisition.pinned_recording_unknown", "pinned_mbid", pin)
@@ -123,7 +124,7 @@ func (r *MusicBrainzResolver) pinnedFacts(ctx context.Context, pin string) (port
 	return facts, found
 }
 
-func (r *MusicBrainzResolver) anchorToISRC(ctx context.Context, q songfields.RecordingIdentity, identity ports.RecordingIdentity) ports.RecordingIdentity {
+func (r *MusicBrainzResolver) anchorToISRC(ctx context.Context, q songfields.RecordingIdentity, identity domain.RecordingIdentity) domain.RecordingIdentity {
 	lengthDisagrees := durationDisagrees(q.DurationSeconds, identity.Duration)
 	identity.ReferenceDoubted = lengthDisagrees
 	recordings := r.isrcRecordings(ctx, q.ISRC)
@@ -142,7 +143,7 @@ func (r *MusicBrainzResolver) anchorToISRC(ctx context.Context, q songfields.Rec
 	return withReferenceSet(identity, identity.MBID, recordings)
 }
 
-func (r *MusicBrainzResolver) anchorToMismatchedISRC(ctx context.Context, q songfields.RecordingIdentity, identity ports.RecordingIdentity, recordings []ports.ISRCRecording) ports.RecordingIdentity {
+func (r *MusicBrainzResolver) anchorToMismatchedISRC(ctx context.Context, q songfields.RecordingIdentity, identity domain.RecordingIdentity, recordings []domain.ISRCRecording) domain.RecordingIdentity {
 	identity.ReferenceDoubted = identity.ReferenceDoubted || identity.MBID != ""
 
 	chosen, ok := closestRecording(recordings, expectedLength(q.DurationSeconds, identity.Duration))
@@ -156,7 +157,7 @@ func (r *MusicBrainzResolver) anchorToMismatchedISRC(ctx context.Context, q song
 	return withReferenceSet(anchored, anchored.MBID, recordings)
 }
 
-func isrcRegistersMBID(recordings []ports.ISRCRecording, mbid string) bool {
+func isrcRegistersMBID(recordings []domain.ISRCRecording, mbid string) bool {
 	for _, rec := range recordings {
 		if rec.MBID == mbid {
 			return true
@@ -174,7 +175,7 @@ func logAnchoredToISRC(ctx context.Context, isrc, searchMBID, isrcMBID string) {
 	}
 }
 
-func withReferenceSet(identity ports.RecordingIdentity, mbid string, recordings []ports.ISRCRecording) ports.RecordingIdentity {
+func withReferenceSet(identity domain.RecordingIdentity, mbid string, recordings []domain.ISRCRecording) domain.RecordingIdentity {
 	identity.MBIDs = referenceSet(mbid, recordings)
 	return identity
 }
@@ -193,7 +194,7 @@ func durationDisagrees(want, got float64) bool {
 	return !SameRecording(want, got)
 }
 
-func referenceSet(mbid string, recordings []ports.ISRCRecording) []string {
+func referenceSet(mbid string, recordings []domain.ISRCRecording) []string {
 	seen := make(map[string]bool, len(recordings)+1)
 	var set []string
 	add := func(id string) {
@@ -210,7 +211,7 @@ func referenceSet(mbid string, recordings []ports.ISRCRecording) []string {
 	return set
 }
 
-func (r *MusicBrainzResolver) isrcRecordings(ctx context.Context, isrc string) []ports.ISRCRecording {
+func (r *MusicBrainzResolver) isrcRecordings(ctx context.Context, isrc string) []domain.ISRCRecording {
 	if isrc == "" {
 		return nil
 	}
@@ -222,7 +223,7 @@ func (r *MusicBrainzResolver) isrcRecordings(ctx context.Context, isrc string) [
 	return recordings
 }
 
-func adoptRecording(identity ports.RecordingIdentity, isrc string, chosen ports.ISRCRecording) ports.RecordingIdentity {
+func adoptRecording(identity domain.RecordingIdentity, isrc string, chosen domain.ISRCRecording) domain.RecordingIdentity {
 	identity.MBID = chosen.MBID
 	if identity.ISRC == "" {
 		identity.ISRC = isrc
@@ -233,14 +234,14 @@ func adoptRecording(identity ports.RecordingIdentity, isrc string, chosen ports.
 	return identity
 }
 
-func closestRecording(recordings []ports.ISRCRecording, want float64) (ports.ISRCRecording, bool) {
+func closestRecording(recordings []domain.ISRCRecording, want float64) (domain.ISRCRecording, bool) {
 	if len(recordings) == 1 {
 		return recordings[0], true
 	}
 	if want <= 0 {
-		return ports.ISRCRecording{}, false
+		return domain.ISRCRecording{}, false
 	}
-	var best ports.ISRCRecording
+	var best domain.ISRCRecording
 	bestGap := math.Inf(1)
 	for _, rec := range recordings {
 		if rec.Duration <= 0 {
@@ -253,17 +254,17 @@ func closestRecording(recordings []ports.ISRCRecording, want float64) (ports.ISR
 	return best, best.MBID != ""
 }
 
-func (r *MusicBrainzResolver) resolveFromSearch(ctx context.Context, q songfields.RecordingIdentity) (ports.RecordingIdentity, error) {
+func (r *MusicBrainzResolver) resolveFromSearch(ctx context.Context, q songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
 	if q.Title == "" || q.Artist == "" {
-		return ports.RecordingIdentity{}, nil
+		return domain.RecordingIdentity{}, nil
 	}
 	results, err := r.searchTracks(ctx, q)
 	if err != nil || len(results) == 0 {
-		return ports.RecordingIdentity{}, err
+		return domain.RecordingIdentity{}, err
 	}
 	best, ok := pickRecording(results, q)
 	if !ok {
-		return ports.RecordingIdentity{}, nil
+		return domain.RecordingIdentity{}, nil
 	}
 	return toIdentity(best), nil
 }
@@ -328,16 +329,16 @@ func agreement(res, q songfields.RecordingIdentity) int {
 	return score
 }
 
-func toIdentity(res songfields.RecordingIdentity) ports.RecordingIdentity {
-	identity := ports.RecordingIdentity{
+func toIdentity(res songfields.RecordingIdentity) domain.RecordingIdentity {
+	identity := domain.RecordingIdentity{
 		ISRC:     res.ISRC,
 		MBID:     res.RecordingMBID,
 		Duration: res.DurationSeconds,
 	}
 	for _, src := range res.Sources {
 		if src.ExternalID != "" {
-			identity.Sources = append(identity.Sources, ports.ProviderRef{
-				Provider: ports.RecordingProvider(src.Provider), ExternalID: src.ExternalID, URL: src.URL,
+			identity.Sources = append(identity.Sources, domain.ProviderRef{
+				Provider: domain.RecordingProvider(src.Provider), ExternalID: src.ExternalID, URL: src.URL,
 			})
 		}
 	}

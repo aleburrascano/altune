@@ -27,8 +27,8 @@ import (
 )
 
 func coreStepsOver(sources *service.SourceRegistry, store *objectStore, workspace ports.ScratchFolder) service.Pipeline {
-	steps, err := service.CoreSteps(sources, ports.NoopAudioTagger(), store, downloadtest.SilentAudioProber(),
-		ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopVerifySkipRecorder(),
+	steps, err := service.CoreSteps(sources, memory.NoopAudioTagger(), store, downloadtest.SilentAudioProber(),
+		memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), memory.NoopVerifySkipRecorder(),
 		service.MustDirectDeleteOrphans(store), downloadtest.SilentAudioRefLookup(), clock.Sleep, random.Real, time.Now, workspace, service.Unlimited(), nil)
 	if err != nil {
 		panic(err)
@@ -37,7 +37,7 @@ func coreStepsOver(sources *service.SourceRegistry, store *objectStore, workspac
 }
 
 func TestSelect_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(
+	source := &searchSource{name: "ytdlp", found: []domain.AudioCandidate{downloadtest.Candidate(
 		"yt:cooking",
 		downloadtest.WithTitle("Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense"),
 		downloadtest.WithChannel("CookingChannel"),
@@ -103,7 +103,7 @@ func TestBuildAudioRef(t *testing.T) {
 }
 
 func TestSelect_PrefersTheTopicUploadOverCoversAndUnrelatedVideos(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
+	source := &searchSource{name: "ytdlp", found: []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"yt:official",
 			downloadtest.WithTitle("The Weeknd - Blinding Lights (Official Video)"),
@@ -159,7 +159,7 @@ func TestProvenance(t *testing.T) {
 			ac: service.AcquisitionContext{
 				IdentityVerified: true,
 				DurationVerified: true,
-				Identity:         ports.RecordingIdentity{Duration: 181},
+				Identity:         domain.RecordingIdentity{Duration: 181},
 			},
 			want: downloadprovenance.ProvenanceVerified,
 		},
@@ -168,7 +168,7 @@ func TestProvenance(t *testing.T) {
 			ac: service.AcquisitionContext{
 				DurationVerified: true,
 				Track:            service.TrackRef{CatalogDuration: 181},
-				Identity:         ports.RecordingIdentity{Duration: 181},
+				Identity:         domain.RecordingIdentity{Duration: 181},
 			},
 			want: downloadprovenance.ProvenanceCorroborated,
 		},
@@ -206,24 +206,24 @@ type tierSource struct {
 
 func (s tierSource) Name() domain.SourceName { return s.name }
 
-func (s tierSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{downloadtest.Candidate(
+func (s tierSource) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
+	return []domain.AudioCandidate{downloadtest.Candidate(
 		s.url,
 		downloadtest.WithTitle("Blinding Lights"),
 		downloadtest.WithChannel("The Weeknd - Topic"),
 		downloadtest.WithArtists([]string{"The Weeknd"}),
 		downloadtest.WithDuration(200),
 		downloadtest.WithCategories([]string{"Music"}),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 	)}, nil
 }
 
-func (s tierSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s tierSource) Fetch(_ context.Context, _ domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	if s.broken {
-		return ports.FetchedAudio{}, errors.New("yt-dlp: download failed")
+		return domain.FetchedAudio{}, errors.New("yt-dlp: download failed")
 	}
 	path := filepath.Join(outDir, "track.mp3")
-	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("audio-bytes"), 0o600)
+	return domain.FetchedAudio{Path: path}, os.WriteFile(path, []byte("audio-bytes"), 0o600)
 }
 
 func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
@@ -266,20 +266,20 @@ func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testin
 
 type waitingCommitLedger struct{ *memory.Ledger }
 
-func (waitingCommitLedger) Complete(ctx context.Context, _ ids.TrackId, _ ids.UserId, _ ports.ClaimNumber, _ ports.Completion) error {
+func (waitingCommitLedger) Complete(ctx context.Context, _ ids.TrackId, _ ids.UserId, _ domain.ClaimNumber, _ domain.Completion) error {
 	<-ctx.Done()
 	return ctx.Err()
 }
 
 type lostLeaseQueue struct{ *firstOutcomeQueue }
 
-func (lostLeaseQueue) Heartbeat(context.Context, ids.TrackId, ports.ClaimNumber, time.Duration) error {
+func (lostLeaseQueue) Heartbeat(context.Context, ids.TrackId, domain.ClaimNumber, time.Duration) error {
 	return domain.ErrLeaseLost
 }
 
 type storedAndOrphaned struct {
 	store  *recordingStore
-	queued []ports.OrphanedAudio
+	queued []domain.OrphanedAudio
 	track  memory.LedgerTrack
 }
 
@@ -315,7 +315,7 @@ func TestRunPipeline_LeaseLossKeepsTheStoredAudioAndQueuesItForTheSweep(t *testi
 	if len(run.store.objects) != 1 {
 		t.Fatalf("objects = %v, want the stored audio kept: the new lease owner may be serving it", run.store.objects)
 	}
-	want := ports.OrphanedAudio{AudioRef: refOf(run.track, ""), UserId: run.track.UserId, TrackId: run.track.ID}
+	want := domain.OrphanedAudio{AudioRef: refOf(run.track, ""), UserId: run.track.UserId, TrackId: run.track.ID}
 	if len(run.queued) != 1 || run.queued[0] != want {
 		t.Errorf("recorded = %+v, want exactly %+v", run.queued, want)
 	}
@@ -388,13 +388,13 @@ type failingCommitLedger struct {
 	err error
 }
 
-func (l failingCommitLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
+func (l failingCommitLedger) Complete(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, domain.Completion) error {
 	return l.err
 }
 
 type panickingCommitLedger struct{ *memory.Ledger }
 
-func (panickingCommitLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
+func (panickingCommitLedger) Complete(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, domain.Completion) error {
 	panic("commit exploded")
 }
 
@@ -415,7 +415,7 @@ func TestRunPipeline_APanicInTheLastStageRollsBackTheStoredAudio(t *testing.T) {
 
 type cancellingTagger struct{ cancel context.CancelFunc }
 
-func (t cancellingTagger) Tag(context.Context, string, ports.TrackTags) error {
+func (t cancellingTagger) Tag(context.Context, string, domain.TrackTags) error {
 	t.cancel()
 	return nil
 }
@@ -428,7 +428,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 	svc := mustAcquisitionServices(memory.NewLedger(track), sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages(taggedBy(cancellingTagger{cancel})))
 
-	err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	err := svc.Execute(ctx, domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute = %v, want the cancellation reported", err)
@@ -466,22 +466,22 @@ func TestRunPipeline_RollbackFailedLogRedactsCookiePath(t *testing.T) {
 }
 
 type finesseSource struct {
-	candidates []ports.AudioCandidate
+	candidates []domain.AudioCandidate
 	broken     string
 }
 
 func (finesseSource) Name() domain.SourceName { return "finesse" }
 
-func (s finesseSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s finesseSource) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
 	return s.candidates, nil
 }
 
-func (s finesseSource) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s finesseSource) Fetch(_ context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	if c.URL == s.broken {
-		return ports.FetchedAudio{}, errors.New("every candidate failed")
+		return domain.FetchedAudio{}, errors.New("every candidate failed")
 	}
 	path := filepath.Join(outDir, "track.mp3")
-	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("audio-bytes"), 0o600)
+	return domain.FetchedAudio{Path: path}, os.WriteFile(path, []byte("audio-bytes"), 0o600)
 }
 
 const (
@@ -489,14 +489,14 @@ const (
 	finesseUploadURL = "https://music.youtube.com/watch?v=bbbbbbbbbbb"
 )
 
-func finesseOn(url, album string) ports.AudioCandidate {
+func finesseOn(url, album string) domain.AudioCandidate {
 	return downloadtest.Candidate(
 		url,
 		downloadtest.WithTitle("Finesse"),
 		downloadtest.WithDuration(191),
 		downloadtest.WithArtists([]string{"Bruno Mars"}),
 		downloadtest.WithAlbum(album),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 	)
 }
 
@@ -516,7 +516,7 @@ func shadowedRun(t *testing.T, source finesseSource) (*service.AcquisitionContex
 }
 
 func TestRunPipeline_ShadowJudgesTheKeptCandidateOnce(t *testing.T) {
-	_, lines, err := shadowedRun(t, finesseSource{candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}})
+	_, lines, err := shadowedRun(t, finesseSource{candidates: []domain.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}})
 	if err != nil {
 		t.Fatalf("RunPipeline: %v", err)
 	}
@@ -531,7 +531,7 @@ func TestRunPipeline_ShadowJudgesTheKeptCandidateOnce(t *testing.T) {
 
 func TestRunPipeline_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
 	source := finesseSource{
-		candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic"), downloadtest.Candidate(
+		candidates: []domain.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic"), downloadtest.Candidate(
 			finesseUploadURL,
 			downloadtest.WithTitle("Bruno Mars - Finesse (Official Audio)"),
 			downloadtest.WithChannel("Bruno Mars - Topic"),
@@ -558,7 +558,7 @@ func TestRunPipeline_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) 
 }
 
 func TestRunPipeline_ShadowLogsAFailedPipeline(t *testing.T) {
-	source := finesseSource{candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}, broken: finesseAlbumURL}
+	source := finesseSource{candidates: []domain.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}, broken: finesseAlbumURL}
 
 	_, lines, err := shadowedRun(t, source)
 
@@ -585,7 +585,7 @@ func TestSearch_AReplaceExcludesAVideoUnderItsOtherURLSpelling(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(tt.url)}}
+			source := &searchSource{name: "ytdlp", found: []domain.AudioCandidate{downloadtest.Candidate(tt.url)}}
 			ac := &service.AcquisitionContext{Replace: service.ReplaceState{ExcludeKeys: []string{excluded}}}
 
 			_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
@@ -615,7 +615,7 @@ func TestRunPipeline_APanicInsideTheShadowJudgeIsLoggedAndTheRunStillSucceeds(t 
 	var logs bytes.Buffer
 	logging.UseHandler(t, panicOnShadowHandler{slog.NewTextHandler(&logs, nil)})
 	workspace := scratchfiles.New()
-	source := finesseSource{candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}}
+	source := finesseSource{candidates: []domain.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}}
 	steps := coreStepsOver(service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, workspace)
 	ac := &service.AcquisitionContext{Track: service.TrackRef{
 		ID: "track-1", UserID: "u1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191,
@@ -643,26 +643,26 @@ func withSpareCapacity[T any](values ...T) []T {
 func TestAcquisitionContext_ASnapshotSharesNoSliceOrPointerWithTheOriginal(t *testing.T) {
 	delta := 1.5
 	original := &service.AcquisitionContext{
-		Track:           service.TrackRef{CatalogSources: withSpareCapacity(ports.CatalogSource{ExternalID: "catalog"})},
-		Identity:        ports.RecordingIdentity{MBIDs: withSpareCapacity("mb-1", "mb-2"), Sources: withSpareCapacity(ports.ProviderRef{ExternalID: "ref"})},
+		Track:           service.TrackRef{CatalogSources: withSpareCapacity(domain.CatalogSource{ExternalID: "catalog"})},
+		Identity:        domain.RecordingIdentity{MBIDs: withSpareCapacity("mb-1", "mb-2"), Sources: withSpareCapacity(domain.ProviderRef{ExternalID: "ref"})},
 		Candidates:      withSpareCapacity(downloadtest.Candidate("https://example.test/a")),
 		Ranked:          withSpareCapacity(downloadtest.Candidate("https://example.test/b")),
 		Selected:        downloadtest.CandidatePtr("https://example.test/c"),
 		Attempted:       withSpareCapacity(service.AttemptedCandidate{URL: "https://example.test/d", Window: 1}),
-		Evidence:        service.Evidence{Qualifiers: withSpareCapacity("live"), DurationDeltaSeconds: &delta},
+		Evidence:        domain.AcquisitionEvidence{Qualifiers: withSpareCapacity("live"), DurationDeltaSeconds: &delta},
 		Rejections:      withSpareCapacity(service.RejectionEntry{URL: "https://example.test/e"}),
 		Replace:         service.ReplaceState{ExcludeKeys: withSpareCapacity("key-1")},
-		PriorRejections: withSpareCapacity(ports.PriorRejection{SourceKey: "prior"}),
-		Relabel:         &ports.TrackLabel{Title: "relabel"},
+		PriorRejections: withSpareCapacity(domain.PriorRejection{SourceKey: "prior"}),
+		Relabel:         &domain.TrackLabel{Title: "relabel"},
 	}
 
 	pass := original.Snapshot()
 	pass.Track.CatalogSources[0].ExternalID = "changed"
-	pass.Track.CatalogSources = append(pass.Track.CatalogSources, ports.CatalogSource{})
+	pass.Track.CatalogSources = append(pass.Track.CatalogSources, domain.CatalogSource{})
 	pass.Identity.MBIDs[0] = "changed"
 	pass.Identity.MBIDs = append(pass.Identity.MBIDs, "extra")
 	pass.Identity.Sources[0].ExternalID = "changed"
-	pass.Identity.Sources = append(pass.Identity.Sources, ports.ProviderRef{})
+	pass.Identity.Sources = append(pass.Identity.Sources, domain.ProviderRef{})
 	pass.Candidates[0].URL = "changed"
 	pass.Candidates = append(pass.Candidates, downloadtest.Candidate("extra"))
 	pass.Ranked[0].URL = "changed"
@@ -677,7 +677,7 @@ func TestAcquisitionContext_ASnapshotSharesNoSliceOrPointerWithTheOriginal(t *te
 	pass.Replace.ExcludeKeys[0] = "changed"
 	pass.Replace.ExcludeKeys = append(pass.Replace.ExcludeKeys, "extra")
 	pass.PriorRejections[0].SourceKey = "changed"
-	pass.PriorRejections = append(pass.PriorRejections, ports.PriorRejection{})
+	pass.PriorRejections = append(pass.PriorRejections, domain.PriorRejection{})
 	pass.Relabel.Title = "changed"
 
 	checks := map[string]bool{

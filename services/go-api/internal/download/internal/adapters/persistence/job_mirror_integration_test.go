@@ -2,7 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/persistence"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"encoding/json"
@@ -48,7 +48,7 @@ func TestPostgresJobQueue_EveryQueueStepLeavesTheJobRowEqualToTheTrackColumns(t 
 	track := insertFailedTrack(t, pool)
 	requireJobRowMirrorsTrack(t, pool, track.ID, "the insert")
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, domain.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	requireJobRowMirrorsTrack(t, pool, track.ID, "enqueue")
@@ -119,7 +119,7 @@ func TestPostgresUpgradeStore_TheStateOwnsTheBookkeepingKeysAndOnlyCopiesThemBac
 
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","source_kbps":96}`, sourceURL: sourceURL("mirror")})
 
-	if _, err := store.NoteAttempt(ctx, id, ports.UpgradeAttempt{RejectedSourceKey: "yt:bad", CountsAsTry: true}); err != nil {
+	if _, err := store.NoteAttempt(ctx, id, domain.UpgradeAttempt{RejectedSourceKey: "yt:bad", CountsAsTry: true}); err != nil {
 		t.Fatalf("NoteAttempt = %v", err)
 	}
 	if err := store.GiveUp(ctx, id, 4, "nothing better"); err != nil {

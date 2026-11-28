@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"testing"
 )
@@ -12,15 +12,15 @@ const (
 	drinkingRemix = "d3dc2825-20c0-4a4f-a963-baa589049146"
 )
 
-func albumIdentity() ports.RecordingIdentity {
-	return ports.RecordingIdentity{ISRC: drinkingISRC, MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}}
+func albumIdentity() domain.RecordingIdentity {
+	return domain.RecordingIdentity{ISRC: drinkingISRC, MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}}
 }
 
-func survivingAlbum() []ports.LinkedRecording {
-	return []ports.LinkedRecording{{MBID: drinkingAlbum, Duration: 236}}
+func survivingAlbum() []domain.LinkedRecording {
+	return []domain.LinkedRecording{{MBID: drinkingAlbum, Duration: 236}}
 }
 
-func doubted(identity ports.RecordingIdentity) ports.RecordingIdentity {
+func doubted(identity domain.RecordingIdentity) domain.RecordingIdentity {
 	identity.ReferenceDoubted = true
 	return identity
 }
@@ -30,71 +30,71 @@ func TestProve(t *testing.T) {
 		name       string
 		facts      service.ProofFacts
 		wantISRC   string
-		wantSource service.ProofSource
+		wantSource domain.ProofSource
 	}{
 		{
 			name:       "the catalog's own ISRC is never replaced by a proven one",
-			facts:      service.ProofFacts{CatalogISRC: "USWB19901214", Identity: ports.RecordingIdentity{ISRC: "DEUM71724939", MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}}, HardVerdict: true, Surviving: survivingAlbum()},
+			facts:      service.ProofFacts{CatalogISRC: "USWB19901214", Identity: domain.RecordingIdentity{ISRC: "DEUM71724939", MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}}, HardVerdict: true, Surviving: survivingAlbum()},
 			wantISRC:   "USWB19901214",
-			wantSource: service.ProofCatalog,
+			wantSource: domain.ProofCatalog,
 		},
 		{
 			name:       "the catalog's own ISRC stands with nothing else known",
 			facts:      service.ProofFacts{CatalogISRC: "USWB19901214"},
 			wantISRC:   "USWB19901214",
-			wantSource: service.ProofCatalog,
+			wantSource: domain.ProofCatalog,
 		},
 		{
 			name:       "the pinned recording's ISRC",
 			facts:      service.ProofFacts{CatalogMBID: drinkingAlbum, Identity: albumIdentity()},
 			wantISRC:   drinkingISRC,
-			wantSource: service.ProofPinnedRecording,
+			wantSource: domain.ProofPinnedRecording,
 		},
 		{
 			name:       "a fingerprint that hard-matches the identity's recording proves its ISRC",
 			facts:      service.ProofFacts{Identity: albumIdentity(), HardVerdict: true, Surviving: survivingAlbum()},
 			wantISRC:   drinkingISRC,
-			wantSource: service.ProofFingerprint,
+			wantSource: domain.ProofFingerprint,
 		},
 		{
 			name:       "an identity ISRC with no proof is unproven",
-			facts:      service.ProofFacts{Identity: ports.RecordingIdentity{ISRC: drinkingISRC, MBID: drinkingRemix, MBIDs: []string{drinkingRemix}}},
-			wantSource: service.ProofUnproven,
+			facts:      service.ProofFacts{Identity: domain.RecordingIdentity{ISRC: drinkingISRC, MBID: drinkingRemix, MBIDs: []string{drinkingRemix}}},
+			wantSource: domain.ProofUnproven,
 		},
 		{
 			name:       "a doubted reference does not prove its ISRC",
 			facts:      service.ProofFacts{Identity: doubted(albumIdentity()), HardVerdict: true, Surviving: survivingAlbum()},
-			wantSource: service.ProofUnproven,
+			wantSource: domain.ProofUnproven,
 		},
 		{
 			name:       "a hard verdict outside the reference set does not prove the ISRC",
-			facts:      service.ProofFacts{Identity: albumIdentity(), HardVerdict: true, Surviving: []ports.LinkedRecording{{MBID: "some-other-recording"}}},
-			wantSource: service.ProofUnproven,
+			facts:      service.ProofFacts{Identity: albumIdentity(), HardVerdict: true, Surviving: []domain.LinkedRecording{{MBID: "some-other-recording"}}},
+			wantSource: domain.ProofUnproven,
 		},
 		{
 			name:       "a soft verdict on the identity's recording does not prove the ISRC",
 			facts:      service.ProofFacts{Identity: albumIdentity(), Surviving: survivingAlbum()},
-			wantSource: service.ProofUnproven,
+			wantSource: domain.ProofUnproven,
 		},
 		{
 			name:       "a surviving recording with no MBID proves nothing",
-			facts:      service.ProofFacts{Identity: ports.RecordingIdentity{ISRC: drinkingISRC, MBIDs: []string{""}}, HardVerdict: true, Surviving: []ports.LinkedRecording{{}}},
-			wantSource: service.ProofUnproven,
+			facts:      service.ProofFacts{Identity: domain.RecordingIdentity{ISRC: drinkingISRC, MBIDs: []string{""}}, HardVerdict: true, Surviving: []domain.LinkedRecording{{}}},
+			wantSource: domain.ProofUnproven,
 		},
 		{
 			name:       "an identity with no MBID is not the pin of a track with none",
-			facts:      service.ProofFacts{Identity: ports.RecordingIdentity{ISRC: drinkingISRC}},
-			wantSource: service.ProofUnproven,
+			facts:      service.ProofFacts{Identity: domain.RecordingIdentity{ISRC: drinkingISRC}},
+			wantSource: domain.ProofUnproven,
 		},
 		{
 			name:       "a pin on another recording proves nothing",
 			facts:      service.ProofFacts{CatalogMBID: drinkingRemix, Identity: albumIdentity()},
-			wantSource: service.ProofUnproven,
+			wantSource: domain.ProofUnproven,
 		},
 		{
 			name:       "no ISRC anywhere is unproven even when pinned and fingerprinted",
-			facts:      service.ProofFacts{CatalogMBID: drinkingAlbum, Identity: ports.RecordingIdentity{MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}}, HardVerdict: true, Surviving: survivingAlbum()},
-			wantSource: service.ProofUnproven,
+			facts:      service.ProofFacts{CatalogMBID: drinkingAlbum, Identity: domain.RecordingIdentity{MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}}, HardVerdict: true, Surviving: survivingAlbum()},
+			wantSource: domain.ProofUnproven,
 		},
 	}
 	for _, tt := range tests {
@@ -110,11 +110,11 @@ func TestProve(t *testing.T) {
 
 func TestSource_NamesStoredInAcquisitionEvidenceStayStable(t *testing.T) {
 	t.Parallel()
-	stored := map[service.ProofSource]string{
-		service.ProofCatalog:         "catalog",
-		service.ProofPinnedRecording: "pinned_recording",
-		service.ProofFingerprint:     "fingerprint",
-		service.ProofUnproven:        "unproven",
+	stored := map[domain.ProofSource]string{
+		domain.ProofCatalog:         "catalog",
+		domain.ProofPinnedRecording: "pinned_recording",
+		domain.ProofFingerprint:     "fingerprint",
+		domain.ProofUnproven:        "unproven",
 	}
 	for source, want := range stored {
 		if string(source) != want {

@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
@@ -57,10 +58,10 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	}{
 		{service.NewSearchStep(nil), "search", downloadfailure.FailureNoMatchFound},
 		{service.NewSelectStep(), "select", downloadfailure.FailureNoMatchFound},
-		{mustNewDownloadStep(&fileWritingSearcher{}, scratchfiles.New(), ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited()), "download", downloadfailure.FailureDownloadFailed},
-		{mustNewTagStep(ports.NoopAudioTagger()), "tag", downloadfailure.FailureAcquisitionFailed},
+		{mustNewDownloadStep(&fileWritingSearcher{}, scratchfiles.New(), memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited()), "download", downloadfailure.FailureDownloadFailed},
+		{mustNewTagStep(memory.NoopAudioTagger()), "tag", downloadfailure.FailureAcquisitionFailed},
 		{mustNewStoreStep(newFakeAudioStore(), scratchfiles.New(), downloadtest.SilentAudioProber(), service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}), downloadtest.SilentAudioRefLookup()), "store", downloadfailure.FailureStorageFailed},
-		{service.NewUpdateTrackStep(nil, ids.UserId{}, ids.TrackId{}), "update_track", downloadfailure.FailureAcquisitionFailed},
+		{service.NewUpdateTrackStep(nil, evidence.NewCodec(), ids.UserId{}, ids.TrackId{}), "update_track", downloadfailure.FailureAcquisitionFailed},
 	}
 
 	for _, tt := range tests {
@@ -87,7 +88,7 @@ func TestFailureReason_MessageTextAloneIsNotCancellation(t *testing.T) {
 
 type answeringSource struct {
 	name     domain.SourceName
-	found    []ports.AudioCandidate
+	found    []domain.AudioCandidate
 	findErr  error
 	fetchErr error
 	stall    bool
@@ -95,7 +96,7 @@ type answeringSource struct {
 
 func (s *answeringSource) Name() domain.SourceName { return s.name }
 
-func (s *answeringSource) Find(ctx context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *answeringSource) Find(ctx context.Context, _ domain.FindRequest) ([]domain.AudioCandidate, error) {
 	if s.stall {
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -103,17 +104,17 @@ func (s *answeringSource) Find(ctx context.Context, _ ports.FindRequest) ([]port
 	return s.found, s.findErr
 }
 
-func (s *answeringSource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
+func (s *answeringSource) Fetch(context.Context, domain.AudioCandidate, string) (domain.FetchedAudio, error) {
 	if s.fetchErr != nil {
-		return ports.FetchedAudio{}, s.fetchErr
+		return domain.FetchedAudio{}, s.fetchErr
 	}
-	return ports.FetchedAudio{}, errors.New("nothing to fetch")
+	return domain.FetchedAudio{}, errors.New("nothing to fetch")
 }
 
 func pendingSong() memory.LedgerTrack {
-	return memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	return memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
-		Title: "Song", Artist: "Artist", Album: "Album", Status: ports.TrackPending,
+		Title: "Song", Artist: "Artist", Album: "Album", Status: domain.TrackPending,
 	}}
 }
 
@@ -125,7 +126,7 @@ func acquireService(ledger *memory.Ledger, registry *service.SourceRegistry, sto
 func persistedCode(t *testing.T, ledger *memory.Ledger, id ids.TrackId) downloadfailure.FailureCode {
 	t.Helper()
 	got, ok := ledger.Track(id)
-	if !ok || got.Status != ports.TrackFailed {
+	if !ok || got.Status != domain.TrackFailed {
 		t.Fatalf("track = %+v, want it failed", got)
 	}
 	code, _ := downloadfailure.SplitFailureReason(got.FailureReason)
@@ -163,7 +164,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 			ledger := memory.NewLedger(track)
 			svc := acquireService(ledger, service.NewSourceRegistry(&answeringSource{name: "ytdlp", findErr: tt.searchErr}), &objectStore{objects: map[string]string{}})
 
-			_ = svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+			_ = svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 			if code := persistedCode(t, ledger, track.ID); code != tt.want {
 				t.Errorf("persisted failure code = %q, want %q", code, tt.want)
@@ -174,13 +175,13 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 
 func TestExecute_AStoreThatFailsWithTheContextLiveKeepsTheStorageReason(t *testing.T) {
 	userID, trackID := ids.NewUserId(uuid.New()), ids.NewTrackId()
-	ledger := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
-		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Status: ports.TrackPending,
+	ledger := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{
+		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Status: domain.TrackPending,
 	}})
 	store := &objectStore{objects: map[string]string{}, storeErr: errors.New("put object: connection reset")}
 	svc := acquireService(ledger, service.NewSourceRegistry(freshAudioSource{}), store)
 
-	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: userID, TrackID: trackID})
+	err := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: userID, TrackID: trackID})
 
 	if got := service.FailureCodeOf(err); got != string(downloadfailure.FailureStorageFailed) {
 		t.Errorf("FailureCodeOf(%v) = %q, want %q", err, got, downloadfailure.FailureStorageFailed)
@@ -247,10 +248,10 @@ func TestFailureReason_DownloadStepWrappingNoConfidentMatch(t *testing.T) {
 func firstTierOutage() *service.SourceRegistry {
 	blocked := &answeringSource{
 		name: "ytmsearch",
-		found: []ports.AudioCandidate{downloadtest.Candidate(
+		found: []domain.AudioCandidate{downloadtest.Candidate(
 			"https://music.youtube.com/watch?v=artTrackAAA",
 			downloadtest.WithTitle("Blinding Lights"),
-			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithKind(domain.KindArtTrack),
 		)},
 		fetchErr: &domain.SourceUnavailableError{
 			Source: "ytmsearch",
@@ -270,7 +271,7 @@ func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
 	ledger := memory.NewLedger(track)
 	svc := acquireService(ledger, firstTierOutage(), &objectStore{objects: map[string]string{}})
 
-	execErr := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	execErr := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	if got := service.FailureCodeOf(execErr); got != string(downloadfailure.FailureSourceUnavailable) {
 		t.Errorf("failure code = %q, want source_unavailable: the first tier was down, not empty", got)
@@ -282,7 +283,7 @@ func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
 	ledger := memory.NewLedger(track)
 	svc := acquireService(ledger, brokenSearchBesideEmptyResults(), &objectStore{objects: map[string]string{}})
 
-	execErr := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	execErr := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	if got := service.FailureCodeOf(execErr); got != string(downloadfailure.FailureAcquisitionFailed) {
 		t.Errorf("failure code = %q, want acquisition_failed", got)
@@ -303,7 +304,7 @@ func TestScheduler_AFirstTierOutageOnAnEarlyRunIsReleasedForARetry(t *testing.T)
 		if !outcome.released || outcome.delay != 30*time.Second {
 			t.Errorf("outcome = %+v, want the first run released for 30s: the first tier was down, not empty", outcome)
 		}
-		if got, _ := ledger.Track(track.ID); got.Status != ports.TrackPending {
+		if got, _ := ledger.Track(track.ID); got.Status != domain.TrackPending {
 			t.Errorf("status = %v, want pending while the job waits for its retry", got.Status)
 		}
 	})
@@ -338,7 +339,7 @@ func TestScheduler_AJobThatRunsOutItsOwnTimeIsRetried(t *testing.T) {
 		if !outcome.released {
 			t.Errorf("outcome = %+v, want the job released: its own timeout is transient", outcome)
 		}
-		if got, _ := ledger.Track(track.ID); got.Status != ports.TrackPending {
+		if got, _ := ledger.Track(track.ID); got.Status != domain.TrackPending {
 			t.Errorf("status = %v, want pending while the job waits for its retry", got.Status)
 		}
 	})
@@ -354,15 +355,15 @@ func TestFailureCode_OwnTimeoutIsReportedAsSourceUnavailable(t *testing.T) {
 
 type retryingAcquirer struct{}
 
-func (retryingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (retryingAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryingAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (retryingAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (retryingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func backoffAfterRun(t *testing.T, run int) time.Duration {
 	t.Helper()

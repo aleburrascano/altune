@@ -89,13 +89,13 @@ type fingerprint struct {
 	Fingerprint string  `json:"fingerprint"`
 }
 
-func (i *Identifier) Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (ports.RecordingMatch, error) {
+func (i *Identifier) Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (domain.RecordingMatch, error) {
 	fp, err := i.fingerprintFile(ctx, filePath)
 	if err != nil {
-		return ports.RecordingMatch{}, err
+		return domain.RecordingMatch{}, err
 	}
 	if fp.Fingerprint == "" || fp.Duration <= 0 {
-		return ports.RecordingMatch{}, fmt.Errorf("%s: %w", filePath, domain.ErrEmptyFingerprint)
+		return domain.RecordingMatch{}, fmt.Errorf("%s: %w", filePath, domain.ErrEmptyFingerprint)
 	}
 	if fullLengthForPreview > 0 {
 		fp.Duration = math.Round(fullLengthForPreview)
@@ -143,9 +143,9 @@ type lookupResponse struct {
 	} `json:"results"`
 }
 
-func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.RecordingMatch, error) {
+func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (domain.RecordingMatch, error) {
 	if i.apiKey == "" {
-		return ports.RecordingMatch{}, ErrMissingAPIKey
+		return domain.RecordingMatch{}, ErrMissingAPIKey
 	}
 
 	form := url.Values{}
@@ -158,28 +158,28 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 		outbound.WithHeader("Content-Type", "application/x-www-form-urlencoded"))
 	switch {
 	case err != nil:
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %w", err)
+		return domain.RecordingMatch{}, fmt.Errorf("acoustid lookup: %w", err)
 	case status == http.StatusTooManyRequests:
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d: %w", status, domain.ErrIdentifyThrottled)
+		return domain.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d: %w", status, domain.ErrIdentifyThrottled)
 	case status != http.StatusOK:
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", status)
+		return domain.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", status)
 	}
 	if len(body) >= lookupBodyCap {
-		return ports.RecordingMatch{}, fmt.Errorf("read acoustid response: exceeds %d byte cap", lookupBodyCap)
+		return domain.RecordingMatch{}, fmt.Errorf("read acoustid response: exceeds %d byte cap", lookupBodyCap)
 	}
 
 	var parsed lookupResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("parse acoustid response: %w", err)
+		return domain.RecordingMatch{}, fmt.Errorf("parse acoustid response: %w", err)
 	}
 	if parsed.Status != "ok" {
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %s", parsed.Error.Message)
+		return domain.RecordingMatch{}, fmt.Errorf("acoustid lookup: %s", parsed.Error.Message)
 	}
 
 	return matchOf(acoustIDResults(parsed)), nil
 }
 
-func matchOf(results []ports.AcoustIDResult) ports.RecordingMatch {
+func matchOf(results []domain.AcoustIDResult) domain.RecordingMatch {
 	for _, result := range results {
 		mbids := make([]string, 0, len(result.Recordings))
 		for _, rec := range result.Recordings {
@@ -190,18 +190,18 @@ func matchOf(results []ports.AcoustIDResult) ports.RecordingMatch {
 		if result.ID == "" && len(mbids) == 0 {
 			continue
 		}
-		return ports.RecordingMatch{AcoustID: result.ID, MBIDs: mbids, Score: result.Score, Results: results}
+		return domain.RecordingMatch{AcoustID: result.ID, MBIDs: mbids, Score: result.Score, Results: results}
 	}
-	return ports.RecordingMatch{Results: results}
+	return domain.RecordingMatch{Results: results}
 }
 
-func acoustIDResults(full lookupResponse) []ports.AcoustIDResult {
-	results := make([]ports.AcoustIDResult, 0, len(full.Results))
+func acoustIDResults(full lookupResponse) []domain.AcoustIDResult {
+	results := make([]domain.AcoustIDResult, 0, len(full.Results))
 	for _, result := range full.Results {
 		if result.Score < MinScore {
 			continue
 		}
-		results = append(results, ports.AcoustIDResult{
+		results = append(results, domain.AcoustIDResult{
 			ID:         result.ID,
 			Score:      result.Score,
 			Recordings: linkedRecordings(result.Recordings),
@@ -211,10 +211,10 @@ func acoustIDResults(full lookupResponse) []ports.AcoustIDResult {
 	return results
 }
 
-func linkedRecordings(recordings []lookupRecording) []ports.LinkedRecording {
-	linked := make([]ports.LinkedRecording, 0, len(recordings))
+func linkedRecordings(recordings []lookupRecording) []domain.LinkedRecording {
+	linked := make([]domain.LinkedRecording, 0, len(recordings))
 	for _, recording := range recordings {
-		linked = append(linked, ports.LinkedRecording{
+		linked = append(linked, domain.LinkedRecording{
 			MBID:          recording.ID,
 			Title:         recording.Title,
 			Artists:       artistNames(recording.Artists),
@@ -238,13 +238,13 @@ func artistNames(artists []struct {
 	return names
 }
 
-func releaseGroups(recording lookupRecording) []ports.ReleaseGroup {
+func releaseGroups(recording lookupRecording) []domain.ReleaseGroup {
 	if len(recording.ReleaseGroups) == 0 {
 		return nil
 	}
-	groups := make([]ports.ReleaseGroup, 0, len(recording.ReleaseGroups))
+	groups := make([]domain.ReleaseGroup, 0, len(recording.ReleaseGroups))
 	for _, group := range recording.ReleaseGroups {
-		groups = append(groups, ports.ReleaseGroup{
+		groups = append(groups, domain.ReleaseGroup{
 			MBID:           group.ID,
 			Title:          group.Title,
 			Type:           group.Type,

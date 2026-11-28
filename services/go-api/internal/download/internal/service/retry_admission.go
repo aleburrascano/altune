@@ -31,7 +31,7 @@ const releaseTimeout = 5 * time.Second
 
 type cooldownGate struct {
 	store    ports.CooldownStore
-	kind     ports.CooldownKind
+	kind     domain.CooldownKind
 	cooldown time.Duration
 }
 
@@ -63,11 +63,11 @@ type RetryAdmission struct {
 }
 
 func NewRetryAdmission(store ports.CooldownStore) *RetryAdmission {
-	return &RetryAdmission{gate: cooldownGate{store: store, kind: ports.CooldownRetry, cooldown: RetryCooldown}}
+	return &RetryAdmission{gate: cooldownGate{store: store, kind: domain.CooldownRetry, cooldown: RetryCooldown}}
 }
 
-func (a *RetryAdmission) Admit(ctx context.Context, track *ports.TrackSnapshot, schedule func() error) error {
-	if track == nil || track.Status != ports.TrackFailed {
+func (a *RetryAdmission) Admit(ctx context.Context, track *domain.TrackSnapshot, schedule func() error) error {
+	if track == nil || track.Status != domain.TrackFailed {
 		return domain.ErrRetryNotFailed
 	}
 	return a.gate.run(ctx, track.ID, schedule)
@@ -78,10 +78,10 @@ type ReacquireAdmission struct {
 }
 
 func NewReacquireAdmission(store ports.CooldownStore) *ReacquireAdmission {
-	return &ReacquireAdmission{gate: cooldownGate{store: store, kind: ports.CooldownReacquire, cooldown: ReacquireCooldown}}
+	return &ReacquireAdmission{gate: cooldownGate{store: store, kind: domain.CooldownReacquire, cooldown: ReacquireCooldown}}
 }
 
-func (a *ReacquireAdmission) Admit(ctx context.Context, track *ports.TrackSnapshot, schedule func() error) error {
+func (a *ReacquireAdmission) Admit(ctx context.Context, track *domain.TrackSnapshot, schedule func() error) error {
 	if track == nil || !track.Streamable {
 		return domain.ErrReacquireNotReady
 	}

@@ -21,11 +21,11 @@ import (
 type recordingTagger struct {
 	mu    sync.Mutex
 	paths []string
-	tags  []ports.TrackTags
+	tags  []domain.TrackTags
 	err   error
 }
 
-func (r *recordingTagger) Tag(_ context.Context, filePath string, tags ports.TrackTags) error {
+func (r *recordingTagger) Tag(_ context.Context, filePath string, tags domain.TrackTags) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.paths = append(r.paths, filePath)
@@ -33,40 +33,40 @@ func (r *recordingTagger) Tag(_ context.Context, filePath string, tags ports.Tra
 	return r.err
 }
 
-func (r *recordingTagger) calls() ([]string, []ports.TrackTags) {
+func (r *recordingTagger) calls() ([]string, []domain.TrackTags) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]string(nil), r.paths...), append([]ports.TrackTags(nil), r.tags...)
+	return append([]string(nil), r.paths...), append([]domain.TrackTags(nil), r.tags...)
 }
 
-func pendingBlindingLights() ports.TrackSnapshot {
-	return ports.TrackSnapshot{
+func pendingBlindingLights() domain.TrackSnapshot {
+	return domain.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
-		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Status: ports.TrackPending,
+		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Status: domain.TrackPending,
 	}
 }
 
-func acquireWith(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, opts ...func(*service.AcquireTrackAudioService)) (*memory.Ledger, error) {
+func acquireWith(t *testing.T, track domain.TrackSnapshot, source ports.AudioSource, opts ...func(*service.AcquireTrackAudioService)) (*memory.Ledger, error) {
 	t.Helper()
 	return acquireVerified(t, track, source, noVerification(), noStages(), opts...)
 }
 
-func acquireStaged(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*memory.Ledger, error) {
+func acquireStaged(t *testing.T, track domain.TrackSnapshot, source ports.AudioSource, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*memory.Ledger, error) {
 	t.Helper()
 	return acquireVerified(t, track, source, noVerification(), stages, opts...)
 }
 
-func acquireVerified(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, wiring service.VerificationPorts, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*memory.Ledger, error) {
+func acquireVerified(t *testing.T, track domain.TrackSnapshot, source ports.AudioSource, wiring service.VerificationPorts, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*memory.Ledger, error) {
 	t.Helper()
 	ledger := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: track})
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
-	return ledger, svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	return ledger, svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }
 
 func requireReady(t *testing.T, ledger *memory.Ledger, id ids.TrackId, err error) {
 	t.Helper()
 	got, _ := ledger.Track(id)
-	if err != nil || got.Status != ports.TrackReady {
+	if err != nil || got.Status != domain.TrackReady {
 		t.Fatalf("Execute = %v, status = %v, want the track acquired", err, got.Status)
 	}
 }
@@ -75,8 +75,8 @@ type pathlessSource struct{ freshAudioSource }
 
 func (pathlessSource) Name() domain.SourceName { return "pathless" }
 
-func (pathlessSource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
-	return ports.FetchedAudio{}, nil
+func (pathlessSource) Fetch(context.Context, domain.AudioCandidate, string) (domain.FetchedAudio, error) {
+	return domain.FetchedAudio{}, nil
 }
 
 func TestExecute_ADownloadWithoutAFileFailsTheAcquisitionAndIsNeverTagged(t *testing.T) {
@@ -88,7 +88,7 @@ func TestExecute_ADownloadWithoutAFileFailsTheAcquisitionAndIsNeverTagged(t *tes
 	if err == nil || !strings.Contains(err.Error(), "fetcher returned no file") {
 		t.Fatalf("Execute = %v, want the download to fail because the fetcher returned no file", err)
 	}
-	if got, _ := ledger.Track(track.ID); got.Status == ports.TrackReady {
+	if got, _ := ledger.Track(track.ID); got.Status == domain.TrackReady {
 		t.Errorf("status = %v, want the track not acquired", got.Status)
 	}
 	if paths, _ := tagger.calls(); len(paths) != 0 {
@@ -145,7 +145,7 @@ func TestExecute_TagsTheDownloadedFileWithTheTracksMetadata(t *testing.T) {
 	if len(paths) != 1 || !strings.HasSuffix(paths[0], "audio.mp3") {
 		t.Fatalf("tagged %v, want the downloaded audio.mp3 once", paths)
 	}
-	want := ports.TrackTags{
+	want := domain.TrackTags{
 		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
 		AlbumArtist: "The Weeknd", Genre: "Pop", Year: 2020, TrackNumber: 4,
 	}
@@ -156,7 +156,7 @@ func TestExecute_TagsTheDownloadedFileWithTheTracksMetadata(t *testing.T) {
 
 func TestExecute_EmbedsOnlyTheProvenISRC(t *testing.T) {
 	const isrc = "USRC17607839"
-	resolved := &resolver{identity: ports.RecordingIdentity{ISRC: isrc, MBID: "rec-1", MBIDs: []string{"rec-1"}}}
+	resolved := &resolver{identity: domain.RecordingIdentity{ISRC: isrc, MBID: "rec-1", MBIDs: []string{"rec-1"}}}
 	pin := "rec-1"
 	for name, tc := range map[string]struct {
 		catalogMBID *string

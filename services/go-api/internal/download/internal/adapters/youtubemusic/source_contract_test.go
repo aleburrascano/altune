@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"context"
 	"errors"
 	"os"
@@ -34,11 +34,11 @@ func observedFixture(t *testing.T, videoID string) stubLookup {
 	return stubLookup{watch: watch}
 }
 
-func pinnedTo(title, videoID string) ports.FindRequest {
-	return ports.FindRequest{
+func pinnedTo(title, videoID string) domain.FindRequest {
+	return domain.FindRequest{
 		Title:    title,
 		Artist:   "slayr",
-		Identity: ports.RecordingIdentity{Duration: 151, Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: videoID}}},
+		Identity: domain.RecordingIdentity{Duration: 151, Sources: []domain.ProviderRef{{Provider: "youtube", ExternalID: videoID}}},
 	}
 }
 
@@ -59,7 +59,7 @@ func TestFind_AFailedLookupIsAnUnresolvedUpload(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v", got, err)
 	}
-	if got[0].Kind != ports.KindUpload || got[0].IsResolved() {
+	if got[0].Kind != domain.KindUpload || got[0].IsResolved() {
 		t.Errorf("candidate = %+v, want an unresolved upload", got[0])
 	}
 }
@@ -92,19 +92,19 @@ type recordingFetcher struct {
 	gotDir string
 }
 
-func (f *recordingFetcher) Download(_ context.Context, url, outDir string) (ports.FetchedAudio, error) {
+func (f *recordingFetcher) Download(_ context.Context, url, outDir string) (domain.FetchedAudio, error) {
 	f.gotURL, f.gotDir = url, outDir
-	return ports.FetchedAudio{Path: outDir + "/track.mp3"}, nil
+	return domain.FetchedAudio{Path: outDir + "/track.mp3"}, nil
 }
 
 func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 	src := youtubemusic.NewSource(&recordingFetcher{}, stubLookup{})
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:  "Blinding Lights",
 		Artist: "The Weeknd",
-		Identity: ports.RecordingIdentity{
+		Identity: domain.RecordingIdentity{
 			Duration: 200,
-			Sources:  []ports.ProviderRef{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
+			Sources:  []domain.ProviderRef{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
 		},
 	}
 
@@ -140,10 +140,10 @@ func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
 	for _, videoID := range hostile {
 		t.Run(videoID, func(t *testing.T) {
 			src := youtubemusic.NewSource(&recordingFetcher{}, stubLookup{})
-			got, err := src.Find(context.Background(), ports.FindRequest{
+			got, err := src.Find(context.Background(), domain.FindRequest{
 				Title: "Song",
-				Identity: ports.RecordingIdentity{
-					Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: videoID}},
+				Identity: domain.RecordingIdentity{
+					Sources: []domain.ProviderRef{{Provider: "youtube", ExternalID: videoID}},
 				},
 			})
 			if err != nil {
@@ -159,7 +159,7 @@ func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
 func TestFind_NoIdentityMeansNoCandidates(t *testing.T) {
 	src := youtubemusic.NewSource(&recordingFetcher{}, stubLookup{})
 
-	got, err := src.Find(context.Background(), ports.FindRequest{Title: "T", Artist: "A"})
+	got, err := src.Find(context.Background(), domain.FindRequest{Title: "T", Artist: "A"})
 	if err != nil {
 		t.Fatalf("an unresolvable track is not an error, got %v", err)
 	}
@@ -170,11 +170,11 @@ func TestFind_NoIdentityMeansNoCandidates(t *testing.T) {
 
 func TestFind_IgnoresNonYouTubeSources(t *testing.T) {
 	src := youtubemusic.NewSource(&recordingFetcher{}, stubLookup{})
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:  "T",
 		Artist: "A",
-		Identity: ports.RecordingIdentity{
-			Sources: []ports.ProviderRef{{Provider: "deezer", ExternalID: "999"}},
+		Identity: domain.RecordingIdentity{
+			Sources: []domain.ProviderRef{{Provider: "deezer", ExternalID: "999"}},
 		},
 	}
 
@@ -208,25 +208,25 @@ func TestName(t *testing.T) {
 }
 
 func TestFind_TheCatalogLinkIsThePinnedVideo(t *testing.T) {
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:          "Finesse",
-		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
 	}
 
 	got, err := youtubemusic.NewSource(&recordingFetcher{}, stubLookup{}).Find(context.Background(), req)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %v, %v", got, err)
 	}
-	if got[0].Kind != ports.KindPinnedVideo {
+	if got[0].Kind != domain.KindPinnedVideo {
 		t.Errorf("Kind = %q, want the pinned video", got[0].Kind)
 	}
 }
 
-func resolverVideoOnly(videoID string) ports.RecordingIdentity {
-	return ports.RecordingIdentity{Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: videoID}}}
+func resolverVideoOnly(videoID string) domain.RecordingIdentity {
+	return domain.RecordingIdentity{Sources: []domain.ProviderRef{{Provider: "youtube", ExternalID: videoID}}}
 }
 
-func findURLs(t *testing.T, req ports.FindRequest) []string {
+func findURLs(t *testing.T, req domain.FindRequest) []string {
 	t.Helper()
 	got, err := youtubemusic.NewSource(&recordingFetcher{}, stubLookup{}).Find(context.Background(), req)
 	if err != nil {
@@ -240,10 +240,10 @@ func findURLs(t *testing.T, req ports.FindRequest) []string {
 }
 
 func TestFind_TheCatalogPinBeatsTheResolverVideo(t *testing.T) {
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:          "Mubu",
 		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
-		CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "12345"}, {Provider: "youtube", ExternalID: "OkjmSTJOAL4"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "deezer", ExternalID: "12345"}, {Provider: "youtube", ExternalID: "OkjmSTJOAL4"}},
 	}
 
 	got := findURLs(t, req)
@@ -254,9 +254,9 @@ func TestFind_TheCatalogPinBeatsTheResolverVideo(t *testing.T) {
 }
 
 func TestFind_TheCatalogPinStandsWhenTheResolverFoundNothing(t *testing.T) {
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:          "Mubu",
-		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "OkjmSTJOAL4"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "youtube", ExternalID: "OkjmSTJOAL4"}},
 	}
 
 	got := findURLs(t, req)
@@ -267,10 +267,10 @@ func TestFind_TheCatalogPinStandsWhenTheResolverFoundNothing(t *testing.T) {
 }
 
 func TestFind_WithoutAYouTubePinTheResolverVideoIsUsed(t *testing.T) {
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:          "Mubu",
 		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
-		CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "12345"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "deezer", ExternalID: "12345"}},
 	}
 
 	got := findURLs(t, req)
@@ -281,10 +281,10 @@ func TestFind_WithoutAYouTubePinTheResolverVideoIsUsed(t *testing.T) {
 }
 
 func TestFind_AMalformedCatalogPinIsNotReplacedByTheResolverVideo(t *testing.T) {
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:          "Mubu",
 		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
-		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "abc&list=1"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "youtube", ExternalID: "abc&list=1"}},
 	}
 
 	if got := findURLs(t, req); len(got) != 0 {
@@ -294,42 +294,42 @@ func TestFind_AMalformedCatalogPinIsNotReplacedByTheResolverVideo(t *testing.T) 
 
 func TestFind_TheCatalogPinCarriesWhatThatVideoIs(t *testing.T) {
 	src := youtubemusic.NewSource(&recordingFetcher{}, observedFixture(t, "88oFlVnMEsc"))
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:          "remember them days",
 		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
-		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "88oFlVnMEsc"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "youtube", ExternalID: "88oFlVnMEsc"}},
 	}
 
 	got, err := src.Find(context.Background(), req)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v", got, err)
 	}
-	if got[0].Kind != ports.KindArtTrack || !got[0].IsResolved() || got[0].Title != "2021 Vibes" {
+	if got[0].Kind != domain.KindArtTrack || !got[0].IsResolved() || got[0].Title != "2021 Vibes" {
 		t.Errorf("candidate = %+v, want the art track, resolved video with its own title", got[0])
 	}
 }
 
 func TestFind_TheObservedTypeIsTheKind(t *testing.T) {
-	resolverOnly := func(videoID string) ports.FindRequest {
-		return ports.FindRequest{Title: "t", Identity: resolverVideoOnly(videoID)}
+	resolverOnly := func(videoID string) domain.FindRequest {
+		return domain.FindRequest{Title: "t", Identity: resolverVideoOnly(videoID)}
 	}
-	catalogPinned := func(videoID string) ports.FindRequest {
-		return ports.FindRequest{Title: "t", CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: videoID}}}
+	catalogPinned := func(videoID string) domain.FindRequest {
+		return domain.FindRequest{Title: "t", CatalogSources: []domain.CatalogSource{{Provider: "youtube", ExternalID: videoID}}}
 	}
 	tests := []struct {
 		name         string
 		lookup       stubLookup
-		req          ports.FindRequest
-		wantKind     ports.CandidateKind
+		req          domain.FindRequest
+		wantKind     domain.CandidateKind
 		wantResolved bool
 		wantArtist   string
 	}{
-		{"art track is the art track", observedFixture(t, "88oFlVnMEsc"), resolverOnly("88oFlVnMEsc"), ports.KindArtTrack, true, "LUCKI"},
-		{"official video is the pinned video", observedFixture(t, "u4GAeAYGAqE"), resolverOnly("u4GAeAYGAqE"), ports.KindPinnedVideo, true, "slayr"},
-		{"user upload is an unresolved upload", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, resolverOnly("dQw4w9WgXcQ"), ports.KindUpload, false, ""},
-		{"user upload the catalog pinned stays resolved", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, catalogPinned("dQw4w9WgXcQ"), ports.KindPinnedVideo, true, ""},
-		{"failed lookup of a resolver video is unresolved", stubLookup{err: errors.New("ytm down")}, resolverOnly("dQw4w9WgXcQ"), ports.KindUpload, false, ""},
-		{"failed lookup of a catalog pin stays resolved", stubLookup{err: errors.New("ytm down")}, catalogPinned("dQw4w9WgXcQ"), ports.KindPinnedVideo, true, ""},
+		{"art track is the art track", observedFixture(t, "88oFlVnMEsc"), resolverOnly("88oFlVnMEsc"), domain.KindArtTrack, true, "LUCKI"},
+		{"official video is the pinned video", observedFixture(t, "u4GAeAYGAqE"), resolverOnly("u4GAeAYGAqE"), domain.KindPinnedVideo, true, "slayr"},
+		{"user upload is an unresolved upload", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, resolverOnly("dQw4w9WgXcQ"), domain.KindUpload, false, ""},
+		{"user upload the catalog pinned stays resolved", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, catalogPinned("dQw4w9WgXcQ"), domain.KindPinnedVideo, true, ""},
+		{"failed lookup of a resolver video is unresolved", stubLookup{err: errors.New("ytm down")}, resolverOnly("dQw4w9WgXcQ"), domain.KindUpload, false, ""},
+		{"failed lookup of a catalog pin stays resolved", stubLookup{err: errors.New("ytm down")}, catalogPinned("dQw4w9WgXcQ"), domain.KindPinnedVideo, true, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

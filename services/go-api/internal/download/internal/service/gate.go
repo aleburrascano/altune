@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"errors"
 	"fmt"
 )
@@ -12,7 +11,7 @@ var ErrNotAnUpgrade = errors.New("the new file does not grade strictly above the
 type ReplacementGate struct {
 	Current domain.Grade
 
-	Stored    ports.SourceFormat
+	Stored    domain.SourceFormat
 	FloorKbps int
 
 	CatalogSeconds float64
@@ -29,7 +28,7 @@ func (g ReplacementGate) Admit(candidate domain.Grade) error {
 	return nil
 }
 
-func (g ReplacementGate) AdmitFetched(candidate domain.Grade, fetched ports.SourceFormat, fetchedSeconds float64) error {
+func (g ReplacementGate) AdmitFetched(candidate domain.Grade, fetched domain.SourceFormat, fetchedSeconds float64) error {
 	if g.betterStreamOfSameGrade(candidate, fetched) || g.fitsCatalogLengthOfSameGrade(candidate, fetchedSeconds) {
 		return nil
 	}
@@ -40,7 +39,7 @@ func (g ReplacementGate) RefetchesCurrentSource() bool {
 	return g.Current.IsKnown() && g.Stored.IsLowBitrate(g.FloorKbps)
 }
 
-func (g ReplacementGate) betterStreamOfSameGrade(candidate domain.Grade, fetched ports.SourceFormat) bool {
+func (g ReplacementGate) betterStreamOfSameGrade(candidate domain.Grade, fetched domain.SourceFormat) bool {
 	return g.RefetchesCurrentSource() &&
 		candidate == g.Current &&
 		!fetched.IsLowBitrate(g.FloorKbps) &&

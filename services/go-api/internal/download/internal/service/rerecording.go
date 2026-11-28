@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
@@ -40,7 +41,7 @@ func (r rerecording) take(ctx context.Context, steps Pipeline, ac *AcquisitionCo
 	return originalErr
 }
 
-func (r rerecording) runPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.TrackLabel) error {
+func (r rerecording) runPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label domain.TrackLabel) error {
 	pass := ac.Snapshot()
 	pass.retargetTo(label)
 	r.resolveIdentity(ctx, &pass)
@@ -57,8 +58,8 @@ func (r rerecording) mayTake(ctx context.Context, ac *AcquisitionContext, err er
 	return noSourceHasIt(err) && ctx.Err() == nil && ac.Replace.allowsRerecording()
 }
 
-func (r rerecording) find(ctx context.Context, ac *AcquisitionContext, originalMBID string) (ports.TrackLabel, bool) {
-	label, found, err := r.finder.FindRerecording(ctx, ports.RerecordingQuery{OriginalMBID: originalMBID})
+func (r rerecording) find(ctx context.Context, ac *AcquisitionContext, originalMBID string) (domain.TrackLabel, bool) {
+	label, found, err := r.finder.FindRerecording(ctx, domain.RerecordingQuery{OriginalMBID: originalMBID})
 	switch {
 	case err != nil:
 		logRerecordingTier(ctx, ac, originalMBID, "", "finder_failed", err)
@@ -69,7 +70,7 @@ func (r rerecording) find(ctx context.Context, ac *AcquisitionContext, originalM
 	default:
 		return label, true
 	}
-	return ports.TrackLabel{}, false
+	return domain.TrackLabel{}, false
 }
 
 func logRerecordingTier(ctx context.Context, ac *AcquisitionContext, originalMBID, rerecordingMBID, outcome string, err error) {

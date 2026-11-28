@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/fakesources"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -123,7 +124,7 @@ func (a answeringSongs) SearchSongs(context.Context, string) ([]ytmsearch.Song, 
 	return a, nil
 }
 
-func prodArtTrack(t *testing.T, req ports.FindRequest, song ytmsearch.Song) ports.AudioCandidate {
+func prodArtTrack(t *testing.T, req domain.FindRequest, song ytmsearch.Song) domain.AudioCandidate {
 	t.Helper()
 	return findOne(t, ytmsearch.NewSource(answeringSongs{song}, nil), req)
 }
@@ -146,7 +147,7 @@ func fakeYtDlpPrinting(t *testing.T, entry map[string]any) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func prodUpload(t *testing.T, req ports.FindRequest, entry map[string]any) ports.AudioCandidate {
+func prodUpload(t *testing.T, req domain.FindRequest, entry map[string]any) domain.AudioCandidate {
 	t.Helper()
 	fakeYtDlpPrinting(t, entry)
 	source := ytdlp.NewSource(ytdlp.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
@@ -158,7 +159,7 @@ func prodUpload(t *testing.T, req ports.FindRequest, entry map[string]any) ports
 }
 
 func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
-	req := ports.FindRequest{Title: "Song", Artist: "Artist", Album: "Album", Duration: 179.6}
+	req := domain.FindRequest{Title: "Song", Artist: "Artist", Album: "Album", Duration: 179.6}
 
 	art := findOne(t, fakesources.NewArtTrackSource(fixtureClip), req)
 	wantArt := prodArtTrack(t, req, ytmsearch.Song{VideoID: "dQw4w9WgXcQ", Type: ytmsearch.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}, Album: "Album", DurationSeconds: 180})
@@ -166,7 +167,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	if !reflect.DeepEqual(art, wantArt) {
 		t.Fatalf("art track %+v, want %+v", art, wantArt)
 	}
-	if art.Kind != ports.KindArtTrack || !art.IsResolved() || art.Channel != "" {
+	if art.Kind != domain.KindArtTrack || !art.IsResolved() || art.Channel != "" {
 		t.Fatalf("art track %+v must be a resolved art_track with no channel", art)
 	}
 
@@ -175,7 +176,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	if !reflect.DeepEqual(upload, wantUpload) {
 		t.Fatalf("upload %+v, want %+v", upload, wantUpload)
 	}
-	if upload.Kind != ports.KindUpload || upload.IsResolved() || upload.Channel == "" || upload.Channel == req.Artist {
+	if upload.Kind != domain.KindUpload || upload.IsResolved() || upload.Channel == "" || upload.Channel == req.Artist {
 		t.Fatalf("upload %+v must be an unresolved upload from a neutral channel", upload)
 	}
 	if fakesources.NewArtTrackSource(fixtureClip).Name() == fakesources.NewUploadSource(fixtureClip).Name() || art.URL == upload.URL {
@@ -185,7 +186,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 
 func TestFind_UnknownDurationBecomesTheDefaultLength(t *testing.T) {
 	for _, in := range []float64{0, -3, math.NaN(), math.Inf(1)} {
-		req := ports.FindRequest{Title: "Song", Artist: "Artist", Duration: in}
+		req := domain.FindRequest{Title: "Song", Artist: "Artist", Duration: in}
 		for _, source := range []ports.AudioSource{fakesources.NewArtTrackSource(fixtureClip), fakesources.NewUploadSource(fixtureClip)} {
 			if got := findOne(t, source, req).Duration; got != unknownLengthSeconds {
 				t.Errorf("%s: duration %v became %v, want %d", source.Name(), in, got, unknownLengthSeconds)
@@ -194,7 +195,7 @@ func TestFind_UnknownDurationBecomesTheDefaultLength(t *testing.T) {
 	}
 }
 
-func findOne(t *testing.T, s ports.AudioSource, req ports.FindRequest) ports.AudioCandidate {
+func findOne(t *testing.T, s ports.AudioSource, req domain.FindRequest) domain.AudioCandidate {
 	t.Helper()
 	found, err := s.Find(context.Background(), req)
 	if err != nil || len(found) != 1 {

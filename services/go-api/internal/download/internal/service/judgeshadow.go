@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 )
 
 type ShadowVerdict string
@@ -20,7 +20,7 @@ type ShadowComparison struct {
 	Verdict     ShadowVerdict
 }
 
-func CompareShadow(target TitleTarget, kept *ports.AudioCandidate, keptProbedSeconds float64, candidates []ports.AudioCandidate) ShadowComparison {
+func CompareShadow(target TitleTarget, kept *domain.AudioCandidate, keptProbedSeconds float64, candidates []domain.AudioCandidate) ShadowComparison {
 	keptURL := ""
 	if kept != nil {
 		keptURL = kept.URL
@@ -50,7 +50,7 @@ func verdictOf(keptAny bool, keptURL, judgeURL string) ShadowVerdict {
 	}
 }
 
-func observed(candidates []ports.AudioCandidate, keptURL string, keptProbedSeconds float64) []TitleCandidate {
+func observed(candidates []domain.AudioCandidate, keptURL string, keptProbedSeconds float64) []TitleCandidate {
 	out := make([]TitleCandidate, 0, len(candidates))
 	for _, c := range candidates {
 		length := c.Duration
@@ -70,13 +70,13 @@ func observed(candidates []ports.AudioCandidate, keptURL string, keptProbedSecon
 	return out
 }
 
-func kindOf(k ports.CandidateKind) TitleKind {
+func kindOf(k domain.CandidateKind) TitleKind {
 	switch k {
-	case ports.KindArtTrack:
+	case domain.KindArtTrack:
 		return TitleArtTrack
-	case ports.KindPinnedVideo, ports.KindCatalogPin:
+	case domain.KindPinnedVideo, domain.KindCatalogPin:
 		return TitlePinnedVideo
-	case ports.KindUpload:
+	case domain.KindUpload:
 		return TitleUpload
 	}
 	return TitleUpload

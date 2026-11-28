@@ -15,11 +15,11 @@ import (
 
 const SourceName domain.SourceName = "catalogpin"
 
-const pinnedProvider = ports.ProviderSoundCloud
+const pinnedProvider = domain.ProviderSoundCloud
 
 type audioFetcher interface {
-	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
-	MarkUnplayable(ctx context.Context, candidates []ports.AudioCandidate)
+	Download(ctx context.Context, url string, outDir string) (domain.FetchedAudio, error)
+	MarkUnplayable(ctx context.Context, candidates []domain.AudioCandidate)
 }
 
 var _ ports.AudioSource = (*Source)(nil)
@@ -65,21 +65,21 @@ func (noPageReader) ReadPage(context.Context, string) ([]byte, error) { return n
 
 func (s *Source) Name() domain.SourceName { return SourceName }
 
-func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *Source) Find(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	candidates := s.pinnedCandidates(ctx, req)
 	s.fetcher.MarkUnplayable(ctx, candidates)
 	return candidates, nil
 }
 
-func (s *Source) pinnedCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
+func (s *Source) pinnedCandidates(ctx context.Context, req domain.FindRequest) []domain.AudioCandidate {
 	if files := s.fileHostCandidates(ctx, req); len(files) > 0 {
 		return files
 	}
 	return soundCloudCandidates(ctx, req)
 }
 
-func (s *Source) fileHostCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
-	var files []ports.AudioCandidate
+func (s *Source) fileHostCandidates(ctx context.Context, req domain.FindRequest) []domain.AudioCandidate {
+	var files []domain.AudioCandidate
 	for _, pin := range req.CatalogSources {
 		if !filelinks.IsProvider(pin.Provider) {
 			continue
@@ -94,7 +94,7 @@ func (s *Source) fileHostCandidates(ctx context.Context, req ports.FindRequest) 
 	return files
 }
 
-func (s *Source) fileURL(ctx context.Context, pin ports.CatalogSource) (string, bool) {
+func (s *Source) fileURL(ctx context.Context, pin domain.CatalogSource) (string, bool) {
 	if download, ok := filelinks.DownloadURL(pin.Provider, pin.ExternalID); ok {
 		return download, true
 	}
@@ -111,8 +111,8 @@ func (s *Source) fileURL(ctx context.Context, pin ports.CatalogSource) (string, 
 	return string(file), file != nil
 }
 
-func soundCloudCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
-	var pinned []ports.AudioCandidate
+func soundCloudCandidates(ctx context.Context, req domain.FindRequest) []domain.AudioCandidate {
+	var pinned []domain.AudioCandidate
 	for _, pin := range req.CatalogSources {
 		if pin.Provider != string(pinnedProvider) || !usablePinURL(ctx, req, pin) {
 			continue
@@ -120,12 +120,12 @@ func soundCloudCandidates(ctx context.Context, req ports.FindRequest) []ports.Au
 		pinned = append(pinned, pinnedCandidate(req, pin.URL))
 	}
 	if len(pinned) == 0 && isHTTPSURL(req.KnownSourceURL) {
-		return []ports.AudioCandidate{pinnedCandidate(req, req.KnownSourceURL)}
+		return []domain.AudioCandidate{pinnedCandidate(req, req.KnownSourceURL)}
 	}
 	return pinned
 }
 
-func usablePinURL(ctx context.Context, req ports.FindRequest, pin ports.CatalogSource) bool {
+func usablePinURL(ctx context.Context, req domain.FindRequest, pin domain.CatalogSource) bool {
 	if pin.URL == "" {
 		slog.DebugContext(ctx, "acquisition.catalogpin_url_missing",
 			"external_id", pin.ExternalID, "title", req.Title)
@@ -139,12 +139,12 @@ func usablePinURL(ctx context.Context, req ports.FindRequest, pin ports.CatalogS
 	return true
 }
 
-func pinnedCandidate(req ports.FindRequest, pinURL string) ports.AudioCandidate {
-	return ports.AudioCandidate{
+func pinnedCandidate(req domain.FindRequest, pinURL string) domain.AudioCandidate {
+	return domain.AudioCandidate{
 		URL:     pinURL,
 		Title:   req.Title,
 		Artists: []string{req.Artist},
-		Kind:    ports.KindCatalogPin,
+		Kind:    domain.KindCatalogPin,
 	}
 }
 
@@ -165,7 +165,7 @@ func isSoundCloudURL(rawURL string) bool {
 	return host == "soundcloud.com" || strings.HasSuffix(host, ".soundcloud.com")
 }
 
-func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *Source) Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	r0, err := s.fetcher.Download(ctx, candidate.URL, outDir)
 	if err != nil {
 		return r0, fmt.Errorf("download audio: %w", err)

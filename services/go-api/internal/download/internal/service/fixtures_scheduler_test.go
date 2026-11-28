@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/memory"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock"
@@ -29,7 +30,7 @@ type firstOutcomeQueue struct {
 	outcome chan jobOutcome
 }
 
-func (q *firstOutcomeQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job, error) {
+func (q *firstOutcomeQueue) Claim(ctx context.Context, lease time.Duration) (domain.Job, error) {
 	job, err := q.Queue.Claim(ctx, lease)
 	if err == nil && q.run != nil {
 		job.Run = *q.run
@@ -37,20 +38,20 @@ func (q *firstOutcomeQueue) Claim(ctx context.Context, lease time.Duration) (por
 	return job, err
 }
 
-func (q *firstOutcomeQueue) Release(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, delay time.Duration) error {
+func (q *firstOutcomeQueue) Release(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber, delay time.Duration) error {
 	q.once.Do(func() { q.outcome <- jobOutcome{released: true, delay: delay} })
 	return q.Queue.Release(ctx, trackID, fence, delay)
 }
 
-func (q *firstOutcomeQueue) Settle(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber) error {
+func (q *firstOutcomeQueue) Settle(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber) error {
 	q.once.Do(func() { q.outcome <- jobOutcome{settled: true} })
 	return q.Queue.Settle(ctx, trackID, fence)
 }
 
 type jobRunner interface {
-	Execute(ctx context.Context, job ports.AcquisitionJob) error
-	ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error
-	RefuseQueued(ctx context.Context, job ports.AcquisitionJob)
+	Execute(ctx context.Context, job domain.AcquisitionJob) error
+	ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error
+	RefuseQueued(ctx context.Context, job domain.AcquisitionJob)
 }
 
 func runOneJob(t *testing.T, acquirer jobRunner, track memory.LedgerTrack) jobOutcome {
@@ -79,17 +80,17 @@ type schedulerPortsOption func(*service.SchedulerPorts)
 
 func testSchedulerPorts() service.SchedulerPorts {
 	return service.SchedulerPorts{
-		Queue:               service.InMemoryQueue(),
+		Queue:               memory.NewQueueFactory(),
 		Upgrades:            service.NoUpgradeLane(),
-		Notifier:            ports.NoopJobNotifier(),
-		Outcomes:            ports.NoopOutcomeRecorder(),
+		Notifier:            memory.NoopJobNotifier(),
+		Outcomes:            memory.NoopOutcomeRecorder(),
 		Events:              events.NoopPublisher(),
 		VerifySkips:         func() uint64 { return 0 },
 		FingerprintVerified: func() bool { return false },
 		Timer:               clock.NewTimer,
 		Ticker:              clock.NewTicker,
 		Unit:                randomtest.Fixed(0.5),
-		Verification:        ports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true},
+		Verification:        domain.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true},
 	}
 }
 
@@ -113,7 +114,7 @@ func withTestOutcomes(r ports.OutcomeRecorder) schedulerPortsOption {
 	return func(wiring *service.SchedulerPorts) { wiring.Outcomes = r }
 }
 
-func withTestToolsPresent(v ports.Verification) schedulerPortsOption {
+func withTestToolsPresent(v domain.Verification) schedulerPortsOption {
 	return func(wiring *service.SchedulerPorts) { wiring.Verification = v }
 }
 
@@ -145,5 +146,5 @@ func withTestUpgrades(runner upgradeRunner, workers int) schedulerPortsOption {
 }
 
 type upgradeRunner interface {
-	ExecuteUpgrade(ctx context.Context, job ports.AcquisitionJob) error
+	ExecuteUpgrade(ctx context.Context, job domain.AcquisitionJob) error
 }

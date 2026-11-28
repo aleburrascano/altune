@@ -24,7 +24,7 @@ type identification struct {
 	identity bool
 }
 
-func (s *DownloadStep) previewer(ac *AcquisitionContext, candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+func (s *DownloadStep) previewer(ac *AcquisitionContext, candidate domain.AudioCandidate) (ports.PreviewFetcher, bool) {
 	if ac.Identity.MBID == "" {
 		return nil, false
 	}
@@ -34,7 +34,7 @@ func (s *DownloadStep) previewer(ac *AcquisitionContext, candidate ports.AudioCa
 func (s *DownloadStep) previewIdentification(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 ) (*identification, *downloadRejection) {
 	previewer, ok := s.previewer(ac, candidate)
 	if !ok {
@@ -44,7 +44,7 @@ func (s *DownloadStep) previewIdentification(
 	started := s.now()
 	match, err := s.identifyPreview(ctx, ac, candidate, previewer)
 	if err != nil {
-		s.noteIdentifyFailure(ctx, ac, candidate, err, "acquisition.preview_fallback", ports.SkipPreviewFallback)
+		s.noteIdentifyFailure(ctx, ac, candidate, err, "acquisition.preview_fallback", domain.SkipPreviewFallback)
 		return nil, nil
 	}
 
@@ -54,8 +54,8 @@ func (s *DownloadStep) previewIdentification(
 func (s *DownloadStep) judgePreview(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	match ports.RecordingMatch,
+	candidate domain.AudioCandidate,
+	match domain.RecordingMatch,
 	elapsed time.Duration,
 ) (*identification, *downloadRejection) {
 	if ac.Replace.isCurrentFile(match) {
@@ -73,12 +73,12 @@ func (s *DownloadStep) judgePreview(
 func (s *DownloadStep) noteIdentifyFailure(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	err error,
 	defaultEvent string,
 	gate string,
 ) {
-	if ctx.Err() != nil || errors.Is(err, ports.ErrNoAudioIdentifier) {
+	if ctx.Err() != nil || errors.Is(err, domain.ErrNoAudioIdentifier) {
 		return
 	}
 	slog.WarnContext(ctx, identifyFailureEvent(err, defaultEvent),
@@ -97,7 +97,7 @@ func identifyFailureEvent(err error, defaultEvent string) string {
 func logPreviewFingerprint(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	verdict AudioVerdict,
 	elapsed time.Duration,
 ) {
@@ -109,18 +109,18 @@ func logPreviewFingerprint(
 func (s *DownloadStep) identifyPreview(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	previewer ports.PreviewFetcher,
-) (ports.RecordingMatch, error) {
+) (domain.RecordingMatch, error) {
 	previewDir, err := s.workspace.Create("preview-*")
 	if err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("create preview dir: %w", err)
+		return domain.RecordingMatch{}, fmt.Errorf("create preview dir: %w", err)
 	}
 	defer removeScratch(ctx, s.workspace, previewDir)
 
 	previewPath, err := s.fetchPreview(ctx, ac, previewer, candidate, previewDir)
 	if err != nil {
-		return ports.RecordingMatch{}, err
+		return domain.RecordingMatch{}, err
 	}
 	identifyCtx, identifyDone := startStage(ctx, ac, s.now, "download.identify")
 	match, err := s.identifier.Identify(identifyCtx, previewPath, candidate.Duration)
@@ -132,7 +132,7 @@ func (s *DownloadStep) fetchPreview(
 	ctx context.Context,
 	ac *AcquisitionContext,
 	previewer ports.PreviewFetcher,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	previewDir string,
 ) (string, error) {
 	_, queued := startStage(ctx, ac, s.now, "download.queue")
@@ -156,7 +156,7 @@ func (s *DownloadStep) fetchPreview(
 func (s *DownloadStep) identify(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	filePath string,
 	result *verificationResult,
 ) *downloadRejection {
@@ -168,7 +168,7 @@ func (s *DownloadStep) identify(
 	match, err := s.identifier.Identify(identifyCtx, filePath, 0)
 	identifyDone(err)
 	if err != nil {
-		s.noteIdentifyFailure(ctx, ac, candidate, err, "acquisition.identify_failed", ports.SkipIdentifyFailed)
+		s.noteIdentifyFailure(ctx, ac, candidate, err, "acquisition.identify_failed", domain.SkipIdentifyFailed)
 		return nil
 	}
 
@@ -188,11 +188,11 @@ type judgedSource struct {
 	title string
 }
 
-func sourceOf(ac *AcquisitionContext, candidate ports.AudioCandidate) judgedSource {
+func sourceOf(ac *AcquisitionContext, candidate domain.AudioCandidate) judgedSource {
 	return judgedSource{kind: SourceKindOf(candidate, UploaderOf(ac.Track.Artist, candidate)), title: candidate.Title}
 }
 
-func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64, source judgedSource) AudioVerdict {
+func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match domain.RecordingMatch, probed float64, source judgedSource) AudioVerdict {
 	input := judgeInput(ac, match.Results, probed, source)
 	input.Audio.RecordingFacts = versionFactsOf(ctx, s.factsCache, s.recordingLookup, input)
 	return AudioVerdictOf(Judge(input, s.cuts), match.Results)
@@ -202,7 +202,7 @@ func (s *DownloadStep) judgeUnfingerprinted(ac *AcquisitionContext, probed float
 	return Judge(judgeInput(ac, nil, probed, source), s.cuts)
 }
 
-func judgeInput(ac *AcquisitionContext, results []ports.AcoustIDResult, length float64, source judgedSource) VerdictInput {
+func judgeInput(ac *AcquisitionContext, results []domain.AcoustIDResult, length float64, source judgedSource) VerdictInput {
 	return VerdictInput{
 		Identity:       judgeIdentity(ac),
 		Audio:          AudioEvidence{AcoustID: results, Length: length, RequireVersionFacts: true},
@@ -235,7 +235,7 @@ const (
 	maxLoggedReleaseGroups = 5
 )
 
-func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate, verdict AudioVerdict, results []ports.AcoustIDResult) {
+func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate domain.AudioCandidate, verdict AudioVerdict, results []domain.AcoustIDResult) {
 	slog.InfoContext(ctx, "acquisition.audio_verdict",
 		logging.KeyTrackID, ac.Track.ID,
 		"candidate_url", candidate.URL,
@@ -250,7 +250,7 @@ func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate port
 	)
 }
 
-func loggedSurviving(surviving []ports.LinkedRecording) []map[string]any {
+func loggedSurviving(surviving []domain.LinkedRecording) []map[string]any {
 	logged := make([]map[string]any, 0, min(len(surviving), maxLoggedSurviving))
 	for _, recording := range surviving[:min(len(surviving), maxLoggedSurviving)] {
 		logged = append(logged, map[string]any{
@@ -263,7 +263,7 @@ func loggedSurviving(surviving []ports.LinkedRecording) []map[string]any {
 	return logged
 }
 
-func loggedResults(results []ports.AcoustIDResult) []map[string]any {
+func loggedResults(results []domain.AcoustIDResult) []map[string]any {
 	logged := make([]map[string]any, 0, min(len(results), maxLoggedResults))
 	for _, result := range results[:min(len(results), maxLoggedResults)] {
 		recordings := make([]string, 0, min(len(result.Recordings), maxLoggedRecordings))
@@ -275,7 +275,7 @@ func loggedResults(results []ports.AcoustIDResult) []map[string]any {
 	return logged
 }
 
-func loggedReleaseGroups(groups []ports.ReleaseGroup) []map[string]any {
+func loggedReleaseGroups(groups []domain.ReleaseGroup) []map[string]any {
 	logged := make([]map[string]any, 0, min(len(groups), maxLoggedReleaseGroups))
 	for _, group := range groups[:min(len(groups), maxLoggedReleaseGroups)] {
 		logged = append(logged, map[string]any{"type": group.Type, "secondary_types": group.SecondaryTypes})
@@ -286,8 +286,8 @@ func loggedReleaseGroups(groups []ports.ReleaseGroup) []map[string]any {
 func judgeVerdict(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	match ports.RecordingMatch,
+	candidate domain.AudioCandidate,
+	match domain.RecordingMatch,
 	result *verificationResult,
 ) *downloadRejection {
 	switch result.verdict.Kind {
@@ -307,8 +307,8 @@ func judgeVerdict(
 func judgeUnknown(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	match ports.RecordingMatch,
+	candidate domain.AudioCandidate,
+	match domain.RecordingMatch,
 ) *downloadRejection {
 	if !match.Known() {
 		slog.InfoContext(ctx, "acquisition.identify_unknown",
@@ -321,7 +321,7 @@ func judgeUnknown(
 	return nil
 }
 
-func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downloadRejection {
+func fingerprintRejection(candidate domain.AudioCandidate, reason string) *downloadRejection {
 	return &downloadRejection{
 		stage:  RejectFingerprint,
 		reason: reason,
@@ -329,7 +329,7 @@ func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downlo
 	}
 }
 
-func currentFileRejection(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) *downloadRejection {
+func currentFileRejection(ctx context.Context, ac *AcquisitionContext, candidate domain.AudioCandidate) *downloadRejection {
 	slog.InfoContext(ctx, "acquisition.candidate_is_current_file",
 		logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"stored_acoustid", ac.Replace.StoredAcoustID)
@@ -350,7 +350,7 @@ const (
 )
 
 type recordedFacts struct {
-	facts ports.RecordingFacts
+	facts domain.RecordingFacts
 	found bool
 }
 
@@ -363,9 +363,9 @@ func newRecordingFactsCache(now clock.Func) *recordingFactsCache {
 	return &recordingFactsCache{memo: expiringcache.New[string, recordedFacts](recordingFactsTTL, recordingFactsCap, now)}
 }
 
-type recordingFetch func(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error)
+type recordingFetch func(ctx context.Context, mbid string) (domain.RecordingFacts, bool, error)
 
-func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch recordingFetch) (ports.RecordingFacts, bool, error) {
+func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch recordingFetch) (domain.RecordingFacts, bool, error) {
 	if known, ok := c.memo.Get(mbid); ok {
 		return known.facts, known.found, nil
 	}
@@ -384,10 +384,10 @@ func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch rec
 	})
 	select {
 	case <-ctx.Done():
-		return ports.RecordingFacts{}, false, ctx.Err()
+		return domain.RecordingFacts{}, false, ctx.Err()
 	case result := <-pending:
 		if result.Err != nil {
-			return ports.RecordingFacts{}, false, result.Err
+			return domain.RecordingFacts{}, false, result.Err
 		}
 		known := result.Val.(recordedFacts)
 		return known.facts, known.found, nil
@@ -396,7 +396,7 @@ func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch rec
 
 func fetchRecorded(ctx context.Context, mbid string, fetch recordingFetch) (known recordedFacts, err error) {
 	panicked := background.SafeRun(ctx, "acquisition.recording_lookup_panicked", func() {
-		var facts ports.RecordingFacts
+		var facts domain.RecordingFacts
 		var found bool
 		facts, found, err = fetch(ctx, mbid)
 		known = recordedFacts{facts: facts, found: found}
@@ -407,8 +407,8 @@ func fetchRecorded(ctx context.Context, mbid string, fetch recordingFetch) (know
 	return known, err
 }
 
-func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, input VerdictInput) map[string]ports.RecordingFacts {
-	facts := make(map[string]ports.RecordingFacts)
+func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, input VerdictInput) map[string]domain.RecordingFacts {
+	facts := make(map[string]domain.RecordingFacts)
 	candidates := VersionLookupCandidates(input)
 	for _, mbid := range candidates[:min(len(candidates), maxVersionLookupsPerCandidate)] {
 		if recording, found := cachedRecordingFacts(ctx, cache, lookup, mbid); found {
@@ -422,11 +422,11 @@ func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup port
 	return facts
 }
 
-func cachedRecordingFacts(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, mbid string) (ports.RecordingFacts, bool) {
+func cachedRecordingFacts(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, mbid string) (domain.RecordingFacts, bool) {
 	facts, found, err := cache.lookup(ctx, mbid, lookup.RecordingByMBID)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.version_lookup_failed", "mbid", mbid, logging.KeyError, redact.LogError(err))
-		return ports.RecordingFacts{}, false
+		return domain.RecordingFacts{}, false
 	}
 	return facts, found
 }

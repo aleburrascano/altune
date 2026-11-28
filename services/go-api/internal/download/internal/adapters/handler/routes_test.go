@@ -3,7 +3,6 @@ package handler_test
 import (
 	"altune/go-api/internal/download/internal/adapters/handler"
 	"altune/go-api/internal/download/internal/adapters/memory"
-	"altune/go-api/internal/download/internal/contracttest"
 	"altune/go-api/internal/download/internal/service"
 	"testing"
 	"time"
@@ -24,7 +23,7 @@ func mountedRoutes(rt handler.Routes) []string {
 
 func TestRoutes_BoundedMountsReacquireAndRetryAndLongLivedMountsNothing(t *testing.T) {
 	repo := memory.NewLedger()
-	store := contracttest.MustNewCooldownStore(time.Now)
+	store := memory.MustNewCooldownStore(time.Now)
 	rt := handler.NewRoutes(
 		handler.NewRetryHandler(repo, &retryFakeScheduler{}, service.NewRetryAdmission(store)),
 		handler.NewReacquireHandler(repo, &reacquireFakeScheduler{}, service.NewReacquireAdmission(store)),

@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/tracklength"
@@ -13,7 +13,7 @@ import (
 func contextWithLengths(saved, resolved float64) *service.AcquisitionContext {
 	return &service.AcquisitionContext{
 		Track:    service.TrackRef{CatalogDuration: saved},
-		Identity: ports.RecordingIdentity{Duration: resolved},
+		Identity: domain.RecordingIdentity{Duration: resolved},
 	}
 }
 
@@ -89,15 +89,15 @@ func TestExpectedLength_OneLengthForEveryReader(t *testing.T) {
 		want float64
 	}{
 		{"catalog length wins over a trusted resolved one", &service.AcquisitionContext{
-			Track: service.TrackRef{CatalogDuration: 139}, Identity: ports.RecordingIdentity{Duration: 167},
+			Track: service.TrackRef{CatalogDuration: 139}, Identity: domain.RecordingIdentity{Duration: 167},
 		}, 139},
 		{"resolved length when no target length is saved", contextWithLengths(0, 140), 140},
 		{"target length when the resolved one is doubted", &service.AcquisitionContext{
-			Track: service.TrackRef{CatalogDuration: 139}, Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+			Track: service.TrackRef{CatalogDuration: 139}, Identity: domain.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 		}, 139},
 		{"target length when nothing was resolved", contextWithLengths(139, 0), 139},
 		{"no length when the only resolved one is doubted", &service.AcquisitionContext{
-			Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+			Identity: domain.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 		}, 0},
 	}
 	for _, tc := range cases {

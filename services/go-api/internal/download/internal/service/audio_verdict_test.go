@@ -1,18 +1,18 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"math"
 	"testing"
 )
 
-func acoustIDResult(id string, score float64) ports.AcoustIDResult {
-	return ports.AcoustIDResult{ID: id, Score: score}
+func acoustIDResult(id string, score float64) domain.AcoustIDResult {
+	return domain.AcoustIDResult{ID: id, Score: score}
 }
 
 func TestAudioVerdictOf_ScoreIsTheTopResultScore(t *testing.T) {
-	results := []ports.AcoustIDResult{acoustIDResult("low", 0.6), acoustIDResult("top", 0.93), acoustIDResult("mid", 0.7)}
+	results := []domain.AcoustIDResult{acoustIDResult("low", 0.6), acoustIDResult("top", 0.93), acoustIDResult("mid", 0.7)}
 
 	verdict := service.AudioVerdictOf(service.Verdict{}, results)
 
@@ -22,7 +22,7 @@ func TestAudioVerdictOf_ScoreIsTheTopResultScore(t *testing.T) {
 }
 
 func TestAudioVerdictOf_ScoreIgnoresANaNResultScore(t *testing.T) {
-	results := []ports.AcoustIDResult{
+	results := []domain.AcoustIDResult{
 		acoustIDResult("malformed", math.NaN()),
 		acoustIDResult("top", 0.93),
 		acoustIDResult("mid", 0.7),

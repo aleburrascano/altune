@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"context"
@@ -72,7 +73,7 @@ func TestSweepStaleTempDirsRepeatedCallsNeverMoveCutoffBack(t *testing.T) {
 type osWorkspace struct{}
 
 func (osWorkspace) Create(pattern string) (string, error) {
-	return os.MkdirTemp("", ports.TempDirPrefix+pattern)
+	return os.MkdirTemp("", domain.TempDirPrefix+pattern)
 }
 
 func (osWorkspace) Remove(path string) error { return os.RemoveAll(path) }

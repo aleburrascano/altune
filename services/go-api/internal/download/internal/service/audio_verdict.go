@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"math"
 )
 
@@ -19,11 +19,11 @@ const (
 type AudioVerdict struct {
 	Kind      VerdictKind
 	Score     float64
-	Surviving []ports.LinkedRecording
+	Surviving []domain.LinkedRecording
 	Judged    Verdict
 }
 
-func AudioVerdictOf(judged Verdict, results []ports.AcoustIDResult) AudioVerdict {
+func AudioVerdictOf(judged Verdict, results []domain.AcoustIDResult) AudioVerdict {
 	return AudioVerdict{Kind: verdictKindOf(judged.Kind), Score: topScore(results), Surviving: judged.Linked, Judged: judged}
 }
 
@@ -41,7 +41,7 @@ func verdictKindOf(kind JudgedKind) VerdictKind {
 	return VerdictUnknown
 }
 
-func topScore(results []ports.AcoustIDResult) float64 {
+func topScore(results []domain.AcoustIDResult) float64 {
 	var best float64
 	seen := false
 	for _, result := range results {

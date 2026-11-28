@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/adapters/memory"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -27,9 +27,9 @@ const (
 )
 
 type acquirer interface {
-	Execute(ctx context.Context, job ports.AcquisitionJob) error
-	ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error
-	RefuseQueued(ctx context.Context, job ports.AcquisitionJob)
+	Execute(ctx context.Context, job domain.AcquisitionJob) error
+	ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error
+	RefuseQueued(ctx context.Context, job domain.AcquisitionJob)
 }
 
 type BackgroundAcquisitionScheduler struct {
@@ -55,7 +55,7 @@ type BackgroundAcquisitionScheduler struct {
 
 	rejected atomic.Uint64
 
-	verification        ports.Verification
+	verification        domain.Verification
 	skipCount           func() uint64
 	fingerprintVerified func() bool
 	log                 *jobLog
@@ -68,10 +68,6 @@ type BackgroundAcquisitionScheduler struct {
 }
 
 type QueueFactory func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue
-
-func InMemoryQueue() QueueFactory {
-	return func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue { return memory.New(wake, now) }
-}
 
 func QueueOf(queue ports.DownloadQueue) QueueFactory {
 	return func(chan<- struct{}, clock.Func) ports.DownloadQueue { return queue }
@@ -124,7 +120,7 @@ type SchedulerPorts struct {
 	Timer               clock.TimerFunc
 	Ticker              clock.TickerFunc
 	Unit                random.Unit
-	Verification        ports.Verification
+	Verification        domain.Verification
 }
 
 func (p SchedulerPorts) validate(owner string) error {
@@ -240,7 +236,7 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers(ctx context.Context
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) verificationStatus() ports.Verification {
+func (s *BackgroundAcquisitionScheduler) verificationStatus() domain.Verification {
 	v := s.verification
 	v.FingerprintVerified = s.fingerprintVerified()
 	return v

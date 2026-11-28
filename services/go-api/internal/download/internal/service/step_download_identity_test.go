@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/contracttest"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -25,23 +24,23 @@ const loggedCap = 5
 
 type pendingLedger struct {
 	contracttest.Rules
-	track ports.TrackSnapshot
+	track domain.TrackSnapshot
 }
 
-func (l *pendingLedger) Get(context.Context, ids.TrackId, ids.UserId) (*ports.TrackSnapshot, error) {
+func (l *pendingLedger) Get(context.Context, ids.TrackId, ids.UserId) (*domain.TrackSnapshot, error) {
 	track := l.track
 	return &track, nil
 }
 
-func (l *pendingLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
+func (l *pendingLedger) Complete(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, domain.Completion) error {
 	return nil
 }
 
-func (l *pendingLedger) Fail(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, string) error {
+func (l *pendingLedger) Fail(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, string) error {
 	return nil
 }
 
-func (l *pendingLedger) RevertAt(context.Context, ports.TrackSnapshot) error { return nil }
+func (l *pendingLedger) RevertAt(context.Context, domain.TrackSnapshot) error { return nil }
 
 func (l *pendingLedger) Requeue(context.Context, ids.TrackId) error {
 	return nil
@@ -55,8 +54,8 @@ type topicUpload struct{}
 
 func (topicUpload) Name() domain.SourceName { return "topic-upload" }
 
-func (topicUpload) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{downloadtest.Candidate(
+func (topicUpload) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
+	return []domain.AudioCandidate{downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=boysdontcry",
 		downloadtest.WithTitle("Boys Don't Cry"),
 		downloadtest.WithChannel("The Cure - Topic"),
@@ -64,22 +63,22 @@ func (topicUpload) Find(context.Context, ports.FindRequest) ([]ports.AudioCandid
 	)}, nil
 }
 
-func (topicUpload) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (topicUpload) Fetch(_ context.Context, _ domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	path := filepath.Join(outDir, "audio.mp3")
-	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("downloaded bytes"), 0o600)
+	return domain.FetchedAudio{Path: path}, os.WriteFile(path, []byte("downloaded bytes"), 0o600)
 }
 
-func acquireIdentifiedAs(t *testing.T, results []ports.AcoustIDResult) {
+func acquireIdentifiedAs(t *testing.T, results []domain.AcoustIDResult) {
 	t.Helper()
-	track := ports.TrackSnapshot{
+	track := domain.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
-		Title: "Boys Don't Cry", Artist: "The Cure", Album: "Three Imaginary Boys", Status: ports.TrackPending,
+		Title: "Boys Don't Cry", Artist: "The Cure", Album: "Three Imaginary Boys", Status: domain.TrackPending,
 	}
 	svc := service.MustNewAcquireTrackAudioService(&pendingLedger{track: track}, service.NewSourceRegistry(topicUpload{}), storedAudio{},
 		scratchfiles.New(),
-		resolving(resolvedTo("mbid-a"), verifiedBy(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: results}})), noStages())
+		resolving(resolvedTo("mbid-a"), verifiedBy(&identifier{match: domain.RecordingMatch{AcoustID: "ac-1", Results: results}})), noStages())
 
-	_ = svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	_ = svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 }
 
 type loggedResult struct {
@@ -106,8 +105,8 @@ func loggedVerdictResults(t *testing.T, buf *logging.Capture) []loggedResult {
 func TestExecute_TheAudioVerdictLogCarriesTheAcoustIDResults(t *testing.T) {
 	buf := logging.CaptureJSON(t, slog.LevelInfo)
 
-	acquireIdentifiedAs(t, []ports.AcoustIDResult{
-		{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: "mbid-a"}, {MBID: "mbid-b"}}},
+	acquireIdentifiedAs(t, []domain.AcoustIDResult{
+		{Score: 0.97, Recordings: []domain.LinkedRecording{{MBID: "mbid-a"}, {MBID: "mbid-b"}}},
 		{Score: 0.41},
 	})
 
@@ -122,10 +121,10 @@ func TestExecute_TheAudioVerdictLogCarriesTheAcoustIDResults(t *testing.T) {
 
 func TestExecute_TheAudioVerdictLogCapsTheResultsAndTheirRecordings(t *testing.T) {
 	buf := logging.CaptureJSON(t, slog.LevelInfo)
-	recordings := make([]ports.LinkedRecording, loggedCap+3)
-	results := make([]ports.AcoustIDResult, loggedCap+3)
+	recordings := make([]domain.LinkedRecording, loggedCap+3)
+	results := make([]domain.AcoustIDResult, loggedCap+3)
 	for i := range results {
-		results[i] = ports.AcoustIDResult{Score: 0.5, Recordings: recordings}
+		results[i] = domain.AcoustIDResult{Score: 0.5, Recordings: recordings}
 	}
 
 	acquireIdentifiedAs(t, results)

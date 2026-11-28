@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"testing"
 )
 
@@ -31,7 +31,7 @@ func TestRank_ArtistMatchesAChannelByItsWholeName(t *testing.T) {
 				"",
 				downloadtest.WithTitle("Song"),
 				downloadtest.WithChannel(tt.channel),
-				downloadtest.WithKind(ports.KindUpload),
+				downloadtest.WithKind(domain.KindUpload),
 			)
 			if got := evaluation(t, song("Song", tt.artist, 0), c)["artist_match"]; got != tt.want {
 				t.Errorf("artist_match(%q, %q) = %v, want %v", tt.artist, tt.channel, got, tt.want)
@@ -43,11 +43,11 @@ func TestRank_ArtistMatchesAChannelByItsWholeName(t *testing.T) {
 func TestRank_ACreditedKindMatchesTheArtistByItsCredits(t *testing.T) {
 	tests := []struct {
 		name string
-		kind ports.CandidateKind
+		kind domain.CandidateKind
 		want bool
 	}{
-		{"credited art track", ports.KindArtTrack, true},
-		{"credited pinned video", ports.KindPinnedVideo, true},
+		{"credited art track", domain.KindArtTrack, true},
+		{"credited pinned video", domain.KindPinnedVideo, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

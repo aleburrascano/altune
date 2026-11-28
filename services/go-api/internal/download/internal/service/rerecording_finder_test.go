@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
@@ -20,39 +20,39 @@ const (
 )
 
 type stubRerecordingLookup struct {
-	work        []ports.WorkRecording
-	details     map[string]ports.RecordingDetail
+	work        []domain.WorkRecording
+	details     map[string]domain.RecordingDetail
 	workErr     error
 	detailErr   map[string]error
 	detailCalls int
 }
 
-func (s *stubRerecordingLookup) WorkRecordings(context.Context, string) ([]ports.WorkRecording, error) {
+func (s *stubRerecordingLookup) WorkRecordings(context.Context, string) ([]domain.WorkRecording, error) {
 	return s.work, s.workErr
 }
 
-func (s *stubRerecordingLookup) RecordingDetail(_ context.Context, mbid string) (ports.RecordingDetail, bool, error) {
+func (s *stubRerecordingLookup) RecordingDetail(_ context.Context, mbid string) (domain.RecordingDetail, bool, error) {
 	s.detailCalls++
 	if err := s.detailErr[mbid]; err != nil {
-		return ports.RecordingDetail{}, false, err
+		return domain.RecordingDetail{}, false, err
 	}
 	detail, ok := s.details[mbid]
 	return detail, ok, nil
 }
 
-func official(title, date string) []ports.RecordingRelease {
-	return []ports.RecordingRelease{{Title: title, Date: date, Status: "Official"}}
+func official(title, date string) []domain.RecordingRelease {
+	return []domain.RecordingRelease{{Title: title, Date: date, Status: "Official"}}
 }
 
-func itsOnlyLoveOriginal() ports.RecordingDetail {
-	return ports.RecordingDetail{
+func itsOnlyLoveOriginal() domain.RecordingDetail {
+	return domain.RecordingDetail{
 		MBID: itsOnlyLove, Title: "It’s Only Love", ArtistIDs: []string{bryanAdams},
 		Duration: 195, FirstReleaseDate: "1984-10-29", Releases: official("Reckless", "1984-10-29"),
 	}
 }
 
 func itsOnlyLoveWork() *stubRerecordingLookup {
-	work := []ports.WorkRecording{
+	work := []domain.WorkRecording{
 		{MBID: itsOnlyLove, Title: "It’s Only Love", ArtistIDs: []string{bryanAdams}},
 		{MBID: "e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams}},
 		{MBID: "b9eec01c-7c0b-48c2-ba44-f0b9952e6599", Title: "It’s Only Love (live at The Royal Albert Hall 2024)", ArtistIDs: []string{bryanAdams}},
@@ -61,26 +61,26 @@ func itsOnlyLoveWork() *stubRerecordingLookup {
 		{MBID: "9857887e-aa9a-47b0-868a-0f51049cdaed", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams}},
 		{MBID: itsOnlyLoveClassi, Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams}},
 	}
-	details := map[string]ports.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}
-	details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = ports.RecordingDetail{
+	details := map[string]domain.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}
+	details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = domain.RecordingDetail{
 		MBID: "e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams},
 		FirstReleaseDate: "2025-05-09", Releases: official("Bryan Adams: Classic", "2025-05-09"),
 	}
-	details["9857887e-aa9a-47b0-868a-0f51049cdaed"] = ports.RecordingDetail{
+	details["9857887e-aa9a-47b0-868a-0f51049cdaed"] = domain.RecordingDetail{
 		MBID: "9857887e-aa9a-47b0-868a-0f51049cdaed", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams},
 		FirstReleaseDate: "2025-05-09", Releases: official("Classic", "2025-05-09"),
 	}
-	details[itsOnlyLoveClassi] = ports.RecordingDetail{
+	details[itsOnlyLoveClassi] = domain.RecordingDetail{
 		MBID: itsOnlyLoveClassi, Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams},
 		ISRCs: []string{"IETLH2500023"}, Duration: 194, FirstReleaseDate: "2025-04-25", Releases: official("It’s Only Love", "2025-04-25"),
 	}
 	return &stubRerecordingLookup{work: work, details: details}
 }
 
-func findRerecording(t *testing.T, authority *stubRerecordingLookup) (ports.TrackLabel, bool) {
+func findRerecording(t *testing.T, authority *stubRerecordingLookup) (domain.TrackLabel, bool) {
 	t.Helper()
 	resolver := newResolver(t, downloadtest.SilentRecordingSearch(), lookups{rerecording: authority})
-	label, found, err := resolver.FindRerecording(context.Background(), ports.RerecordingQuery{OriginalMBID: itsOnlyLove})
+	label, found, err := resolver.FindRerecording(context.Background(), domain.RerecordingQuery{OriginalMBID: itsOnlyLove})
 	if err != nil {
 		t.Fatalf("FindRerecording: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestFindRerecording_BryanAdamsItsOnlyLoveTakesTheClassicVersionWithAnISRC(t
 
 	label, found := findRerecording(t, itsOnlyLoveWork())
 
-	want := ports.TrackLabel{
+	want := domain.TrackLabel{
 		MBID: itsOnlyLoveClassi, Title: "It’s Only Love (classic version)", Album: "It’s Only Love",
 		Year: 2025, ISRC: "IETLH2500023", DurationSeconds: 194,
 	}
@@ -106,16 +106,16 @@ func TestFindRerecording_BryanAdamsItsOnlyLoveTakesTheClassicVersionWithAnISRC(t
 	}
 }
 
-func onlyRecording(rec ports.WorkRecording, detail ports.RecordingDetail) *stubRerecordingLookup {
+func onlyRecording(rec domain.WorkRecording, detail domain.RecordingDetail) *stubRerecordingLookup {
 	return &stubRerecordingLookup{
-		work:    []ports.WorkRecording{rec},
-		details: map[string]ports.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), rec.MBID: detail},
+		work:    []domain.WorkRecording{rec},
+		details: map[string]domain.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), rec.MBID: detail},
 	}
 }
 
-func laterClassic(mbid, title, disambiguation string, artist string) (ports.WorkRecording, ports.RecordingDetail) {
-	rec := ports.WorkRecording{MBID: mbid, Title: title, Disambiguation: disambiguation, ArtistIDs: []string{artist}}
-	detail := ports.RecordingDetail{
+func laterClassic(mbid, title, disambiguation string, artist string) (domain.WorkRecording, domain.RecordingDetail) {
+	rec := domain.WorkRecording{MBID: mbid, Title: title, Disambiguation: disambiguation, ArtistIDs: []string{artist}}
+	detail := domain.RecordingDetail{
 		MBID: mbid, Title: title, ArtistIDs: []string{artist}, ISRCs: []string{"IETLH2500099"},
 		FirstReleaseDate: "2025-04-25", Releases: official("Classic", "2025-04-25"),
 	}
@@ -135,7 +135,7 @@ func TestFindRerecording_NoneWhenNoOtherRecordingIsALabelledLaterStudioRerecordi
 	undated, undatedDetail := laterClassic("undated", "It’s Only Love (classic version)", "", bryanAdams)
 	undatedDetail.FirstReleaseDate = ""
 	promoOnly, promoOnlyDetail := laterClassic("promo", "It’s Only Love (classic version)", "", bryanAdams)
-	promoOnlyDetail.Releases = []ports.RecordingRelease{{Title: "Classic", Date: "2025-04-25", Status: "Promotion"}}
+	promoOnlyDetail.Releases = []domain.RecordingRelease{{Title: "Classic", Date: "2025-04-25", Status: "Promotion"}}
 	noArtist, noArtistDetail := laterClassic("no-artist", "It’s Only Love (classic version)", "", bryanAdams)
 	noArtist.ArtistIDs = nil
 
@@ -165,9 +165,9 @@ func TestFindRerecording_NoneWhenNoOtherRecordingIsALabelledLaterStudioRerecordi
 func TestFindRerecording_NoneWithoutARerecordingLookup(t *testing.T) {
 	resolver := newResolver(t, downloadtest.SilentRecordingSearch(), lookups{})
 
-	label, found, err := resolver.FindRerecording(context.Background(), ports.RerecordingQuery{OriginalMBID: itsOnlyLove})
+	label, found, err := resolver.FindRerecording(context.Background(), domain.RerecordingQuery{OriginalMBID: itsOnlyLove})
 
-	if err != nil || found || label != (ports.TrackLabel{}) {
+	if err != nil || found || label != (domain.TrackLabel{}) {
 		t.Fatalf("FindRerecording = %+v, %v, %v; want zero, false, nil", label, found, err)
 	}
 }
@@ -176,7 +176,7 @@ func TestFindRerecording_LogsNoneWithTheCandidateCount(t *testing.T) {
 	logs := logging.CaptureText(t, slog.LevelDebug)
 	authority := itsOnlyLoveWork()
 	authority.work = authority.work[:6]
-	authority.details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = ports.RecordingDetail{}
+	authority.details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = domain.RecordingDetail{}
 	delete(authority.details, "9857887e-aa9a-47b0-868a-0f51049cdaed")
 
 	if _, found := findRerecording(t, authority); found {
@@ -199,8 +199,8 @@ func TestFindRerecording_PrefersAnISRCThenTheEarliestReleaseThenMusicBrainzOrder
 	fourth, fourthDetail := laterClassic("fourth", "It’s Only Love (Taylor’s Version)", "", bryanAdams)
 	fourthDetail.FirstReleaseDate = "2023-03-01"
 	authority := &stubRerecordingLookup{
-		work: []ports.WorkRecording{first, second, third, fourth},
-		details: map[string]ports.RecordingDetail{
+		work: []domain.WorkRecording{first, second, third, fourth},
+		details: map[string]domain.RecordingDetail{
 			itsOnlyLove: itsOnlyLoveOriginal(), "first": firstDetail, "second": secondDetail, "third": thirdDetail, "fourth": fourthDetail,
 		},
 	}
@@ -214,7 +214,7 @@ func TestFindRerecording_PrefersAnISRCThenTheEarliestReleaseThenMusicBrainzOrder
 
 func TestFindRerecording_LabelTakesTheEarliestOfficialRelease(t *testing.T) {
 	rec, detail := laterClassic("multi", "It’s Only Love (classic version)", "", bryanAdams)
-	detail.Releases = []ports.RecordingRelease{
+	detail.Releases = []domain.RecordingRelease{
 		{Title: "Bootleg", Date: "2024-01-01", Status: "Bootleg"},
 		{Title: "Undated", Status: "Official"},
 		{Title: "Later", Date: "2026-02-02", Status: "Official"},
@@ -231,7 +231,7 @@ func TestFindRerecording_LabelTakesTheEarliestOfficialRelease(t *testing.T) {
 const rerecordingLookupCap = 5
 
 func TestFindRerecording_LooksUpAtMostFiveCandidatesBesideTheOriginal(t *testing.T) {
-	authority := &stubRerecordingLookup{details: map[string]ports.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}}
+	authority := &stubRerecordingLookup{details: map[string]domain.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}}
 	for i := range 40 {
 		rec, detail := laterClassic(fmt.Sprintf("classic-%d", i), "It’s Only Love (classic version)", "", bryanAdams)
 		detail.Releases = nil
@@ -260,7 +260,7 @@ func TestFindRerecording_MusicBrainzErrorsAreReturned(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			resolver := newResolver(t, downloadtest.SilentRecordingSearch(), lookups{rerecording: authority})
-			_, found, err := resolver.FindRerecording(context.Background(), ports.RerecordingQuery{OriginalMBID: itsOnlyLove})
+			_, found, err := resolver.FindRerecording(context.Background(), domain.RerecordingQuery{OriginalMBID: itsOnlyLove})
 			if !errors.Is(err, boom) || found {
 				t.Fatalf("FindRerecording = found %v, err %v; want the MusicBrainz error", found, err)
 			}
@@ -306,7 +306,7 @@ func TestFindRerecording_TakesATaylorsVersionWrittenWithAStraightApostropheInCap
 
 	label, found := findRerecording(t, onlyRecording(rec, detail))
 
-	want := ports.TrackLabel{
+	want := domain.TrackLabel{
 		MBID: "tv", Title: "IT'S ONLY LOVE (TAYLOR'S VERSION)", Album: "Only Love (Taylor's Version)",
 		Year: 2025, ISRC: "IETLH2500099",
 	}
@@ -330,8 +330,8 @@ func TestFindRerecording_SkipsACandidateMusicBrainzNoLongerKnowsAndTakesTheNext(
 	gone, _ := laterClassic("gone", "It’s Only Love (classic version)", "", bryanAdams)
 	kept, keptDetail := laterClassic("kept", "It’s Only Love (classic version)", "", bryanAdams)
 	authority := &stubRerecordingLookup{
-		work:    []ports.WorkRecording{gone, kept},
-		details: map[string]ports.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), "kept": keptDetail},
+		work:    []domain.WorkRecording{gone, kept},
+		details: map[string]domain.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), "kept": keptDetail},
 	}
 
 	label, found := findRerecording(t, authority)

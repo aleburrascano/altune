@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
@@ -70,8 +71,8 @@ type freshAudioSource struct{}
 
 func (freshAudioSource) Name() domain.SourceName { return "new-audio" }
 
-func (freshAudioSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{downloadtest.Candidate(
+func (freshAudioSource) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
+	return []domain.AudioCandidate{downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=freshAAAAAA",
 		downloadtest.WithTitle("Blinding Lights"),
 		downloadtest.WithChannel("The Weeknd - Topic"),
@@ -79,9 +80,9 @@ func (freshAudioSource) Find(context.Context, ports.FindRequest) ([]ports.AudioC
 	)}, nil
 }
 
-func (freshAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (freshAudioSource) Fetch(_ context.Context, _ domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	path := filepath.Join(outDir, "audio.mp3")
-	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("new bytes"), 0o600)
+	return domain.FetchedAudio{Path: path}, os.WriteFile(path, []byte("new bytes"), 0o600)
 }
 
 type servedTrack struct {
@@ -100,9 +101,9 @@ func seedReadyTrack(t *testing.T) servedTrack {
 		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
 	}, "audio.mp3")
 	sourceURL := "https://www.youtube.com/watch?v=currentAAAA"
-	ledger := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	ledger := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{
 		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
-		Status: ports.TrackReady, Streamable: true, AudioRef: &originalRef, AudioSourceURL: &sourceURL,
+		Status: domain.TrackReady, Streamable: true, AudioRef: &originalRef, AudioSourceURL: &sourceURL,
 	}})
 	store := &objectStore{objects: map[string]string{originalRef: "original bytes"}}
 	return servedTrack{ledger: ledger, store: store, userID: userID, trackID: trackID, originalRef: originalRef}
@@ -129,11 +130,12 @@ type stageMod func(*service.StagePorts)
 func noStages(mods ...stageMod) service.StagePorts {
 	stages := service.StagePorts{
 		Prober:        downloadtest.SilentAudioProber(),
-		Tagger:        ports.NoopAudioTagger(),
-		Rejections:    ports.NoopRejectionStore(),
-		StoredAudio:   ports.NoopStoredAudioReader(),
+		Tagger:        memory.NoopAudioTagger(),
+		Rejections:    memory.NoopRejectionStore(),
+		StoredAudio:   memory.NoopStoredAudioReader(),
 		Orphans:       service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}),
-		Skips:         ports.NoopVerifySkipRecorder(),
+		Skips:         memory.NoopVerifySkipRecorder(),
+		Evidence:      evidence.NewCodec(),
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
@@ -165,11 +167,11 @@ func orphaningInto(q ports.OrphanedAudioRecorder) stageMod {
 
 func noVerification() service.VerificationPorts {
 	return service.VerificationPorts{
-		Identifier:      ports.NoopAudioIdentifier(),
-		RecordingLookup: ports.NoopRecordingLookup(),
-		Rerecordings:    ports.NoopRerecordingFinder(),
-		Previews:        ports.NoopPreviewMatcher(),
-		Recordings:      ports.NoopRecordingResolver(),
+		Identifier:      memory.NoopAudioIdentifier(),
+		RecordingLookup: memory.NoopRecordingLookup(),
+		Rerecordings:    memory.NoopRerecordingFinder(),
+		Previews:        memory.NoopPreviewMatcher(),
+		Recordings:      memory.NoopRecordingResolver(),
 	}
 }
 

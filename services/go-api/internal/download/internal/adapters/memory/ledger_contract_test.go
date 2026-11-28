@@ -3,13 +3,13 @@ package memory_test
 import (
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/contracttest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"testing"
 )
 
 type seededLedger struct{ *memory.Ledger }
 
-func (l seededLedger) AddTrack(_ *testing.T, track ports.TrackSnapshot) {
+func (l seededLedger) AddTrack(_ *testing.T, track domain.TrackSnapshot) {
 	l.Seed(memory.LedgerTrack{TrackSnapshot: track})
 }
 

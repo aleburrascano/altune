@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
@@ -122,14 +123,14 @@ func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) 
 	case errors.Is(decodeCtx.Err(), context.DeadlineExceeded):
 		slog.WarnContext(ctx, "acquisition.decode_timeout_accepting",
 			"file", filePath, "timeout", p.decodeTimeout.String())
-		p.recordSkip(ports.SkipDecodeTimeout)
+		p.recordSkip(domain.SkipDecodeTimeout)
 		return nil
 	case errors.As(err, &exitErr):
 		return fmt.Errorf("audio stream failed to decode: %s", firstLine(stderr))
 	default:
 		slog.WarnContext(ctx, "acquisition.decoder_unavailable_accepting",
 			"file", filePath, logging.KeyError, redact.LogError(err))
-		p.recordSkip(ports.SkipDecoderUnavailable)
+		p.recordSkip(domain.SkipDecoderUnavailable)
 		return nil
 	}
 }

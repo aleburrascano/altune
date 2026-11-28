@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
@@ -35,7 +36,7 @@ func (a supersededAudio) release(ctx context.Context, userId ids.UserId, trackId
 }
 
 func (a supersededAudio) handToRecorder(ctx context.Context, userId ids.UserId, trackId ids.TrackId, old string) {
-	err := queueOrphanedAudio(ctx, a.orphans, ports.OrphanedAudio{
+	err := queueOrphanedAudio(ctx, a.orphans, domain.OrphanedAudio{
 		AudioRef:  old,
 		UserId:    userId,
 		TrackId:   trackId,

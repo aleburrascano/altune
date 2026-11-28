@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
@@ -26,7 +25,7 @@ const (
 	qualifierPenalty    = 0.2
 )
 
-func ScoreConfidence(e Evidence, trackSeconds float64) float64 {
+func ScoreConfidence(e domain.AcquisitionEvidence, trackSeconds float64) float64 {
 	switch VerdictKind(e.Verdict) {
 	case VerdictHard:
 		return fingerprintConfidence(hardConfidence, e.AcoustIDScore)
@@ -45,7 +44,7 @@ func fingerprintConfidence(base, score float64) float64 {
 	return base
 }
 
-func unknownConfidence(e Evidence, trackSeconds float64) float64 {
+func unknownConfidence(e domain.AcquisitionEvidence, trackSeconds float64) float64 {
 	total := unknownBase + channelBonus(e.Channel) + durationBonus(e.DurationDeltaSeconds, trackSeconds)
 	if e.Resolved {
 		total += resolvedBonus
@@ -78,13 +77,13 @@ func durationBonus(delta *float64, trackSeconds float64) float64 {
 	}
 }
 
-func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, verified verificationResult) Evidence {
+func (ac *AcquisitionContext) buildEvidence(candidate domain.AudioCandidate, verified verificationResult) domain.AcquisitionEvidence {
 	_, qualifiers := UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
 	var delta *float64
 	if d, known := ac.durationDelta(candidate, verified.probed.Seconds()); known {
 		delta = &d
 	}
-	return Evidence{
+	return domain.AcquisitionEvidence{
 		Verdict:              string(verified.verdict.Kind),
 		AcoustIDScore:        verified.verdict.Score,
 		DurationDeltaSeconds: delta,
@@ -95,7 +94,7 @@ func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, veri
 	}
 }
 
-func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, probed float64) (float64, bool) {
+func (ac *AcquisitionContext) durationDelta(candidate domain.AudioCandidate, probed float64) (float64, bool) {
 	expected := ac.ExpectedLength()
 	if probed <= 0 || expected <= 0 {
 		return 0, false
@@ -103,7 +102,7 @@ func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, prob
 	return probed - expected, true
 }
 
-func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence, confidence float64) {
+func (ac *AcquisitionContext) adopt(ctx context.Context, evidence domain.AcquisitionEvidence, confidence float64) {
 	ac.Evidence = evidence
 	ac.Confidence = confidence
 	slog.InfoContext(ctx, "acquisition.confidence",
@@ -113,37 +112,21 @@ func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence, conf
 	)
 }
 
-type Evidence struct {
-	Verdict              string            `json:"verdict"`
-	AcoustIDScore        float64           `json:"acoustid_score"`
-	DurationDeltaSeconds *float64          `json:"duration_delta_seconds"`
-	Channel              string            `json:"channel"`
-	Qualifiers           []string          `json:"qualifiers"`
-	Resolved             bool              `json:"resolved"`
-	SourceTitle          string            `json:"source_title"`
-	ISRCSource           ProofSource       `json:"isrc_source"`
-	SourceKind           domain.SourceKind `json:"source_kind"`
-	PipelineGeneration   int               `json:"pipeline_generation"`
-	Grade                domain.Grade      `json:"grade"`
-	SourceFormatID       string            `json:"source_format_id,omitempty"`
-	SourceKbps           int               `json:"source_kbps,omitempty"`
-}
-
-func SourceKindOf(c ports.AudioCandidate, channelClass string) domain.SourceKind {
+func SourceKindOf(c domain.AudioCandidate, channelClass string) domain.SourceKind {
 	switch c.Kind {
-	case ports.KindArtTrack:
+	case domain.KindArtTrack:
 		return domain.ArtTrack
-	case ports.KindPinnedVideo:
+	case domain.KindPinnedVideo:
 		return officialVideoKind(c)
-	case ports.KindUpload:
+	case domain.KindUpload:
 		return uploadSourceKind(channelClass)
-	case ports.KindCatalogPin:
+	case domain.KindCatalogPin:
 		return domain.FanUpload
 	}
 	return domain.FanUpload
 }
 
-func officialVideoKind(c ports.AudioCandidate) domain.SourceKind {
+func officialVideoKind(c domain.AudioCandidate) domain.SourceKind {
 	if c.ObservedOMV {
 		return domain.OfficialVideo
 	}
@@ -151,7 +134,7 @@ func officialVideoKind(c ports.AudioCandidate) domain.SourceKind {
 }
 
 func UploaderSourceKind(trackArtist, channel string) domain.SourceKind {
-	return uploadSourceKind(UploaderOf(trackArtist, ports.AudioCandidate{Channel: channel, Kind: ports.KindUpload}))
+	return uploadSourceKind(UploaderOf(trackArtist, domain.AudioCandidate{Channel: channel, Kind: domain.KindUpload}))
 }
 
 func uploadSourceKind(channelClass string) domain.SourceKind {
@@ -164,20 +147,20 @@ func uploadSourceKind(channelClass string) domain.SourceKind {
 func FingerprintOf(verdict VerdictKind) domain.FingerprintResult {
 	switch verdict {
 	case VerdictHard:
-		return domain.Matches
+		return domain.FingerprintMatches
 	case VerdictSoft:
-		return domain.Approximates
+		return domain.FingerprintApproximates
 	case VerdictOtherVersion, VerdictContradicted:
-		return domain.Contradicts
+		return domain.FingerprintContradicts
 	case VerdictDifferentSong:
-		return domain.Unsupported
+		return domain.FingerprintUnsupported
 	case VerdictUnknown:
-		return domain.Silent
+		return domain.FingerprintSilent
 	}
-	return domain.Silent
+	return domain.FingerprintSilent
 }
 
-func (ac *AcquisitionContext) CollectEvidence() Evidence {
+func (ac *AcquisitionContext) CollectEvidence() domain.AcquisitionEvidence {
 	evidence := ac.Evidence
 	_, evidence.ISRCSource = ac.provenISRC()
 	if ac.Selected != nil {
@@ -194,10 +177,10 @@ func (ac *AcquisitionContext) gradeFor(kind domain.SourceKind) domain.Grade {
 	if ac.Verdict.Judged.Grade != "" {
 		return ac.Verdict.Judged.Grade
 	}
-	return domain.Of(FingerprintOf(ac.Verdict.Kind), ac.Provenance(), kind)
+	return domain.GradeOf(FingerprintOf(ac.Verdict.Kind), ac.Provenance(), kind)
 }
 
-func (ac *AcquisitionContext) provenISRC() (string, ProofSource) {
+func (ac *AcquisitionContext) provenISRC() (string, domain.ProofSource) {
 	return ProveISRC(ProofFacts{
 		CatalogISRC: ac.Track.ISRC,
 		CatalogMBID: ac.Track.CatalogMBID,

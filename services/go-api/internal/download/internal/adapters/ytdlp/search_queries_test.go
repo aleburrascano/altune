@@ -2,7 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"os"
@@ -28,7 +28,7 @@ func fakeYtDlpLoggingArgs(t *testing.T) string {
 	return log
 }
 
-func searchedQueries(t *testing.T, req ports.FindRequest) []string {
+func searchedQueries(t *testing.T, req domain.FindRequest) []string {
 	t.Helper()
 	log := fakeYtDlpLoggingArgs(t)
 	source := ytdlp.NewSource(ytdlp.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
@@ -51,13 +51,13 @@ func searchedQueries(t *testing.T, req ports.FindRequest) []string {
 func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 	tests := []struct {
 		name        string
-		req         ports.FindRequest
+		req         domain.FindRequest
 		wantQueries []string
 		wantMin     int
 	}{
 		{
 			name: "basic track produces title+artist queries",
-			req:  ports.FindRequest{Title: "Blinding Lights", Artist: "The Weeknd"},
+			req:  domain.FindRequest{Title: "Blinding Lights", Artist: "The Weeknd"},
 			wantQueries: []string{
 				"Blinding Lights The Weeknd",
 				"Blinding Lights The Weeknd audio",
@@ -66,7 +66,7 @@ func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 		},
 		{
 			name: "track with album adds album query",
-			req:  ports.FindRequest{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"},
+			req:  domain.FindRequest{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"},
 			wantQueries: []string{
 				"Circles Post Malone",
 				"Circles Post Malone Hollywood's Bleeding",
@@ -76,7 +76,7 @@ func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 		},
 		{
 			name: "track with ISRC includes ISRC as first query",
-			req:  ports.FindRequest{Title: "HUMBLE.", Artist: "Kendrick Lamar", ISRC: "USUM71700626"},
+			req:  domain.FindRequest{Title: "HUMBLE.", Artist: "Kendrick Lamar", ISRC: "USUM71700626"},
 			wantQueries: []string{
 				"USUM71700626",
 				"HUMBLE. Kendrick Lamar",
@@ -85,7 +85,7 @@ func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 		},
 		{
 			name:    "empty album skips album query",
-			req:     ports.FindRequest{Title: "Song", Artist: "Artist", Album: ""},
+			req:     domain.FindRequest{Title: "Song", Artist: "Artist", Album: ""},
 			wantMin: 2,
 		},
 	}

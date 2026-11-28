@@ -23,8 +23,8 @@ const (
 )
 
 type candidateFetcher interface {
-	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error)
-	PreviewFetcherFor(candidate ports.AudioCandidate) (ports.PreviewFetcher, bool)
+	Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error)
+	PreviewFetcherFor(candidate domain.AudioCandidate) (ports.PreviewFetcher, bool)
 }
 
 type DownloadStep struct {
@@ -125,19 +125,19 @@ const (
 )
 
 type attempt struct {
-	candidate    ports.AudioCandidate
+	candidate    domain.AudioCandidate
 	filePath     string
 	tmpDir       string
 	verified     verificationResult
 	rejection    *downloadRejection
 	status       attemptStatus
 	otherVersion bool
-	evidence     Evidence
+	evidence     domain.AcquisitionEvidence
 	confidence   float64
-	format       ports.SourceFormat
+	format       domain.SourceFormat
 }
 
-func (a attempt) muxed() bool { return a.format.ID == ports.MuxedFallbackFormatID }
+func (a attempt) muxed() bool { return a.format.ID == domain.MuxedFallbackFormatID }
 
 type heldAttempt struct {
 	attempt attempt
@@ -262,11 +262,11 @@ func (f *downloadFailures) noteAttempt(result attempt) {
 	f.deadSources[result.candidate.Source] = true
 }
 
-func (f *downloadFailures) sourceDead(candidate ports.AudioCandidate) bool {
+func (f *downloadFailures) sourceDead(candidate domain.AudioCandidate) bool {
 	return f.deadSources[candidate.Source]
 }
 
-func recordSourceDead(ac *AcquisitionContext, candidate ports.AudioCandidate) {
+func recordSourceDead(ac *AcquisitionContext, candidate domain.AudioCandidate) {
 	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectNotAttempted,
 		"source reported itself unavailable earlier in this job")
 }
@@ -300,14 +300,14 @@ func (f *downloadFailures) result(ctx context.Context) error {
 	return withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", last))
 }
 
-func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) {
+func recordNotAttempted(ac *AcquisitionContext, untried []domain.AudioCandidate) {
 	for _, c := range untried {
 		ac.recordRejection(c.URL, c.Title, c.Source, RejectNotAttempted,
 			fmt.Sprintf("skipped after %d download attempts", MaxDownloadAttempts))
 	}
 }
 
-func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) {
+func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, candidate domain.AudioCandidate) {
 	ac.recordUnmeasuredRejection(candidate.URL, candidate.Title, candidate.Source, RejectDuration,
 		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.ExpectedLength()))
 	slog.InfoContext(ctx, "acquisition.candidate_skipped_duration",
@@ -346,7 +346,7 @@ func (a attempt) keep(ctx context.Context, ac *AcquisitionContext) afterDownload
 func (s *DownloadStep) runAttempt(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	tmpDir string,
 ) (result attempt) {
 	defer func() {
@@ -363,7 +363,7 @@ func (s *DownloadStep) runAttempt(
 func (s *DownloadStep) attemptAudio(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	tmpDir string,
 ) attempt {
 	prior, rejection := s.previewIdentification(ctx, ac, candidate)
@@ -390,14 +390,14 @@ const (
 	RejectOtherVersionOffLengthFmt  = "other version %.0fs off the expected length"
 )
 
-func otherVersionLengthReason(evidence Evidence) string {
+func otherVersionLengthReason(evidence domain.AcquisitionEvidence) string {
 	if evidence.DurationDeltaSeconds == nil {
 		return RejectOtherVersionLengthUnknown
 	}
 	return fmt.Sprintf(RejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
 }
 
-func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePath string, verified verificationResult) attempt {
+func judgeAttempt(ac *AcquisitionContext, candidate domain.AudioCandidate, filePath string, verified verificationResult) attempt {
 	evidence := ac.buildEvidence(candidate, verified)
 	result := attempt{
 		filePath:     filePath,
@@ -420,13 +420,13 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 func (s *DownloadStep) fetchFull(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	tmpDir string,
-) (ports.FetchedAudio, *downloadRejection) {
+) (domain.FetchedAudio, *downloadRejection) {
 	_, queued := startStage(ctx, ac, s.now, "download.queue")
 	if err := s.limiter.Acquire(ctx); err != nil {
 		queued(err)
-		return ports.FetchedAudio{}, &downloadRejection{stage: RejectDownload, reason: "download failed", err: err}
+		return domain.FetchedAudio{}, &downloadRejection{stage: RejectDownload, reason: "download failed", err: err}
 	}
 	defer s.limiter.Release()
 	queued(nil)
@@ -441,20 +441,20 @@ func (s *DownloadStep) fetchFull(
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
 			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			logging.KeyError, redact.LogError(err))
-		return ports.FetchedAudio{}, &downloadRejection{stage: RejectDownload, reason: "download failed", err: err}
+		return domain.FetchedAudio{}, &downloadRejection{stage: RejectDownload, reason: "download failed", err: err}
 	}
 	if fetched.Path == "" {
 		slog.WarnContext(ctx, "acquisition.candidate_download_no_file",
 			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
-		return ports.FetchedAudio{}, &downloadRejection{stage: RejectDownload, reason: "download failed", err: errFetchedNoFile}
+		return domain.FetchedAudio{}, &downloadRejection{stage: RejectDownload, reason: "download failed", err: errFetchedNoFile}
 	}
 	return fetched, nil
 }
 
 var errFetchedNoFile = errors.New("fetcher returned no file")
 
-func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCandidate, err error) error {
-	if !ports.RunTimedOut(jobCtx, fetchCtx) {
+func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate domain.AudioCandidate, err error) error {
+	if !domain.RunTimedOut(jobCtx, fetchCtx) {
 		return err
 	}
 	return &domain.SourceUnavailableError{
@@ -483,7 +483,7 @@ func (r *downloadRejection) failure() error {
 	return r.err
 }
 
-func (r *downloadRejection) record(ac *AcquisitionContext, candidate ports.AudioCandidate) {
+func (r *downloadRejection) record(ac *AcquisitionContext, candidate domain.AudioCandidate) {
 	if r == nil {
 		return
 	}
@@ -493,7 +493,7 @@ func (r *downloadRejection) record(ac *AcquisitionContext, candidate ports.Audio
 func (s *DownloadStep) verify(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	filePath string,
 	prior *identification,
 ) (verificationResult, *downloadRejection) {
@@ -528,12 +528,12 @@ func (s *DownloadStep) verify(
 func (s *DownloadStep) verifyDuration(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	filePath string,
 ) (bool, sharedtracklength.TrackLength, *downloadRejection) {
 	judge, known := ac.lengths().FileJudge(candidate)
 	if !known {
-		s.recordSkip(ports.SkipNoDuration)
+		s.recordSkip(domain.SkipNoDuration)
 		return false, sharedtracklength.TrackLength{}, nil
 	}
 	return s.probeDuration(ctx, ac, candidate, filePath, judge)
@@ -542,7 +542,7 @@ func (s *DownloadStep) verifyDuration(
 func (s *DownloadStep) probeDuration(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	filePath string,
 	judge FileJudge,
 ) (bool, sharedtracklength.TrackLength, *downloadRejection) {
@@ -552,13 +552,13 @@ func (s *DownloadStep) probeDuration(
 		err = lengthErr
 	}
 	switch {
-	case err != nil && (ctx.Err() != nil || errors.Is(err, ports.ErrNoAudioProber)):
+	case err != nil && (ctx.Err() != nil || errors.Is(err, domain.ErrNoAudioProber)):
 		return false, sharedtracklength.TrackLength{}, nil
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
 			logging.KeyTrackID, ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"probed_seconds", actual, logging.KeyError, redact.LogError(err))
-		s.recordSkip(ports.SkipProbeFailed)
+		s.recordSkip(domain.SkipProbeFailed)
 		return false, sharedtracklength.TrackLength{}, nil
 	}
 	if acceptable, held := judge.Judge(actual); !acceptable {
@@ -570,7 +570,7 @@ func (s *DownloadStep) probeDuration(
 func durationRejection(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	actual float64,
 	held float64,
 ) *downloadRejection {
@@ -593,7 +593,7 @@ func durationRejection(
 func (s *DownloadStep) verifyDecodable(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	filePath string,
 ) *downloadRejection {
 	err := s.prober.ValidateDecodable(ctx, filePath)
@@ -606,7 +606,7 @@ func (s *DownloadStep) verifyDecodable(
 func decodeRejection(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
+	candidate domain.AudioCandidate,
 	err error,
 ) *downloadRejection {
 	if ctx.Err() != nil {

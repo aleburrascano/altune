@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -19,11 +19,11 @@ import (
 
 type recordingOrphanQueue struct {
 	mu       sync.Mutex
-	recorded []ports.OrphanedAudio
+	recorded []domain.OrphanedAudio
 	err      error
 }
 
-func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
+func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o domain.OrphanedAudio) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.err != nil {
@@ -33,10 +33,10 @@ func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.Or
 	return nil
 }
 
-func (q *recordingOrphanQueue) entries() []ports.OrphanedAudio {
+func (q *recordingOrphanQueue) entries() []domain.OrphanedAudio {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return append([]ports.OrphanedAudio(nil), q.recorded...)
+	return append([]domain.OrphanedAudio(nil), q.recorded...)
 }
 
 func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
@@ -47,7 +47,7 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -58,7 +58,7 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 	got := recorded[0]
 	notBefore := got.NotBefore
 	got.NotBefore = time.Time{}
-	want := ports.OrphanedAudio{AudioRef: track.originalRef, UserId: track.userID, TrackId: track.trackID}
+	want := domain.OrphanedAudio{AudioRef: track.originalRef, UserId: track.userID, TrackId: track.trackID}
 	if got != want {
 		t.Errorf("recorded = %+v, want %+v", got, want)
 	}
@@ -74,7 +74,7 @@ func TestExecuteReplace_SupersededAudioIsQueuedAfterTheGraceAndKept(t *testing.T
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -100,7 +100,7 @@ func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 	queue := &recordingOrphanQueue{err: errors.New("queue down")}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)))
 
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want success despite the queue failing", err)
 	}
 }
@@ -110,7 +110,7 @@ func TestExecuteReplace_NothingIsDeletedAtCommitAndExactlyOneEntryIsQueued(t *te
 	queue := &recordingOrphanQueue{}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)), service.WithSupersededAudioGrace(time.Hour))
 
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 	if !track.store.holds(track.originalRef) {
@@ -128,7 +128,7 @@ func TestExecuteReplace_FailedRollbackDeleteIsQueuedForTheSweep(t *testing.T) {
 	queue := &recordingOrphanQueue{}
 	svc := track.serviceStaged(noStages(orphaningInto(queue)))
 
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: track.userID, TrackID: track.trackID}); err == nil {
 		t.Fatal("expected the replace to fail")
 	}
 
@@ -146,7 +146,7 @@ func TestDirectDeleteOrphans_DeleteTheRefAtOnceWhateverTheGrace(t *testing.T) {
 	store := &objectStore{objects: map[string]string{"u/old.mp3": "old bytes"}}
 	recorder := service.MustDirectDeleteOrphans(store)
 
-	err := recorder.RecordOrphanedAudio(context.Background(), ports.OrphanedAudio{AudioRef: "u/old.mp3", NotBefore: time.Now().Add(time.Hour)})
+	err := recorder.RecordOrphanedAudio(context.Background(), domain.OrphanedAudio{AudioRef: "u/old.mp3", NotBefore: time.Now().Add(time.Hour)})
 
 	if err != nil || store.holds("u/old.mp3") {
 		t.Errorf("RecordOrphanedAudio = %v, holds = %v, want the ref deleted now and no error", err, store.holds("u/old.mp3"))
@@ -156,7 +156,7 @@ func TestDirectDeleteOrphans_DeleteTheRefAtOnceWhateverTheGrace(t *testing.T) {
 func TestDirectDeleteOrphans_SurfacesAFailedDelete(t *testing.T) {
 	store := &objectStore{objects: map[string]string{"u/old.mp3": "old bytes"}, deleteErr: errors.New("down")}
 
-	err := service.MustDirectDeleteOrphans(store).RecordOrphanedAudio(context.Background(), ports.OrphanedAudio{AudioRef: "u/old.mp3"})
+	err := service.MustDirectDeleteOrphans(store).RecordOrphanedAudio(context.Background(), domain.OrphanedAudio{AudioRef: "u/old.mp3"})
 
 	if err == nil {
 		t.Error("RecordOrphanedAudio = nil, want the delete failure so the caller can log it")
@@ -175,7 +175,7 @@ func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
 			t.Fatal("want the delete failure surfaced")
 		}
 
-		want := ports.OrphanedAudio{AudioRef: "u/new.mp3", UserId: userID, TrackId: trackID}
+		want := domain.OrphanedAudio{AudioRef: "u/new.mp3", UserId: userID, TrackId: trackID}
 		if recorded := queue.entries(); len(recorded) != 1 || recorded[0] != want {
 			t.Errorf("recorded = %+v, want exactly %+v", recorded, want)
 		}
@@ -186,8 +186,8 @@ func TestStoreRollback_SharedRefIsNeverQueued(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userID, own := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		sharedRef := "u/shared.mp3"
-		refs := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
-			ID: ids.NewTrackId(), UserId: userID, Status: ports.TrackReady, Streamable: true, AudioRef: &sharedRef,
+		refs := memory.NewLedger(memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{
+			ID: ids.NewTrackId(), UserId: userID, Status: domain.TrackReady, Streamable: true, AudioRef: &sharedRef,
 		}})
 		queue := &recordingOrphanQueue{}
 		store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}

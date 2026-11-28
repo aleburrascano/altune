@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/titlemarkers"
 	"cmp"
@@ -18,31 +19,31 @@ const (
 
 var _ ports.RerecordingFinder = (*MusicBrainzResolver)(nil)
 
-func (r *MusicBrainzResolver) FindRerecording(ctx context.Context, q ports.RerecordingQuery) (ports.TrackLabel, bool, error) {
+func (r *MusicBrainzResolver) FindRerecording(ctx context.Context, q domain.RerecordingQuery) (domain.TrackLabel, bool, error) {
 	original, found, err := r.rerecording.RecordingDetail(ctx, q.OriginalMBID)
 	if err != nil {
-		return ports.TrackLabel{}, false, fmt.Errorf("rerecording original %s: %w", q.OriginalMBID, err)
+		return domain.TrackLabel{}, false, fmt.Errorf("rerecording original %s: %w", q.OriginalMBID, err)
 	}
 	if !found {
 		slog.InfoContext(ctx, "acquisition.rerecording_none", "original_mbid", q.OriginalMBID, "candidates", 0)
-		return ports.TrackLabel{}, false, nil
+		return domain.TrackLabel{}, false, nil
 	}
 	return r.rerecordingOf(ctx, original)
 }
 
-func (r *MusicBrainzResolver) rerecordingOf(ctx context.Context, original ports.RecordingDetail) (ports.TrackLabel, bool, error) {
+func (r *MusicBrainzResolver) rerecordingOf(ctx context.Context, original domain.RecordingDetail) (domain.TrackLabel, bool, error) {
 	work, err := r.rerecording.WorkRecordings(ctx, original.MBID)
 	if err != nil {
-		return ports.TrackLabel{}, false, fmt.Errorf("rerecording work of %s: %w", original.MBID, err)
+		return domain.TrackLabel{}, false, fmt.Errorf("rerecording work of %s: %w", original.MBID, err)
 	}
 	candidates := labelledRerecordings(original, work)
 	details, err := r.releasedAfter(ctx, original, candidates)
 	if err != nil {
-		return ports.TrackLabel{}, false, err
+		return domain.TrackLabel{}, false, err
 	}
 	if len(details) == 0 {
 		slog.InfoContext(ctx, "acquisition.rerecording_none", "original_mbid", original.MBID, "candidates", len(candidates))
-		return ports.TrackLabel{}, false, nil
+		return domain.TrackLabel{}, false, nil
 	}
 	chosen := preferredRerecording(details)
 	slog.InfoContext(ctx, "acquisition.rerecording_found",
@@ -50,9 +51,9 @@ func (r *MusicBrainzResolver) rerecordingOf(ctx context.Context, original ports.
 	return rerecordingLabel(chosen), true, nil
 }
 
-func labelledRerecordings(original ports.RecordingDetail, work []ports.WorkRecording) []ports.WorkRecording {
+func labelledRerecordings(original domain.RecordingDetail, work []domain.WorkRecording) []domain.WorkRecording {
 	songTitle := titlemarkers.StripVersionPhrases(titlemarkers.Tokens(original.Title))
-	var kept []ports.WorkRecording
+	var kept []domain.WorkRecording
 	for _, rec := range work {
 		if rec.MBID == original.MBID || rec.Live || !sameLeadArtist(rec.ArtistIDs, original.ArtistIDs) {
 			continue
@@ -68,7 +69,7 @@ func sameLeadArtist(a, b []string) bool {
 	return len(a) > 0 && len(b) > 0 && a[0] == b[0]
 }
 
-func rerecordingSongTitle(rec ports.WorkRecording) ([]string, bool) {
+func rerecordingSongTitle(rec domain.WorkRecording) ([]string, bool) {
 	title, inTitle := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(rec.Title))
 	disambiguation, inDisambiguation := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(rec.Disambiguation))
 	if !inTitle && !inDisambiguation {
@@ -84,8 +85,8 @@ func vetoed(tokens []string) bool {
 	return slices.ContainsFunc(titlemarkers.Matches(tokens), func(e titlemarkers.Entry) bool { return e.Veto })
 }
 
-func (r *MusicBrainzResolver) releasedAfter(ctx context.Context, original ports.RecordingDetail, candidates []ports.WorkRecording) ([]ports.RecordingDetail, error) {
-	var kept []ports.RecordingDetail
+func (r *MusicBrainzResolver) releasedAfter(ctx context.Context, original domain.RecordingDetail, candidates []domain.WorkRecording) ([]domain.RecordingDetail, error) {
+	var kept []domain.RecordingDetail
 	for _, rec := range candidates[:min(len(candidates), maxRerecordingLookups)] {
 		detail, found, err := r.rerecording.RecordingDetail(ctx, rec.MBID)
 		if err != nil {
@@ -101,8 +102,8 @@ func (r *MusicBrainzResolver) releasedAfter(ctx context.Context, original ports.
 	return kept, nil
 }
 
-func earliestOfficialRelease(releases []ports.RecordingRelease) (ports.RecordingRelease, bool) {
-	var earliest ports.RecordingRelease
+func earliestOfficialRelease(releases []domain.RecordingRelease) (domain.RecordingRelease, bool) {
+	var earliest domain.RecordingRelease
 	found := false
 	for _, rel := range releases {
 		if rel.Status != officialReleaseStatus {
@@ -122,12 +123,12 @@ func releaseDateBefore(a, b string) bool {
 	return a < b
 }
 
-func preferredRerecording(details []ports.RecordingDetail) ports.RecordingDetail {
+func preferredRerecording(details []domain.RecordingDetail) domain.RecordingDetail {
 	ranked := slices.Clone(details)
 	if len(ranked) == 0 {
-		return ports.RecordingDetail{}
+		return domain.RecordingDetail{}
 	}
-	slices.SortStableFunc(ranked, func(a, b ports.RecordingDetail) int {
+	slices.SortStableFunc(ranked, func(a, b domain.RecordingDetail) int {
 		hasA, hasB := len(a.ISRCs) > 0, len(b.ISRCs) > 0
 		if hasA && !hasB {
 			return -1
@@ -140,9 +141,9 @@ func preferredRerecording(details []ports.RecordingDetail) ports.RecordingDetail
 	return ranked[0]
 }
 
-func rerecordingLabel(detail ports.RecordingDetail) ports.TrackLabel {
+func rerecordingLabel(detail domain.RecordingDetail) domain.TrackLabel {
 	release, _ := earliestOfficialRelease(detail.Releases)
-	label := ports.TrackLabel{
+	label := domain.TrackLabel{
 		MBID:            detail.MBID,
 		Title:           detail.Title,
 		Album:           release.Title,

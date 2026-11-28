@@ -1,6 +1,7 @@
 package downloadtest
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/songfields"
@@ -12,7 +13,7 @@ type silentAudioProber struct{}
 func SilentAudioProber() ports.AudioProber { return silentAudioProber{} }
 
 func (silentAudioProber) ProbeDuration(context.Context, string) (float64, error) {
-	return 0, ports.ErrNoAudioProber
+	return 0, domain.ErrNoAudioProber
 }
 
 func (silentAudioProber) ValidateDecodable(context.Context, string) error { return nil }

@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"testing"
@@ -15,7 +15,7 @@ const acquireTakes = 2 * time.Second
 
 type slowAcquirer struct{ finish chan struct{} }
 
-func (a slowAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
+func (a slowAcquirer) Execute(ctx context.Context, job domain.AcquisitionJob) error {
 	select {
 	case <-a.finish:
 		return nil
@@ -24,11 +24,11 @@ func (a slowAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) err
 	}
 }
 
-func (slowAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (slowAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	return nil
 }
 
-func (slowAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (slowAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -45,7 +45,7 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		active := scheduler.Status(t.Context()).ActiveJobs
-		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != ports.JobRunning {
+		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != domain.JobRunning {
 			t.Fatalf("ActiveJobs = %+v, want the running job of %s", active, track)
 		}
 		if got := active[0].ElapsedMs; got != 3000 {
@@ -70,7 +70,7 @@ func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 		synctest.Wait()
 
 		status := scheduler.Status(t.Context())
-		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != ports.JobSucceeded {
+		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != domain.JobSucceeded {
 			t.Fatalf("Recent = %+v, want the succeeded job of %s", status.Recent, track)
 		}
 		if got := status.Recent[0].ElapsedMs; got != acquireTakes.Milliseconds() {

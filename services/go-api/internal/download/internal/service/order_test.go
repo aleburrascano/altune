@@ -2,12 +2,12 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"slices"
 	"testing"
 )
 
-func rankTopicUpload(title string, duration float64, url string) ports.AudioCandidate {
+func rankTopicUpload(title string, duration float64, url string) domain.AudioCandidate {
 	return downloadtest.Candidate(
 		url,
 		downloadtest.WithTitle(title),
@@ -24,7 +24,7 @@ func TestRank_AnEqualTieGoesToTheLengthClosestToTheExpectedOne(t *testing.T) {
 
 	ranked, _ := rank(track, shorter, longer)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{longer, shorter}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{longer, shorter}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v: 40s off beats 50s off", got, want)
 	}
 }
@@ -36,7 +36,7 @@ func TestRank_WithoutAnExpectedLengthATieGoesByURL(t *testing.T) {
 
 	ranked, _ := rank(track, short, long)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{long, short}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{long, short}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v: no expected length makes every distance unknown", got, want)
 	}
 }
@@ -48,7 +48,7 @@ func TestRank_ACandidateWithoutALengthLosesATieToOneFarOff(t *testing.T) {
 
 	ranked, _ := rank(track, unmeasured, farOff)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{farOff, unmeasured}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{farOff, unmeasured}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v: an unknown length is the farthest of all", got, want)
 	}
 }
@@ -60,7 +60,7 @@ func TestRank_AnOtherVersionGoesAfterACleanCandidateThatLacksTheFeature(t *testi
 
 	ranked, refused := rank(track, edit, clean)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{clean, edit}); len(refused) != 0 || !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{clean, edit}); len(refused) != 0 || !slices.Equal(got, want) {
 		t.Errorf("ranked = %v refused = %+v, want %v: a fallback qualifier outranks every other signal", got, refused, want)
 	}
 }
@@ -83,7 +83,7 @@ func TestRank_AnOtherVersionGoesLastOffTopicToo(t *testing.T) {
 
 	ranked, _ := rank(track, edit, clean)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{clean, edit}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{clean, edit}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}
 }
@@ -112,7 +112,7 @@ func TestRank_OffTopicTheFeaturedCreditBreaksAnIdentityTie(t *testing.T) {
 
 	ranked, _ := rank(track, solo, featured)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{featured, solo}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{featured, solo}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}
 }
@@ -124,7 +124,7 @@ func TestRank_OnTopicTheFeaturedCreditBeatsAShorterQualifierList(t *testing.T) {
 
 	ranked, _ := rank(track, solo, featured)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{featured, solo}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{featured, solo}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}
 }
@@ -146,7 +146,7 @@ func TestRank_OnTopicTheCloserIdentityWinsAtEqualQualifiers(t *testing.T) {
 
 	ranked, _ := rank(track, loose, exact)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{exact, loose}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{exact, loose}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}
 }
@@ -168,7 +168,7 @@ func TestRank_OffTopicTheMetadataRankBreaksAnIdentityAndFeatureTie(t *testing.T)
 
 	ranked, _ := rank(track, plain, label)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{label, plain}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{label, plain}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}
 }
@@ -194,7 +194,7 @@ func TestRank_OffTopicTheQualifierDistanceBreaksAMetadataTie(t *testing.T) {
 
 	ranked, _ := rank(track, video, plain)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{plain, video}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{plain, video}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}
 }
@@ -212,13 +212,13 @@ func TestRank_ResolvedCandidatesGoFirstThenTopicThenOther(t *testing.T) {
 		"https://x.example/c",
 		downloadtest.WithTitle("Song"),
 		downloadtest.WithDuration(200),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 		downloadtest.WithArtists([]string{"Artist"}),
 	)
 
 	ranked, _ := rank(track, other, topic, art)
 
-	if got, want := urls(ranked), urls([]ports.AudioCandidate{art, topic, other}); !slices.Equal(got, want) {
+	if got, want := urls(ranked), urls([]domain.AudioCandidate{art, topic, other}); !slices.Equal(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}
 }

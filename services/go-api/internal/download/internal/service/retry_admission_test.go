@@ -1,9 +1,8 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/contracttest"
+	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
@@ -17,8 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func blindingLights() *ports.TrackSnapshot {
-	return &ports.TrackSnapshot{
+func blindingLights() *domain.TrackSnapshot {
+	return &domain.TrackSnapshot{
 		ID:     ids.NewTrackId(),
 		UserId: ids.NewUserId(uuid.New()),
 		Title:  "Blinding Lights",
@@ -27,21 +26,21 @@ func blindingLights() *ports.TrackSnapshot {
 	}
 }
 
-func failedTrack() *ports.TrackSnapshot {
+func failedTrack() *domain.TrackSnapshot {
 	track := blindingLights()
-	track.Status = ports.TrackFailed
+	track.Status = domain.TrackFailed
 	return track
 }
 
-func readyTrack() *ports.TrackSnapshot {
+func readyTrack() *domain.TrackSnapshot {
 	track := blindingLights()
-	track.Status, track.Streamable = ports.TrackReady, true
+	track.Status, track.Streamable = domain.TrackReady, true
 	return track
 }
 
-func pendingTrack() *ports.TrackSnapshot {
+func pendingTrack() *domain.TrackSnapshot {
 	track := blindingLights()
-	track.Status = ports.TrackPending
+	track.Status = domain.TrackPending
 	return track
 }
 
@@ -61,7 +60,7 @@ func (s *scheduleSpy) schedule() error {
 func TestRetryAdmission_AdmitsTheFirstRetryOfAFailedTrack(t *testing.T) {
 	spy := &scheduleSpy{}
 
-	err := service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now)).Admit(context.Background(), failedTrack(), spy.schedule)
+	err := service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now)).Admit(context.Background(), failedTrack(), spy.schedule)
 
 	if err != nil || spy.calls != 1 {
 		t.Fatalf("Admit = %v with %d schedules, want nil and one schedule", err, spy.calls)
@@ -69,7 +68,7 @@ func TestRetryAdmission_AdmitsTheFirstRetryOfAFailedTrack(t *testing.T) {
 }
 
 func TestRetryAdmission_RefusesASecondRetryInsideTheCooldownWithoutScheduling(t *testing.T) {
-	admission := service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now))
+	admission := service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now))
 	track := failedTrack()
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("first Admit = %v, want nil", err)
@@ -88,7 +87,7 @@ func TestRetryAdmission_RefusesASecondRetryInsideTheCooldownWithoutScheduling(t 
 
 func TestRetryAdmission_AdmitsAgainOnceTheOneMinuteCooldownElapsed(t *testing.T) {
 	manual := clocktest.NewManual(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
-	store := contracttest.MustNewCooldownStore(manual.Func())
+	store := memory.MustNewCooldownStore(manual.Func())
 	admission := service.NewRetryAdmission(store)
 	track := failedTrack()
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
@@ -102,7 +101,7 @@ func TestRetryAdmission_AdmitsAgainOnceTheOneMinuteCooldownElapsed(t *testing.T)
 }
 
 func TestRetryAdmission_AdmitsDistinctTracksIndependently(t *testing.T) {
-	admission := service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now))
+	admission := service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now))
 
 	if err := admission.Admit(context.Background(), failedTrack(), scheduleQueued); err != nil {
 		t.Errorf("first track Admit = %v, want nil", err)
@@ -113,12 +112,12 @@ func TestRetryAdmission_AdmitsDistinctTracksIndependently(t *testing.T) {
 }
 
 func TestRetryAdmission_RefusesATrackThatHasNotFailed(t *testing.T) {
-	cases := map[string]*ports.TrackSnapshot{"pending": pendingTrack(), "ready": readyTrack(), "nil": nil}
+	cases := map[string]*domain.TrackSnapshot{"pending": pendingTrack(), "ready": readyTrack(), "nil": nil}
 	for name, track := range cases {
 		t.Run(name, func(t *testing.T) {
 			spy := &scheduleSpy{}
 
-			err := service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now)).Admit(context.Background(), track, spy.schedule)
+			err := service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now)).Admit(context.Background(), track, spy.schedule)
 
 			if !errors.Is(err, domain.ErrRetryNotFailed) || spy.calls != 0 {
 				t.Errorf("Admit = %v with %d schedules, want ErrRetryNotFailed and none", err, spy.calls)
@@ -128,12 +127,12 @@ func TestRetryAdmission_RefusesATrackThatHasNotFailed(t *testing.T) {
 }
 
 func TestReacquireAdmission_RefusesATrackThatIsNotStreamable(t *testing.T) {
-	cases := map[string]*ports.TrackSnapshot{"pending": pendingTrack(), "failed": failedTrack(), "nil": nil}
+	cases := map[string]*domain.TrackSnapshot{"pending": pendingTrack(), "failed": failedTrack(), "nil": nil}
 	for name, track := range cases {
 		t.Run(name, func(t *testing.T) {
 			spy := &scheduleSpy{}
 
-			err := service.NewReacquireAdmission(contracttest.MustNewCooldownStore(time.Now)).Admit(context.Background(), track, spy.schedule)
+			err := service.NewReacquireAdmission(memory.MustNewCooldownStore(time.Now)).Admit(context.Background(), track, spy.schedule)
 
 			if !errors.Is(err, domain.ErrReacquireNotReady) || spy.calls != 0 {
 				t.Errorf("Admit = %v with %d schedules, want ErrReacquireNotReady and none", err, spy.calls)
@@ -143,7 +142,7 @@ func TestReacquireAdmission_RefusesATrackThatIsNotStreamable(t *testing.T) {
 }
 
 func TestReacquireAdmission_AdmitsAStreamableTrackOnceThenHoldsTheCooldown(t *testing.T) {
-	admission := service.NewReacquireAdmission(contracttest.MustNewCooldownStore(time.Now))
+	admission := service.NewReacquireAdmission(memory.MustNewCooldownStore(time.Now))
 	track := readyTrack()
 
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
@@ -155,12 +154,12 @@ func TestReacquireAdmission_AdmitsAStreamableTrackOnceThenHoldsTheCooldown(t *te
 }
 
 func TestAdmission_RetryAndReacquireWindowsAreIndependent(t *testing.T) {
-	store := contracttest.MustNewCooldownStore(time.Now)
+	store := memory.MustNewCooldownStore(time.Now)
 	track := failedTrack()
 	if err := service.NewRetryAdmission(store).Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("retry Admit = %v, want nil", err)
 	}
-	track.Status, track.Streamable = ports.TrackReady, true
+	track.Status, track.Streamable = domain.TrackReady, true
 
 	if err := service.NewReacquireAdmission(store).Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Errorf("reacquire Admit after retry = %v, want nil (separate kinds)", err)
@@ -168,7 +167,7 @@ func TestAdmission_RetryAndReacquireWindowsAreIndependent(t *testing.T) {
 }
 
 func TestAdmission_TheCooldownLivesInTheStoreAndSurvivesARestart(t *testing.T) {
-	store := contracttest.MustNewCooldownStore(time.Now)
+	store := memory.MustNewCooldownStore(time.Now)
 	retryTrack, reacquireTrack := failedTrack(), readyTrack()
 	if err := service.NewRetryAdmission(store).Admit(context.Background(), retryTrack, scheduleQueued); err != nil {
 		t.Fatalf("first retry Admit = %v, want nil", err)
@@ -186,7 +185,7 @@ func TestAdmission_TheCooldownLivesInTheStoreAndSurvivesARestart(t *testing.T) {
 }
 
 func TestRetryAdmission_AStoreErrorRefusesWithoutSchedulingAndKeepsTheCause(t *testing.T) {
-	store := contracttest.MustNewCooldownStore(time.Now)
+	store := memory.MustNewCooldownStore(time.Now)
 	reserveErr := fmt.Errorf("reserve cooldown: %w", &pgconn.PgError{
 		Code:    "42P01",
 		Message: `relation "acquisition_cooldowns" does not exist`,
@@ -206,7 +205,7 @@ func TestRetryAdmission_AStoreErrorRefusesWithoutSchedulingAndKeepsTheCause(t *t
 }
 
 func TestRetryAdmission_ARefusedScheduleRefundsTheCooldownAfterTheCallerHasGone(t *testing.T) {
-	admission := service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now))
+	admission := service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now))
 	track := failedTrack()
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -220,7 +219,7 @@ func TestRetryAdmission_ARefusedScheduleRefundsTheCooldownAfterTheCallerHasGone(
 }
 
 func TestRetryAdmission_AFailedRefundStillReturnsTheScheduleError(t *testing.T) {
-	store := contracttest.MustNewCooldownStore(time.Now)
+	store := memory.MustNewCooldownStore(time.Now)
 	releaseErr := errors.New("db down")
 	store.FailRelease(releaseErr)
 

@@ -21,8 +21,8 @@ const (
 )
 
 type LedgerTrack struct {
-	ports.TrackSnapshot
-	ClaimNumber   ports.ClaimNumber
+	domain.TrackSnapshot
+	ClaimNumber   domain.ClaimNumber
 	FailureReason string
 	Provenance    downloadprovenance.AcquisitionProvenance
 	Confidence    float64
@@ -50,15 +50,15 @@ func (l *Ledger) UsingRules(rules ports.StatusRules) *Ledger {
 	return l
 }
 
-func (l *Ledger) Next(from ports.TrackStatus, event ports.TrackEvent) (ports.TrackStatus, error) {
+func (l *Ledger) Next(from domain.TrackStatus, event domain.TrackEvent) (domain.TrackStatus, error) {
 	return l.rules.Next(from, event)
 }
 
-func (l *Ledger) Claimable() []ports.TrackStatus { return l.rules.Claimable() }
+func (l *Ledger) Claimable() []domain.TrackStatus { return l.rules.Claimable() }
 
-func (l *Ledger) Retryable() []ports.TrackStatus { return l.rules.Retryable() }
+func (l *Ledger) Retryable() []domain.TrackStatus { return l.rules.Retryable() }
 
-func (l *Ledger) Upgradable() []ports.TrackStatus { return l.rules.Upgradable() }
+func (l *Ledger) Upgradable() []domain.TrackStatus { return l.rules.Upgradable() }
 
 func (l *Ledger) Seed(track LedgerTrack) {
 	l.mu.Lock()
@@ -82,12 +82,12 @@ func (l *Ledger) FailWrites(err error) {
 	l.writeErr = err
 }
 
-func (l *Ledger) Get(_ context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (l *Ledger) Get(_ context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	track, ok := l.tracks[id]
 	if !ok || track.UserId != userId {
-		return nil, ports.ErrTrackNotFound
+		return nil, domain.ErrTrackNotFound
 	}
 	snapshot := copyTrack(track).TrackSnapshot
 	return &snapshot, nil
@@ -104,7 +104,7 @@ func (l *Ledger) AudioRefInUse(_ context.Context, audioRef string, excludeTrackI
 	return false, nil
 }
 
-func (l *Ledger) Complete(_ context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, c ports.Completion) error {
+func (l *Ledger) Complete(_ context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, c domain.Completion) error {
 	return l.update(id, userId, fence, func(track *LedgerTrack) error {
 		if err := settleAudio(l.rules, track, c); err != nil {
 			return err
@@ -118,9 +118,9 @@ func (l *Ledger) Complete(_ context.Context, id ids.TrackId, userId ids.UserId, 
 	})
 }
 
-func (l *Ledger) Fail(_ context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, reason string) error {
+func (l *Ledger) Fail(_ context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, reason string) error {
 	return l.update(id, userId, fence, func(track *LedgerTrack) error {
-		next, err := l.rules.Next(track.Status, ports.EventFailPending)
+		next, err := l.rules.Next(track.Status, domain.EventFailPending)
 		if err != nil {
 			return illegalTransition("fail acquisition", track.Status)
 		}
@@ -132,17 +132,17 @@ func (l *Ledger) Fail(_ context.Context, id ids.TrackId, userId ids.UserId, fenc
 	})
 }
 
-func (l *Ledger) RevertAt(_ context.Context, snapshot ports.TrackSnapshot) error {
+func (l *Ledger) RevertAt(_ context.Context, snapshot domain.TrackSnapshot) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	track, ok := l.tracks[snapshot.ID]
 	if !ok || track.UserId != snapshot.UserId {
-		return ports.ErrTrackNotFound
+		return domain.ErrTrackNotFound
 	}
 	if track.Version != snapshot.Version {
 		return fmt.Errorf("revert to pending at version %d, track is at %d: %w", snapshot.Version, track.Version, ErrVersionConflict)
 	}
-	next, err := l.rules.Next(track.Status, ports.EventRevertToPending)
+	next, err := l.rules.Next(track.Status, domain.EventRevertToPending)
 	if err != nil {
 		return illegalTransition("revert to pending", track.Status)
 	}
@@ -159,7 +159,7 @@ func (l *Ledger) Requeue(_ context.Context, id ids.TrackId) error {
 		return nil
 	}
 	if retryable {
-		next, err := l.rules.Next(track.Status, ports.EventRevertToPending)
+		next, err := l.rules.Next(track.Status, domain.EventRevertToPending)
 		if err != nil {
 			return illegalTransition("revert to pending", track.Status)
 		}
@@ -169,12 +169,12 @@ func (l *Ledger) Requeue(_ context.Context, id ids.TrackId) error {
 	return l.write(track)
 }
 
-func (l *Ledger) update(id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, mutate func(*LedgerTrack) error) error {
+func (l *Ledger) update(id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, mutate func(*LedgerTrack) error) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	stored, ok := l.tracks[id]
 	if !ok || stored.UserId != userId {
-		return ports.ErrTrackNotFound
+		return domain.ErrTrackNotFound
 	}
 	if fence > 0 && stored.ClaimNumber > 0 && fence != stored.ClaimNumber {
 		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, stored.ClaimNumber, fence, domain.ErrLeaseLost)
@@ -195,13 +195,13 @@ func (l *Ledger) write(track LedgerTrack) error {
 	return nil
 }
 
-func settleAudio(rules ports.StatusRules, track *LedgerTrack, c ports.Completion) error {
+func settleAudio(rules ports.StatusRules, track *LedgerTrack, c domain.Completion) error {
 	if c.AudioRef == "" {
 		return errors.New("audio_ref required for ready status")
 	}
-	event, op := ports.EventMarkReady, "mark ready"
+	event, op := domain.EventMarkReady, "mark ready"
 	if c.ReplaceAudio {
-		event, op = ports.EventReplaceAudio, "replace audio"
+		event, op = domain.EventReplaceAudio, "replace audio"
 	}
 	next, err := rules.Next(track.Status, event)
 	if err != nil || (c.ReplaceAudio && !track.Streamable) || (!c.ReplaceAudio && track.Streamable && *track.AudioRef != c.AudioRef) {
@@ -212,7 +212,7 @@ func settleAudio(rules ports.StatusRules, track *LedgerTrack, c ports.Completion
 	return nil
 }
 
-func recordCompletion(track *LedgerTrack, c ports.Completion) {
+func recordCompletion(track *LedgerTrack, c domain.Completion) {
 	if c.Duration.Known() {
 		duration := c.Duration.Seconds()
 		track.StoredDurationSeconds = &duration
@@ -251,7 +251,7 @@ func adoptISRC(track *LedgerTrack, isrc string) {
 	}
 }
 
-func relabel(track *LedgerTrack, given *ports.TrackLabel) error {
+func relabel(track *LedgerTrack, given *domain.TrackLabel) error {
 	if given == nil {
 		return nil
 	}
@@ -270,7 +270,7 @@ func relabel(track *LedgerTrack, given *ports.TrackLabel) error {
 	return nil
 }
 
-func labelOptionals(label ports.TrackLabel) (year *int, isrc *string, seconds *float64) {
+func labelOptionals(label domain.TrackLabel) (year *int, isrc *string, seconds *float64) {
 	if label.Year != 0 {
 		year = &label.Year
 	}
@@ -285,18 +285,18 @@ func labelOptionals(label ports.TrackLabel) (year *int, isrc *string, seconds *f
 
 type illegalTransitionError struct {
 	op     string
-	status ports.TrackStatus
+	status domain.TrackStatus
 }
 
-func illegalTransition(op string, status ports.TrackStatus) error {
+func illegalTransition(op string, status domain.TrackStatus) error {
 	return illegalTransitionError{op: op, status: status}
 }
 
 func (e illegalTransitionError) Error() string {
-	return fmt.Sprintf("%s from status %d: %v", e.op, e.status, ports.ErrIllegalTransition)
+	return fmt.Sprintf("%s from status %d: %v", e.op, e.status, domain.ErrIllegalTransition)
 }
 
-func (e illegalTransitionError) Unwrap() error { return ports.ErrIllegalTransition }
+func (e illegalTransitionError) Unwrap() error { return domain.ErrIllegalTransition }
 
 func copyTrack(track LedgerTrack) LedgerTrack {
 	track.CatalogSources = slices.Clone(track.CatalogSources)

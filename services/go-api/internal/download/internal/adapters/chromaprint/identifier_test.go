@@ -3,7 +3,6 @@ package chromaprint_test
 import (
 	"altune/go-api/internal/download/internal/adapters/chromaprint"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/retrysafe"
 	"context"
@@ -92,7 +91,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-func matchFromBody(t *testing.T, body string) ports.RecordingMatch {
+func matchFromBody(t *testing.T, body string) domain.RecordingMatch {
 	t.Helper()
 	srv := lookupServerServing(body)
 	t.Cleanup(srv.Close)
@@ -388,7 +387,7 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 		t.Errorf("Results order = [%s %s], want [ac-top ac-second]", match.Results[0].ID, match.Results[1].ID)
 	}
 	got := match.Results[0].Recordings[0]
-	want := ports.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
+	want := domain.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("linked recording = %+v, want %+v", got, want)
 	}
@@ -411,7 +410,7 @@ func TestIdentify_CarriesReleaseGroupsOnLinkedRecordings(t *testing.T) {
 	}
 
 	recs := match.Results[0].Recordings
-	want := []ports.ReleaseGroup{
+	want := []domain.ReleaseGroup{
 		{MBID: "rg-1", Title: "Song Live", Type: "Album", SecondaryTypes: []string{"Live", "Compilation"}},
 		{MBID: "rg-2", Title: "Song", Type: "Single"},
 	}

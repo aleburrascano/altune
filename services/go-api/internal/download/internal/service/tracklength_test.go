@@ -2,18 +2,18 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"math"
 	"testing"
 )
 
-func upload(seconds float64) ports.AudioCandidate {
-	return downloadtest.Candidate("", downloadtest.WithDuration(seconds), downloadtest.WithKind(ports.KindUpload))
+func upload(seconds float64) domain.AudioCandidate {
+	return downloadtest.Candidate("", downloadtest.WithDuration(seconds), downloadtest.WithKind(domain.KindUpload))
 }
 
-func lengthArtTrack(seconds float64) ports.AudioCandidate {
-	return downloadtest.Candidate("", downloadtest.WithDuration(seconds), downloadtest.WithKind(ports.KindArtTrack))
+func lengthArtTrack(seconds float64) domain.AudioCandidate {
+	return downloadtest.Candidate("", downloadtest.WithDuration(seconds), downloadtest.WithKind(domain.KindArtTrack))
 }
 
 func fileAccepted(t *testing.T, p service.LengthPolicy, actual float64) bool {
@@ -197,7 +197,7 @@ func TestPolicy_ThePreDownloadGate(t *testing.T) {
 	tests := []struct {
 		name      string
 		policy    service.LengthPolicy
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      bool
 	}{
 		{"a candidate that claims no length passes", service.NewLengthPolicy(139, 0), upload(0), true},
@@ -220,7 +220,7 @@ func TestPolicy_AFileLengthIsJudgedOnlyAgainstAKnownLength(t *testing.T) {
 	tests := []struct {
 		name      string
 		policy    service.LengthPolicy
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      bool
 	}{
 		{"an upload with a saved length", service.NewLengthPolicy(139, 0), upload(140), true},
@@ -243,7 +243,7 @@ func TestPolicy_AResolvedCandidatesFileIsHeldToItsOwnLengthFirst(t *testing.T) {
 	tests := []struct {
 		name       string
 		policy     service.LengthPolicy
-		candidate  ports.AudioCandidate
+		candidate  domain.AudioCandidate
 		actual     float64
 		acceptable bool
 		held       float64
@@ -273,7 +273,7 @@ func TestFileJudge_ANonFiniteFileLengthIsNeverAcceptable(t *testing.T) {
 	judges := []struct {
 		name      string
 		policy    service.LengthPolicy
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 	}{
 		{"held to a saved length", service.NewLengthPolicy(200, 0), upload(0)},
 		{"held to a resolved length", service.NewLengthPolicy(0, 200), upload(0)},
@@ -297,7 +297,7 @@ func TestFileJudge_AFileWithNoMeasuredLengthIsNotTheSameRecordingAsAShortTrack(t
 	judges := []struct {
 		name      string
 		policy    service.LengthPolicy
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 	}{
 		{"held to the candidate's own four seconds", service.NewLengthPolicy(0, 0), lengthArtTrack(4)},
 		{"held to a corroborated four seconds", service.NewLengthPolicy(4, 4), upload(0)},

@@ -26,8 +26,8 @@ The door is `library.go`: `New(Deps)`, `Deps` (infrastructure only: the database
 
 Other modules read these tables with SQL of their own instead of through a port. Each reader is listed here with the columns it reads, so a change to a column knows who to tell. `scripts/library-table-readers.sh` fails when a file outside `library` reads one of the tables above and is not listed, or when a listed file stops reading them.
 
-- `services/go-api/internal/download/internal/adapters/persistence/job_queue.go` reads `tracks.id`, `user_id` and `acquisition_status`, and takes row locks on `tracks` (`FOR UPDATE`) to serialize job claims with ledger writes.
-- `services/go-api/internal/download/internal/adapters/persistence/upgrade_store.go` reads `tracks.id`, `user_id`, `acquisition_status`, `acquisition_evidence`, `audio_ref` and `audio_source_url`, and takes `FOR NO KEY UPDATE` locks on `tracks`.
-- `services/go-api/internal/download/internal/adapters/persistence/outcome_store.go` reads `tracks.id` to find outcomes whose track is gone.
-- `services/go-api/internal/download/internal/adapters/persistence/rejection_store.go` reads `tracks.id` to find rejections whose track is gone.
+- `services/go-api/internal/download/internal/adapters/persistence/job_repo.go` reads `tracks.id`, `user_id` and `acquisition_status`, and takes row locks on `tracks` (`FOR UPDATE`) to serialize job claims with ledger writes.
+- `services/go-api/internal/download/internal/adapters/persistence/upgrade_state_repo.go` reads `tracks.id`, `user_id`, `acquisition_status`, `acquisition_evidence`, `audio_ref` and `audio_source_url`, and takes `FOR NO KEY UPDATE` locks on `tracks`.
+- `services/go-api/internal/download/internal/adapters/persistence/outcome_repo.go` reads `tracks.id` to find outcomes whose track is gone.
+- `services/go-api/internal/download/internal/adapters/persistence/rejection_repo.go` reads `tracks.id` to find rejections whose track is gone.
 - `services/go-api/internal/search/internal/adapters/persistence/related_tracks_repo.go` reads `tracks.user_id`, `title`, `artist`, `album`, `album_artist`, `artwork_url` and `added_at`.

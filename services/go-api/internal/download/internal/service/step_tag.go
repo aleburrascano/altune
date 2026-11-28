@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
@@ -23,7 +24,7 @@ func (s *TagStep) Name() StepName { return stepNameTag }
 
 func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, downloaded afterDownload) (afterTag, error) {
 	isrc, _ := ac.provenISRC()
-	tags := ports.TrackTags{
+	tags := domain.TrackTags{
 		Title:       ac.Track.Title,
 		Artist:      ac.Track.Artist,
 		Album:       ac.Track.Album,

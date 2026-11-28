@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"fmt"
 	"sort"
 	"strings"
@@ -109,14 +108,14 @@ func (s RejectionStage) lasting() bool {
 	return s != RejectDownload && s != RejectNotAttempted && s != RejectCurrentFile
 }
 
-func LastingRejections(entries []RejectionEntry, trackID string, basis ports.RejectionBasis) []ports.CandidateRejectionRecord {
-	recs := make([]ports.CandidateRejectionRecord, 0, len(entries))
+func LastingRejections(entries []RejectionEntry, trackID string, basis domain.RejectionBasis) []domain.CandidateRejectionRecord {
+	recs := make([]domain.CandidateRejectionRecord, 0, len(entries))
 	for _, e := range entries {
 		key := domain.SourceKey(e.URL)
 		if !e.Stage.lasting() || e.Unmeasured || key == "" {
 			continue
 		}
-		recs = append(recs, ports.CandidateRejectionRecord{
+		recs = append(recs, domain.CandidateRejectionRecord{
 			TrackID:   trackID,
 			SourceKey: key,
 			Reason:    string(e.Stage),

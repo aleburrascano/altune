@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/memory"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/logging"
@@ -23,13 +25,13 @@ type lookups struct {
 func newResolver(t testing.TB, search ports.RecordingSearch, with lookups) *service.MusicBrainzResolver {
 	t.Helper()
 	if with.isrc == nil {
-		with.isrc = ports.NoopISRCLookup()
+		with.isrc = memory.NoopISRCLookup()
 	}
 	if with.recording == nil {
-		with.recording = ports.NoopRecordingLookup()
+		with.recording = memory.NoopRecordingLookup()
 	}
 	if with.rerecording == nil {
-		with.rerecording = ports.NoopRerecordingLookup()
+		with.rerecording = memory.NoopRerecordingLookup()
 	}
 	resolver, err := service.NewMusicBrainzResolver(service.ResolverPorts{
 		Search: search, ISRC: with.isrc, Recording: with.recording, Rerecording: with.rerecording,
@@ -43,9 +45,9 @@ func newResolver(t testing.TB, search ports.RecordingSearch, with lookups) *serv
 func TestNewRecordingResolver_RefusesEachMissingPort(t *testing.T) {
 	full := service.ResolverPorts{
 		Search:      downloadtest.SilentRecordingSearch(),
-		ISRC:        ports.NoopISRCLookup(),
-		Recording:   ports.NoopRecordingLookup(),
-		Rerecording: ports.NoopRerecordingLookup(),
+		ISRC:        memory.NoopISRCLookup(),
+		Recording:   memory.NoopRecordingLookup(),
+		Rerecording: memory.NoopRerecordingLookup(),
 	}
 	cases := map[string]func(*service.ResolverPorts){
 		"Search":      func(p *service.ResolverPorts) { p.Search = nil },
@@ -79,12 +81,12 @@ func (s stubSearcher) SearchRecordings(context.Context, string, int) ([]songfiel
 }
 
 type stubISRCLookup struct {
-	recordings []ports.ISRCRecording
+	recordings []domain.ISRCRecording
 	err        error
 	calls      int
 }
 
-func (s *stubISRCLookup) RecordingsByISRC(context.Context, string) ([]ports.ISRCRecording, error) {
+func (s *stubISRCLookup) RecordingsByISRC(context.Context, string) ([]domain.ISRCRecording, error) {
 	s.calls++
 	return s.recordings, s.err
 }
@@ -108,7 +110,7 @@ func drinkingInLA() stubSearcher {
 var drinkingQuery = songfields.RecordingIdentity{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: "CAA509814003"}
 
 func TestResolve_ISRCRecordingReplacesMismatchedSearchMBID(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "single-edit", Duration: 220},
 		{MBID: "album-version", Duration: 237},
 	}}
@@ -127,7 +129,7 @@ func TestResolve_ISRCRecordingReplacesMismatchedSearchMBID(t *testing.T) {
 }
 
 func TestResolve_SearchMBIDKeptWhenISRCAgrees(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "other", Duration: 236},
 		{MBID: "remix-mbid", Duration: 300},
 	}}
@@ -150,7 +152,7 @@ func TestResolve_ISRCLookupFailureKeepsSearchIdentity(t *testing.T) {
 }
 
 func TestResolve_NoISRCSkipsTheLookup(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "x"}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "x"}}}
 	resolver := newResolver(t, drinkingInLA(), lookups{isrc: authority})
 
 	q := drinkingQuery
@@ -162,7 +164,7 @@ func TestResolve_NoISRCSkipsTheLookup(t *testing.T) {
 }
 
 func TestResolve_ISRCAnchorsIdentityWhenSearchFails(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "album-version", Duration: 237}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "album-version", Duration: 237}}}
 	resolver := newResolver(t, failingSearcher{}, lookups{isrc: authority})
 
 	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
@@ -185,39 +187,39 @@ func TestResolve_ISRCAnchor_DurationEdges(t *testing.T) {
 	cases := []struct {
 		name         string
 		searchLength float64
-		recordings   []ports.ISRCRecording
+		recordings   []domain.ISRCRecording
 		wantMBID     string
 		wantDuration float64
 	}{
 		{
 			name:       "no search length and several recordings keeps the search identity",
-			recordings: []ports.ISRCRecording{{MBID: "a", Duration: 236}, {MBID: "b", Duration: 237}},
+			recordings: []domain.ISRCRecording{{MBID: "a", Duration: 236}, {MBID: "b", Duration: 237}},
 			wantMBID:   "remix-mbid",
 		},
 		{
 			name:         "no search length and one recording adopts it",
-			recordings:   []ports.ISRCRecording{{MBID: "only", Duration: 237}},
+			recordings:   []domain.ISRCRecording{{MBID: "only", Duration: 237}},
 			wantMBID:     "only",
 			wantDuration: 237,
 		},
 		{
 			name:         "an exact tie keeps the first recording MusicBrainz lists",
 			searchLength: 236,
-			recordings:   []ports.ISRCRecording{{MBID: "first", Duration: 235}, {MBID: "second", Duration: 237}},
+			recordings:   []domain.ISRCRecording{{MBID: "first", Duration: 235}, {MBID: "second", Duration: 237}},
 			wantMBID:     "first",
 			wantDuration: 235,
 		},
 		{
 			name:         "recordings without a length are never the nearest",
 			searchLength: 236,
-			recordings:   []ports.ISRCRecording{{MBID: "unknown"}, {MBID: "far", Duration: 300}},
+			recordings:   []domain.ISRCRecording{{MBID: "unknown"}, {MBID: "far", Duration: 300}},
 			wantMBID:     "far",
 			wantDuration: 300,
 		},
 		{
 			name:         "several recordings none with a length keeps the search identity",
 			searchLength: 236,
-			recordings:   []ports.ISRCRecording{{MBID: "x"}, {MBID: "y"}},
+			recordings:   []domain.ISRCRecording{{MBID: "x"}, {MBID: "y"}},
 			wantMBID:     "remix-mbid",
 			wantDuration: 236,
 		},
@@ -242,7 +244,7 @@ func TestResolve_ISRCAnchor_DurationEdges(t *testing.T) {
 
 func TestResolve_ISRCAnchorsIdentityWhenSearchFindsNothing(t *testing.T) {
 	empty := stubSearcher{}
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "album-version", Duration: 237}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "album-version", Duration: 237}}}
 	resolver := newResolver(t, empty, lookups{isrc: authority})
 
 	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
@@ -253,7 +255,7 @@ func TestResolve_ISRCAnchorsIdentityWhenSearchFindsNothing(t *testing.T) {
 
 func TestResolve_SoleISRCRecordingMismatchDoubtsTheReference(t *testing.T) {
 	logs := logging.CaptureText(t, slog.LevelDebug)
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
 	resolver := newResolver(t, drinkingInLA(), lookups{isrc: authority})
 
 	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
@@ -275,7 +277,7 @@ func TestResolve_SoleISRCRecordingMismatchDoubtsTheReference(t *testing.T) {
 }
 
 func TestResolve_ISRCReferenceSetKeepsAllRegisteredRecordingsWhenSearchMBIDAgrees(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "other", Duration: 236},
 		{MBID: "remix-mbid", Duration: 236},
 		{MBID: "third", Duration: 236},
@@ -327,7 +329,7 @@ func TestResolve_NoISRCRecordingsYieldsEmptyMBIDsWhenSearchFindsNothing(t *testi
 }
 
 func TestResolve_ISRCReferenceSetKeepsEveryRegisteredRecording(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "b", Duration: 236},
 		{MBID: "c", Duration: 236},
 		{MBID: "d", Duration: 236},
@@ -428,7 +430,7 @@ func assertMBIDs(t *testing.T, got, want []string) {
 
 func TestResolve_ReferenceDoubtedLogCarriesSearchAnchoredAndISRC(t *testing.T) {
 	logs := logging.CaptureText(t, slog.LevelDebug)
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
 	resolver := newResolver(t, drinkingInLA(), lookups{isrc: authority})
 
 	if _, err := resolver.Resolve(context.Background(), drinkingQuery); err != nil {
@@ -451,7 +453,7 @@ func TestResolve_ReferenceDoubtedLogCarriesSearchAnchoredAndISRC(t *testing.T) {
 }
 
 func TestResolve_AnchoredReferenceSetListsAnchorFirstAndDropsTheSearchMBID(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "single-edit", Duration: 220},
 		{MBID: "album-version", Duration: 237},
 	}}
@@ -470,7 +472,7 @@ func TestResolve_AnchoredReferenceSetListsAnchorFirstAndDropsTheSearchMBID(t *te
 func TestResolve_AmbiguousAnchorStillDoubtsTheUnregisteredSearchMBID(t *testing.T) {
 	search := drinkingInLA()
 	search.results[0].DurationSeconds = 0
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "a", Duration: 236},
 		{MBID: "b", Duration: 237},
 	}}
@@ -487,7 +489,7 @@ func TestResolve_AmbiguousAnchorStillDoubtsTheUnregisteredSearchMBID(t *testing.
 }
 
 func TestResolve_ReferenceSetListsARepeatedISRCRecordingOnce(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "other", Duration: 236},
 		{MBID: "remix-mbid", Duration: 236},
 		{MBID: "other", Duration: 236},
@@ -503,7 +505,7 @@ func TestResolve_ReferenceSetListsARepeatedISRCRecordingOnce(t *testing.T) {
 }
 
 func TestResolve_ISRCRecordingWithoutAnMBIDIsNotAReference(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "", Duration: 236},
 		{MBID: "remix-mbid", Duration: 236},
 		{MBID: "other", Duration: 236},
@@ -522,7 +524,7 @@ func TestResolve_SearchLengthOffByMoreThanFiveSecondsIsLoggedNotDoubtedWhenISRCA
 	search.results[0].DurationSeconds = 100
 	q := drinkingQuery
 	q.DurationSeconds = 106
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "remix-mbid", Duration: 100}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "remix-mbid", Duration: 100}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
 
@@ -596,7 +598,7 @@ func TestResolve_UnknownTrackLengthNeverDoubtsTheReference(t *testing.T) {
 }
 
 func TestResolve_ISRCAnchoredAfterSearchFailureReferencesTheISRCRecording(t *testing.T) {
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "album-version", Duration: 237}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "album-version", Duration: 237}}}
 	resolver := newResolver(t, failingSearcher{}, lookups{isrc: authority})
 
 	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
@@ -610,7 +612,7 @@ func TestResolve_AnotherVersionIsNotTheSavedSong(t *testing.T) {
 	acoustic := songfields.RecordingIdentity{Title: "Take On Me (2017 Acoustic)", Artist: "a-ha", ISRC: "DEUM71724939", RecordingMBID: "acoustic-mbid"}
 	studio := songfields.RecordingIdentity{Title: "Take on Me", Artist: "a-ha", ISRC: "USWB19901214", RecordingMBID: "studio-mbid"}
 	takeOnMe := songfields.RecordingIdentity{Title: "Take on Me", Artist: "a-ha"}
-	resolve := func(results ...songfields.RecordingIdentity) ports.RecordingIdentity {
+	resolve := func(results ...songfields.RecordingIdentity) domain.RecordingIdentity {
 		t.Helper()
 		identity, err := newResolver(t, stubSearcher{results: results}, lookups{}).Resolve(context.Background(), takeOnMe)
 		if err != nil {
@@ -630,7 +632,7 @@ func TestResolve_AnotherVersionIsNotTheSavedSong(t *testing.T) {
 func TestResolve_ISRCAnchorPicksTheRecordingNearestTheCatalogLength(t *testing.T) {
 	search := drinkingInLA()
 	search.results[0].DurationSeconds = 167
-	recordings := []ports.ISRCRecording{{MBID: "long", Duration: 167}, {MBID: "catalog", Duration: 139}}
+	recordings := []domain.ISRCRecording{{MBID: "long", Duration: 167}, {MBID: "catalog", Duration: 139}}
 	resolver := newResolver(t, search, lookups{isrc: &stubISRCLookup{recordings: recordings}})
 	query := drinkingQuery
 	query.DurationSeconds = 139
@@ -645,12 +647,12 @@ func TestResolve_ISRCAnchorPicksTheRecordingNearestTheCatalogLength(t *testing.T
 }
 
 type stubRecordingLookup struct {
-	facts map[string]ports.RecordingFacts
+	facts map[string]domain.RecordingFacts
 	err   error
 	asked []string
 }
 
-func (s *stubRecordingLookup) RecordingByMBID(_ context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+func (s *stubRecordingLookup) RecordingByMBID(_ context.Context, mbid string) (domain.RecordingFacts, bool, error) {
 	s.asked = append(s.asked, mbid)
 	facts, found := s.facts[mbid]
 	return facts, found, s.err
@@ -662,17 +664,17 @@ const (
 )
 
 var (
-	cureStudioFacts = ports.RecordingFacts{
+	cureStudioFacts = domain.RecordingFacts{
 		MBID: cureStudioMBID, Title: "Boys Don\u2019t Cry", Artists: []string{"The Cure"}, Duration: 157.306,
 	}
-	cureLiveFacts = ports.RecordingFacts{
+	cureLiveFacts = domain.RecordingFacts{
 		MBID: cureLiveMBID, Title: "Boys Don\u2019t Cry", Artists: []string{"The Cure"}, Duration: 187,
 		Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
 	}
 	pinnedCureQuery = songfields.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure", DurationSeconds: 157.07, RecordingMBID: cureStudioMBID}
 )
 
-func searchRanking(mbid string, duration float64, sources ...ports.ProviderRef) stubSearcher {
+func searchRanking(mbid string, duration float64, sources ...domain.ProviderRef) stubSearcher {
 	refs := make([]songfields.ProviderRef, len(sources))
 	for i, src := range sources {
 		refs[i] = songfields.ProviderRef{Provider: string(src.Provider), ExternalID: src.ExternalID, URL: src.URL}
@@ -684,14 +686,14 @@ func searchRanking(mbid string, duration float64, sources ...ports.ProviderRef) 
 }
 
 func cureLookup() *stubRecordingLookup {
-	return &stubRecordingLookup{facts: map[string]ports.RecordingFacts{
+	return &stubRecordingLookup{facts: map[string]domain.RecordingFacts{
 		cureStudioMBID: cureStudioFacts, cureLiveMBID: cureLiveFacts,
 	}}
 }
 
 func TestResolve_TheCatalogPinIsTheIdentity(t *testing.T) {
 	logs := logging.CaptureText(t, slog.LevelDebug)
-	liveSource := ports.ProviderRef{Provider: ports.ProviderYouTube, ExternalID: "live-video"}
+	liveSource := domain.ProviderRef{Provider: domain.ProviderYouTube, ExternalID: "live-video"}
 	resolver := newResolver(t, searchRanking(cureLiveMBID, 187, liveSource), lookups{recording: cureLookup()})
 
 	identity, err := resolver.Resolve(context.Background(), pinnedCureQuery)
@@ -705,7 +707,7 @@ func TestResolve_TheCatalogPinIsTheIdentity(t *testing.T) {
 	if identity.Duration != 157.306 || identity.ReferenceDoubted {
 		t.Errorf("duration %v doubted %v, want the pinned length and a trusted reference", identity.Duration, identity.ReferenceDoubted)
 	}
-	if _, adopted := identity.SourceFor(ports.ProviderYouTube); adopted {
+	if _, adopted := identity.SourceFor(domain.ProviderYouTube); adopted {
 		t.Error("the live recording's youtube source must not follow a rejected search pick")
 	}
 	for _, want := range []string{"acquisition.identity_pin_disagrees", "pinned_mbid=" + cureStudioMBID, "search_mbid=" + cureLiveMBID} {
@@ -739,12 +741,12 @@ func TestResolve_PinnedIdentityHoldsWhateverTheTextSearchDoes(t *testing.T) {
 
 func TestResolve_SearchAgreeingWithThePinKeepsItsSourcesAndLogsNoDisagreement(t *testing.T) {
 	logs := logging.CaptureText(t, slog.LevelDebug)
-	studioSource := ports.ProviderRef{Provider: ports.ProviderYouTube, ExternalID: "studio-video"}
+	studioSource := domain.ProviderRef{Provider: domain.ProviderYouTube, ExternalID: "studio-video"}
 	resolver := newResolver(t, searchRanking(cureStudioMBID, 157, studioSource), lookups{recording: cureLookup()})
 
 	identity, _ := resolver.Resolve(context.Background(), pinnedCureQuery)
 
-	if got, ok := identity.SourceFor(ports.ProviderYouTube); !ok || got.ExternalID != "studio-video" {
+	if got, ok := identity.SourceFor(domain.ProviderYouTube); !ok || got.ExternalID != "studio-video" {
 		t.Errorf("youtube source = %+v, %v; want the agreeing search's video", got, ok)
 	}
 	if strings.Contains(logs.String(), "identity_pin_disagrees") {
@@ -755,10 +757,10 @@ func TestResolve_SearchAgreeingWithThePinKeepsItsSourcesAndLogsNoDisagreement(t 
 func TestResolve_PinnedRecordingWithOneISRCAnchorsTheReferenceSet(t *testing.T) {
 	facts := cureStudioFacts
 	facts.ISRCs = []string{"GBAAA8000001"}
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "greatest-hits-sibling", Duration: 157}, {MBID: cureStudioMBID, Duration: 157},
 	}}
-	lookup := &stubRecordingLookup{facts: map[string]ports.RecordingFacts{cureStudioMBID: facts}}
+	lookup := &stubRecordingLookup{facts: map[string]domain.RecordingFacts{cureStudioMBID: facts}}
 	resolver := newResolver(t, searchRanking(cureLiveMBID, 187), lookups{recording: lookup, isrc: authority})
 
 	identity, _ := resolver.Resolve(context.Background(), pinnedCureQuery)
@@ -774,8 +776,8 @@ func TestResolve_PinnedRecordingWithOneISRCAnchorsTheReferenceSet(t *testing.T) 
 func TestResolve_PinnedRecordingWithSeveralISRCsLeavesTheISRCEmpty(t *testing.T) {
 	facts := cureStudioFacts
 	facts.ISRCs = []string{"GBAAA8000001", "GBAAA8000002"}
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "other"}}}
-	lookup := &stubRecordingLookup{facts: map[string]ports.RecordingFacts{cureStudioMBID: facts}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "other"}}}
+	lookup := &stubRecordingLookup{facts: map[string]domain.RecordingFacts{cureStudioMBID: facts}}
 	resolver := newResolver(t, stubSearcher{}, lookups{recording: lookup, isrc: authority})
 
 	identity, _ := resolver.Resolve(context.Background(), pinnedCureQuery)
@@ -845,7 +847,7 @@ func TestResolve_CatalogLengthConflictWithISRCRegisteredReferenceIsNotDoubted(t 
 	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
 	q.DurationSeconds = 300
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
 
@@ -871,7 +873,7 @@ func TestResolve_CatalogLengthAgreeingWithISRCRegisteredReferenceLogsNoConflict(
 	search := drinkingInLA()
 	q := drinkingQuery
 	q.DurationSeconds = 237
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "remix-mbid", Duration: 236}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "remix-mbid", Duration: 236}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
 
@@ -888,7 +890,7 @@ func TestResolve_CatalogLengthConflictWithOtherISRCRecordingsStillDoubts(t *test
 	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
 	q.DurationSeconds = 300
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "other-mbid", Duration: 300}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "other-mbid", Duration: 300}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
 
@@ -930,7 +932,7 @@ func TestResolve_CatalogLengthConflictIsNotDoubtedWhenTheISRCRegistersTheReferen
 	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
 	q.DurationSeconds = 300
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{
 		{MBID: "other-mbid", Duration: 300},
 		{MBID: "remix-mbid", Duration: 197},
 		{MBID: "third-mbid", Duration: 250},
@@ -966,7 +968,7 @@ func TestResolve_UnknownCatalogLengthWithISRCRegisteredReferenceLogsNoConflict(t
 	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
 	q.DurationSeconds = 0
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
 
@@ -987,7 +989,7 @@ func TestResolve_UnknownReferenceLengthWithISRCRegisteredReferenceLogsNoConflict
 	search.results[0].DurationSeconds = 0
 	q := drinkingQuery
 	q.DurationSeconds = 300
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "remix-mbid", Duration: 0}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "remix-mbid", Duration: 0}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
 
@@ -1008,7 +1010,7 @@ func TestResolve_CatalogLengthExactlyFiveSecondsOffISRCRegisteredReferenceLogsNo
 	search.results[0].DurationSeconds = 197
 	q := drinkingQuery
 	q.DurationSeconds = 202
-	authority := &stubISRCLookup{recordings: []ports.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
+	authority := &stubISRCLookup{recordings: []domain.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
 	resolver := newResolver(t, search, lookups{isrc: authority})
 	logs := logging.CaptureText(t, slog.LevelDebug)
 
@@ -1064,12 +1066,12 @@ func TestResolve_AQueryWithoutAnISRCNeverMatchesAHitThatAlsoLacksOne(t *testing.
 }
 
 func TestResolve_DropsASearchedSourceWithNoExternalID(t *testing.T) {
-	keep := ports.ProviderRef{Provider: ports.ProviderDeezer, ExternalID: "3135556"}
-	resolver := newResolver(t, searchRanking(cureStudioMBID, 157, ports.ProviderRef{Provider: ports.ProviderYouTube}, keep), lookups{})
+	keep := domain.ProviderRef{Provider: domain.ProviderDeezer, ExternalID: "3135556"}
+	resolver := newResolver(t, searchRanking(cureStudioMBID, 157, domain.ProviderRef{Provider: domain.ProviderYouTube}, keep), lookups{})
 
 	identity, err := resolver.Resolve(context.Background(), songfields.RecordingIdentity{Title: "Boys Don't Cry", Artist: "The Cure"})
 
-	if err != nil || !slices.Equal(identity.Sources, []ports.ProviderRef{keep}) {
+	if err != nil || !slices.Equal(identity.Sources, []domain.ProviderRef{keep}) {
 		t.Errorf("sources %+v, err %v; want only the source that names its external id", identity.Sources, err)
 	}
 }

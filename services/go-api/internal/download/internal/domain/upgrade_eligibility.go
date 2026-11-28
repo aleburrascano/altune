@@ -5,10 +5,10 @@ import (
 	"time"
 )
 
-const LowBitrateSourceFormatID = "18"
+const LowBitrateSourceFormatID = MuxedFallbackFormatID
 
 func SettledGrades() []Grade {
-	return []Grade{AUser, BestAvailable}
+	return []Grade{GradeAUser, BestAvailable}
 }
 
 type UpgradeRow struct {
@@ -45,7 +45,7 @@ func UpgradeEligible(row UpgradeRow, rules UpgradeRules) bool {
 		(row.SourceURL != "" || inPlaceDue) &&
 		!row.JobQueued &&
 		!slices.Contains(SettledGrades(), grade) &&
-		(grade != A || inPlaceDue || lowBitrate(row, rules)) &&
+		(grade != GradeA || inPlaceDue || lowBitrate(row, rules)) &&
 		row.BestAvailableGeneration < rules.Generation &&
 		(row.UpgradeTriedAt == nil || row.UpgradeTriedAt.Before(rules.Now.Add(-rules.RetryAfter))) &&
 		rules.QueuedUpgrades < rules.MaxQueued

@@ -1,7 +1,7 @@
 package id3
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
@@ -22,7 +22,7 @@ type Tagger struct{}
 
 func NewTagger() *Tagger { return &Tagger{} }
 
-func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags) error {
+func (t *Tagger) Tag(ctx context.Context, filePath string, tags domain.TrackTags) error {
 	if !strings.HasSuffix(strings.ToLower(filePath), ".mp3") {
 		return fmt.Errorf("%w: %s", ErrUnsupportedContainer, filepath.Ext(filePath))
 	}

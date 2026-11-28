@@ -2,6 +2,7 @@ package download
 
 import (
 	"altune/go-api/internal/download/internal/adapters/chromaprint"
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/ffmpegtag"
 	"altune/go-api/internal/download/internal/adapters/handler"
 	"altune/go-api/internal/download/internal/adapters/id3"
@@ -34,35 +35,35 @@ import (
 )
 
 type (
-	Status       = ports.Status
-	Verification = ports.Verification
-	JobRecord    = ports.JobRecord
+	Status       = domain.SchedulerStatus
+	Verification = domain.Verification
+	JobRecord    = domain.JobRecord
 
 	TrackLibrary    = ports.TrackLibrary
 	StatusRules     = ports.StatusRules
 	InPlaceVerdicts = ports.InPlaceVerdicts
-	InPlaceRecord   = ports.InPlaceRecord
-	TrackSnapshot   = ports.TrackSnapshot
-	TrackStatus     = ports.TrackStatus
-	TrackEvent      = ports.TrackEvent
-	TrackLabel      = ports.TrackLabel
-	CatalogSource   = ports.CatalogSource
-	Completion      = ports.Completion
-	ClaimNumber     = ports.ClaimNumber
-	OrphanedAudio   = ports.OrphanedAudio
+	InPlaceRecord   = domain.InPlaceRecord
+	TrackSnapshot   = domain.TrackSnapshot
+	TrackStatus     = domain.TrackStatus
+	TrackEvent      = domain.TrackEvent
+	TrackLabel      = domain.TrackLabel
+	CatalogSource   = domain.CatalogSource
+	Completion      = domain.Completion
+	ClaimNumber     = domain.ClaimNumber
+	OrphanedAudio   = domain.OrphanedAudio
 
-	FetchedAudio = ports.FetchedAudio
+	FetchedAudio = domain.FetchedAudio
 
 	RecordingResolverPorts = service.ResolverPorts
 	RecordingResolverPort  = ports.RecordingResolver
 	RecordingLookup        = ports.RecordingLookup
 	RecordingSearch        = ports.RecordingSearch
-	RecordingDetail        = ports.RecordingDetail
-	RecordingRelease       = ports.RecordingRelease
-	RecordingFacts         = ports.RecordingFacts
-	WorkRecording          = ports.WorkRecording
+	RecordingDetail        = domain.RecordingDetail
+	RecordingRelease       = domain.RecordingRelease
+	RecordingFacts         = domain.RecordingFacts
+	WorkRecording          = domain.WorkRecording
 	ISRCLookup             = ports.ISRCLookup
-	ISRCRecording          = ports.ISRCRecording
+	ISRCRecording          = domain.ISRCRecording
 	RerecordingLookup      = ports.RerecordingLookup
 	RerecordingFinder      = ports.RerecordingFinder
 
@@ -80,33 +81,33 @@ type (
 )
 
 const (
-	TrackPending = ports.TrackPending
-	TrackReady   = ports.TrackReady
-	TrackFailed  = ports.TrackFailed
+	TrackPending = domain.TrackPending
+	TrackReady   = domain.TrackReady
+	TrackFailed  = domain.TrackFailed
 
-	EventFailPending     = ports.EventFailPending
-	EventMarkFailed      = ports.EventMarkFailed
-	EventMarkReady       = ports.EventMarkReady
-	EventReplaceAudio    = ports.EventReplaceAudio
-	EventRevertToPending = ports.EventRevertToPending
+	EventFailPending     = domain.EventFailPending
+	EventMarkFailed      = domain.EventMarkFailed
+	EventMarkReady       = domain.EventMarkReady
+	EventReplaceAudio    = domain.EventReplaceAudio
+	EventRevertToPending = domain.EventRevertToPending
 
 	VideoTypeOfficialVideo = ytmsearch.VideoTypeOfficialVideo
 	VideoTypeUserUpload    = ytmsearch.VideoTypeUserUpload
 )
 
 var (
-	ErrTrackNotFound     = ports.ErrTrackNotFound
-	ErrIllegalTransition = ports.ErrIllegalTransition
+	ErrTrackNotFound     = domain.ErrTrackNotFound
+	ErrIllegalTransition = domain.ErrIllegalTransition
 	ErrLeaseLost         = domain.ErrLeaseLost
 
 	NewDatabase = persistence.NewDatabase
 
 	NewRecordingResolver  = service.NewMusicBrainzResolver
-	NoopISRCLookup        = ports.NoopISRCLookup
-	NoopRecordingLookup   = ports.NoopRecordingLookup
-	NoopRecordingResolver = ports.NoopRecordingResolver
-	NoopRerecordingFinder = ports.NoopRerecordingFinder
-	NoopRerecordingLookup = ports.NoopRerecordingLookup
+	NoopISRCLookup        = memory.NoopISRCLookup
+	NoopRecordingLookup   = memory.NoopRecordingLookup
+	NoopRecordingResolver = memory.NoopRecordingResolver
+	NoopRerecordingFinder = memory.NoopRerecordingFinder
+	NoopRerecordingLookup = memory.NoopRerecordingLookup
 
 	LoadEvalBaseline      = qualitycheck.LoadBaseline
 	LoadEvalDir           = qualitycheck.LoadDir
@@ -210,43 +211,25 @@ func New(ctx context.Context, d Deps) (*Module, error) {
 	}
 	service.SweepStaleTempDirs(ctx, scratchfiles.New(), clock.Now)
 
-	sources, tools, err := d.sources(ctx)
-	if err != nil {
-		return nil, err
-	}
-	inner, err := ytmsearch.ForClient(d.innerTubeClient(ctx))
+	inner, err := ytmsearch.ForClient(innerTubeClient(ctx, d.Config, d.Redis, d.Transport, d.NewClient))
 	if err != nil {
 		return nil, fmt.Errorf("build the ytmusic canary client: %w", err)
 	}
 	canarySearcher := YtDlpSearcher(d.Config)
+	ytDlpInstalled := canarySearcher.Available()
 	m := &Module{
 		checks: sourceChecks(sourceProbes{
-			ytDlp: canarySearcher, ytDlpAvailable: tools.YtDlp, innerTube: inner,
+			ytDlp: canarySearcher, ytDlpAvailable: ytDlpInstalled, innerTube: inner,
 			ytMusicEnabled: d.Config.YtMusicEnabled, ytDlpEnabled: d.Config.YtDLPEnabled,
 		}),
 		signedOutSince: canarySearcher.SignedOutSince,
 		outcomes:       d.Database.Outcomes(),
 		rejections:     d.Database.Rejections(),
 	}
-	if len(sources.All()) == 0 || d.AudioStore == nil {
+	if len(d.Sources.All()) == 0 || d.AudioStore == nil {
 		return m, nil
 	}
-	return m.startAcquisition(ctx, d, sources, tools)
-}
-
-func (d Deps) sources(ctx context.Context) (ports.SourceOrder, ports.Verification, error) {
-	if len(d.Sources.All()) > 0 {
-		return d.Sources, ports.Verification{}, nil
-	}
-	if d.AudioStore == nil {
-		return ports.SourceOrder{}, ports.Verification{}, nil
-	}
-	searcher := YtDlpSearcher(d.Config)
-	tiers, err := d.liveTiers(ctx, searcher)
-	if err != nil {
-		return ports.SourceOrder{}, ports.Verification{}, fmt.Errorf("enable audio sources: %w", err)
-	}
-	return tiers, ports.Verification{YtDlp: searcher.Available()}, nil
+	return m.startAcquisition(ctx, d, domain.Verification{YtDlp: ytDlpInstalled})
 }
 
 func YtDlpSearcher(cfg *config.Config) *ytdlp.YouTubeAudioSearcher {
@@ -256,25 +239,24 @@ func YtDlpSearcher(cfg *config.Config) *ytdlp.YouTubeAudioSearcher {
 		ytdlp.WithEnvironment(cfg.Env))
 }
 
-func (d Deps) innerTubeClient(ctx context.Context) *http.Client {
-	cfg := d.Config
+func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper, newClient func(time.Duration, http.RoundTripper) *http.Client) *http.Client {
 	settings := outbound.YouTubeMusicBudgetSettings{MinInterval: cfg.YtmInnerTubeMinInterval, Cooldown: cfg.YtmInnerTubeCooldown}
-	budget, err := outbound.NewYouTubeMusicBudget(d.Redis, settings, clock.Now, clock.Sleep)
+	budget, err := outbound.NewYouTubeMusicBudget(redis, settings, clock.Now, clock.Sleep)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing through the shared outbound pacer only")
-		return d.NewClient(ytmSearchTimeout, d.Transport)
+		return newClient(ytmSearchTimeout, transport)
 	}
-	return d.NewClient(ytmSearchTimeout, budget.Transport(d.Transport))
+	return newClient(ytmSearchTimeout, budget.Transport(transport))
 }
 
-func (d Deps) liveTiers(ctx context.Context, searcher *ytdlp.YouTubeAudioSearcher) (ports.SourceOrder, error) {
-	cfg := d.Config
+func LiveSources(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper, newClient func(time.Duration, http.RoundTripper) *http.Client) (ports.SourceOrder, error) {
+	searcher := YtDlpSearcher(cfg)
 	var tiers ports.SourceOrder
 	switch {
 	case cfg.YtMusicEnabled:
-		songs, err := ytmsearch.ForClient(d.innerTubeClient(ctx))
+		songs, err := ytmsearch.ForClient(innerTubeClient(ctx, cfg, redis, transport, newClient))
 		if err != nil {
-			return ports.SourceOrder{}, fmt.Errorf("build the ytmusic search client: %w", err)
+			return ports.SourceOrder{}, fmt.Errorf("enable audio sources: build the ytmusic search client: %w", err)
 		}
 		tiers.First = append(tiers.First, ytmsearch.NewSource(songs, searcher), youtubemusic.NewSource(searcher, songs))
 	default:
@@ -289,7 +271,7 @@ func (d Deps) liveTiers(ctx context.Context, searcher *ytdlp.YouTubeAudioSearche
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	if len(tiers.All()) > 0 {
-		tiers.First = append([]ports.AudioSource{savedlink.MustNewSource(searcher, savedlink.NewHTTPPageReader(d.Transport, cfg.AcquisitionFileHostPageTimeout))}, tiers.First...)
+		tiers.First = append([]ports.AudioSource{savedlink.MustNewSource(searcher, savedlink.NewHTTPPageReader(transport, cfg.AcquisitionFileHostPageTimeout))}, tiers.First...)
 	}
 	return tiers, nil
 }
@@ -331,9 +313,10 @@ type acquisitionWorker struct {
 
 type acquireOption = func(*service.AcquireTrackAudioService)
 
-func (m *Module) startAcquisition(ctx context.Context, d Deps, sources ports.SourceOrder, tools ports.Verification) (*Module, error) {
+func (m *Module) startAcquisition(ctx context.Context, d Deps, tools domain.Verification) (*Module, error) {
 	cfg := d.Config
-	upgradeState := ports.UpgradeState(memory.NewUpgradeState())
+	sources := d.Sources
+	upgradeState := ports.UpgradeState(memory.NewUpgradeState(clock.Now))
 	if d.Database != nil {
 		upgradeState = d.Database.UpgradeStore()
 	}
@@ -365,6 +348,7 @@ func (m *Module) startAcquisition(ctx context.Context, d Deps, sources ports.Sou
 			StoredAudio:   storedAudio,
 			Orphans:       d.Orphans,
 			Skips:         skips,
+			Evidence:      evidence.NewCodec(),
 			Events:        d.Events,
 			DownloadLimit: service.MustLimitedTo(cfg.AcquisitionDownloadConcurrency),
 			Observer:      service.NoObserver(),
@@ -402,11 +386,11 @@ func (m *Module) startAcquisition(ctx context.Context, d Deps, sources ports.Sou
 	return m, nil
 }
 
-func fingerprinting(ctx context.Context, d Deps, tools *ports.Verification) (*service.FingerprintHealth, ports.AudioIdentifier, ports.StoredAudioReader) {
+func fingerprinting(ctx context.Context, d Deps, tools *domain.Verification) (*service.FingerprintHealth, ports.AudioIdentifier, ports.StoredAudioReader) {
 	cfg := d.Config
 	if cfg.AcoustIDAPIKey == "" {
 		slog.WarnContext(ctx, "acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
-		return service.NewFingerprintHealth(ports.NoopAudioIdentifier()), ports.NoopAudioIdentifier(), ports.NoopStoredAudioReader()
+		return service.NewFingerprintHealth(memory.NoopAudioIdentifier()), memory.NoopAudioIdentifier(), memory.NoopStoredAudioReader()
 	}
 	identifier := chromaprint.MustNewIdentifier(ctx, cfg.FFmpegLocation, cfg.AcoustIDAPIKey, d.NewClient(acoustIDTimeout, d.Transport))
 	tools.Fpcalc = identifier.Available()
@@ -436,7 +420,7 @@ func upgradeLane(d Deps, ledger ports.LibraryTracks, replace *service.ReplaceSer
 	if err != nil {
 		return service.UpgradeLane{}, fmt.Errorf("build the in-place check: %w", err)
 	}
-	runner := service.MustNewRunner(ledger, replace, store,
+	runner := service.MustNewRunner(ledger, replace, store, evidence.NewCodec(),
 		service.RunnerConfig{
 			MaxTries:            cfg.AcquisitionUpgradeMaxTries,
 			LowBitrateFloorKbps: cfg.AcquisitionLowBitrateFloorKbps,
@@ -444,12 +428,12 @@ func upgradeLane(d Deps, ledger ports.LibraryTracks, replace *service.ReplaceSer
 	return service.MustUpgradeLaneOf(runner, cfg.AcquisitionUpgradeConcurrency), nil
 }
 
-func schedulerPorts(d Deps, ledger ports.LibraryTracks, lane service.UpgradeLane, skips *service.VerifySkipCounter, health *service.FingerprintHealth, tools ports.Verification) service.SchedulerPorts {
+func schedulerPorts(d Deps, ledger ports.LibraryTracks, lane service.UpgradeLane, skips *service.VerifySkipCounter, health *service.FingerprintHealth, tools domain.Verification) service.SchedulerPorts {
 	wiring := service.SchedulerPorts{
-		Queue:               service.InMemoryQueue(),
+		Queue:               memory.NewQueueFactory(),
 		Upgrades:            lane,
-		Notifier:            ports.NoopJobNotifier(),
-		Outcomes:            ports.NoopOutcomeRecorder(),
+		Notifier:            memory.NoopJobNotifier(),
+		Outcomes:            memory.NoopOutcomeRecorder(),
 		Events:              d.Events,
 		VerifySkips:         skips.Count,
 		FingerprintVerified: health.Verified,

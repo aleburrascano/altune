@@ -2,16 +2,15 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/songfields"
 	"context"
-	"encoding/json"
 	"testing"
 )
 
@@ -26,18 +25,18 @@ const (
 func TestSourceKindOf(t *testing.T) {
 	cases := []struct {
 		name    string
-		kind    ports.CandidateKind
+		kind    domain.CandidateKind
 		omv     bool
 		channel string
 		want    domain.SourceKind
 	}{
-		{"art track", ports.KindArtTrack, false, channelOther, domain.ArtTrack},
-		{"observed official video", ports.KindPinnedVideo, true, channelOther, domain.OfficialVideo},
-		{"pinned video of an unknown type is not official", ports.KindPinnedVideo, false, channelTopic, domain.FanUpload},
-		{"upload from the artist's channel", ports.KindUpload, false, channelArtist, domain.LabelUpload},
-		{"upload from a topic channel", ports.KindUpload, false, channelTopic, domain.LabelUpload},
-		{"upload from any other channel", ports.KindUpload, false, channelOther, domain.FanUpload},
-		{"catalog pin is not assumed official", ports.KindCatalogPin, false, channelTopic, domain.FanUpload},
+		{"art track", domain.KindArtTrack, false, channelOther, domain.ArtTrack},
+		{"observed official video", domain.KindPinnedVideo, true, channelOther, domain.OfficialVideo},
+		{"pinned video of an unknown type is not official", domain.KindPinnedVideo, false, channelTopic, domain.FanUpload},
+		{"upload from the artist's channel", domain.KindUpload, false, channelArtist, domain.LabelUpload},
+		{"upload from a topic channel", domain.KindUpload, false, channelTopic, domain.LabelUpload},
+		{"upload from any other channel", domain.KindUpload, false, channelOther, domain.FanUpload},
+		{"catalog pin is not assumed official", domain.KindCatalogPin, false, channelTopic, domain.FanUpload},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -69,12 +68,12 @@ func TestUploaderSourceKind(t *testing.T) {
 
 func TestFingerprintOf(t *testing.T) {
 	cases := map[service.VerdictKind]domain.FingerprintResult{
-		service.VerdictHard:          domain.Matches,
-		service.VerdictSoft:          domain.Approximates,
-		service.VerdictOtherVersion:  domain.Contradicts,
-		service.VerdictDifferentSong: domain.Unsupported,
-		service.VerdictUnknown:       domain.Silent,
-		"":                           domain.Silent,
+		service.VerdictHard:          domain.FingerprintMatches,
+		service.VerdictSoft:          domain.FingerprintApproximates,
+		service.VerdictOtherVersion:  domain.FingerprintContradicts,
+		service.VerdictDifferentSong: domain.FingerprintUnsupported,
+		service.VerdictUnknown:       domain.FingerprintSilent,
+		"":                           domain.FingerprintSilent,
 	}
 	for verdict, want := range cases {
 		if got := service.FingerprintOf(verdict); got != want {
@@ -86,27 +85,27 @@ func TestFingerprintOf(t *testing.T) {
 func TestScoreConfidence(t *testing.T) {
 	tests := []struct {
 		name  string
-		e     service.Evidence
+		e     domain.AcquisitionEvidence
 		track float64
 		want  float64
 	}{
-		{"hard", service.Evidence{Verdict: "hard", AcoustIDScore: 0.97}, 204, 0.95},
-		{"soft", service.Evidence{Verdict: "soft", AcoustIDScore: 0.95}, 204, 0.85},
-		{"hard with a low score", service.Evidence{Verdict: "hard", AcoustIDScore: 0.8}, 204, 0.85},
-		{"soft with a low score stays at the unknown cap", service.Evidence{Verdict: "soft", AcoustIDScore: 0.8}, 204, 0.8},
-		{"hard at exactly the low-score cutoff keeps full confidence", service.Evidence{Verdict: "hard", AcoustIDScore: 0.92}, 204, 0.95},
-		{"hard with no score recorded", service.Evidence{Verdict: "hard"}, 204, 0.95},
-		{"topic one second off", service.Evidence{Verdict: "unknown", Channel: channelTopic, DurationDeltaSeconds: secs(1)}, 204, 0.7},
-		{"other channel twenty seconds off", service.Evidence{Verdict: "unknown", Channel: channelOther, DurationDeltaSeconds: secs(20)}, 204, 0.2},
-		{"artist channel on the spot", service.Evidence{Verdict: "unknown", Channel: channelArtist, DurationDeltaSeconds: secs(0)}, 204, 0.7},
-		{"no fingerprint run", service.Evidence{Channel: channelTopic, DurationDeltaSeconds: secs(-1)}, 204, 0.7},
-		{"topic twenty seconds short earns no length bonus", service.Evidence{Channel: channelTopic, DurationDeltaSeconds: secs(-20)}, 204, 0.5},
-		{"loose duration window", service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(10)}, 204, 0.3},
-		{"loose window grows with the track", service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(20)}, 400, 0.3},
-		{"qualifier costs 0.2", service.Evidence{Channel: channelTopic, DurationDeltaSeconds: secs(0), Qualifiers: []string{"radio edit"}}, 204, 0.5},
-		{"resolved adds 0.1 and the cap holds", service.Evidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204, 0.8},
-		{"unknown length earns no length bonus", service.Evidence{Verdict: "unknown", Channel: channelTopic}, 204, 0.5},
-		{"never below zero", service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}, 204, 0},
+		{"hard", domain.AcquisitionEvidence{Verdict: "hard", AcoustIDScore: 0.97}, 204, 0.95},
+		{"soft", domain.AcquisitionEvidence{Verdict: "soft", AcoustIDScore: 0.95}, 204, 0.85},
+		{"hard with a low score", domain.AcquisitionEvidence{Verdict: "hard", AcoustIDScore: 0.8}, 204, 0.85},
+		{"soft with a low score stays at the unknown cap", domain.AcquisitionEvidence{Verdict: "soft", AcoustIDScore: 0.8}, 204, 0.8},
+		{"hard at exactly the low-score cutoff keeps full confidence", domain.AcquisitionEvidence{Verdict: "hard", AcoustIDScore: 0.92}, 204, 0.95},
+		{"hard with no score recorded", domain.AcquisitionEvidence{Verdict: "hard"}, 204, 0.95},
+		{"topic one second off", domain.AcquisitionEvidence{Verdict: "unknown", Channel: channelTopic, DurationDeltaSeconds: secs(1)}, 204, 0.7},
+		{"other channel twenty seconds off", domain.AcquisitionEvidence{Verdict: "unknown", Channel: channelOther, DurationDeltaSeconds: secs(20)}, 204, 0.2},
+		{"artist channel on the spot", domain.AcquisitionEvidence{Verdict: "unknown", Channel: channelArtist, DurationDeltaSeconds: secs(0)}, 204, 0.7},
+		{"no fingerprint run", domain.AcquisitionEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(-1)}, 204, 0.7},
+		{"topic twenty seconds short earns no length bonus", domain.AcquisitionEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(-20)}, 204, 0.5},
+		{"loose duration window", domain.AcquisitionEvidence{Channel: channelOther, DurationDeltaSeconds: secs(10)}, 204, 0.3},
+		{"loose window grows with the track", domain.AcquisitionEvidence{Channel: channelOther, DurationDeltaSeconds: secs(20)}, 400, 0.3},
+		{"qualifier costs 0.2", domain.AcquisitionEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(0), Qualifiers: []string{"radio edit"}}, 204, 0.5},
+		{"resolved adds 0.1 and the cap holds", domain.AcquisitionEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204, 0.8},
+		{"unknown length earns no length bonus", domain.AcquisitionEvidence{Verdict: "unknown", Channel: channelTopic}, 204, 0.5},
+		{"never below zero", domain.AcquisitionEvidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}, 204, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -145,7 +144,7 @@ func TestScoreConfidence_ALengthExactlyAtEachToleranceEarnsThatTiersBonus(t *tes
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e := service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(tc.delta)}
+			e := domain.AcquisitionEvidence{Channel: channelOther, DurationDeltaSeconds: secs(tc.delta)}
 			if got := service.ScoreConfidence(e, tc.track); got != tc.want {
 				t.Errorf("ScoreConfidence(%v s off a %v s track) = %v, want %v", tc.delta, tc.track, got, tc.want)
 			}
@@ -154,9 +153,9 @@ func TestScoreConfidence_ALengthExactlyAtEachToleranceEarnsThatTiersBonus(t *tes
 }
 
 func TestScoreConfidence_RanksHardOverSoftOverEveryUnknown(t *testing.T) {
-	best := service.ScoreConfidence(service.Evidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204)
-	hard := service.ScoreConfidence(service.Evidence{Verdict: "hard", AcoustIDScore: 0.5}, 204)
-	soft := service.ScoreConfidence(service.Evidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
+	best := service.ScoreConfidence(domain.AcquisitionEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204)
+	hard := service.ScoreConfidence(domain.AcquisitionEvidence{Verdict: "hard", AcoustIDScore: 0.5}, 204)
+	soft := service.ScoreConfidence(domain.AcquisitionEvidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
 	if !(hard > soft && soft >= best) {
 		t.Errorf("hard %v, soft %v, best unknown %v: want hard > soft >= unknown", hard, soft, best)
 	}
@@ -174,16 +173,16 @@ func (tornerWatch) Watch(context.Context, string) (ytmsearch.Watch, error) {
 }
 
 func TestScoreConfidence_ATopicChannelTrackSixSecondsShortClearsTheFloor(t *testing.T) {
-	req := ports.FindRequest{
+	req := domain.FindRequest{
 		Title:          "Tornerò",
 		Artist:         "I Santo California",
-		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "UeGkPDoLKjI"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "youtube", ExternalID: "UeGkPDoLKjI"}},
 	}
 	found, err := youtubemusic.NewSource(nil, tornerWatch{}).Find(context.Background(), req)
 	if err != nil || len(found) != 1 {
 		t.Fatalf("Find = %+v, %v", found, err)
 	}
-	evidence := service.Evidence{
+	evidence := domain.AcquisitionEvidence{
 		Channel:              channelTopic,
 		Resolved:             found[0].IsResolved(),
 		DurationDeltaSeconds: secs(-6.08),
@@ -198,9 +197,9 @@ func TestScoreConfidence_ATopicChannelTrackSixSecondsShortClearsTheFloor(t *test
 func secs(v float64) *float64 { return &v }
 
 func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToTheUnknownCap(t *testing.T) {
-	lowest := service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}
-	highest := service.Evidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}
-	unknownCap := service.ScoreConfidence(service.Evidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
+	lowest := domain.AcquisitionEvidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}
+	highest := domain.AcquisitionEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}
+	unknownCap := service.ScoreConfidence(domain.AcquisitionEvidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
 
 	if got := service.ScoreConfidence(lowest, 204); got != 0 {
 		t.Errorf("lowest unknown score = %v, want 0: a constant change that drops it below 0 needs the zero clamp back", got)
@@ -210,47 +209,47 @@ func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToTheUnknownCap(t *testin
 	}
 }
 
-func storedISRCAndEvidence(t *testing.T, ledger *memory.Ledger, id ids.TrackId) (string, service.Evidence) {
+func storedISRCAndEvidence(t *testing.T, ledger *memory.Ledger, id ids.TrackId) (string, domain.AcquisitionEvidence) {
 	t.Helper()
 	got, _ := ledger.Track(id)
-	var evidence service.Evidence
-	if err := json.Unmarshal(got.Evidence, &evidence); err != nil {
+	stored, err := evidence.NewCodec().Decode(got.Evidence)
+	if err != nil {
 		t.Fatalf("evidence not stored as JSON: %v (%q)", err, got.Evidence)
 	}
 	if got.ISRC == nil {
-		return "", evidence
+		return "", stored
 	}
-	return *got.ISRC, evidence
+	return *got.ISRC, stored
 }
 
 func TestExecute_WritesBackOnlyAProvenISRCAndStoresWhereItCameFrom(t *testing.T) {
 	const resolvedISRC, recording, catalogLength = "USUG11904206", "blinding-lights-single", 200.0
 	catalogISRC, pin := "USUG11904999", recording
-	identity := ports.RecordingIdentity{ISRC: resolvedISRC, MBID: recording, MBIDs: []string{recording}}
+	identity := domain.RecordingIdentity{ISRC: resolvedISRC, MBID: recording, MBIDs: []string{recording}}
 	doubtedIdentity := identity
 	doubtedIdentity.ReferenceDoubted = true
 	fingerprinted := func() *identifier {
-		return &identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
-			{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},
+		return &identifier{match: domain.RecordingMatch{AcoustID: "ac-1", Results: []domain.AcoustIDResult{
+			{Score: 0.97, Recordings: []domain.LinkedRecording{{MBID: recording}}},
 		}}}
 	}
 	tests := []struct {
 		name        string
 		catalogISRC *string
 		catalogMBID *string
-		identity    ports.RecordingIdentity
+		identity    domain.RecordingIdentity
 		identifier  *identifier
 		probed      float64
 		wantVerdict string
 		wantISRC    string
-		wantSource  service.ProofSource
+		wantSource  domain.ProofSource
 	}{
-		{"the catalog's own ISRC is kept over a proven one", &catalogISRC, nil, identity, fingerprinted(), 0, "hard", catalogISRC, service.ProofCatalog},
-		{"the pinned recording's ISRC", nil, &pin, identity, nil, 0, "", resolvedISRC, service.ProofPinnedRecording},
-		{"a fingerprint-proven ISRC", nil, nil, identity, fingerprinted(), 0, "hard", resolvedISRC, service.ProofFingerprint},
-		{"a fingerprint the length demotes to soft proves nothing", nil, nil, identity, fingerprinted(), catalogLength + 10, "soft", "", service.ProofUnproven},
-		{"a fingerprint on a doubted reference is only soft, so it proves nothing", nil, nil, doubtedIdentity, fingerprinted(), 0, "soft", "", service.ProofUnproven},
-		{"an unproven resolver ISRC", nil, nil, identity, nil, 0, "", "", service.ProofUnproven},
+		{"the catalog's own ISRC is kept over a proven one", &catalogISRC, nil, identity, fingerprinted(), 0, "hard", catalogISRC, domain.ProofCatalog},
+		{"the pinned recording's ISRC", nil, &pin, identity, nil, 0, "", resolvedISRC, domain.ProofPinnedRecording},
+		{"a fingerprint-proven ISRC", nil, nil, identity, fingerprinted(), 0, "hard", resolvedISRC, domain.ProofFingerprint},
+		{"a fingerprint the length demotes to soft proves nothing", nil, nil, identity, fingerprinted(), catalogLength + 10, "soft", "", domain.ProofUnproven},
+		{"a fingerprint on a doubted reference is only soft, so it proves nothing", nil, nil, doubtedIdentity, fingerprinted(), 0, "soft", "", domain.ProofUnproven},
+		{"an unproven resolver ISRC", nil, nil, identity, nil, 0, "", "", domain.ProofUnproven},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -289,17 +288,17 @@ func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 	)
 	recorded := service.NewRecordedResolver(
 		[]songfields.RecordingIdentity{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, RecordingMBID: drinkingRemix, DurationSeconds: 236}},
-		[]ports.ISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
+		[]domain.ISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
 	track := pendingBlindingLights()
 	catalogLength := 236.0
 	track.Title, track.Artist, track.Album, track.CatalogDurationSeconds = "Drinking in L.A.", "Bran Van 3000", "Glee", &catalogLength
-	source := &offeringSource{found: []ports.AudioCandidate{downloadtest.Candidate(
+	source := &offeringSource{found: []domain.AudioCandidate{downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=-_5yNLsZ5Pk",
 		downloadtest.WithTitle("Drinking in L.A."),
 		downloadtest.WithChannel("Bran Van 3000 - Topic"),
 		downloadtest.WithCategories([]string{"Music"}),
 	)}}
-	var resolved ports.RecordingIdentity
+	var resolved domain.RecordingIdentity
 	stages := noStages()
 	stages.Observer = func(ac *service.AcquisitionContext) { resolved = ac.Identity }
 
@@ -309,7 +308,7 @@ func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 	if resolved.ISRC != drinkingISRC {
 		t.Fatalf("resolver identity ISRC = %q, want the search hit's guess %q", resolved.ISRC, drinkingISRC)
 	}
-	if isrc, evidence := storedISRCAndEvidence(t, ledger, track.ID); isrc != "" || evidence.ISRCSource != service.ProofUnproven {
-		t.Errorf("stored ISRC %q with isrc_source %q, want none with %q: the search hit's ISRC was never proven", isrc, evidence.ISRCSource, service.ProofUnproven)
+	if isrc, evidence := storedISRCAndEvidence(t, ledger, track.ID); isrc != "" || evidence.ISRCSource != domain.ProofUnproven {
+		t.Errorf("stored ISRC %q with isrc_source %q, want none with %q: the search hit's ISRC was never proven", isrc, evidence.ISRCSource, domain.ProofUnproven)
 	}
 }

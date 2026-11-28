@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"context"
 	"errors"
 	"net/http"
@@ -26,18 +25,18 @@ func (f *fakeSongSearch) SearchSongs(_ context.Context, query string) ([]ytmsear
 
 type recordingDownloader struct{ gotURL string }
 
-func (d *recordingDownloader) Download(_ context.Context, url, outDir string) (ports.FetchedAudio, error) {
+func (d *recordingDownloader) Download(_ context.Context, url, outDir string) (domain.FetchedAudio, error) {
 	d.gotURL = url
-	return ports.FetchedAudio{Path: outDir + "/a.m4a"}, nil
+	return domain.FetchedAudio{Path: outDir + "/a.m4a"}, nil
 }
 
 func atv(id, title string, artists []string, seconds int, explicit bool) ytmsearch.Song {
 	return ytmsearch.Song{VideoID: id, Title: title, Artists: artists, DurationSeconds: seconds, Type: ytmsearch.VideoTypeAudioOnly, Explicit: explicit}
 }
 
-var vibesRequest = ports.FindRequest{Title: "2021 Vibes", Artist: "LUCKI", Duration: 125}
+var vibesRequest = domain.FindRequest{Title: "2021 Vibes", Artist: "LUCKI", Duration: 125}
 
-func find(t *testing.T, songs []ytmsearch.Song, req ports.FindRequest) []ports.AudioCandidate {
+func find(t *testing.T, songs []ytmsearch.Song, req domain.FindRequest) []domain.AudioCandidate {
 	t.Helper()
 	got, err := ytmsearch.NewSource(&fakeSongSearch{songs: songs}, &recordingDownloader{}).Find(context.Background(), req)
 	if err != nil {
@@ -118,23 +117,23 @@ func TestSource_TheCatalogsCleanFlagPicksTheCleanTwin(t *testing.T) {
 
 func TestSource_CreditAndTitleQuirksStillMatch(t *testing.T) {
 	cases := map[string]struct {
-		req  ports.FindRequest
+		req  domain.FindRequest
 		song ytmsearch.Song
 	}{
 		"dollar sign in the credit": {
-			req:  ports.FindRequest{Title: "Teen Bean", Artist: "Ken Carson", Duration: 119},
+			req:  domain.FindRequest{Title: "Teen Bean", Artist: "Ken Carson", Duration: 119},
 			song: atv("eeeeeeeeeee", "Teen Bean", []string{"Ken Car$on"}, 120, true),
 		},
 		"bonus tag on the title": {
-			req:  ports.FindRequest{Title: "Y NOT?", Artist: "LUCKI", Duration: 148},
+			req:  domain.FindRequest{Title: "Y NOT?", Artist: "LUCKI", Duration: 148},
 			song: atv("fffffffffff", "Y NOT? (Bonus)", []string{"LUCKI"}, 149, true),
 		},
 		"featured artist in the title": {
-			req:  ports.FindRequest{Title: "Syrup Sandwiches", Artist: "Cordae", Duration: 173},
+			req:  domain.FindRequest{Title: "Syrup Sandwiches", Artist: "Cordae", Duration: 173},
 			song: atv("ggggggggggg", "Syrup Sandwiches (feat. Joey Bada$$)", []string{"Cordae"}, 173, true),
 		},
 		"second credited artist": {
-			req:  ports.FindRequest{Title: "Our 25th Birthday", Artist: "Central Cee", Duration: 308},
+			req:  domain.FindRequest{Title: "Our 25th Birthday", Artist: "Central Cee", Duration: 308},
 			song: atv("hhhhhhhhhhh", "Our 25th Birthday", []string{"Dave", "Central Cee"}, 308, true),
 		},
 	}
@@ -162,7 +161,7 @@ func TestSource_TheSavedLengthDoesNotGateTheMatch(t *testing.T) {
 	}
 	for name, saved := range cases {
 		t.Run(name, func(t *testing.T) {
-			req := ports.FindRequest{Title: "Demigod", Artist: "SLAYR", Duration: saved}
+			req := domain.FindRequest{Title: "Demigod", Artist: "SLAYR", Duration: saved}
 			if got := find(t, []ytmsearch.Song{atv("jjjjjjjjjjj", "Demigod", []string{"slayr"}, 168, true)}, req); len(got) != 1 {
 				t.Errorf("candidates = %+v, want the official track", got)
 			}
@@ -174,7 +173,7 @@ func TestSource_TheClosestLengthBreaksATie(t *testing.T) {
 	got := find(t, []ytmsearch.Song{
 		atv("kkkkkkkkkkk", "Human", []string{"The Human League"}, 300, false),
 		atv("lllllllllll", "Human", []string{"The Human League"}, 266, false),
-	}, ports.FindRequest{Title: "Human", Artist: "The Human League", Duration: 264})
+	}, domain.FindRequest{Title: "Human", Artist: "The Human League", Duration: 264})
 	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=lllllllllll" {
 		t.Errorf("candidates = %+v, want the 266 s track closest to the saved length", got)
 	}
@@ -185,7 +184,7 @@ func TestSource_TheCatalogAlbumBreaksATie(t *testing.T) {
 	compilation.Album = "Greatest Hits"
 	original := atv("nnnnnnnnnnn", "Human", []string{"The Human League"}, 300, false)
 	original.Album = "Crash"
-	req := ports.FindRequest{Title: "Human", Artist: "The Human League", Album: "crash", Duration: 264}
+	req := domain.FindRequest{Title: "Human", Artist: "The Human League", Album: "crash", Duration: 264}
 
 	got := find(t, []ytmsearch.Song{compilation, original}, req)
 	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=nnnnnnnnnnn" {
@@ -214,13 +213,13 @@ func TestSource_FetchDownloadsTheCandidateURL(t *testing.T) {
 func TestSource_TheArtTrackCarriesWhatTheSearchObserved(t *testing.T) {
 	song := atv("abc12345678", "Finesse", []string{"Bruno Mars"}, 191, false)
 	song.Album = "24K Magic"
-	req := ports.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
+	req := domain.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
 
 	got := find(t, []ytmsearch.Song{song}, req)
 	if len(got) != 1 {
 		t.Fatalf("candidates = %v, want 1", got)
 	}
-	if got[0].Kind != ports.KindArtTrack || got[0].Album != "24K Magic" || len(got[0].Artists) != 1 || got[0].Artists[0] != "Bruno Mars" {
+	if got[0].Kind != domain.KindArtTrack || got[0].Album != "24K Magic" || len(got[0].Artists) != 1 || got[0].Artists[0] != "Bruno Mars" {
 		t.Errorf("candidate = %+v, want the art track with its observed artists and album", got[0])
 	}
 }
@@ -303,7 +302,7 @@ func TestSource_TheArtTrackCarriesNoPlaceholderText(t *testing.T) {
 
 func TestSource_AFeaturingBracketIsACreditNotATitle(t *testing.T) {
 	song := atv("abc12345678", "Finesse (featuring Cardi B)", []string{"Bruno Mars"}, 191, false)
-	req := ports.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
+	req := domain.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
 
 	if got := find(t, []ytmsearch.Song{song}, req); len(got) != 1 {
 		t.Fatalf("candidates = %v, want the featuring art track taken as a strong hit", got)

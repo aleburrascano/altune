@@ -110,6 +110,10 @@ func (a *application) wireDownload(
 	if err != nil {
 		return nil, fmt.Errorf("wire recording resolver: %w", err)
 	}
+	sources, err := download.LiveSources(ctx, a.cfg, a.redisClient, transport, newOutboundClient)
+	if err != nil {
+		return nil, fmt.Errorf("wire audio sources: %w", err)
+	}
 	module, err := download.New(ctx, download.Deps{
 		Config:            a.cfg,
 		Transport:         transport,
@@ -125,6 +129,7 @@ func (a *application) wireDownload(
 		RecordingResolver: recording.Resolver,
 		RecordingLookup:   recording.Lookup,
 		Rerecordings:      recording.Rerecordings,
+		Sources:           sources,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build download: %w", err)

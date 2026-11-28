@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/contracttest"
 	"altune/go-api/internal/download/internal/domain"
@@ -39,22 +40,22 @@ func newLedgerTrack(userId ids.UserId, title, artist, album string) ledgerTrack 
 	if strings.TrimSpace(album) == "" {
 		album = title
 	}
-	return ledgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	return ledgerTrack{TrackSnapshot: domain.TrackSnapshot{
 		ID:     ids.NewTrackId(),
 		UserId: userId,
 		Title:  title,
 		Artist: artist,
 		Album:  album,
-		Status: ports.TrackPending,
+		Status: domain.TrackPending,
 	}}
 }
 
 func makeReady(track *ledgerTrack, audioRef string) {
-	track.Status, track.AudioRef, track.FailureReason, track.Streamable = ports.TrackReady, &audioRef, "", true
+	track.Status, track.AudioRef, track.FailureReason, track.Streamable = domain.TrackReady, &audioRef, "", true
 }
 
 func makeFailed(track *ledgerTrack, reason string) {
-	track.Status, track.AudioRef, track.FailureReason = ports.TrackFailed, nil, reason
+	track.Status, track.AudioRef, track.FailureReason = domain.TrackFailed, nil, reason
 }
 
 func useSource(track *ledgerTrack, url string) { track.AudioSourceURL = &url }
@@ -81,7 +82,7 @@ func committedTrack(t *testing.T, ledger *memory.Ledger, id ids.TrackId) ledgerT
 
 type emptyLedger struct{ contracttest.Rules }
 
-func (emptyLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (emptyLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	return memory.NewLedger().Get(ctx, id, userId)
 }
 
@@ -93,42 +94,42 @@ func (emptyLedger) AudioRefInUse(context.Context, string, ids.TrackId) (bool, er
 	return false, nil
 }
 
-func (emptyLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
-	return ports.ErrTrackNotFound
+func (emptyLedger) Complete(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, domain.Completion) error {
+	return domain.ErrTrackNotFound
 }
 
-func (emptyLedger) Fail(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, string) error {
-	return ports.ErrTrackNotFound
+func (emptyLedger) Fail(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, string) error {
+	return domain.ErrTrackNotFound
 }
 
-func (emptyLedger) RevertAt(context.Context, ports.TrackSnapshot) error {
-	return ports.ErrTrackNotFound
+func (emptyLedger) RevertAt(context.Context, domain.TrackSnapshot) error {
+	return domain.ErrTrackNotFound
 }
 
 type liveCtxLedger struct{ *memory.Ledger }
 
-func (l liveCtxLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (l liveCtxLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return l.Ledger.Get(ctx, id, userId)
 }
 
-func (l liveCtxLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, c ports.Completion) error {
+func (l liveCtxLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, c domain.Completion) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return l.Ledger.Complete(ctx, id, userId, fence, c)
 }
 
-func (l liveCtxLedger) RevertAt(ctx context.Context, track ports.TrackSnapshot) error {
+func (l liveCtxLedger) RevertAt(ctx context.Context, track domain.TrackSnapshot) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return l.Ledger.RevertAt(ctx, track)
 }
 
-func (l liveCtxLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, reason string) error {
+func (l liveCtxLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, reason string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -145,24 +146,24 @@ func newBlockingSource() *blockingSource {
 	return &blockingSource{fakeAudioSearcher: &fakeAudioSearcher{}, searching: make(chan struct{})}
 }
 
-func (s *blockingSource) Find(ctx context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *blockingSource) Find(ctx context.Context, _ domain.FindRequest) ([]domain.AudioCandidate, error) {
 	s.announce.Do(func() { close(s.searching) })
 	<-ctx.Done()
 	return nil, errors.New("upstream closed")
 }
 
 type fakeAudioSearcher struct {
-	searchResults []ports.AudioCandidate
+	searchResults []domain.AudioCandidate
 	searchErr     error
 	downloadPath  string
 	downloadErr   error
 	searchCalled  bool
 	downloadURLs  []string
-	requests      []ports.FindRequest
+	requests      []domain.FindRequest
 	mu            sync.Mutex
 }
 
-func (s *fakeAudioSearcher) Search(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
+func (s *fakeAudioSearcher) Search(_ context.Context, _ string) ([]domain.AudioCandidate, error) {
 	s.mu.Lock()
 	s.searchCalled = true
 	s.mu.Unlock()
@@ -178,14 +179,14 @@ func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (s
 
 func (s *fakeAudioSearcher) Name() domain.SourceName { return "fake" }
 
-func (s *fakeAudioSearcher) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *fakeAudioSearcher) Find(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	s.mu.Lock()
 	s.requests = append(s.requests, req)
 	s.mu.Unlock()
 	return s.Search(ctx, "")
 }
 
-func (s *fakeAudioSearcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *fakeAudioSearcher) Fetch(ctx context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	return fetchedFrom(s.Download(ctx, c.URL, outDir))
 }
 
@@ -287,8 +288,8 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t 
 	scheduler.Shutdown(context.Background())
 
 	settled := committedTrack(t, ledger, track.ID)
-	if settled.Status != ports.TrackPending {
-		t.Errorf("status = %v, want %v (released for another worker)", settled.Status, ports.TrackPending)
+	if settled.Status != domain.TrackPending {
+		t.Errorf("status = %v, want %v (released for another worker)", settled.Status, domain.TrackPending)
 	}
 	if settled.FailureReason != "" {
 		t.Errorf("persisted failure_reason = %q, want nil", settled.FailureReason)
@@ -313,8 +314,8 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWo
 	scheduler.Shutdown(context.Background())
 
 	settled := committedTrack(t, ledger, track.ID)
-	if settled.Status != ports.TrackPending {
-		t.Errorf("status = %v, want %v (released for another worker)", settled.Status, ports.TrackPending)
+	if settled.Status != domain.TrackPending {
+		t.Errorf("status = %v, want %v (released for another worker)", settled.Status, domain.TrackPending)
 	}
 	if settled.FailureReason != "" {
 		t.Errorf("persisted failure_reason = %q, want nil", settled.FailureReason)
@@ -344,8 +345,8 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 		awaitIdle(t, scheduler, time.Sleep)
 
 		recent := scheduler.Status(t.Context()).Recent
-		if len(recent) != 1 || recent[0].State != ports.JobFailed {
-			t.Fatalf("recent jobs = %+v, want exactly one %s job", recent, ports.JobFailed)
+		if len(recent) != 1 || recent[0].State != domain.JobFailed {
+			t.Fatalf("recent jobs = %+v, want exactly one %s job", recent, domain.JobFailed)
 		}
 		if strings.Contains(recent[0].Reason, cookieJarPath) {
 			t.Errorf("job reason = %q, still names the cookie file %q", recent[0].Reason, cookieJarPath)
@@ -379,7 +380,7 @@ func TestBackgroundScheduler_ScheduleRacingShutdown_NeverLosesAnAcceptedJob(t *t
 	}
 }
 
-func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[string]ports.JobRecord, remaining map[string]struct{}) {
+func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[string]domain.JobRecord, remaining map[string]struct{}) {
 	t.Helper()
 	svc := newTestAcquireService(&countingLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var jobs sync.WaitGroup
@@ -406,7 +407,7 @@ func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[str
 		}()
 	}
 	drained := make(chan struct{})
-	var recent []ports.JobRecord
+	var recent []domain.JobRecord
 	go func() {
 		defer close(drained)
 		<-start
@@ -419,7 +420,7 @@ func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[str
 	callers.Wait()
 	jobs.Wait()
 
-	settled = make(map[string]ports.JobRecord, len(recent))
+	settled = make(map[string]domain.JobRecord, len(recent))
 	for _, job := range recent {
 		settled[job.TrackID] = job
 	}
@@ -437,18 +438,18 @@ type startedAcquirer struct {
 	calls   atomic.Int32
 }
 
-func (a *startedAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (a *startedAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	a.calls.Add(1)
 	a.once.Do(func() { close(a.started) })
 	<-a.release
 	return nil
 }
 
-func (a *startedAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
-	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
+func (a *startedAcquirer) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
+	return a.Execute(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *startedAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (a *startedAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -472,8 +473,8 @@ func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 
 		close(acq.release)
 		settled := awaitSettledJob(t, scheduler, queued.String())
-		if settled.State != ports.JobSucceeded {
-			t.Errorf("queued job state = %q, want %q (it must run once a worker frees up)", settled.State, ports.JobSucceeded)
+		if settled.State != domain.JobSucceeded {
+			t.Errorf("queued job state = %q, want %q (it must run once a worker frees up)", settled.State, domain.JobSucceeded)
 		}
 		if got := acq.calls.Load(); got != 2 {
 			t.Errorf("acquirer executions = %d, want 2 (both jobs eventually run)", got)
@@ -482,7 +483,7 @@ func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 	})
 }
 
-func awaitSettledJob(t *testing.T, s *service.BackgroundAcquisitionScheduler, trackID string) ports.JobRecord {
+func awaitSettledJob(t *testing.T, s *service.BackgroundAcquisitionScheduler, trackID string) domain.JobRecord {
 	t.Helper()
 	synctest.Wait()
 	job, settled := settledJob(s, trackID)
@@ -492,14 +493,14 @@ func awaitSettledJob(t *testing.T, s *service.BackgroundAcquisitionScheduler, tr
 	return job
 }
 
-func settledJob(s *service.BackgroundAcquisitionScheduler, trackID string) (ports.JobRecord, bool) {
+func settledJob(s *service.BackgroundAcquisitionScheduler, trackID string) (domain.JobRecord, bool) {
 	recent := s.Status(context.Background()).Recent
 	for _, job := range recent {
 		if job.TrackID == trackID {
 			return job, true
 		}
 	}
-	return ports.JobRecord{}, false
+	return domain.JobRecord{}, false
 }
 
 func trackHeldByJob(t *testing.T, advance func(time.Duration), hold func(*service.BackgroundAcquisitionScheduler) error) (*service.BackgroundAcquisitionScheduler, func()) {
@@ -579,17 +580,17 @@ type stubAcquirer struct {
 	ran []string
 }
 
-func (s *stubAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (s *stubAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	s.record("Execute")
 	return nil
 }
 
-func (s *stubAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (s *stubAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	s.record("ExecuteReplace")
 	return nil
 }
 
-func (s *stubAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (s *stubAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func (s *stubAcquirer) record(entryPoint string) {
 	s.mu.Lock()
@@ -656,22 +657,22 @@ func (r *burstLedger) enter() {
 	<-r.release
 }
 
-func (r *burstLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (r *burstLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	r.enter()
 	return r.emptyLedger.Get(ctx, id, userId)
 }
 
-func (r *burstLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, c ports.Completion) error {
+func (r *burstLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, c domain.Completion) error {
 	r.enter()
 	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
 }
 
-func (r *burstLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, reason string) error {
+func (r *burstLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, reason string) error {
 	r.enter()
 	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
 }
 
-func (r *burstLedger) RevertAt(ctx context.Context, track ports.TrackSnapshot) error {
+func (r *burstLedger) RevertAt(ctx context.Context, track domain.TrackSnapshot) error {
 	r.enter()
 	return r.emptyLedger.RevertAt(ctx, track)
 }
@@ -744,7 +745,7 @@ type corrCapturingLedger struct {
 	seen   bool
 }
 
-func (r *corrCapturingLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (r *corrCapturingLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	r.mu.Lock()
 	r.corrID = logging.CorrelationIDFromContext(ctx)
 	r.seen = true
@@ -831,22 +832,22 @@ func (r *blockingLedger) enter() {
 	<-r.release
 }
 
-func (r *blockingLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (r *blockingLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	r.enter()
 	return r.emptyLedger.Get(ctx, id, userId)
 }
 
-func (r *blockingLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, c ports.Completion) error {
+func (r *blockingLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, c domain.Completion) error {
 	r.enter()
 	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
 }
 
-func (r *blockingLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, reason string) error {
+func (r *blockingLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, reason string) error {
 	r.enter()
 	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
 }
 
-func (r *blockingLedger) RevertAt(ctx context.Context, track ports.TrackSnapshot) error {
+func (r *blockingLedger) RevertAt(ctx context.Context, track domain.TrackSnapshot) error {
 	r.enter()
 	return r.emptyLedger.RevertAt(ctx, track)
 }
@@ -889,22 +890,22 @@ func (r *countingLedger) enter() {
 	r.calls.Add(1)
 }
 
-func (r *countingLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (r *countingLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	r.enter()
 	return r.emptyLedger.Get(ctx, id, userId)
 }
 
-func (r *countingLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, c ports.Completion) error {
+func (r *countingLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, c domain.Completion) error {
 	r.enter()
 	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
 }
 
-func (r *countingLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, reason string) error {
+func (r *countingLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, reason string) error {
 	r.enter()
 	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
 }
 
-func (r *countingLedger) RevertAt(ctx context.Context, track ports.TrackSnapshot) error {
+func (r *countingLedger) RevertAt(ctx context.Context, track domain.TrackSnapshot) error {
 	r.enter()
 	return r.emptyLedger.RevertAt(ctx, track)
 }
@@ -953,22 +954,22 @@ func (r *panicLedger) enter() {
 	panic("boom")
 }
 
-func (r *panicLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (r *panicLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	r.enter()
 	return r.emptyLedger.Get(ctx, id, userId)
 }
 
-func (r *panicLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, c ports.Completion) error {
+func (r *panicLedger) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, c domain.Completion) error {
 	r.enter()
 	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
 }
 
-func (r *panicLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, reason string) error {
+func (r *panicLedger) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence domain.ClaimNumber, reason string) error {
 	r.enter()
 	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
 }
 
-func (r *panicLedger) RevertAt(ctx context.Context, track ports.TrackSnapshot) error {
+func (r *panicLedger) RevertAt(ctx context.Context, track domain.TrackSnapshot) error {
 	r.enter()
 	return r.emptyLedger.RevertAt(ctx, track)
 }
@@ -989,22 +990,22 @@ type panickingAcquirer struct {
 	refused atomic.Int32
 }
 
-func (a *panickingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (a *panickingAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
-	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
+func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
+	return a.Execute(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *panickingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {
+func (a *panickingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {
 	a.refused.Add(1)
 }
 
 type scriptedClaimQueue struct {
 	*memJobQueue
-	job      ports.Job
+	job      domain.Job
 	claimed  atomic.Bool
 	released atomic.Int32
 	settled  atomic.Int32
@@ -1013,33 +1014,33 @@ type scriptedClaimQueue struct {
 	outcome  chan struct{}
 }
 
-func newScriptedClaimQueue(job ports.Job) *scriptedClaimQueue {
+func newScriptedClaimQueue(job domain.Job) *scriptedClaimQueue {
 	return &scriptedClaimQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), job: job, outcome: make(chan struct{}, 4)}
 }
 
-func (q *scriptedClaimQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job, error) {
-	if q.job.Kind != ports.JobKindUpgrade && q.claimed.CompareAndSwap(false, true) {
+func (q *scriptedClaimQueue) Claim(ctx context.Context, lease time.Duration) (domain.Job, error) {
+	if q.job.Kind != domain.JobKindUpgrade && q.claimed.CompareAndSwap(false, true) {
 		return q.job, nil
 	}
 	return q.memJobQueue.Claim(ctx, lease)
 }
 
-func (q *scriptedClaimQueue) ClaimUpgrade(ctx context.Context, lease time.Duration) (ports.Job, error) {
-	if q.job.Kind == ports.JobKindUpgrade && q.claimed.CompareAndSwap(false, true) {
+func (q *scriptedClaimQueue) ClaimUpgrade(ctx context.Context, lease time.Duration) (domain.Job, error) {
+	if q.job.Kind == domain.JobKindUpgrade && q.claimed.CompareAndSwap(false, true) {
 		return q.job, nil
 	}
 	return q.memJobQueue.ClaimUpgrade(ctx, lease)
 }
 
-func (q *scriptedClaimQueue) Heartbeat(context.Context, ids.TrackId, ports.ClaimNumber, time.Duration) error {
+func (q *scriptedClaimQueue) Heartbeat(context.Context, ids.TrackId, domain.ClaimNumber, time.Duration) error {
 	return nil
 }
 
-func (q *scriptedClaimQueue) VerifyLease(context.Context, ids.TrackId, ports.ClaimNumber) error {
+func (q *scriptedClaimQueue) VerifyLease(context.Context, ids.TrackId, domain.ClaimNumber) error {
 	return nil
 }
 
-func (q *scriptedClaimQueue) Release(_ context.Context, _ ids.TrackId, _ ports.ClaimNumber, delay time.Duration) error {
+func (q *scriptedClaimQueue) Release(_ context.Context, _ ids.TrackId, _ domain.ClaimNumber, delay time.Duration) error {
 	q.mu.Lock()
 	q.delays = append(q.delays, delay)
 	q.mu.Unlock()
@@ -1048,7 +1049,7 @@ func (q *scriptedClaimQueue) Release(_ context.Context, _ ids.TrackId, _ ports.C
 	return nil
 }
 
-func (q *scriptedClaimQueue) Settle(context.Context, ids.TrackId, ports.ClaimNumber) error {
+func (q *scriptedClaimQueue) Settle(context.Context, ids.TrackId, domain.ClaimNumber) error {
 	q.settled.Add(1)
 	q.outcome <- struct{}{}
 	return nil
@@ -1071,7 +1072,7 @@ func (q *scriptedClaimQueue) awaitLeaving(t *testing.T) {
 
 type panickingUpgrader struct{}
 
-func (panickingUpgrader) ExecuteUpgrade(context.Context, ports.AcquisitionJob) error {
+func (panickingUpgrader) ExecuteUpgrade(context.Context, domain.AcquisitionJob) error {
 	panic("boom")
 }
 
@@ -1080,15 +1081,15 @@ type panicsAfterClaim struct {
 	panickingUpgrader
 }
 
-func (panicsAfterClaim) Execute(context.Context, ports.AcquisitionJob) error {
+func (panicsAfterClaim) Execute(context.Context, domain.AcquisitionJob) error {
 	panic("boom")
 }
 
-func (panicsAfterClaim) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (panicsAfterClaim) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	panic("boom")
 }
 
-func panicOnClaim(t *testing.T, acq jobRunner, job ports.Job) *scriptedClaimQueue {
+func panicOnClaim(t *testing.T, acq jobRunner, job domain.Job) *scriptedClaimQueue {
 	t.Helper()
 	queue := newScriptedClaimQueue(job)
 	scheduler := newTestScheduler(panicsAfterClaim{jobRunner: acq}, 1, time.Now,
@@ -1102,7 +1103,7 @@ func panicOnClaim(t *testing.T, acq jobRunner, job ports.Job) *scriptedClaimQueu
 
 type settleKeepsPendingQueue struct{ *memJobQueue }
 
-func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber) error {
+func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber) error {
 	return q.Release(ctx, trackID, fence, 0)
 }
 
@@ -1128,7 +1129,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobIsNotReclaimedWithinAPoll(t *t
 
 func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t *testing.T) {
 	acq := &panickingAcquirer{}
-	job := ports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Run: service.MaxAcquisitionAttempts}
 
 	panicOnClaim(t, acq, job)
 
@@ -1139,7 +1140,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t
 
 func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetried(t *testing.T) {
 	acq := &panickingAcquirer{}
-	job := ports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: ports.ClaimNumber(service.MaxAcquisitionAttempts + 4), Run: 1}
+	job := domain.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: domain.ClaimNumber(service.MaxAcquisitionAttempts + 4), Run: 1}
 
 	panicOnClaim(t, acq, job)
 
@@ -1150,7 +1151,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetr
 
 func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *testing.T) {
 	acq := &panickingAcquirer{}
-	job := ports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: ports.ClaimNumber(service.MaxAcquisitionAttempts + 4), Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: domain.ClaimNumber(service.MaxAcquisitionAttempts + 4), Run: service.MaxAcquisitionAttempts}
 
 	panicOnClaim(t, acq, job)
 
@@ -1233,8 +1234,8 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 			t.Fatalf("schedule after Resume = %v, want nil", err)
 		}
 		settled := awaitSettledJob(t, scheduler, paused.String())
-		if settled.State != ports.JobSucceeded {
-			t.Errorf("resumed job state = %q, want %q (kill switch must be reversible)", settled.State, ports.JobSucceeded)
+		if settled.State != domain.JobSucceeded {
+			t.Errorf("resumed job state = %q, want %q (kill switch must be reversible)", settled.State, domain.JobSucceeded)
 		}
 	})
 }
@@ -1302,8 +1303,8 @@ func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 			t.Fatalf("schedule after Resume = %v, want nil", err)
 		}
 		settled := awaitSettledJob(t, scheduler, queued.String())
-		if settled.State != ports.JobSucceeded {
-			t.Errorf("resumed job state = %q, want %q", settled.State, ports.JobSucceeded)
+		if settled.State != domain.JobSucceeded {
+			t.Errorf("resumed job state = %q, want %q", settled.State, domain.JobSucceeded)
 		}
 		awaitIdle(t, scheduler, time.Sleep)
 	})
@@ -1378,17 +1379,17 @@ type blockingAcquirer struct {
 	calls   atomic.Int32
 }
 
-func (a *blockingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (a *blockingAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	a.calls.Add(1)
 	<-a.release
 	return nil
 }
 
-func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
-	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
+func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
+	return a.Execute(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *blockingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (a *blockingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -1442,7 +1443,7 @@ type holdOneLibraryTracks struct {
 	holdOnce sync.Once
 }
 
-func (r *holdOneLibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (r *holdOneLibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	if id == r.hold {
 		r.holdOnce.Do(func() { close(r.holding) })
 		<-r.release
@@ -1507,8 +1508,8 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 		}
 
 		stored := committedTrack(t, base, queued.ID)
-		if stored.Status != ports.TrackPending {
-			t.Errorf("queued track status = %v, want %v (untouched by shutdown)", stored.Status, ports.TrackPending)
+		if stored.Status != domain.TrackPending {
+			t.Errorf("queued track status = %v, want %v (untouched by shutdown)", stored.Status, domain.TrackPending)
 		}
 		if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 			t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
@@ -1553,8 +1554,8 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 		<-shutdownDone
 
 		stored := committedTrack(t, base, queued.ID)
-		if stored.Status != ports.TrackPending {
-			t.Errorf("refused track status = %v, want %v (untouched)", stored.Status, ports.TrackPending)
+		if stored.Status != domain.TrackPending {
+			t.Errorf("refused track status = %v, want %v (untouched)", stored.Status, domain.TrackPending)
 		}
 		if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 			t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
@@ -1572,11 +1573,11 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), withServiceEvents(pub))
 
-	svc.RefuseQueued(context.Background(), ports.AcquisitionJob{UserID: userId, TrackID: track.ID})
+	svc.RefuseQueued(context.Background(), domain.AcquisitionJob{UserID: userId, TrackID: track.ID})
 
 	stored := committedTrack(t, ledger, track.ID)
-	if stored.Status != ports.TrackReady {
-		t.Errorf("already-ready track status = %v, want %v (untouched)", stored.Status, ports.TrackReady)
+	if stored.Status != domain.TrackReady {
+		t.Errorf("already-ready track status = %v, want %v (untouched)", stored.Status, domain.TrackReady)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0 (quiet no-op)", got)
@@ -1615,13 +1616,13 @@ func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
 
 type outcomeAcquirer struct{ err error }
 
-func (a outcomeAcquirer) Execute(context.Context, ports.AcquisitionJob) error { return a.err }
+func (a outcomeAcquirer) Execute(context.Context, domain.AcquisitionJob) error { return a.err }
 
-func (a outcomeAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (a outcomeAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	return a.err
 }
 
-func (outcomeAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (outcomeAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func finishJobs(t *testing.T, advance func(time.Duration), s *service.BackgroundAcquisitionScheduler, count int) {
 	t.Helper()
@@ -1655,7 +1656,7 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 		if got.Succeeded != 0 || got.Failed != 1 {
 			t.Errorf("failing scheduler status = succeeded %d, failed %d, want 0, 1", got.Succeeded, got.Failed)
 		}
-		if len(got.Recent) != 1 || got.Recent[0].State != ports.JobFailed || got.Recent[0].Reason == "" {
+		if len(got.Recent) != 1 || got.Recent[0].State != domain.JobFailed || got.Recent[0].Reason == "" {
 			t.Errorf("recent = %+v, want one failed entry with a reason", got.Recent)
 		}
 	})
@@ -1686,60 +1687,29 @@ func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 }
 
 func TestAcquisitionVerification_ToolsPresent_RequiresYtDlp(t *testing.T) {
-	armed := ports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}
+	armed := domain.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}
 	if !armed.ToolsPresent() {
 		t.Error("ToolsPresent() = false with every tool present, want true")
 	}
 
-	missingYtDlp := ports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true}
+	missingYtDlp := domain.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true}
 	if missingYtDlp.ToolsPresent() {
 		t.Error("ToolsPresent() = true with yt-dlp unavailable; the startup warning never fires (defect)")
 	}
 }
 
-type fakeOutcomeRecorder struct {
-	calls     chan ports.AcquisitionOutcome
-	deadlines chan time.Duration
-	err       error
-	delay     time.Duration
-	after     func(time.Duration) <-chan time.Time
-}
-
-func newFakeOutcomeRecorder() *fakeOutcomeRecorder {
-	return &fakeOutcomeRecorder{
-		calls:     make(chan ports.AcquisitionOutcome, 8),
-		deadlines: make(chan time.Duration, 8),
-	}
-}
-
-func (r *fakeOutcomeRecorder) Record(ctx context.Context, o ports.AcquisitionOutcome) error {
-	if deadline, ok := ctx.Deadline(); ok {
-		r.deadlines <- time.Until(deadline)
-	}
-	if r.delay > 0 {
-		select {
-		case <-r.after(r.delay):
-		case <-ctx.Done():
-			r.calls <- o
-			return ctx.Err()
-		}
-	}
-	r.calls <- o
-	return r.err
-}
-
-func awaitOutcome(t *testing.T, calls chan ports.AcquisitionOutcome) ports.AcquisitionOutcome {
+func awaitOutcome(t *testing.T, calls chan domain.AcquisitionOutcome) domain.AcquisitionOutcome {
 	t.Helper()
 	select {
 	case o := <-calls:
 		return o
 	case <-time.After(jobSettleTimeout):
 		t.Fatal("outcome recorder never received a Record call")
-		return ports.AcquisitionOutcome{}
+		return domain.AcquisitionOutcome{}
 	}
 }
 
-func assertExactlyOneOutcome(t *testing.T, calls chan ports.AcquisitionOutcome) ports.AcquisitionOutcome {
+func assertExactlyOneOutcome(t *testing.T, calls chan domain.AcquisitionOutcome) domain.AcquisitionOutcome {
 	t.Helper()
 	first := awaitOutcome(t, calls)
 	synctest.Wait()
@@ -1754,7 +1724,7 @@ func assertExactlyOneOutcome(t *testing.T, calls chan ports.AcquisitionOutcome) 
 func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("succeeded", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			recorder := newFakeOutcomeRecorder()
+			recorder := memory.NewOutcomeRepo(time.Now)
 			svc := newTestAcquireService(memory.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -1764,13 +1734,13 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 				t.Fatalf("schedule: %v", err)
 			}
 
-			outcome := assertExactlyOneOutcome(t, recorder.calls)
+			outcome := assertExactlyOneOutcome(t, recorder.Calls())
 			awaitIdle(t, scheduler, time.Sleep)
 			if outcome.TrackID != trackId.String() {
 				t.Errorf("track id = %q, want %q", outcome.TrackID, trackId.String())
 			}
-			if outcome.Outcome != ports.JobSucceeded {
-				t.Errorf("outcome = %q, want %q", outcome.Outcome, ports.JobSucceeded)
+			if outcome.Outcome != domain.JobSucceeded {
+				t.Errorf("outcome = %q, want %q", outcome.Outcome, domain.JobSucceeded)
 			}
 			if outcome.ElapsedMs < 0 {
 				t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
@@ -1780,7 +1750,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 
 	t.Run("failed", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			recorder := newFakeOutcomeRecorder()
+			recorder := memory.NewOutcomeRepo(time.Now)
 			userId := ids.NewUserId(uuid.New())
 			track := newLedgerTrack(userId, "Song", "Artist", "Album")
 			ledger := memory.NewLedger()
@@ -1794,13 +1764,13 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 				t.Fatalf("schedule: %v", err)
 			}
 
-			outcome := assertExactlyOneOutcome(t, recorder.calls)
+			outcome := assertExactlyOneOutcome(t, recorder.Calls())
 			awaitIdle(t, scheduler, time.Sleep)
 			if outcome.TrackID != track.ID.String() {
 				t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
 			}
-			if outcome.Outcome != ports.JobFailed {
-				t.Errorf("outcome = %q, want %q", outcome.Outcome, ports.JobFailed)
+			if outcome.Outcome != domain.JobFailed {
+				t.Errorf("outcome = %q, want %q", outcome.Outcome, domain.JobFailed)
 			}
 			if outcome.Reason == "" {
 				t.Error("reason is empty, want the acquisition failure reason")
@@ -1813,7 +1783,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 
 	t.Run("panicked", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			recorder := newFakeOutcomeRecorder()
+			recorder := memory.NewOutcomeRepo(time.Now)
 			svc := newTestAcquireService(&panicLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -1823,10 +1793,10 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 				t.Fatalf("schedule: %v", err)
 			}
 
-			outcome := assertExactlyOneOutcome(t, recorder.calls)
+			outcome := assertExactlyOneOutcome(t, recorder.Calls())
 			awaitIdle(t, scheduler, time.Sleep)
-			if outcome.Outcome != ports.JobFailed {
-				t.Errorf("outcome = %q, want %q", outcome.Outcome, ports.JobFailed)
+			if outcome.Outcome != domain.JobFailed {
+				t.Errorf("outcome = %q, want %q", outcome.Outcome, domain.JobFailed)
 			}
 			if outcome.Reason != "panic" {
 				t.Errorf("reason = %q, want %q", outcome.Reason, "panic")
@@ -1839,7 +1809,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 
 	t.Run("queued job runs and records its own outcome once a worker frees up", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			recorder := newFakeOutcomeRecorder()
+			recorder := memory.NewOutcomeRepo(time.Now)
 			acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 			scheduler := newTestScheduler(acq, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -1855,14 +1825,14 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 				t.Fatalf("second schedule: %v", err)
 			}
 
-			if got := len(recorder.calls); got != 0 {
+			if got := len(recorder.Calls()); got != 0 {
 				t.Fatalf("recorded outcomes while the queued job still waits for a slot = %d, want 0", got)
 			}
 			close(acq.release)
 
-			byTrackID := make(map[string]ports.AcquisitionOutcome, 2)
+			byTrackID := make(map[string]domain.AcquisitionOutcome, 2)
 			for i := 0; i < 2; i++ {
-				o := awaitOutcome(t, recorder.calls)
+				o := awaitOutcome(t, recorder.Calls())
 				byTrackID[o.TrackID] = o
 			}
 			awaitIdle(t, scheduler, time.Sleep)
@@ -1871,16 +1841,16 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 			if !ok {
 				t.Fatalf("no outcome recorded for the running track %q, got %v", running.String(), byTrackID)
 			}
-			if runningOutcome.Outcome != ports.JobSucceeded {
-				t.Errorf("running track outcome = %q, want %q", runningOutcome.Outcome, ports.JobSucceeded)
+			if runningOutcome.Outcome != domain.JobSucceeded {
+				t.Errorf("running track outcome = %q, want %q", runningOutcome.Outcome, domain.JobSucceeded)
 			}
 
 			outcome, ok := byTrackID[queued.String()]
 			if !ok {
 				t.Fatalf("no outcome recorded for the queued track %q, got %v", queued.String(), byTrackID)
 			}
-			if outcome.Outcome != ports.JobSucceeded {
-				t.Errorf("outcome = %q, want %q", outcome.Outcome, ports.JobSucceeded)
+			if outcome.Outcome != domain.JobSucceeded {
+				t.Errorf("outcome = %q, want %q", outcome.Outcome, domain.JobSucceeded)
 			}
 			if outcome.ElapsedMs < 0 {
 				t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
@@ -1892,8 +1862,8 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testing.T) {
 	t.Run("erroring recorder leaves the job succeeded", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			recorder := newFakeOutcomeRecorder()
-			recorder.err = errors.New("outcome store unavailable")
+			recorder := memory.NewOutcomeRepo(time.Now)
+			recorder.FailWith(errors.New("outcome store unavailable"))
 			svc := newTestAcquireService(memory.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -1902,21 +1872,21 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 			if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), trackId, ""); err != nil {
 				t.Fatalf("schedule: %v", err)
 			}
-			awaitOutcome(t, recorder.calls)
+			awaitOutcome(t, recorder.Calls())
 			awaitIdle(t, scheduler, time.Sleep)
 
 			recent := scheduler.Status(t.Context()).Recent
-			if len(recent) != 1 || recent[0].State != ports.JobSucceeded {
-				t.Fatalf("recent jobs = %+v, want exactly one %s job (a Record error must not change the job's result)", recent, ports.JobSucceeded)
+			if len(recent) != 1 || recent[0].State != domain.JobSucceeded {
+				t.Fatalf("recent jobs = %+v, want exactly one %s job (a Record error must not change the job's result)", recent, domain.JobSucceeded)
 			}
 		})
 	})
 
 	t.Run("hanging recorder does not delay the next job", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			recorder := newFakeOutcomeRecorder()
-			recorder.delay = service.OutcomeRecordTimeout * 3
-			recorder.after = time.After
+			recorder := memory.NewOutcomeRepo(time.Now)
+			hang := service.OutcomeRecordTimeout * 3
+			recorder.HangFor(hang, time.After)
 			acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 			scheduler := newTestScheduler(acq, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -1935,15 +1905,15 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 			}
 			awaitIdle(t, scheduler, time.Sleep)
 			if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
-				t.Errorf("second job took %s to run, want well under the recorder's %s hang (outcome recording must not block the next job)", elapsed, recorder.delay)
+				t.Errorf("second job took %s to run, want well under the recorder's %s hang (outcome recording must not block the next job)", elapsed, hang)
 			}
 			if got := acq.calls.Load(); got != 2 {
 				t.Errorf("acquirer executions = %d, want 2", got)
 			}
 			for i := 0; i < 2; i++ {
 				select {
-				case <-recorder.calls:
-				case <-time.After(recorder.delay + jobSettleTimeout):
+				case <-recorder.Calls():
+				case <-time.After(hang + jobSettleTimeout):
 					t.Fatalf("outcome recorder call %d never settled", i+1)
 				}
 			}
@@ -1953,7 +1923,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 
 func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		svc := newTestAcquireService(memory.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
@@ -1961,11 +1931,11 @@ func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *tes
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule: %v", err)
 		}
-		assertExactlyOneOutcome(t, recorder.calls)
+		assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
 
 		select {
-		case margin := <-recorder.deadlines:
+		case margin := <-recorder.Deadlines():
 			if margin < time.Second {
 				t.Errorf("recorder's context deadline was %s away, want at least 1s of working margin", margin)
 			}
@@ -1975,7 +1945,7 @@ func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *tes
 	})
 }
 
-func startVerifiedScheduler(t *testing.T, v ports.Verification) {
+func startVerifiedScheduler(t *testing.T, v domain.Verification) {
 	t.Helper()
 	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now, withTestToolsPresent(v))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -1984,12 +1954,12 @@ func startVerifiedScheduler(t *testing.T, v ports.Verification) {
 func TestNewBackgroundAcquisitionScheduler_LogsVerificationDegradedOrArmed(t *testing.T) {
 	cases := []struct {
 		name         string
-		verification ports.Verification
+		verification domain.Verification
 		wantLevel    string
 		wantMsg      string
 	}{
-		{"not fully armed warns", ports.Verification{Ffprobe: true}, "WARN", "acquisition.verification_degraded"},
-		{"fully armed informs", ports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}, "INFO", "acquisition.verification_armed"},
+		{"not fully armed warns", domain.Verification{Ffprobe: true}, "WARN", "acquisition.verification_degraded"},
+		{"fully armed informs", domain.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}, "INFO", "acquisition.verification_armed"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2014,7 +1984,7 @@ func TestNewBackgroundAcquisitionScheduler_LogsVerificationDegradedOrArmed(t *te
 func TestNewBackgroundAcquisitionScheduler_NamesFingerprintLookupsUnverified(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
 
-	startVerifiedScheduler(t, ports.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})
+	startVerifiedScheduler(t, domain.Verification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})
 
 	var record struct {
 		FingerprintLookup string `json:"fingerprint_lookup"`
@@ -2031,8 +2001,8 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 	t.Run("failure logs the warning", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			logs := logging.CaptureJSON(t, slog.LevelDebug)
-			recorder := newFakeOutcomeRecorder()
-			recorder.err = errors.New("outcome store unavailable")
+			recorder := memory.NewOutcomeRepo(time.Now)
+			recorder.FailWith(errors.New("outcome store unavailable"))
 			svc := newTestAcquireService(memory.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -2040,7 +2010,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 			if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 				t.Fatalf("schedule: %v", err)
 			}
-			assertExactlyOneOutcome(t, recorder.calls)
+			assertExactlyOneOutcome(t, recorder.Calls())
 			awaitIdle(t, scheduler, time.Sleep)
 			synctest.Wait()
 
@@ -2053,7 +2023,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 	t.Run("success logs no warning", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			logs := logging.CaptureJSON(t, slog.LevelDebug)
-			recorder := newFakeOutcomeRecorder()
+			recorder := memory.NewOutcomeRepo(time.Now)
 			svc := newTestAcquireService(memory.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
@@ -2061,7 +2031,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 			if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 				t.Fatalf("schedule: %v", err)
 			}
-			assertExactlyOneOutcome(t, recorder.calls)
+			assertExactlyOneOutcome(t, recorder.Calls())
 			awaitIdle(t, scheduler, time.Sleep)
 			synctest.Wait()
 
@@ -2072,24 +2042,6 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 	})
 }
 
-type ctxAtRecordRecorder struct {
-	calls   chan ports.AcquisitionOutcome
-	ctxErrs chan error
-}
-
-func newCtxAtRecordRecorder() *ctxAtRecordRecorder {
-	return &ctxAtRecordRecorder{
-		calls:   make(chan ports.AcquisitionOutcome, 8),
-		ctxErrs: make(chan error, 8),
-	}
-}
-
-func (r *ctxAtRecordRecorder) Record(ctx context.Context, o ports.AcquisitionOutcome) error {
-	r.ctxErrs <- ctx.Err()
-	r.calls <- o
-	return nil
-}
-
 func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userId := ids.NewUserId(uuid.New())
@@ -2097,7 +2049,7 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 		ledger := memory.NewLedger()
 		ledger.Seed(track)
 		source := newBlockingSource()
-		recorder := newCtxAtRecordRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		svc := newTestAcquireService(liveCtxLedger{ledger}, service.NewSourceRegistry(source), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder), service.WithDrainBudget(10*time.Millisecond))
 		if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
@@ -2107,18 +2059,18 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 
 		scheduler.Shutdown(context.Background())
 
-		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		outcome := assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
 		if outcome.TrackID != track.ID.String() {
 			t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
 		}
-		if outcome.Outcome != ports.JobCancelled {
-			t.Errorf("outcome = %q, want %q (a job cut mid-run by shutdown is released for retry, not failed)", outcome.Outcome, ports.JobCancelled)
+		if outcome.Outcome != domain.JobCancelled {
+			t.Errorf("outcome = %q, want %q (a job cut mid-run by shutdown is released for retry, not failed)", outcome.Outcome, domain.JobCancelled)
 		}
 		if outcome.Reason != "shutdown" {
 			t.Errorf("reason = %q, want %q", outcome.Reason, "shutdown")
 		}
-		if ctxErr := <-recorder.ctxErrs; ctxErr != nil {
+		if ctxErr := <-recorder.ContextErrors(); ctxErr != nil {
 			t.Errorf("Record's context was already done (%v), want a live context detached from the cancelled job", ctxErr)
 		}
 	})
@@ -2132,7 +2084,7 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 		queued := newPendingTrack(t, userId, base)
 		ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-		recorder := newCtxAtRecordRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder), service.WithDrainBudget(10*time.Millisecond))
 		var released sync.Once
 		release := func() {
@@ -2159,22 +2111,22 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 		scheduler.Shutdown(shutdownCtx)
 		release()
 
-		only := awaitOutcome(t, recorder.calls)
+		only := awaitOutcome(t, recorder.Calls())
 		if only.TrackID != running.ID.String() {
 			t.Fatalf("recorded track = %q, want the running track %q (the queued job was never claimed)", only.TrackID, running.ID.String())
 		}
-		if only.Outcome != ports.JobCancelled {
-			t.Errorf("outcome = %q, want %q", only.Outcome, ports.JobCancelled)
+		if only.Outcome != domain.JobCancelled {
+			t.Errorf("outcome = %q, want %q", only.Outcome, domain.JobCancelled)
 		}
 		if only.Reason != "shutdown" {
 			t.Errorf("reason = %q, want %q", only.Reason, "shutdown")
 		}
-		if ctxErr := <-recorder.ctxErrs; ctxErr != nil {
+		if ctxErr := <-recorder.ContextErrors(); ctxErr != nil {
 			t.Errorf("Record's context was already done (%v), want a live context", ctxErr)
 		}
 
 		select {
-		case extra := <-recorder.calls:
+		case extra := <-recorder.Calls():
 			t.Fatalf("recorder received a call for the never-claimed queued job %+v, want none", extra)
 		case <-time.After(50 * time.Millisecond):
 		}
@@ -2183,9 +2135,9 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 
 func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
-		recorder.delay = 300 * time.Millisecond
-		recorder.after = time.After
+		recorder := memory.NewOutcomeRepo(time.Now)
+		hang := 300 * time.Millisecond
+		recorder.HangFor(hang, time.After)
 		svc := newTestAcquireService(memory.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 
@@ -2198,16 +2150,16 @@ func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing
 		scheduler.Shutdown(context.Background())
 		elapsed := time.Since(start)
 
-		if elapsed < recorder.delay {
-			t.Errorf("Shutdown returned %s after Schedule, want at least the %s the in-flight outcome write takes", elapsed, recorder.delay)
+		if elapsed < hang {
+			t.Errorf("Shutdown returned %s after Schedule, want at least the %s the in-flight outcome write takes", elapsed, hang)
 		}
-		assertExactlyOneOutcome(t, recorder.calls)
+		assertExactlyOneOutcome(t, recorder.Calls())
 	})
 }
 
 func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 		scheduler := newTestScheduler(acq, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
@@ -2219,7 +2171,7 @@ func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testin
 		time.Sleep(30 * time.Millisecond)
 		close(acq.release)
 
-		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		outcome := assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
 		recent := scheduler.Status(t.Context()).Recent
 		if len(recent) != 1 {
@@ -2246,18 +2198,18 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 		ledger.Seed(track)
 		leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
 		svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
 
 		if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
 			t.Fatalf("schedule: %v", err)
 		}
-		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		outcome := assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
 
-		if outcome.Outcome != ports.JobFailed {
-			t.Fatalf("outcome = %q, want %q", outcome.Outcome, ports.JobFailed)
+		if outcome.Outcome != domain.JobFailed {
+			t.Fatalf("outcome = %q, want %q", outcome.Outcome, domain.JobFailed)
 		}
 		if strings.Contains(outcome.Reason, cookieJarPath) {
 			t.Errorf("recorded reason = %q, still names the cookie file %q", outcome.Reason, cookieJarPath)
@@ -2268,15 +2220,15 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		logs := logging.CaptureJSON(t, slog.LevelDebug)
-		recorder := newFakeOutcomeRecorder()
-		recorder.err = errors.New("pg write: --cookies " + cookieJarPath + ": permission denied")
+		recorder := memory.NewOutcomeRepo(time.Now)
+		recorder.FailWith(errors.New("pg write: --cookies " + cookieJarPath + ": permission denied"))
 		scheduler := newTestScheduler(&stubAcquirer{}, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
 
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule: %v", err)
 		}
-		assertExactlyOneOutcome(t, recorder.calls)
+		assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
 
 		var warnLines []string
@@ -2307,18 +2259,18 @@ func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(
 
 func TestBackgroundScheduler_RecordOutcome_BoundsTheWriteToTwoSeconds(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		scheduler := newTestScheduler(&stubAcquirer{}, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
 
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule: %v", err)
 		}
-		assertExactlyOneOutcome(t, recorder.calls)
+		assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
 
 		select {
-		case margin := <-recorder.deadlines:
+		case margin := <-recorder.Deadlines():
 			if margin > 2*time.Second {
 				t.Errorf("recorder's context deadline was %s away, want at most 2s", margin)
 			}
@@ -2330,7 +2282,7 @@ func TestBackgroundScheduler_RecordOutcome_BoundsTheWriteToTwoSeconds(t *testing
 
 func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		scheduler := newTestScheduler(&stubAcquirer{}, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
 		trackId := ids.NewTrackId()
@@ -2338,17 +2290,17 @@ func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
 		if err := scheduler.ScheduleReplace(context.Background(), ids.NewUserId(uuid.New()), trackId); err != nil {
 			t.Fatalf("schedule replace: %v", err)
 		}
-		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		outcome := assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
-		if outcome.TrackID != trackId.String() || outcome.Outcome != ports.JobSucceeded {
-			t.Errorf("recorded (%q, %q), want (%q, %q)", outcome.TrackID, outcome.Outcome, trackId.String(), ports.JobSucceeded)
+		if outcome.TrackID != trackId.String() || outcome.Outcome != domain.JobSucceeded {
+			t.Errorf("recorded (%q, %q), want (%q, %q)", outcome.TrackID, outcome.Outcome, trackId.String(), domain.JobSucceeded)
 		}
 	})
 }
 
 func TestBackgroundScheduler_DedupedSchedule_ReplaysAndRecordsBothOutcomes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 		scheduler := newTestScheduler(acq, 2, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
@@ -2364,8 +2316,8 @@ func TestBackgroundScheduler_DedupedSchedule_ReplaysAndRecordsBothOutcomes(t *te
 		}
 		close(acq.release)
 
-		first := awaitOutcome(t, recorder.calls)
-		second := awaitOutcome(t, recorder.calls)
+		first := awaitOutcome(t, recorder.Calls())
+		second := awaitOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
 		if first.TrackID != trackId.String() || second.TrackID != trackId.String() {
 			t.Errorf("track ids = %q, %q, want both %q", first.TrackID, second.TrackID, trackId.String())
@@ -2387,8 +2339,8 @@ func TestBackgroundScheduler_WithoutAnOutcomeRecorder_LeavesTheJobUntouched(t *t
 		awaitIdle(t, scheduler, time.Sleep)
 
 		status := scheduler.Status(t.Context())
-		if status.Succeeded != 1 || len(status.Recent) != 1 || status.Recent[0].State != ports.JobSucceeded {
-			t.Errorf("status = succeeded %d, recent %+v, want one %s job", status.Succeeded, status.Recent, ports.JobSucceeded)
+		if status.Succeeded != 1 || len(status.Recent) != 1 || status.Recent[0].State != domain.JobSucceeded {
+			t.Errorf("status = succeeded %d, recent %+v, want one %s job", status.Succeeded, status.Recent, domain.JobSucceeded)
 		}
 	})
 }
@@ -2400,7 +2352,7 @@ type ctxCapturingAcquirer struct {
 	ctx     atomic.Value
 }
 
-func (a *ctxCapturingAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
+func (a *ctxCapturingAcquirer) Execute(ctx context.Context, job domain.AcquisitionJob) error {
 	a.ctx.Store(ctx)
 	a.once.Do(func() { close(a.started) })
 	select {
@@ -2410,18 +2362,18 @@ func (a *ctxCapturingAcquirer) Execute(ctx context.Context, job ports.Acquisitio
 	return ctx.Err()
 }
 
-func (a *ctxCapturingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
-	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
+func (a *ctxCapturingAcquirer) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
+	return a.Execute(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *ctxCapturingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (a *ctxCapturingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 type flakyHeartbeatQueue struct {
 	*memJobQueue
 	heartbeatErr error
 }
 
-func (q *flakyHeartbeatQueue) Heartbeat(context.Context, ids.TrackId, ports.ClaimNumber, time.Duration) error {
+func (q *flakyHeartbeatQueue) Heartbeat(context.Context, ids.TrackId, domain.ClaimNumber, time.Duration) error {
 	return q.heartbeatErr
 }
 
@@ -2461,7 +2413,7 @@ type beatingQueue struct {
 	beats chan struct{}
 }
 
-func (q *beatingQueue) Heartbeat(context.Context, ids.TrackId, ports.ClaimNumber, time.Duration) error {
+func (q *beatingQueue) Heartbeat(context.Context, ids.TrackId, domain.ClaimNumber, time.Duration) error {
 	select {
 	case q.beats <- struct{}{}:
 	default:
@@ -2519,7 +2471,7 @@ func TestAcquisitionStatus_ReportsVerifySkipsAndFingerprintVerification(t *testi
 }
 
 type releaseRecord struct {
-	fence ports.ClaimNumber
+	fence domain.ClaimNumber
 	delay time.Duration
 }
 
@@ -2528,7 +2480,7 @@ type releaseRecordingQueue struct {
 	releases chan releaseRecord
 }
 
-func (q *releaseRecordingQueue) Release(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, delay time.Duration) error {
+func (q *releaseRecordingQueue) Release(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber, delay time.Duration) error {
 	q.releases <- releaseRecord{fence: fence, delay: delay}
 	return q.memJobQueue.Release(ctx, trackID, fence, delay)
 }
@@ -2564,8 +2516,8 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 		t.Errorf("released delay = %v, want %v", released.delay, 30*time.Second)
 	}
 	stored := storedTrack(t, ledger, track)
-	if stored.Status != ports.TrackPending {
-		t.Errorf("status = %v, want %v", stored.Status, ports.TrackPending)
+	if stored.Status != domain.TrackPending {
+		t.Errorf("status = %v, want %v", stored.Status, domain.TrackPending)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
@@ -2598,8 +2550,8 @@ func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
 		if err := scheduler.Schedule(context.Background(), user, accepted, ""); err != nil {
 			t.Fatalf("schedule after Resume = %v, want nil", err)
 		}
-		if settled := awaitSettledJob(t, scheduler, accepted.String()); settled.State != ports.JobSucceeded {
-			t.Errorf("post-resume job state = %q, want %q", settled.State, ports.JobSucceeded)
+		if settled := awaitSettledJob(t, scheduler, accepted.String()); settled.State != domain.JobSucceeded {
+			t.Errorf("post-resume job state = %q, want %q", settled.State, domain.JobSucceeded)
 		}
 	})
 }
@@ -2619,17 +2571,17 @@ type gatedAcquirer struct {
 	release chan struct{}
 }
 
-func (a gatedAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (a gatedAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	a.running <- struct{}{}
 	<-a.release
 	return nil
 }
 
-func (a gatedAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
-	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
+func (a gatedAcquirer) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
+	return a.Execute(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (gatedAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (gatedAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) {
 	queue := backlogQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), pending: 5, oldestAge: 90 * time.Second}
@@ -2691,19 +2643,19 @@ type conflictingQueue struct {
 	gate      chan struct{}
 }
 
-func (q *conflictingQueue) Enqueue(ctx context.Context, trackID ids.TrackId, kind ports.JobKind, delay time.Duration) error {
+func (q *conflictingQueue) Enqueue(ctx context.Context, trackID ids.TrackId, kind domain.JobKind, delay time.Duration) error {
 	if n := q.enqueues.Add(1); q.rejectAll || n > 1 {
 		return domain.ErrJobKindConflict
 	}
 	return q.memJobQueue.Enqueue(ctx, trackID, kind, delay)
 }
 
-func (q *conflictingQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job, error) {
+func (q *conflictingQueue) Claim(ctx context.Context, lease time.Duration) (domain.Job, error) {
 	select {
 	case <-q.gate:
 		return q.memJobQueue.Claim(ctx, lease)
 	default:
-		return ports.Job{}, domain.ErrNoJobAvailable
+		return domain.Job{}, domain.ErrNoJobAvailable
 	}
 }
 
@@ -2757,8 +2709,8 @@ func TestBackgroundScheduler_Schedule_RunsTheJobWhenTheSchedulerClockIsAnHourAhe
 		time.Sleep(time.Second)
 
 		settled := awaitSettledJob(t, scheduler, trackID.String())
-		if settled.State != ports.JobSucceeded {
-			t.Errorf("job state = %q, want %q (claimability follows the queue clock, not the scheduler's)", settled.State, ports.JobSucceeded)
+		if settled.State != domain.JobSucceeded {
+			t.Errorf("job state = %q, want %q (claimability follows the queue clock, not the scheduler's)", settled.State, domain.JobSucceeded)
 		}
 	})
 }
@@ -2769,7 +2721,7 @@ type claimSignalQueue struct {
 	claimed chan struct{}
 }
 
-func (q *claimSignalQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job, error) {
+func (q *claimSignalQueue) Claim(ctx context.Context, lease time.Duration) (domain.Job, error) {
 	job, err := q.DownloadQueue.Claim(ctx, lease)
 	if err == nil {
 		q.claims.Add(1)
@@ -2783,7 +2735,7 @@ func seededPendingQueue(t *testing.T) *claimSignalQueue {
 	mem := newMemJobQueue(nil)
 	trackID := ids.NewTrackId()
 	mem.RememberUser(trackID, ids.NewUserId(uuid.New()))
-	if err := mem.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
+	if err := mem.Enqueue(context.Background(), trackID, domain.JobKindAcquire, 0); err != nil {
 		t.Fatalf("seed pending job: %v", err)
 	}
 	return &claimSignalQueue{DownloadQueue: mem, claimed: make(chan struct{})}
@@ -2838,7 +2790,7 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 	}
 }
 
-func awaitRecent(t *testing.T, s *service.BackgroundAcquisitionScheduler) []ports.JobRecord {
+func awaitRecent(t *testing.T, s *service.BackgroundAcquisitionScheduler) []domain.JobRecord {
 	t.Helper()
 	synctest.Wait()
 	recent := s.Status(t.Context()).Recent
@@ -2850,7 +2802,7 @@ func awaitRecent(t *testing.T, s *service.BackgroundAcquisitionScheduler) []port
 
 func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		job := ports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Waited: 3 * time.Second}
+		job := domain.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Waited: 3 * time.Second}
 		queue := newScriptedClaimQueue(job)
 		scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now,
 			withTestQueue(queue), service.WithPollInterval(time.Millisecond))
@@ -2864,9 +2816,9 @@ func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
 	})
 }
 
-func scheduledOutcome(t *testing.T, source ports.AudioSource) ports.AcquisitionOutcome {
+func scheduledOutcome(t *testing.T, source ports.AudioSource) domain.AcquisitionOutcome {
 	t.Helper()
-	recorder := newFakeOutcomeRecorder()
+	recorder := memory.NewOutcomeRepo(time.Now)
 	track := pendingBlindingLights()
 	length := blindingLightsLength
 	track.CatalogDurationSeconds = &length
@@ -2877,14 +2829,14 @@ func scheduledOutcome(t *testing.T, source ports.AudioSource) ports.AcquisitionO
 	if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
-	return assertExactlyOneOutcome(t, recorder.calls)
+	return assertExactlyOneOutcome(t, recorder.Calls())
 }
 
 func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		got := scheduledOutcome(t, freshAudioSource{})
 
-		if got.Outcome != ports.JobSucceeded || got.SourceHost != "www.youtube.com" {
+		if got.Outcome != domain.JobSucceeded || got.SourceHost != "www.youtube.com" {
 			t.Errorf("outcome = %q from host %q, want succeeded from www.youtube.com", got.Outcome, got.SourceHost)
 		}
 		if _, timed := got.StageMs["search"]; !timed || got.Stored.Codec != "mp3" || got.Stored.Bytes == 0 {
@@ -2902,7 +2854,7 @@ func TestBackgroundScheduler_AFailedOutcomeNamesNoSourceHost(t *testing.T) {
 
 		got := scheduledOutcome(t, source)
 
-		if got.Outcome != ports.JobFailed {
+		if got.Outcome != domain.JobFailed {
 			t.Fatalf("outcome = %q, want failed", got.Outcome)
 		}
 		if got.SourceHost != "" {
@@ -2918,7 +2870,7 @@ type orderedAcquirer struct {
 	firstOnce    sync.Once
 }
 
-func (a *orderedAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (a *orderedAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	a.firstOnce.Do(func() {
 		close(a.firstStarted)
 		<-a.releaseFirst
@@ -2927,7 +2879,7 @@ func (a *orderedAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
 	return nil
 }
 
-func (a *orderedAcquirer) ExecuteUpgrade(context.Context, ports.AcquisitionJob) error {
+func (a *orderedAcquirer) ExecuteUpgrade(context.Context, domain.AcquisitionJob) error {
 	a.record("ExecuteUpgrade")
 	return nil
 }
@@ -2974,13 +2926,13 @@ func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUser
 
 type keptUpgrader struct{ stubAcquirer }
 
-func (*keptUpgrader) ExecuteUpgrade(context.Context, ports.AcquisitionJob) error {
+func (*keptUpgrader) ExecuteUpgrade(context.Context, domain.AcquisitionJob) error {
 	return service.ErrKept
 }
 
 func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		acq := &keptUpgrader{}
 		scheduler := newTestScheduler(acq, 1, time.Now,
 			service.WithPollInterval(5*time.Millisecond),
@@ -2993,9 +2945,9 @@ func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t
 		}
 		awaitIdle(t, scheduler, time.Sleep)
 
-		got := assertExactlyOneOutcome(t, recorder.calls)
-		if got.Outcome != ports.JobKept {
-			t.Errorf("outcome = %q, want %q", got.Outcome, ports.JobKept)
+		got := assertExactlyOneOutcome(t, recorder.Calls())
+		if got.Outcome != domain.JobKept {
+			t.Errorf("outcome = %q, want %q", got.Outcome, domain.JobKept)
 		}
 		if status := scheduler.Status(t.Context()); status.Succeeded != 0 || status.Failed != 0 {
 			t.Errorf("succeeded = %d, failed = %d, want a kept file to move neither", status.Succeeded, status.Failed)
@@ -3012,7 +2964,7 @@ type committingUpgrader struct {
 	startedOne sync.Once
 }
 
-func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, job ports.AcquisitionJob) error {
+func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, job domain.AcquisitionJob) error {
 	u.startedOne.Do(func() { close(u.started) })
 	<-u.proceed
 	_, err := u.step.Execute(ctx, &service.AcquisitionContext{Job: job, AudioRef: "upgraded.mp3"}, service.AfterStore{Kept: downloadtest.Candidate("https://www.youtube.com/watch?v=upgradedAAA")})
@@ -3026,7 +2978,7 @@ func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverC
 	ledger := memory.NewLedger()
 	ledger.Seed(track)
 	acq := &committingUpgrader{
-		step:      service.NewUpdateTrackStep(ledger, userId, track.ID),
+		step:      service.NewUpdateTrackStep(ledger, evidence.NewCodec(), userId, track.ID),
 		started:   make(chan struct{}),
 		proceed:   make(chan struct{}),
 		commitErr: make(chan error, 1),
@@ -3049,13 +3001,13 @@ func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverC
 	if commitErr := <-acq.commitErr; !errors.Is(commitErr, domain.ErrLeaseLost) {
 		t.Errorf("upgrade commit = %v, want ErrLeaseLost", commitErr)
 	}
-	if status := storedTrack(t, ledger, track).Status; status != ports.TrackPending {
+	if status := storedTrack(t, ledger, track).Status; status != domain.TrackPending {
 		t.Errorf("track status = %v, want the upgrade to have written nothing", status)
 	}
 }
 
 func TestBackgroundScheduler_APanickingReplaceAtTheRunCapIsSettled(t *testing.T) {
-	job := ports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: ports.JobKindReplace, Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: domain.JobKindReplace, Run: service.MaxAcquisitionAttempts}
 
 	queue := panicOnClaim(t, &panickingAcquirer{}, job)
 
@@ -3067,7 +3019,7 @@ func TestBackgroundScheduler_APanickingReplaceAtTheRunCapIsSettled(t *testing.T)
 	}
 }
 
-func panickedJobOutcome(t *testing.T, job ports.Job) (*panickingAcquirer, *scriptedClaimQueue) {
+func panickedJobOutcome(t *testing.T, job domain.Job) (*panickingAcquirer, *scriptedClaimQueue) {
 	t.Helper()
 	acq := &panickingAcquirer{}
 	job.TrackID = ids.NewTrackId()
@@ -3076,7 +3028,7 @@ func panickedJobOutcome(t *testing.T, job ports.Job) (*panickingAcquirer, *scrip
 }
 
 func TestBackgroundScheduler_APanickedJobAtOrPastTheRunCapLeavesTheQueueWhateverItsKind(t *testing.T) {
-	kinds := []ports.JobKind{ports.JobKindAcquire, ports.JobKindReplace, ports.JobKindUpgrade}
+	kinds := []domain.JobKind{domain.JobKindAcquire, domain.JobKindReplace, domain.JobKindUpgrade}
 	runs := []struct {
 		name string
 		run  int
@@ -3085,7 +3037,7 @@ func TestBackgroundScheduler_APanickedJobAtOrPastTheRunCapLeavesTheQueueWhatever
 		for _, r := range runs {
 			run := r.run
 			t.Run(string(kind)+"/"+r.name, func(t *testing.T) {
-				acq, queue := panickedJobOutcome(t, ports.Job{Kind: kind, Run: run})
+				acq, queue := panickedJobOutcome(t, domain.Job{Kind: kind, Run: run})
 
 				if got := queue.releaseDelays(); len(got) != 0 {
 					t.Errorf("released with %v, want no Release: a released job at the cap stays claimable", got)
@@ -3108,11 +3060,11 @@ func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *
 	ledger := memory.NewLedger()
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	job := ports.Job{TrackID: track.ID, UserID: userId, ClaimNumber: 1, Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: track.ID, UserID: userId, ClaimNumber: 1, Run: service.MaxAcquisitionAttempts}
 
 	panicOnClaim(t, svc, job)
 
-	if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackPending {
+	if got := committedTrack(t, ledger, track.ID).Status; got != domain.TrackPending {
 		t.Errorf("status = %v, want pending: the panicked job no longer holds the lease", got)
 	}
 	if got := committedTrack(t, ledger, track.ID).FailureReason; got != "" {
@@ -3123,20 +3075,20 @@ func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *
 func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(t *testing.T) {
 	cases := []struct {
 		name string
-		kind ports.JobKind
+		kind domain.JobKind
 		run  int
 		want time.Duration
 	}{
-		{"acquire/first run", ports.JobKindAcquire, 1, 30 * time.Second},
-		{"acquire/second run", ports.JobKindAcquire, 2, 2 * time.Minute},
-		{"replace/first run", ports.JobKindReplace, 1, 30 * time.Second},
-		{"replace/second run", ports.JobKindReplace, 2, 2 * time.Minute},
-		{"upgrade/first run", ports.JobKindUpgrade, 1, 30 * time.Second},
-		{"upgrade/second run", ports.JobKindUpgrade, 2, 2 * time.Minute},
+		{"acquire/first run", domain.JobKindAcquire, 1, 30 * time.Second},
+		{"acquire/second run", domain.JobKindAcquire, 2, 2 * time.Minute},
+		{"replace/first run", domain.JobKindReplace, 1, 30 * time.Second},
+		{"replace/second run", domain.JobKindReplace, 2, 2 * time.Minute},
+		{"upgrade/first run", domain.JobKindUpgrade, 1, 30 * time.Second},
+		{"upgrade/second run", domain.JobKindUpgrade, 2, 2 * time.Minute},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			acq, queue := panickedJobOutcome(t, ports.Job{Kind: tc.kind, Run: tc.run})
+			acq, queue := panickedJobOutcome(t, domain.Job{Kind: tc.kind, Run: tc.run})
 
 			if got := queue.releaseDelays(); len(got) != 1 || got[0] != tc.want {
 				t.Errorf("release delays = %v, want exactly [%v]", got, tc.want)
@@ -3163,7 +3115,7 @@ func TestBackgroundScheduler_APanickedJobsRetryDelayIsSpreadByTheInjectedUnit(t 
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			job := ports.Job{Kind: ports.JobKindAcquire, Run: 1, TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New())}
+			job := domain.Job{Kind: domain.JobKindAcquire, Run: 1, TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New())}
 			queue := newScriptedClaimQueue(job)
 			scheduler := newTestScheduler(panicsAfterClaim{jobRunner: &panickingAcquirer{}}, 1, time.Now,
 				withTestQueue(queue),
@@ -3182,19 +3134,19 @@ func TestBackgroundScheduler_APanickedJobsRetryDelayIsSpreadByTheInjectedUnit(t 
 
 type retryableAcquirer struct{}
 
-func (retryableAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (retryableAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryableAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (retryableAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	return service.ErrAcquisitionRetryable
 }
 
-func (retryableAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (retryableAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		scheduler := newTestScheduler(retryableAcquirer{}, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
 
@@ -3204,14 +3156,14 @@ func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 
 		synctest.Wait()
 		status := scheduler.Status(t.Context())
-		if len(status.Recent) == 0 || status.Recent[0].State != ports.JobRetrying {
-			t.Fatalf("recent = %+v, want one %s job", status.Recent, ports.JobRetrying)
+		if len(status.Recent) == 0 || status.Recent[0].State != domain.JobRetrying {
+			t.Fatalf("recent = %+v, want one %s job", status.Recent, domain.JobRetrying)
 		}
 		if status.Failed != 0 {
 			t.Errorf("failed = %d, want 0", status.Failed)
 		}
 		select {
-		case o := <-recorder.calls:
+		case o := <-recorder.Calls():
 			t.Errorf("recorder received %+v, want no outcome row for a retrying job", o)
 		case <-time.After(50 * time.Millisecond):
 		}
@@ -3219,7 +3171,7 @@ func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 }
 
 func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
-	recorder := newFakeOutcomeRecorder()
+	recorder := memory.NewOutcomeRepo(time.Now)
 	acq := &ctxCapturingAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 	queue := &flakyHeartbeatQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), heartbeatErr: domain.ErrLeaseLost}
 	scheduler := newTestScheduler(acq, 1, time.Now,
@@ -3237,9 +3189,9 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 		t.Fatalf("schedule: %v", err)
 	}
 
-	outcome := awaitOutcome(t, recorder.calls)
-	if outcome.Outcome != ports.JobCancelled || outcome.Reason != "lease_lost" {
-		t.Errorf("outcome = %q reason %q, want %q reason lease_lost", outcome.Outcome, outcome.Reason, ports.JobCancelled)
+	outcome := awaitOutcome(t, recorder.Calls())
+	if outcome.Outcome != domain.JobCancelled || outcome.Reason != "lease_lost" {
+		t.Errorf("outcome = %q reason %q, want %q reason lease_lost", outcome.Outcome, outcome.Reason, domain.JobCancelled)
 	}
 	if failed := scheduler.Status(t.Context()).Failed; failed != 0 {
 		t.Errorf("failed = %d, want 0", failed)
@@ -3248,16 +3200,16 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 
 func TestScheduler_OutcomeCarriesJobKindAndRun(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
-		job := ports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: ports.JobKindReplace, Run: 2}
+		recorder := memory.NewOutcomeRepo(time.Now)
+		job := domain.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: domain.JobKindReplace, Run: 2}
 		queue := newScriptedClaimQueue(job)
 		scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now,
 			withTestQueue(queue), service.WithPollInterval(time.Millisecond), withTestOutcomes(recorder))
 		t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-		got := assertExactlyOneOutcome(t, recorder.calls)
+		got := assertExactlyOneOutcome(t, recorder.Calls())
 
-		if got.Kind != ports.JobKindReplace || got.Run != 2 {
+		if got.Kind != domain.JobKindReplace || got.Run != 2 {
 			t.Errorf("outcome kind/run = %q/%d, want replace/2", got.Kind, got.Run)
 		}
 	})
@@ -3265,7 +3217,7 @@ func TestScheduler_OutcomeCarriesJobKindAndRun(t *testing.T) {
 
 func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
 		track.ClaimNumber = 1000
@@ -3279,9 +3231,9 @@ func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *
 			t.Fatalf("schedule: %v", err)
 		}
 
-		assertExactlyOneOutcome(t, recorder.calls)
+		assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
-		if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackPending {
+		if got := committedTrack(t, ledger, track.ID).Status; got != domain.TrackPending {
 			t.Errorf("status = %v, want pending: the job ran on a fence the track no longer carries", got)
 		}
 		if got := committedTrack(t, ledger, track.ID).FailureReason; got != "" {
@@ -3292,7 +3244,7 @@ func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *
 
 func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFailed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		recorder := newFakeOutcomeRecorder()
+		recorder := memory.NewOutcomeRepo(time.Now)
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
 		track.ClaimNumber = 1000
@@ -3306,10 +3258,10 @@ func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFail
 			t.Fatalf("schedule: %v", err)
 		}
 
-		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		outcome := assertExactlyOneOutcome(t, recorder.Calls())
 		awaitIdle(t, scheduler, time.Sleep)
-		if outcome.Outcome != ports.JobCancelled || outcome.Reason != service.LeaseLostReason {
-			t.Errorf("outcome = %q/%q, want %q/%q", outcome.Outcome, outcome.Reason, ports.JobCancelled, service.LeaseLostReason)
+		if outcome.Outcome != domain.JobCancelled || outcome.Reason != service.LeaseLostReason {
+			t.Errorf("outcome = %q/%q, want %q/%q", outcome.Outcome, outcome.Reason, domain.JobCancelled, service.LeaseLostReason)
 		}
 	})
 }
@@ -3323,7 +3275,7 @@ func TestExecute_ALedgerRefusalForAStaleFenceSurfacesErrLeaseLostWithTheCause(t 
 	cause := errors.New("boom")
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: cause}), newFakeAudioStore())
 
-	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: userId, TrackID: track.ID, Claim: 1})
+	err := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: userId, TrackID: track.ID, Claim: 1})
 
 	if !errors.Is(err, domain.ErrLeaseLost) || !errors.Is(err, cause) {
 		t.Errorf("err = %v, want both ErrLeaseLost and the pipeline's cause", err)
@@ -3346,13 +3298,13 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 		wantMeasured float64
 		wantScored   bool
 	}{
-		{"stored file", &fakeAudioSearcher{searchResults: []ports.AudioCandidate{stored}, downloadPath: audio}, &queueProber{durations: []float64{213.4, 213.4}}, domain.SourceKey(stored.URL), 213.4, true},
+		{"stored file", &fakeAudioSearcher{searchResults: []domain.AudioCandidate{stored}, downloadPath: audio}, &queueProber{durations: []float64{213.4, 213.4}}, domain.SourceKey(stored.URL), 213.4, true},
 		{"no match: target, no measurement", &fakeAudioSearcher{}, &queueProber{}, "", 0, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				recorder := newFakeOutcomeRecorder()
+				recorder := memory.NewOutcomeRepo(time.Now)
 				userId := ids.NewUserId(uuid.New())
 				ledger := memory.NewLedger()
 				track := queuedTrack(t, ledger, userId)
@@ -3365,7 +3317,7 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 					t.Fatalf("schedule: %v", err)
 				}
 
-				got := assertExactlyOneOutcome(t, recorder.calls)
+				got := assertExactlyOneOutcome(t, recorder.Calls())
 				awaitIdle(t, scheduler, time.Sleep)
 				if (got.Confidence > 0) != tc.wantScored || got.SourceKey != tc.wantSource || got.TargetSeconds != target || got.MeasuredSeconds != tc.wantMeasured {
 					t.Errorf("outcome = %v/%q/%v/%v, want scored=%v/%q/%v/%v", got.Confidence, got.SourceKey, got.TargetSeconds, got.MeasuredSeconds, tc.wantScored, tc.wantSource, float64(target), tc.wantMeasured)
@@ -3380,12 +3332,12 @@ func fencedPendingTrack(t *testing.T, fence int) (*memory.Ledger, ledgerTrack) {
 	userId := ids.NewUserId(uuid.New())
 	ledger := memory.NewLedger()
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
-	track.ClaimNumber = ports.ClaimNumber(fence)
+	track.ClaimNumber = domain.ClaimNumber(fence)
 	ledger.Seed(track)
 	return ledger, track
 }
 
-func panicThroughTheLedger(t *testing.T, store ports.LibraryTracks, job ports.Job) (*scriptedClaimQueue, *recordingPublisher) {
+func panicThroughTheLedger(t *testing.T, store ports.LibraryTracks, job domain.Job) (*scriptedClaimQueue, *recordingPublisher) {
 	t.Helper()
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(store, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), withServiceEvents(pub))
@@ -3394,11 +3346,11 @@ func panicThroughTheLedger(t *testing.T, store ports.LibraryTracks, job ports.Jo
 
 func TestBackgroundScheduler_APanickedJobAtTheRunCapThatStillHoldsItsLeaseFailsTheTrack(t *testing.T) {
 	ledger, track := fencedPendingTrack(t, 7)
-	job := ports.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 7, Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 7, Run: service.MaxAcquisitionAttempts}
 
 	_, pub := panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, ledger, track).Status; got != ports.TrackFailed {
+	if got := storedTrack(t, ledger, track).Status; got != domain.TrackFailed {
 		t.Errorf("status = %v, want failed: the job still holds the lease", got)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
@@ -3408,12 +3360,12 @@ func TestBackgroundScheduler_APanickedJobAtTheRunCapThatStillHoldsItsLeaseFailsT
 
 func TestBackgroundScheduler_APanickedJobOneFenceBehindDoesNotFailTheTrackOrAnnounceIt(t *testing.T) {
 	ledger, track := fencedPendingTrack(t, 7)
-	job := ports.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 6, Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 6, Run: service.MaxAcquisitionAttempts}
 
 	_, pub := panicThroughTheLedger(t, ledger, job)
 
 	stored := storedTrack(t, ledger, track)
-	if stored.Status != ports.TrackPending {
+	if stored.Status != domain.TrackPending {
 		t.Errorf("status = %v, want pending: a fence one behind has lost the lease", stored.Status)
 	}
 	if stored.FailureReason != "" {
@@ -3426,11 +3378,11 @@ func TestBackgroundScheduler_APanickedJobOneFenceBehindDoesNotFailTheTrackOrAnno
 
 func TestBackgroundScheduler_APanickedJobBelowTheRunCapLeavesTheTrackPendingForItsRetry(t *testing.T) {
 	ledger, track := fencedPendingTrack(t, 7)
-	job := ports.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 7, Run: service.MaxAcquisitionAttempts - 1}
+	job := domain.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 7, Run: service.MaxAcquisitionAttempts - 1}
 
 	queue, _ := panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, ledger, track).Status; got != ports.TrackPending {
+	if got := storedTrack(t, ledger, track).Status; got != domain.TrackPending {
 		t.Errorf("status = %v, want pending: below the cap the job is retried", got)
 	}
 	if got := queue.released.Load(); got != 1 {
@@ -3443,17 +3395,17 @@ func TestBackgroundScheduler_APanickedJobBelowTheRunCapLeavesTheTrackPendingForI
 
 func TestBackgroundScheduler_AnUnfencedPanickedJobAtTheRunCapStillFailsTheTrack(t *testing.T) {
 	ledger, track := fencedPendingTrack(t, 1000)
-	job := ports.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 0, Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: track.ID, UserID: track.UserId, ClaimNumber: 0, Run: service.MaxAcquisitionAttempts}
 
 	panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, ledger, track).Status; got != ports.TrackFailed {
+	if got := storedTrack(t, ledger, track).Status; got != domain.TrackFailed {
 		t.Errorf("status = %v, want failed: an unfenced job is not checked against the lease", got)
 	}
 }
 
 func TestBackgroundScheduler_APanickedJobAtTheRunCapSurvivesARefusalThatPanicsAndLeavesTheQueue(t *testing.T) {
-	job := ports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: 7, Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: 7, Run: service.MaxAcquisitionAttempts}
 
 	var queue *scriptedClaimQueue
 	func() {
@@ -3474,14 +3426,14 @@ func TestBackgroundScheduler_APanickedJobAtTheRunCapSurvivesARefusalThatPanicsAn
 }
 
 func TestBackgroundScheduler_APanickedReplaceOrUpgradeThatLostItsLeaseLeavesTheTrackPending(t *testing.T) {
-	for _, kind := range []ports.JobKind{ports.JobKindReplace, ports.JobKindUpgrade} {
+	for _, kind := range []domain.JobKind{domain.JobKindReplace, domain.JobKindUpgrade} {
 		t.Run(string(kind), func(t *testing.T) {
 			ledger, track := fencedPendingTrack(t, 1000)
-			job := ports.Job{TrackID: track.ID, UserID: track.UserId, Kind: kind, ClaimNumber: 1, Run: service.MaxAcquisitionAttempts}
+			job := domain.Job{TrackID: track.ID, UserID: track.UserId, Kind: kind, ClaimNumber: 1, Run: service.MaxAcquisitionAttempts}
 
 			panicThroughTheLedger(t, ledger, job)
 
-			if got := storedTrack(t, ledger, track).Status; got != ports.TrackPending {
+			if got := storedTrack(t, ledger, track).Status; got != domain.TrackPending {
 				t.Errorf("status = %v, want pending: the panicked %s job no longer holds the lease", got, kind)
 			}
 		})
@@ -3495,11 +3447,11 @@ func TestBackgroundScheduler_APanickedUpgradeAtTheRunCapThatHoldsItsLeaseLeavesA
 	makeReady(&track, "audio/ref.mp3")
 	track.ClaimNumber = 7
 	ledger.Seed(track)
-	job := ports.Job{TrackID: track.ID, UserID: userId, Kind: ports.JobKindUpgrade, ClaimNumber: 7, Run: service.MaxAcquisitionAttempts}
+	job := domain.Job{TrackID: track.ID, UserID: userId, Kind: domain.JobKindUpgrade, ClaimNumber: 7, Run: service.MaxAcquisitionAttempts}
 
 	panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, ledger, track).Status; got != ports.TrackReady {
+	if got := storedTrack(t, ledger, track).Status; got != domain.TrackReady {
 		t.Errorf("status = %v, want ready: a failed upgrade never un-readies the playing file", got)
 	}
 }

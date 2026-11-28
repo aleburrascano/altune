@@ -66,10 +66,10 @@ func (s *recordingStore) wroteTo(audioRef string) bool {
 
 type orphanLog struct {
 	mu       sync.Mutex
-	recorded []ports.OrphanedAudio
+	recorded []domain.OrphanedAudio
 }
 
-func (q *orphanLog) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
+func (q *orphanLog) RecordOrphanedAudio(_ context.Context, o domain.OrphanedAudio) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.recorded = append(q.recorded, o)
@@ -103,7 +103,7 @@ type cancellingCompleteLedger struct {
 	cancel context.CancelFunc
 }
 
-func (l cancellingCompleteLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
+func (l cancellingCompleteLedger) Complete(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, domain.Completion) error {
 	l.cancel()
 	return errors.New("scheduler shutting down")
 }
@@ -142,8 +142,8 @@ type topicSource struct {
 	title, artist string
 }
 
-func (s topicSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return []ports.AudioCandidate{downloadtest.Candidate(
+func (s topicSource) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
+	return []domain.AudioCandidate{downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=freshAAAAAA",
 		downloadtest.WithTitle(s.title),
 		downloadtest.WithChannel(s.artist+" - Topic"),
@@ -170,13 +170,13 @@ func (s storing) execute(opts ...func(*service.AcquireTrackAudioService)) error 
 func (s storing) executeStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) error {
 	s.t.Helper()
 	svc := mustAcquisitionServices(s.ledger, sourceFor(s.track), s.store, scratchfiles.New(), noVerification(), stages, opts...)
-	return svc.Execute(context.Background(), ports.AcquisitionJob{UserID: s.track.UserId, TrackID: s.track.ID})
+	return svc.Execute(context.Background(), domain.AcquisitionJob{UserID: s.track.UserId, TrackID: s.track.ID})
 }
 
 func pending(title, artist, album string) memory.LedgerTrack {
-	return memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	return memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
-		Title: title, Artist: artist, Album: album, Status: ports.TrackPending,
+		Title: title, Artist: artist, Album: album, Status: domain.TrackPending,
 	}}
 }
 
@@ -190,7 +190,7 @@ func refOf(track memory.LedgerTrack, prefix string) string {
 func servedBy(track memory.LedgerTrack, audioRef string) memory.LedgerTrack {
 	serving := pending(track.Title, track.Artist, track.Album)
 	serving.UserId = track.UserId
-	serving.Status, serving.AudioRef, serving.Streamable = ports.TrackReady, &audioRef, true
+	serving.Status, serving.AudioRef, serving.Streamable = domain.TrackReady, &audioRef, true
 	return serving
 }
 
@@ -242,7 +242,7 @@ func TestStore_AReplaceStagesItsOwnPrefixedRef(t *testing.T) {
 
 	svc := mustAcquisitionServices(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages(), service.WithAcquireStoreKeyPrefix("staging/"))
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -291,12 +291,12 @@ func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
 	svc := mustAcquisitionServices(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
+	if err := svc.Execute(ctx, domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want the cancelled store to fail")
 	}
 
 	got, _ := ledger.Track(track.ID)
-	if got.Status != ports.TrackFailed || got.FailureReason != string(downloadfailure.FailureAcquisitionCancelled) {
+	if got.Status != domain.TrackFailed || got.FailureReason != string(downloadfailure.FailureAcquisitionCancelled) {
 		t.Errorf("track = %v %q, want failed as %q", got.Status, got.FailureReason, downloadfailure.FailureAcquisitionCancelled)
 	}
 }
@@ -478,7 +478,7 @@ func TestStore_ARetryUnderACollisionReusesOneScopedRef(t *testing.T) {
 
 func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(t *testing.T) {
 	served := seedReadyTrack(t)
-	twin := servedBy(memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	twin := servedBy(memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: served.userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
 	}}, served.originalRef)
 	served.ledger.Seed(twin)
@@ -486,7 +486,7 @@ func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(
 	svc := mustAcquisitionServices(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -520,7 +520,7 @@ func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *tes
 	svc := mustAcquisitionServices(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err == nil {
 		t.Fatal("ExecuteReplace succeeded, want the failed commit")
 	}
 
@@ -638,7 +638,7 @@ func TestStoreRollback_SurfacesAPermanentDeleteFailureAndQueuesTheOrphan(t *test
 	if store.deleteCalls < 2 {
 		t.Errorf("delete calls = %d, want the compensation retried", store.deleteCalls)
 	}
-	want := ports.OrphanedAudio{AudioRef: refOf(track, ""), UserId: track.UserId, TrackId: track.ID}
+	want := domain.OrphanedAudio{AudioRef: refOf(track, ""), UserId: track.UserId, TrackId: track.ID}
 	if len(orphans.recorded) != 1 || orphans.recorded[0] != want {
 		t.Errorf("recorded = %+v, want exactly %+v", orphans.recorded, want)
 	}
@@ -688,7 +688,7 @@ func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T
 	svc := mustAcquisitionServices(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
+	if err := svc.Execute(ctx, domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want the cancelled commit to fail")
 	}
 

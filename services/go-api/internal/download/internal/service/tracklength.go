@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/tracklength"
 )
 
@@ -37,7 +36,7 @@ func (p LengthPolicy) Corroborated() bool {
 	return SameRecording(p.saved, p.resolved)
 }
 
-func (p LengthPolicy) Plausible(candidate ports.AudioCandidate) bool {
+func (p LengthPolicy) Plausible(candidate domain.AudioCandidate) bool {
 	if candidate.Duration <= 0 {
 		return true
 	}
@@ -49,10 +48,10 @@ func (p LengthPolicy) Plausible(candidate ports.AudioCandidate) bool {
 
 type FileJudge struct {
 	policy    LengthPolicy
-	candidate ports.AudioCandidate
+	candidate domain.AudioCandidate
 }
 
-func (p LengthPolicy) FileJudge(candidate ports.AudioCandidate) (FileJudge, bool) {
+func (p LengthPolicy) FileJudge(candidate domain.AudioCandidate) (FileJudge, bool) {
 	if !ownLength(candidate) && p.Expected() <= 0 {
 		return FileJudge{}, false
 	}
@@ -70,7 +69,7 @@ func (j FileJudge) Judge(actual float64) (acceptable bool, heldAgainst float64) 
 	return p.Expected() <= 0 || p.accepts(actual), p.Expected()
 }
 
-func ownLength(candidate ports.AudioCandidate) bool {
+func ownLength(candidate domain.AudioCandidate) bool {
 	return candidate.IsResolved() && candidate.Duration > 0
 }
 

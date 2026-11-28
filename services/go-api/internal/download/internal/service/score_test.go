@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"fmt"
 	"math"
@@ -23,7 +23,7 @@ const (
 	scorePrecision = 0.01
 )
 
-func metadataRank(t *testing.T, track service.RankTrack, c ports.AudioCandidate) float64 {
+func metadataRank(t *testing.T, track service.RankTrack, c domain.AudioCandidate) float64 {
 	t.Helper()
 	return number(t, evaluation(t, track, c), "metadata_rank")
 }
@@ -106,7 +106,7 @@ func TestRank_LengthScoreUsesTheConfidenceWindows(t *testing.T) {
 	lengthScoreOf := map[float64]float64{0.4: 1.0, 0.3: 0.5, 0.2: 0.0}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			confidence := service.ScoreConfidence(service.Evidence{Channel: service.ChannelOther, DurationDeltaSeconds: &tt.delta}, tt.expected)
+			confidence := service.ScoreConfidence(domain.AcquisitionEvidence{Channel: service.ChannelOther, DurationDeltaSeconds: &tt.delta}, tt.expected)
 			want, known := lengthScoreOf[confidence]
 			if !known {
 				t.Fatalf("ScoreConfidence = %v, not a length bonus this test knows", confidence)
@@ -129,13 +129,13 @@ func TestRank_ChannelScoreTrustsTopicAndArtistThenVevo(t *testing.T) {
 	tests := []struct {
 		name      string
 		artist    string
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      float64
 	}{
 		{"topic class", "The Weeknd", downloadtest.Candidate("", downloadtest.WithChannel("The Weeknd - Topic")), 1.0},
 		{"topic class without a channel", "The Weeknd", downloadtest.Candidate(
 			"",
-			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithKind(domain.KindArtTrack),
 			downloadtest.WithArtists([]string{"The Weeknd"}),
 		), 1.0},
 		{"artist class", "The Weeknd", downloadtest.Candidate("", downloadtest.WithChannel("TheWeeknd")), 1.0},
@@ -195,7 +195,7 @@ func TestRank_ViewScoreIsAShareOfTheMostViewedCandidate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var candidates []ports.AudioCandidate
+			var candidates []domain.AudioCandidate
 			for i, views := range tt.views {
 				candidates = append(candidates, downloadtest.Candidate(
 					string(rune('a'+i)),
@@ -288,7 +288,7 @@ func TestRank_EvaluationCarriesScoresAndTheCandidate(t *testing.T) {
 		downloadtest.WithCategories([]string{"Music"}),
 	)
 
-	_, _, evaluated := service.Rank(track, []ports.AudioCandidate{c})
+	_, _, evaluated := service.Rank(track, []domain.AudioCandidate{c})
 
 	if len(evaluated) != 1 {
 		t.Fatalf("evaluated %d candidates, want 1", len(evaluated))
@@ -309,7 +309,7 @@ func TestRank_UnplayableCandidatesAreNotEvaluated(t *testing.T) {
 	track := song("Song", "Artist", 200)
 	drm := downloadtest.Candidate("", downloadtest.WithTitle("Song"), downloadtest.WithUnplayable("drm"))
 
-	_, refused, evaluated := service.Rank(track, []ports.AudioCandidate{drm})
+	_, refused, evaluated := service.Rank(track, []domain.AudioCandidate{drm})
 
 	if len(evaluated) != 0 || len(refused) != 1 {
 		t.Fatalf("evaluated %d, refused %d, want 0 and 1", len(evaluated), len(refused))

@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
@@ -25,8 +24,8 @@ func (ac *AcquisitionContext) appendRejection(r RejectionEntry) {
 	ac.Rejections = append(ac.Rejections, r)
 }
 
-func (ac *AcquisitionContext) rejectionBasis() ports.RejectionBasis {
-	return ports.RejectionBasis{ExpectedSeconds: ac.ExpectedLength(), ReferenceMBID: ac.Identity.MBID}
+func (ac *AcquisitionContext) rejectionBasis() domain.RejectionBasis {
+	return domain.RejectionBasis{ExpectedSeconds: ac.ExpectedLength(), ReferenceMBID: ac.Identity.MBID}
 }
 
 func (s *pipeline) recordRejections(ctx context.Context, ac *AcquisitionContext) {

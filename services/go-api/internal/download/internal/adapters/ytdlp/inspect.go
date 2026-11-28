@@ -1,7 +1,7 @@
 package ytdlp
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/parallel"
@@ -88,10 +88,10 @@ func inspectionFromInfo(info inspectedInfo) inspection {
 
 func (i inspection) unplayableFor(flatDuration float64) string {
 	if i.PreviewFormat || i.isPreviewDuration(flatDuration) {
-		return ports.UnplayablePreview
+		return domain.UnplayablePreview
 	}
 	if i.AudioFormats > 0 && i.EncryptedAudio == i.AudioFormats {
-		return ports.UnplayableDRM
+		return domain.UnplayableDRM
 	}
 	return ""
 }
@@ -114,7 +114,7 @@ func isSoundCloudURL(rawURL string) bool {
 	return host == "soundcloud.com" || strings.HasSuffix(host, ".soundcloud.com")
 }
 
-func (s *YouTubeAudioSearcher) MarkUnplayable(ctx context.Context, candidates []ports.AudioCandidate) {
+func (s *YouTubeAudioSearcher) MarkUnplayable(ctx context.Context, candidates []domain.AudioCandidate) {
 	g := parallel.New("acquisition.soundcloud_inspect_panic", inspectConcurrency)
 	for i := range candidates {
 		if !isSoundCloudURL(candidates[i].URL) {
@@ -127,7 +127,7 @@ func (s *YouTubeAudioSearcher) MarkUnplayable(ctx context.Context, candidates []
 	_ = g.Wait()
 }
 
-func (s *YouTubeAudioSearcher) unplayableReason(ctx context.Context, c ports.AudioCandidate) string {
+func (s *YouTubeAudioSearcher) unplayableReason(ctx context.Context, c domain.AudioCandidate) string {
 	result, err := s.inspectCached(ctx, c.URL)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.soundcloud_inspect_failed",

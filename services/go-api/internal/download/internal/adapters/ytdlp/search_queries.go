@@ -1,8 +1,8 @@
 package ytdlp
 
-import "altune/go-api/internal/download/internal/ports"
+import "altune/go-api/internal/download/internal/domain"
 
-func searchQueries(req ports.FindRequest) []string {
+func searchQueries(req domain.FindRequest) []string {
 	var queries []string
 	if req.ISRC != "" {
 		queries = append(queries, req.ISRC)

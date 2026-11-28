@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
@@ -30,6 +31,7 @@ type pipeline struct {
 	downloadLimiter *ConcurrencyLimit
 	recordingLookup ports.RecordingLookup
 	verifySkips     ports.VerifySkipRecorder
+	evidence        ports.EvidenceCodec
 	confidenceFloor float64
 	workspace       ports.ScratchFolder
 	storedAudio     ports.StoredAudioReader
@@ -60,14 +62,14 @@ func (s *pipeline) observe(ac *AcquisitionContext) {
 	s.contextObserver(ac)
 }
 
-func (s *pipeline) acquireBudget(ctx context.Context, job ports.AcquisitionJob) (context.Context, context.CancelFunc) {
+func (s *pipeline) acquireBudget(ctx context.Context, job domain.AcquisitionJob) (context.Context, context.CancelFunc) {
 	ctx = logging.ContextWithSubjectUser(ctx, job.UserID.String())
 	return context.WithTimeoutCause(ctx, s.acquireTimeout, errAcquireBudgetSpent)
 }
 
-func (s *pipeline) loadTrack(ctx context.Context, userId ids.UserId, trackId ids.TrackId) (*ports.TrackSnapshot, bool, error) {
+func (s *pipeline) loadTrack(ctx context.Context, userId ids.UserId, trackId ids.TrackId) (*domain.TrackSnapshot, bool, error) {
 	track, err := s.ledger.Get(ctx, trackId, userId)
-	if errors.Is(err, ports.ErrTrackNotFound) {
+	if errors.Is(err, domain.ErrTrackNotFound) {
 		slog.WarnContext(ctx, "acquire_track_not_found", logging.KeyTrackID, trackId.String())
 		return nil, false, nil
 	}
@@ -77,7 +79,7 @@ func (s *pipeline) loadTrack(ctx context.Context, userId ids.UserId, trackId ids
 	return track, true, nil
 }
 
-func (s *pipeline) startAcquisition(ctx context.Context, job ports.AcquisitionJob, track *ports.TrackSnapshot) *AcquisitionContext {
+func (s *pipeline) startAcquisition(ctx context.Context, job domain.AcquisitionJob, track *domain.TrackSnapshot) *AcquisitionContext {
 	job.Progress().Meta(track.Title, track.Artist, track.Album)
 
 	slog.InfoContext(ctx, "track_acquisition_started",
@@ -133,7 +135,7 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
+func buildTrackRef(track *domain.TrackSnapshot) TrackRef {
 	return TrackRef{
 		ID:          track.ID.String(),
 		UserID:      track.UserId.String(),

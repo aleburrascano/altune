@@ -23,7 +23,7 @@ type ReplacementPlanner struct {
 	retryAfter   time.Duration
 	checkUploads bool
 	lowBitrate   int
-	upgradable   []ports.TrackStatus
+	upgradable   []domain.TrackStatus
 }
 
 func NewReplacementPlanner(store ports.UpgradeStore, scheduler UpgradeScheduler, maxQueued int, retryAfter time.Duration) *ReplacementPlanner {
@@ -46,7 +46,7 @@ func (p *ReplacementPlanner) RescuingLowBitrate(floorKbps int) *ReplacementPlann
 }
 
 func (p *ReplacementPlanner) PlanNext(ctx context.Context) error {
-	candidates, err := p.store.Candidates(ctx, ports.UpgradeSelection{
+	candidates, err := p.store.Candidates(ctx, domain.UpgradeSelection{
 		Limit:        1,
 		Generation:   domain.PipelineGeneration,
 		RetryAfter:   p.retryAfter,
@@ -67,7 +67,7 @@ func (p *ReplacementPlanner) PlanNext(ctx context.Context) error {
 	return nil
 }
 
-func (p *ReplacementPlanner) schedule(ctx context.Context, candidate ports.UpgradeCandidate) error {
+func (p *ReplacementPlanner) schedule(ctx context.Context, candidate domain.UpgradeCandidate) error {
 	err := p.scheduler.ScheduleUpgrade(ctx, candidate.UserID, candidate.TrackID)
 	if errors.Is(err, domain.ErrAcquisitionPaused) {
 		slog.InfoContext(ctx, "acquisition.upgrade_planning_paused")

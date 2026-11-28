@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
-	"encoding/json"
 	"log/slog"
 )
 
@@ -19,7 +18,7 @@ func NewReplaceService(acquire *AcquireTrackAudioService) *ReplaceService {
 	return &ReplaceService{pipeline: acquire.pipeline}
 }
 
-func (s *ReplaceService) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
+func (s *ReplaceService) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
 	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
 	track, found, err := s.loadTrack(ctx, job.UserID, job.TrackID)
@@ -30,7 +29,7 @@ func (s *ReplaceService) ExecuteReplace(ctx context.Context, job ports.Acquisiti
 	return err
 }
 
-func (s *ReplaceService) ReplaceGated(ctx context.Context, job ports.AcquisitionJob, track *ports.TrackSnapshot, gate ReplacementGate) (ReplaceAttempt, error) {
+func (s *ReplaceService) ReplaceGated(ctx context.Context, job domain.AcquisitionJob, track *domain.TrackSnapshot, gate ReplacementGate) (ReplaceAttempt, error) {
 	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
 	ac, err := s.forUpgradeSweep().replaceLoaded(ctx, job, track, gate, neverRetry)
@@ -40,8 +39,14 @@ func (s *ReplaceService) ReplaceGated(ctx context.Context, job ports.Acquisition
 func (s *ReplaceService) forUpgradeSweep() *ReplaceService {
 	sweep := *s.pipeline
 	sweep.events = events.NoopPublisher()
-	sweep.rerecordings = ports.NoopRerecordingFinder()
+	sweep.rerecordings = noRerecordingFinder{}
 	return &ReplaceService{pipeline: &sweep}
+}
+
+type noRerecordingFinder struct{}
+
+func (noRerecordingFinder) FindRerecording(context.Context, domain.RerecordingQuery) (domain.TrackLabel, bool, error) {
+	return domain.TrackLabel{}, false, nil
 }
 
 func attemptOf(ac *AcquisitionContext, err error) ReplaceAttempt {
@@ -53,12 +58,12 @@ func attemptOf(ac *AcquisitionContext, err error) ReplaceAttempt {
 	return attempt
 }
 
-func (s *ReplaceService) replaceLoaded(ctx context.Context, job ports.AcquisitionJob, track *ports.TrackSnapshot, gate ReplacementGate, retry retryPolicy) (*AcquisitionContext, error) {
+func (s *ReplaceService) replaceLoaded(ctx context.Context, job domain.AcquisitionJob, track *domain.TrackSnapshot, gate ReplacementGate, retry retryPolicy) (*AcquisitionContext, error) {
 	trackId := track.ID
 	job.TrackID = trackId
 	ac := s.startAcquisition(ctx, job, track)
 	ac.Replace.Gate = gate
-	ac.Replace.StoredKnownWrong = storedFileKnownWrong(track)
+	ac.Replace.StoredKnownWrong = storedFileKnownWrong(s.evidence, track)
 	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
@@ -73,16 +78,16 @@ func (s *ReplaceService) replaceLoaded(ctx context.Context, job ports.Acquisitio
 	return ac, nil
 }
 
-func storedFileKnownWrong(track *ports.TrackSnapshot) bool {
+func storedFileKnownWrong(codec ports.EvidenceCodec, track *domain.TrackSnapshot) bool {
 	catalog, stored := deref(track.CatalogDurationSeconds), deref(track.StoredDurationSeconds)
 	if catalog > 0 && stored > 0 && !SameRecording(catalog, stored) {
 		return true
 	}
-	var evidence Evidence
-	return json.Unmarshal(track.Evidence, &evidence) == nil && evidence.Grade == domain.F
+	evidence, err := codec.Decode(track.Evidence)
+	return err == nil && evidence.Grade == domain.GradeF
 }
 
-func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId ids.TrackId) error {
+func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *domain.TrackSnapshot, trackId ids.TrackId) error {
 	ac.preserveCurrentAudio(track)
 	if track.AudioSourceURL == nil {
 		slog.InfoContext(ctx, "acquisition.replacing_unknown_source", logging.KeyTrackID, trackId.String())
@@ -94,7 +99,7 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 	return requireCurrentFileFact(track)
 }
 
-func requireCurrentFileFact(track *ports.TrackSnapshot) error {
+func requireCurrentFileFact(track *domain.TrackSnapshot) error {
 	if sourceKey(deref(track.AudioSourceURL)) != "" || deref(track.StoredDurationSeconds) > 0 {
 		return nil
 	}

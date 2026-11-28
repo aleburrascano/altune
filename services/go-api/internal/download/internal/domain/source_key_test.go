@@ -3,7 +3,6 @@ package domain_test
 import (
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"context"
 	"strings"
 	"testing"
@@ -20,7 +19,7 @@ func (a answeringSongs) SearchSongs(context.Context, string) ([]ytmsearch.Song, 
 func ytMusicWatchURL(t *testing.T, videoID string) string {
 	t.Helper()
 	song := ytmsearch.Song{VideoID: videoID, Type: ytmsearch.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}}
-	found, err := ytmsearch.NewSource(answeringSongs{song}, nil).Find(context.Background(), ports.FindRequest{Title: "Song", Artist: "Artist"})
+	found, err := ytmsearch.NewSource(answeringSongs{song}, nil).Find(context.Background(), domain.FindRequest{Title: "Song", Artist: "Artist"})
 	if err != nil || len(found) != 1 {
 		t.Fatalf("found %v err %v, want one candidate", found, err)
 	}

@@ -1,25 +1,27 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 )
 
 type UpdateTrackStep struct {
-	ledger  ports.LibraryTracks
-	userId  ids.UserId
-	trackId ids.TrackId
+	ledger   ports.LibraryTracks
+	evidence ports.EvidenceCodec
+	userId   ids.UserId
+	trackId  ids.TrackId
 }
 
-func NewUpdateTrackStep(ledger ports.LibraryTracks, userId ids.UserId, trackId ids.TrackId) *UpdateTrackStep {
+func NewUpdateTrackStep(ledger ports.LibraryTracks, evidence ports.EvidenceCodec, userId ids.UserId, trackId ids.TrackId) *UpdateTrackStep {
 	return &UpdateTrackStep{
-		ledger:  ledger,
-		userId:  userId,
-		trackId: trackId,
+		ledger:   ledger,
+		evidence: evidence,
+		userId:   userId,
+		trackId:  trackId,
 	}
 }
 
@@ -30,27 +32,27 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, s
 	if err := ac.admitFetched(evidence.Grade); err != nil {
 		return afterUpdate{}, err
 	}
-	completion, err := completionOf(ac, stored.Kept, evidence)
+	completion, err := completionOf(s.evidence, ac, stored.Kept, evidence)
 	if err != nil {
 		return afterUpdate{}, err
 	}
 	if err := ac.Job.VerifyCommit(ctx); err != nil {
-		return afterUpdate{}, err
+		return afterUpdate{}, fmt.Errorf("%w", err)
 	}
 	err = s.ledger.Complete(ctx, s.trackId, s.userId, ac.Job.Claim, completion)
-	if errors.Is(err, ports.ErrTrackNotFound) {
+	if errors.Is(err, domain.ErrTrackNotFound) {
 		return afterUpdate{}, errors.New("track not found for update")
 	}
 	return afterUpdate{}, err
 }
 
-func completionOf(ac *AcquisitionContext, kept ports.AudioCandidate, evidence Evidence) (ports.Completion, error) {
-	raw, err := json.Marshal(evidence)
+func completionOf(codec ports.EvidenceCodec, ac *AcquisitionContext, kept domain.AudioCandidate, evidence domain.AcquisitionEvidence) (domain.Completion, error) {
+	raw, err := codec.Encode(evidence)
 	if err != nil {
-		return ports.Completion{}, fmt.Errorf("marshal acquisition evidence: %w", err)
+		return domain.Completion{}, fmt.Errorf("encode acquisition evidence: %w", err)
 	}
 	isrc, _ := ac.provenISRC()
-	return ports.Completion{
+	return domain.Completion{
 		AudioRef:           ac.AudioRef,
 		ReplaceAudio:       ac.Replace.PreservedRef != "",
 		Duration:           ac.StoredLength(),

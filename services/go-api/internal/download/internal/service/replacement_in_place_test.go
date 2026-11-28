@@ -25,14 +25,14 @@ type fixedChecker struct {
 	calls   int
 }
 
-func (c *fixedChecker) CheckInPlace(context.Context, *ports.TrackSnapshot) (service.Finding, error) {
+func (c *fixedChecker) CheckInPlace(context.Context, *domain.TrackSnapshot) (service.Finding, error) {
 	c.calls++
 	return c.finding, c.err
 }
 
 type recordingInPlaceStore struct {
 	mu       sync.Mutex
-	records  []ports.InPlaceRecord
+	records  []domain.InPlaceRecord
 	failures int
 }
 
@@ -43,7 +43,7 @@ func (s *recordingInPlaceStore) NoteInPlaceFailure(context.Context, ids.TrackId)
 	return s.failures, nil
 }
 
-func (s *recordingInPlaceStore) RecordInPlace(_ context.Context, _ ids.TrackId, record ports.InPlaceRecord) (bool, error) {
+func (s *recordingInPlaceStore) RecordInPlace(_ context.Context, _ ids.TrackId, record domain.InPlaceRecord) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.records = append(s.records, record)
@@ -51,13 +51,13 @@ func (s *recordingInPlaceStore) RecordInPlace(_ context.Context, _ ids.TrackId, 
 }
 
 var (
-	replaceHardMatch = service.Finding{Verdict: "hard", Fingerprint: domain.Matches, Basis: "acoustid", Score: 0.97}
-	otherTake        = service.Finding{Verdict: "other_version", Fingerprint: domain.Contradicts, Basis: "acoustid", Score: 0.93}
-	wrongSong        = service.Finding{Verdict: "different_song", Fingerprint: domain.Unsupported, Basis: "acoustid", Score: 0.9}
+	replaceHardMatch = service.Finding{Verdict: "hard", Fingerprint: domain.FingerprintMatches, Basis: "acoustid", Score: 0.97}
+	otherTake        = service.Finding{Verdict: "other_version", Fingerprint: domain.FingerprintContradicts, Basis: "acoustid", Score: 0.93}
+	wrongSong        = service.Finding{Verdict: "different_song", Fingerprint: domain.FingerprintUnsupported, Basis: "acoustid", Score: 0.9}
 	noAnswer         = service.Finding{}
-	softMatch        = service.Finding{Verdict: "soft", Fingerprint: domain.Approximates, Basis: "acoustid", Score: 0.9}
-	previewHit       = service.Finding{Verdict: "preview", Fingerprint: domain.Matches, Basis: "preview", BitErrorRate: 0.06}
-	looseHit         = service.Finding{Verdict: "preview", Fingerprint: domain.Approximates, Basis: "preview", BitErrorRate: 0.15}
+	softMatch        = service.Finding{Verdict: "soft", Fingerprint: domain.FingerprintApproximates, Basis: "acoustid", Score: 0.9}
+	previewHit       = service.Finding{Verdict: "preview", Fingerprint: domain.FingerprintMatches, Basis: "preview", BitErrorRate: 0.06}
+	looseHit         = service.Finding{Verdict: "preview", Fingerprint: domain.FingerprintApproximates, Basis: "preview", BitErrorRate: 0.15}
 )
 
 func (w *world) storedEvidence(evidence string) {
@@ -94,15 +94,15 @@ func evidenceFor(g domain.Grade, kind domain.SourceKind) string {
 }
 
 func TestRunner_AnArtTrackGradedCWithAMatchingFingerprintBecomesAWithNoDownload(t *testing.T) {
-	w := seed(t, domain.C)
-	w.storedEvidence(evidenceFor(domain.C, domain.ArtTrack))
+	w := seed(t, domain.GradeC)
+	w.storedEvidence(evidenceFor(domain.GradeC, domain.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: replaceHardMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: replaceHardMatch}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 	if err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
-	want := ports.InPlaceRecord{AudioRef: originalRef, Generation: domain.PipelineGeneration, Verdict: "hard", Basis: "acoustid", Score: 0.97, Grade: "A"}
+	want := domain.InPlaceRecord{AudioRef: originalRef, Generation: domain.PipelineGeneration, Verdict: "hard", Basis: "acoustid", Score: 0.97, Grade: "A"}
 	if len(recorder.records) != 1 || recorder.records[0] != want {
 		t.Errorf("records = %+v, want exactly %+v", recorder.records, want)
 	}
@@ -115,11 +115,11 @@ func TestRunner_AnArtTrackGradedCWithAMatchingFingerprintBecomesAWithNoDownload(
 }
 
 func TestRunner_APreviewMatchProvesTheFileAsWellAsAFingerprint(t *testing.T) {
-	w := seed(t, domain.D)
-	w.storedEvidence(evidenceFor(domain.D, domain.ArtTrack))
+	w := seed(t, domain.GradeD)
+	w.storedEvidence(evidenceFor(domain.GradeD, domain.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: previewHit}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: previewHit}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -132,11 +132,11 @@ func TestRunner_APreviewMatchProvesTheFileAsWellAsAFingerprint(t *testing.T) {
 }
 
 func TestRunner_AMismatchRecordsTheVerdictThenFallsThroughToReacquire(t *testing.T) {
-	w := seed(t, domain.C)
-	w.storedEvidence(evidenceFor(domain.C, domain.ArtTrack))
+	w := seed(t, domain.GradeC)
+	w.storedEvidence(evidenceFor(domain.GradeC, domain.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: otherTake}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: otherTake}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 	if err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
@@ -152,11 +152,11 @@ func TestRunner_AMismatchRecordsTheVerdictThenFallsThroughToReacquire(t *testing
 }
 
 func TestRunner_AFingerprintThatNeverAnswersFallsThroughToReacquireWithoutChangingTheGrade(t *testing.T) {
-	w := seed(t, domain.C)
-	w.storedEvidence(evidenceFor(domain.C, domain.ArtTrack))
+	w := seed(t, domain.GradeC)
+	w.storedEvidence(evidenceFor(domain.GradeC, domain.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: noAnswer}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
+	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: noAnswer}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -169,11 +169,11 @@ func TestRunner_AFingerprintThatNeverAnswersFallsThroughToReacquireWithoutChangi
 }
 
 func TestRunner_AMatchOnAnUnofficialSourceIsBAndStillLooksForAnOfficialOne(t *testing.T) {
-	w := seed(t, domain.C)
-	w.storedEvidence(evidenceFor(domain.C, domain.FanUpload))
+	w := seed(t, domain.GradeC)
+	w.storedEvidence(evidenceFor(domain.GradeC, domain.FanUpload))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: replaceHardMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
+	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: replaceHardMatch}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -186,11 +186,11 @@ func TestRunner_AMatchOnAnUnofficialSourceIsBAndStillLooksForAnOfficialOne(t *te
 }
 
 func TestRunner_ATrackCheckedThisGenerationIsNotCheckedAgain(t *testing.T) {
-	w := seed(t, domain.C)
+	w := seed(t, domain.GradeC)
 	w.storedEvidence(fmt.Sprintf(`{"grade":"C","source_kind":"art_track","in_place_generation":%d}`, domain.PipelineGeneration))
 	checker := &fixedChecker{finding: replaceHardMatch}
 
-	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
+	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -200,11 +200,11 @@ func TestRunner_ATrackCheckedThisGenerationIsNotCheckedAgain(t *testing.T) {
 }
 
 func TestRunner_AUserUploadThatMatchesIsGradedAUserAndNeverReplaced(t *testing.T) {
-	w := seed(t, domain.D)
+	w := seed(t, domain.GradeD)
 	w.asUserUpload()
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: replaceHardMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: replaceHardMatch}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -219,11 +219,11 @@ func TestRunner_AUserUploadThatMatchesIsGradedAUserAndNeverReplaced(t *testing.T
 func TestRunner_AUserUploadThatDoesNotMatchIsFlaggedAndNeverReplaced(t *testing.T) {
 	for name, finding := range map[string]service.Finding{"another version": otherTake, "another song": wrongSong} {
 		t.Run(name, func(t *testing.T) {
-			w := seed(t, domain.D)
+			w := seed(t, domain.GradeD)
 			w.asUserUpload()
 			recorder := &recordingInPlaceStore{}
 
-			if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+			if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
 			}
 
@@ -240,11 +240,11 @@ func TestRunner_AUserUploadThatDoesNotMatchIsFlaggedAndNeverReplaced(t *testing.
 func TestRunner_AUserUploadWithNoAnswerOrOnlyASoftOneIsNeitherGradedNorFlagged(t *testing.T) {
 	for name, finding := range map[string]service.Finding{"no answer": noAnswer, "soft": softMatch} {
 		t.Run(name, func(t *testing.T) {
-			w := seed(t, domain.D)
+			w := seed(t, domain.GradeD)
 			w.asUserUpload()
 			recorder := &recordingInPlaceStore{}
 
-			if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+			if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: finding}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
 			}
 
@@ -259,12 +259,12 @@ func TestRunner_AUserUploadWithNoAnswerOrOnlyASoftOneIsNeitherGradedNorFlagged(t
 }
 
 func TestRunner_ACheckThatFailsRecordsNothingAndReportsTheError(t *testing.T) {
-	w := seed(t, domain.C)
-	w.storedEvidence(evidenceFor(domain.C, domain.ArtTrack))
+	w := seed(t, domain.GradeC)
+	w.storedEvidence(evidenceFor(domain.GradeC, domain.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 	acoustIDDown := errors.New("acoustid unreachable")
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{err: acoustIDDown}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{err: acoustIDDown}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if !errors.Is(err, acoustIDDown) {
 		t.Errorf("ExecuteUpgrade = %v, want the outage reported", err)
@@ -278,20 +278,20 @@ func TestRunner_ACheckThatFailsRecordsNothingAndReportsTheError(t *testing.T) {
 }
 
 func TestRunner_AfterThreeFailedChecksTheTrackFallsThroughToReacquire(t *testing.T) {
-	w := seed(t, domain.C)
-	w.storedEvidence(evidenceFor(domain.C, domain.ArtTrack))
+	w := seed(t, domain.GradeC)
+	w.storedEvidence(evidenceFor(domain.GradeC, domain.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 	runner := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{err: errors.New("fpcalc cannot decode")}, recorder)
 
 	for try := 1; try <= 2; try++ {
-		if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err == nil {
+		if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err == nil {
 			t.Fatalf("try %d: ExecuteUpgrade = nil, want the failed check reported", try)
 		}
 	}
 	if w.source.finds != 0 {
 		t.Fatalf("sources searched %d times before the third failure, want 0", w.source.finds)
 	}
-	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
+	if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
 		t.Fatalf("third try: %v", err)
 	}
 
@@ -304,11 +304,11 @@ func TestRunner_AfterThreeFailedChecksTheTrackFallsThroughToReacquire(t *testing
 }
 
 func TestRunner_APreviewMatchAboveTheOfficialCutGradesBAndStillLooksForABetterSource(t *testing.T) {
-	w := seed(t, domain.D)
-	w.storedEvidence(evidenceFor(domain.D, domain.ArtTrack))
+	w := seed(t, domain.GradeD)
+	w.storedEvidence(evidenceFor(domain.GradeD, domain.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: looseHit}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
+	if err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: looseHit}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil && !errors.Is(err, service.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -330,7 +330,7 @@ func TestRunner_ATrackGradedBestAvailableIsNeitherCheckedNorReplaced(t *testing.
 	checker := &fixedChecker{finding: otherTake}
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || checker.calls != 0 || len(recorder.records) != 0 || w.source.finds != 0 {
 		t.Errorf("err = %v, checks = %d, records = %+v, searches = %d, want the track left alone", err, checker.calls, recorder.records, w.source.finds)
@@ -341,12 +341,12 @@ func TestRunner_ATrackGradedBestAvailableIsNeitherCheckedNorReplaced(t *testing.
 }
 
 func TestRunner_AGradeATrackNotYetCheckedThisGenerationIsCheckedAndKeptWhenNothingStandsAgainstIt(t *testing.T) {
-	w := seed(t, domain.A)
-	w.storedEvidence(judgedEvidence(domain.A, 0))
+	w := seed(t, domain.GradeA)
+	w.storedEvidence(judgedEvidence(domain.GradeA, 0))
 	checker := &fixedChecker{finding: noAnswer}
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || checker.calls != 1 || w.source.finds != 0 {
 		t.Errorf("err = %v, checks = %d, searches = %d, want one check and no re-acquire: unknown changes nothing", err, checker.calls, w.source.finds)
@@ -357,11 +357,11 @@ func TestRunner_AGradeATrackNotYetCheckedThisGenerationIsCheckedAndKeptWhenNothi
 }
 
 func TestRunner_AGradeATrackCheckedThisGenerationIsSkipped(t *testing.T) {
-	w := seed(t, domain.A)
-	w.storedEvidence(judgedEvidence(domain.A, domain.PipelineGeneration))
+	w := seed(t, domain.GradeA)
+	w.storedEvidence(judgedEvidence(domain.GradeA, domain.PipelineGeneration))
 	checker := &fixedChecker{finding: otherTake}
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || checker.calls != 0 || w.source.finds != 0 {
 		t.Errorf("err = %v, checks = %d, searches = %d, want the top grade skipped", err, checker.calls, w.source.finds)
@@ -369,12 +369,12 @@ func TestRunner_AGradeATrackCheckedThisGenerationIsSkipped(t *testing.T) {
 }
 
 func TestRunner_AWrongLengthGradeAIsLoweredAndReacquired(t *testing.T) {
-	w := seed(t, domain.A)
-	w.storedEvidence(judgedEvidence(domain.A, 0))
-	wrongLength := service.Finding{Verdict: "hard", Fingerprint: domain.Approximates, Basis: "acoustid", Score: 0.97, Lowers: true}
+	w := seed(t, domain.GradeA)
+	w.storedEvidence(judgedEvidence(domain.GradeA, 0))
+	wrongLength := service.Finding{Verdict: "hard", Fingerprint: domain.FingerprintApproximates, Basis: "acoustid", Score: 0.97, Lowers: true}
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: wrongLength}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: wrongLength}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil && !errors.Is(err, service.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
@@ -388,11 +388,11 @@ func TestRunner_AWrongLengthGradeAIsLoweredAndReacquired(t *testing.T) {
 }
 
 func TestRunner_AProvenButNotLoweringFindingNeverLowersAStoredGrade(t *testing.T) {
-	w := seed(t, domain.A)
-	w.storedEvidence(judgedEvidence(domain.A, 0))
+	w := seed(t, domain.GradeA)
+	w.storedEvidence(judgedEvidence(domain.GradeA, 0))
 	recorder := &recordingInPlaceStore{}
 
-	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: softMatch}, recorder).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.checkedRunner(service.RunnerConfig{MaxTries: 3}, &fixedChecker{finding: softMatch}, recorder).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err != nil || w.source.finds != 0 {
 		t.Errorf("err = %v, searches = %d, want the stored A kept: weaker evidence now does not lower it", err, w.source.finds)

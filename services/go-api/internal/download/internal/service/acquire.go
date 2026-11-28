@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -45,6 +46,7 @@ func NewAcquireTrackAudioService(
 		storedAudio:     stages.StoredAudio,
 		orphans:         stages.Orphans,
 		verifySkips:     stages.Skips,
+		evidence:        stages.Evidence,
 		recordings:      wiring.Recordings,
 		events:          stages.Events,
 		downloadLimiter: stages.DownloadLimit,
@@ -97,7 +99,7 @@ func WithAcquireStoreKeyPrefix(prefix string) func(*AcquireTrackAudioService) {
 
 const AcquireTimeout = 10 * time.Minute
 
-func (s *AcquireTrackAudioService) Execute(ctx context.Context, job ports.AcquisitionJob) error {
+func (s *AcquireTrackAudioService) Execute(ctx context.Context, job domain.AcquisitionJob) error {
 	ctx, cancel := s.acquireBudget(ctx, job)
 	defer cancel()
 	track, found, err := s.loadTrack(ctx, job.UserID, job.TrackID)
@@ -118,10 +120,10 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, job ports.Acquis
 	return nil
 }
 
-func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *ports.TrackSnapshot) (proceed bool, err error) {
+func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *domain.TrackSnapshot) (proceed bool, err error) {
 	return reacquirePolicy{ledger: s.ledger, audioStore: s.audioStore}.reconcile(ctx, track)
 }
 
-func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, job ports.AcquisitionJob) {
+func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, job domain.AcquisitionJob) {
 	s.outcomes().refuseQueued(logging.ContextWithSubjectUser(ctx, job.UserID.String()), job)
 }

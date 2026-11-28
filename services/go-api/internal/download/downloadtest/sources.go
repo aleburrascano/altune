@@ -8,17 +8,17 @@ import (
 
 type (
 	AudioSource    = ports.AudioSource
-	AudioCandidate = ports.AudioCandidate
-	FindRequest    = ports.FindRequest
-	FetchedAudio   = ports.FetchedAudio
+	AudioCandidate = domain.AudioCandidate
+	FindRequest    = domain.FindRequest
+	FetchedAudio   = domain.FetchedAudio
 	SourceName     = domain.SourceName
 	SourceOrder    = ports.SourceOrder
 )
 
 const (
 	ArtTrackURL    = fakesources.ArtTrackURL
-	JobKindAcquire = ports.JobKindAcquire
-	JobKindReplace = ports.JobKindReplace
+	JobKindAcquire = domain.JobKindAcquire
+	JobKindReplace = domain.JobKindReplace
 )
 
 var (

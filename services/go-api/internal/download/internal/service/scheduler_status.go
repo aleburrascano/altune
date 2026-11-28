@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
@@ -12,11 +12,11 @@ func (s *BackgroundAcquisitionScheduler) workerCount() int {
 	return s.workers
 }
 
-func (s *BackgroundAcquisitionScheduler) Status(ctx context.Context) ports.Status {
+func (s *BackgroundAcquisitionScheduler) Status(ctx context.Context) domain.SchedulerStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
 	pending, oldestAge, depthKnown := s.pendingDepth(ctx)
-	return ports.Status{
+	return domain.SchedulerStatus{
 		InFlight:         s.runner.inFlight(),
 		Pending:          s.pending.size(),
 		Succeeded:        succeeded,

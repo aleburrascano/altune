@@ -15,6 +15,7 @@ type StagePorts struct {
 	StoredAudio   ports.StoredAudioReader
 	Orphans       ports.OrphanedAudioRecorder
 	Skips         ports.VerifySkipRecorder
+	Evidence      ports.EvidenceCodec
 	Events        events.Publisher
 	DownloadLimit *ConcurrencyLimit
 	Observer      func(*AcquisitionContext)
@@ -33,6 +34,7 @@ func (p StagePorts) validate(owner string) error {
 		missingPort(owner, "StoredAudio", p.StoredAudio),
 		missingPort(owner, "Orphans", p.Orphans),
 		missingPort(owner, "Skips", p.Skips),
+		missingPort(owner, "Evidence", p.Evidence),
 		missingPort(owner, "Events", p.Events),
 		missingPort(owner, "DownloadLimit", p.DownloadLimit),
 		missingPort(owner, "Observer", p.Observer),
