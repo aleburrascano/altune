@@ -263,7 +263,7 @@ func (l *linter) checkWrites(fset *token.FileSet, file string, f *ast.File, labe
 			owner, owned := l.cfg.TableOwners[table]
 			switch {
 			case !owned:
-				l.add(file, line, "table", label, fmt.Sprintf("%s writes table %s, which has no owner in architecture.json; add it to table_owners", label, table))
+				l.add(file, line, "table", label, fmt.Sprintf("%s writes table %s, which has no owner in architecture.json; add it to table_owners there and to the README of the module that writes it", label, table))
 			case owner != ownModule:
 				l.add(file, line, "table", label, fmt.Sprintf("%s writes table %s, which module %s owns; ask %s through its door", label, table, owner, owner))
 			}
