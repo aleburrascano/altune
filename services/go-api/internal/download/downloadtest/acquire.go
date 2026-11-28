@@ -59,7 +59,7 @@ func AcquireWithNoSource(ctx context.Context, ledger *memory.Ledger, recording R
 			Unit:          random.Real,
 		})
 	if err := svc.Execute(ctx, domain.AcquisitionJob{UserID: userID, TrackID: trackID}); err != nil {
-		return fmt.Errorf("%w", err)
+		return fmt.Errorf("execute the acquisition job: %w", err)
 	}
 	return nil
 }

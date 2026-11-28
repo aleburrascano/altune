@@ -9,40 +9,40 @@ import (
 
 type Database struct{ pool *pgxpool.Pool }
 
-func NewDatabase(pool *pgxpool.Pool) *Database {
+var _ ports.Database = (*Database)(nil)
+
+func NewDatabase(pool *pgxpool.Pool) ports.Database {
 	if pool == nil {
 		return nil
 	}
 	return &Database{pool: pool}
 }
 
-func (db *Database) pgxPool() *pgxpool.Pool {
-	if db == nil {
-		return nil
-	}
-	return db.pool
+func (db *Database) Rejections() ports.RejectionStore {
+	return NewPostgresRejectionStore(db.pool)
 }
 
-func (db *Database) Rejections() *PostgresRejectionStore {
-	return NewPostgresRejectionStore(db.pgxPool())
+func (db *Database) Outcomes() ports.OutcomeRecorder {
+	return NewPostgresOutcomeStore(db.pool)
 }
 
-func (db *Database) Outcomes() *PostgresOutcomeStore {
-	return NewPostgresOutcomeStore(db.pgxPool())
+func (db *Database) Upgrades() ports.UpgradeRecords {
+	return NewPostgresUpgradeStore(db.pool)
 }
 
-func (db *Database) UpgradeStore() *PostgresUpgradeStore {
-	return NewPostgresUpgradeStore(db.pgxPool())
+func (db *Database) Cooldowns() ports.CooldownStore {
+	return NewPostgresCooldownStore(db.pool)
 }
 
-func (db *Database) Cooldowns() *PostgresCooldownStore {
-	return NewPostgresCooldownStore(db.pgxPool())
+func (db *Database) JobQueue(requeuer ports.QueueTracks) ports.QueueFactory {
+	queue := MustNewPostgresJobQueue(db.pool, requeuer)
+	return func(chan<- struct{}, clock.Func) ports.DownloadQueue { return queue }
 }
 
-func (db *Database) JobQueue(requeuer ports.QueueTracks) *PostgresJobQueue {
-	return MustNewPostgresJobQueue(db.pgxPool(), requeuer)
+func (db *Database) JobNotifier(sleep clock.Sleeper) ports.JobNotifier {
+	return MustNewPostgresJobNotifier(db.pool, sleep)
 }
 
-func (db *Database) JobNotifier(sleep clock.Sleeper) *PostgresJobNotifier {
-	return MustNewPostgresJobNotifier(db.pgxPool(), sleep)
+func (db *Database) Retention() (outcomes, rejections ports.RetentionPruner) {
+	return NewPostgresOutcomeStore(db.pool), NewPostgresRejectionStore(db.pool)
 }

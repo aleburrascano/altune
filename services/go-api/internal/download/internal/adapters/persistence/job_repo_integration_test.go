@@ -1230,8 +1230,8 @@ func integrationSchedulerPorts(queue ports.DownloadQueue) service.SchedulerPorts
 	return service.SchedulerPorts{
 		Queue:               service.QueueOf(queue),
 		Upgrades:            service.NoUpgradeLane(),
-		Notifier:            memory.NoopJobNotifier(),
-		Outcomes:            memory.NoopOutcomeRecorder(),
+		Notifier:            memory.NewDatabase(clock.Now).JobNotifier(clock.Sleep),
+		Outcomes:            memory.NewDatabase(clock.Now).Outcomes(),
 		Events:              events.NoopPublisher(),
 		VerifySkips:         func() uint64 { return 0 },
 		FingerprintVerified: func() bool { return false },

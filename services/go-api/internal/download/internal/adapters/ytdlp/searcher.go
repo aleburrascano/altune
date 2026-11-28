@@ -218,7 +218,7 @@ func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query str
 		},
 	)
 	if err != nil {
-		return candidates, fmt.Errorf("%w", err)
+		return candidates, fmt.Errorf("search the engines: %w", err)
 	}
 	return candidates, nil
 }
@@ -242,7 +242,7 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 		func(firstErr error) error { return firstErr },
 	)
 	if err != nil {
-		return candidates, fmt.Errorf("%w", err)
+		return candidates, fmt.Errorf("search the queries: %w", err)
 	}
 	return candidates, nil
 }

@@ -8,6 +8,7 @@ It owns the tables `acquisition_cooldowns`, `acquisition_jobs`, `acquisition_out
 - Read config or the environment. `app` hands it `Deps`, and the audio sources come in as `Deps.Sources`; `app` builds the live ones with `download.LiveSources`.
 - Do I/O in `domain`, `service` or `ports`. Time, randomness and every outside system come in through a port.
 - Let `service` or `domain` know a wire format. HTTP codes live in `adapters/handler/errors.go` and stored JSON shapes in `adapters/evidence`.
+- Keep state without a database. `Deps.Database` is required, and so is `Deps.InPlaceVerdicts`: `New` refuses a missing one, so production never falls back to memory state. `app` passes `download.NewDatabase(pool)`; tests pass `memory.NewDatabase`, the in-memory twin of all five repositories.
 - Decide anything about a track in `library`. `download` is handed the library half of the track ledger through `Deps.Library` (read a track, complete, fail, revert, the status rules, and whether a completion's confidence and evidence are accepted), and joins its own upgrade state to it inside `New`.
 
 ## Shape
@@ -18,7 +19,7 @@ The root holds `download.go` (the door: `New(ctx, Deps) (*Module, error)`, `Live
 - `ports/ports.go`: every interface the module needs from outside, and nothing else.
 - `service/`: the acquisition pipeline and scheduler, candidate ranking, the audio verdict, the title match, replacement (upgrade), the MusicBrainz recording resolver, the track ledger (`track_ledger.go`, the library half plus the upgrade state), the in-place recorder, the fingerprint health tracker and the source canary runner. Its tests run on fakes from `adapters/memory`.
 - `adapters/persistence/`: the five Postgres repositories, `<table>_repo.go`.
-- `adapters/memory/`: the in-memory twin of each repository (`cooldown_repo`, `job_repo`, `outcome_repo`, `rejection_repo`, `upgrade_state_repo`), the in-memory ledger, library half, audio store and rules, and `noop.go` with the `Noop*` stand-ins.
+- `adapters/memory/`: the in-memory twin of each repository (`cooldown_repo`, `job_repo`, `outcome_repo`, `rejection_repo`, `upgrade_state_repo`), the in-memory ledger, library half, audio store and rules, `database.go` (the in-memory `ports.Database`) and `noop.go` with the `Noop*` stand-ins.
 - `contracttest/`: one suite per repository (`<table>_repo_contract.go`) plus the ledger suite. Each runs against the memory twin and against Postgres; the Postgres half runs with `INTEGRATION=1`. The one method a twin cannot mirror is `UpgradeStore.Candidates`: the memory twin returns the candidates it was given, and the SQL that picks them is held to `domain.UpgradeEligible` by a property test in `adapters/persistence`.
 - `adapters/handler/`: `routes.go` (`Routes`, mounted by `app`), `acquisition_handler.go` (the retry and reacquire handlers) and `errors.go` (the one place a domain error becomes a wire code and status). The handlers read no body, so there is no `dto.go`.
 - `adapters/evidence/`: the codec that turns acquisition and in-place evidence into the JSON stored on the track and back. The stored keys are fixed by its tests.

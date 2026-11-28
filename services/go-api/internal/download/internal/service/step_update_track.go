@@ -37,7 +37,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, s
 		return afterUpdate{}, err
 	}
 	if err := ac.Job.VerifyCommit(ctx); err != nil {
-		return afterUpdate{}, fmt.Errorf("%w", err)
+		return afterUpdate{}, fmt.Errorf("verify the lease before completing the track: %w", err)
 	}
 	err = s.ledger.Complete(ctx, s.trackId, s.userId, ac.Job.Claim, completion)
 	if errors.Is(err, domain.ErrTrackNotFound) {

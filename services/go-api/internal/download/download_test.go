@@ -44,6 +44,12 @@ type orphanSink struct{}
 
 func (orphanSink) RecordOrphanedAudio(context.Context, domain.OrphanedAudio) error { return nil }
 
+type verdictSink struct{}
+
+func (verdictSink) RecordInPlaceVerdict(context.Context, ids.TrackId, domain.InPlaceRecord) (bool, error) {
+	return true, nil
+}
+
 func newClient(timeout time.Duration, transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: timeout, Transport: transport}
 }
@@ -53,6 +59,8 @@ func offlineDeps(cfg *config.Config, sources downloadtest.SourceOrder) download.
 	return download.Deps{
 		Config:            cfg,
 		Transport:         http.DefaultTransport,
+		Database:          memory.NewDatabase(clock.Now),
+		InPlaceVerdicts:   verdictSink{},
 		Events:            events.NoopPublisher(),
 		NewClient:         newClient,
 		Library:           memory.NewLibrary(),
@@ -101,6 +109,8 @@ func TestNew_RefusesAMissingCollaboratorInsteadOfPanickingLater(t *testing.T) {
 		"resolver":    func(d *download.Deps) { d.RecordingResolver = nil },
 		"lookup":      func(d *download.Deps) { d.RecordingLookup = nil },
 		"rerecording": func(d *download.Deps) { d.Rerecordings = nil },
+		"database":    func(d *download.Deps) { d.Database = nil },
+		"verdicts":    func(d *download.Deps) { d.InPlaceVerdicts = nil },
 	}
 	for name, drop := range cases {
 		t.Run(name, func(t *testing.T) {

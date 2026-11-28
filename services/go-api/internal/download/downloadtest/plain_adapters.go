@@ -32,7 +32,7 @@ func PlainFinder(finder Finder) OutageFinder { return plainFinder{finder: finder
 func (p plainFinder) FindReportingOutage(ctx context.Context, req domain.FindRequest) (service.FindResult, error) {
 	candidates, err := p.finder.Find(ctx, req)
 	if err != nil {
-		return service.FindResult{Candidates: candidates}, fmt.Errorf("%w", err)
+		return service.FindResult{Candidates: candidates}, fmt.Errorf("find candidates: %w", err)
 	}
 	return service.FindResult{Candidates: candidates}, nil
 }
@@ -44,7 +44,7 @@ func PlainFetcher(fetcher Fetcher) PreviewingFetcher { return plainFetcher{fetch
 func (p plainFetcher) Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	fetched, err := p.fetcher.Fetch(ctx, candidate, outDir)
 	if err != nil {
-		return fetched, fmt.Errorf("%w", err)
+		return fetched, fmt.Errorf("fetch the candidate: %w", err)
 	}
 	return fetched, nil
 }

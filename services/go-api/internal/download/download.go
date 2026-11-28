@@ -129,13 +129,14 @@ const (
 var (
 	errTransportRequired = errors.New("download: Deps.Transport is required, so acquisition calls never fall back to an unpaced transport")
 	errDepsIncomplete    = errors.New("download: New needs a config, an events publisher, a client builder, the library half (Library), the orphaned-audio recorder, the stored-audio reader and the three recording ports")
-	errVerdictsRequired  = errors.New("download: Deps.InPlaceVerdicts is required with a Database, so in-place verdicts are never dropped")
+	errVerdictsRequired  = errors.New("download: Deps.InPlaceVerdicts is required, so in-place verdicts are never dropped")
+	errDatabaseRequired  = errors.New("download: Deps.Database is required, so job, upgrade and outcome state is never silently kept in memory only")
 )
 
 type Deps struct {
 	Config    *config.Config
 	Transport http.RoundTripper
-	Database  *persistence.Database
+	Database  ports.Database
 	Redis     *goredis.Client
 	Events    events.Publisher
 	NewClient func(timeout time.Duration, transport http.RoundTripper) *http.Client
@@ -161,7 +162,10 @@ func (d Deps) validate() error {
 		d.RecordingResolver == nil || d.RecordingLookup == nil || d.Rerecordings == nil {
 		return errDepsIncomplete
 	}
-	if d.Database != nil && d.InPlaceVerdicts == nil {
+	if d.Database == nil {
+		return errDatabaseRequired
+	}
+	if d.InPlaceVerdicts == nil {
 		return errVerdictsRequired
 	}
 	return nil
@@ -174,8 +178,8 @@ type Module struct {
 	planEvery      time.Duration
 	checks         []service.Check
 	signedOutSince func(context.Context) (time.Time, bool)
-	outcomes       *persistence.PostgresOutcomeStore
-	rejections     *persistence.PostgresRejectionStore
+	outcomes       ports.RetentionPruner
+	rejections     ports.RetentionPruner
 }
 
 func (m *Module) Routes() handler.Routes { return m.routes }
@@ -192,7 +196,7 @@ func (m *Module) HasSourceChecks() bool { return len(m.checks) > 0 }
 
 func (m *Module) CheckSources(ctx context.Context) error {
 	if err := service.RunChecks(ctx, clock.Now, m.checks); err != nil {
-		return fmt.Errorf("%w", err)
+		return fmt.Errorf("run source canary checks: %w", err)
 	}
 	return nil
 }
@@ -201,7 +205,7 @@ func (m *Module) YouTubeSignedOutSince(ctx context.Context) (time.Time, bool) {
 	return m.signedOutSince(ctx)
 }
 
-func (m *Module) Retention() (outcomes *persistence.PostgresOutcomeStore, rejections *persistence.PostgresRejectionStore) {
+func (m *Module) Retention() (outcomes, rejections ports.RetentionPruner) {
 	return m.outcomes, m.rejections
 }
 
@@ -217,14 +221,15 @@ func New(ctx context.Context, d Deps) (*Module, error) {
 	}
 	canarySearcher := YtDlpSearcher(d.Config)
 	ytDlpInstalled := canarySearcher.Available()
+	outcomes, rejections := d.Database.Retention()
 	m := &Module{
 		checks: sourceChecks(sourceProbes{
 			ytDlp: canarySearcher, ytDlpAvailable: ytDlpInstalled, innerTube: inner,
 			ytMusicEnabled: d.Config.YtMusicEnabled, ytDlpEnabled: d.Config.YtDLPEnabled,
 		}),
 		signedOutSince: canarySearcher.SignedOutSince,
-		outcomes:       d.Database.Outcomes(),
-		rejections:     d.Database.Rejections(),
+		outcomes:       outcomes,
+		rejections:     rejections,
 	}
 	if len(d.Sources.All()) == 0 || d.AudioStore == nil {
 		return m, nil
@@ -316,11 +321,8 @@ type acquireOption = func(*service.AcquireTrackAudioService)
 func (m *Module) startAcquisition(ctx context.Context, d Deps, tools domain.Verification) (*Module, error) {
 	cfg := d.Config
 	sources := d.Sources
-	upgradeState := ports.UpgradeState(memory.NewUpgradeState(clock.Now))
-	if d.Database != nil {
-		upgradeState = d.Database.UpgradeStore()
-	}
-	ledger, err := service.NewTrackLedger(d.Library, upgradeState)
+	upgrades := d.Database.Upgrades()
+	ledger, err := service.NewTrackLedger(d.Library, upgrades)
 	if err != nil {
 		return nil, fmt.Errorf("build the track ledger: %w", err)
 	}
@@ -364,7 +366,7 @@ func (m *Module) startAcquisition(ctx context.Context, d Deps, tools domain.Veri
 		}...,
 	)
 	replaceSvc := service.NewReplaceService(acquireSvc)
-	lane, err := upgradeLane(d, ledger, replaceSvc, service.NewInPlaceChecker(acquireSvc))
+	lane, err := upgradeLane(d, upgrades, ledger, replaceSvc, service.NewInPlaceChecker(acquireSvc))
 	if err != nil {
 		return nil, err
 	}
@@ -373,14 +375,11 @@ func (m *Module) startAcquisition(ctx context.Context, d Deps, tools domain.Veri
 		service.WithSchedulerPaused(cfg.AcquisitionPaused),
 		service.WithDrainBudget(time.Duration(cfg.AcquisitionDrainBudgetSeconds)*time.Second),
 	)
-	if d.Database == nil {
-		return m, nil
-	}
 	m.routes = handler.NewRoutes(
 		handler.NewRetryHandler(ledger, m.scheduler, service.NewRetryAdmission(d.Database.Cooldowns())),
 		handler.NewReacquireHandler(ledger, m.scheduler, service.NewReacquireAdmission(d.Database.Cooldowns())),
 	)
-	m.plan = service.NewReplacementPlanner(d.Database.UpgradeStore(), m.scheduler, cfg.AcquisitionUpgradeConcurrency, cfg.AcquisitionUpgradeRetryAfter).
+	m.plan = service.NewReplacementPlanner(upgrades, m.scheduler, cfg.AcquisitionUpgradeConcurrency, cfg.AcquisitionUpgradeRetryAfter).
 		CheckingUploads().UpgradingFrom(d.Library).RescuingLowBitrate(cfg.AcquisitionLowBitrateFloorKbps).PlanNext
 	m.planEvery = service.PlanInterval(cfg.AcquisitionUpgradePerHour)
 	return m, nil
@@ -406,12 +405,11 @@ func upgradePreviewMatcher(d Deps) ports.PreviewMatcher {
 	return previewcheck.NewMatcher(previews, printer, previewcheck.DefaultMatchMaxBitErrorRate)
 }
 
-func upgradeLane(d Deps, ledger ports.LibraryTracks, replace *service.ReplaceService, checker *service.InPlaceChecker) (service.UpgradeLane, error) {
+func upgradeLane(d Deps, store ports.UpgradeRecords, ledger ports.LibraryTracks, replace *service.ReplaceService, checker *service.InPlaceChecker) (service.UpgradeLane, error) {
 	cfg := d.Config
-	if d.Database == nil || cfg.AcquisitionUpgradeConcurrency < 1 {
+	if cfg.AcquisitionUpgradeConcurrency < 1 {
 		return service.NoUpgradeLane(), nil
 	}
-	store := d.Database.UpgradeStore()
 	recorder, err := service.NewInPlaceRecorder(d.InPlaceVerdicts, store)
 	if err != nil {
 		return service.UpgradeLane{}, fmt.Errorf("build the in-place recorder: %w", err)
@@ -429,11 +427,11 @@ func upgradeLane(d Deps, ledger ports.LibraryTracks, replace *service.ReplaceSer
 }
 
 func schedulerPorts(d Deps, ledger ports.LibraryTracks, lane service.UpgradeLane, skips *service.VerifySkipCounter, health *service.FingerprintHealth, tools domain.Verification) service.SchedulerPorts {
-	wiring := service.SchedulerPorts{
-		Queue:               memory.NewQueueFactory(),
+	return service.SchedulerPorts{
+		Queue:               d.Database.JobQueue(ledger),
 		Upgrades:            lane,
-		Notifier:            memory.NoopJobNotifier(),
-		Outcomes:            memory.NoopOutcomeRecorder(),
+		Notifier:            d.Database.JobNotifier(clock.Sleep),
+		Outcomes:            d.Database.Outcomes(),
 		Events:              d.Events,
 		VerifySkips:         skips.Count,
 		FingerprintVerified: health.Verified,
@@ -442,10 +440,4 @@ func schedulerPorts(d Deps, ledger ports.LibraryTracks, lane service.UpgradeLane
 		Unit:                random.Real,
 		Verification:        tools,
 	}
-	if d.Database != nil {
-		wiring.Queue = service.QueueOf(d.Database.JobQueue(ledger))
-		wiring.Notifier = d.Database.JobNotifier(clock.Sleep)
-		wiring.Outcomes = d.Database.Outcomes()
-	}
-	return wiring
 }
