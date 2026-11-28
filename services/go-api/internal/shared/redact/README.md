@@ -1,1 +1,1 @@
-`redact` owns which values are secret in logs.
+Infrastructure: `redact` owns which values are secret in logs.

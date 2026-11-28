@@ -1,1 +1,1 @@
-`redis` owns how we talk to Redis.
+Infrastructure: `redis` owns how we talk to Redis.
