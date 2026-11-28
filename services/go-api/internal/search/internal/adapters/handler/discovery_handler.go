@@ -5,14 +5,11 @@ import (
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type DiscoveryHandler struct {
@@ -165,39 +162,4 @@ func NewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) (*DiscoveryHand
 		clientEvents:    svcs.ClientEvents,
 	}
 	return h.WithRateLimits(DefaultDiscoveryRateLimits), nil
-}
-
-const maxEventBodyBytes = 32 << 10
-
-const maxFavoriteBodyBytes = 16 << 10
-
-const maxHistoryBodyBytes = 4 << 10
-
-func (h *DiscoveryHandler) Routes() chi.Router {
-	r := chi.NewRouter()
-	r.With(h.searchLimiter).Get("/search", h.handleSearch)
-	r.With(h.suggestLimiter).Get("/suggest", h.handleSuggest)
-	r.With(h.historyLimiter).Get("/search-history", h.handleSearchHistory)
-	r.With(h.historyLimiter, httpserver.MaxBodySize(maxHistoryBodyBytes)).Post("/search-history", h.handleRecordSearchHistory)
-	r.With(h.historyLimiter).Delete("/search-history", h.handleClearSearchHistory)
-	r.With(h.eventLimiter, httpserver.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
-	r.With(h.favoritesLimiter).Get("/favorites", h.handleListFavorites)
-	r.With(h.favoritesLimiter, httpserver.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
-	r.With(h.favoritesLimiter, httpserver.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)
-	r.Group(h.contentRoutes)
-	return r
-}
-
-func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
-	r.Use(h.contentLimiter)
-	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
-	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
-	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
-	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
-	r.Get("/artists/{provider}/{externalId}/unreleased", h.handleArtistUnreleased)
-	r.Get("/unreleased/search", h.handleUnreleasedSearch)
-	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)
-	r.Get("/enrichment", h.handleEnrichment)
-	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
-	r.Get("/lyrics", h.handleLyrics)
 }

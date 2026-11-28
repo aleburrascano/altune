@@ -1,12 +1,11 @@
 package search_test
 
 import (
-	"altune/go-api/internal/search/internal/adapters/connections"
+	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/internal/shell/setup"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/dbtest"
@@ -29,12 +28,13 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 )
 
-func searchOrder(t *testing.T, h *harness, disc *setup.Discovery) []string {
+func searchOrder(t *testing.T, h *harness, disc *search.Module) []string {
 	t.Helper()
 	query := &domain.SearchQuery{Raw: "probe song", Kinds: map[domain.ResultKind]bool{domain.ResultKindAlbum: true}}
 	_, statuses := disc.Search.InspectSearchWithStatuses(context.Background(), query)
@@ -49,7 +49,7 @@ func searchOrder(t *testing.T, h *harness, disc *setup.Discovery) []string {
 func TestSearch_AsksTheProvidersInTableOrder(t *testing.T) {
 	tests := []struct {
 		name      string
-		providers func() connections.ProviderSettings
+		providers func() search.ProviderSettings
 		want      []string
 	}{
 		{"every key set", everyProviderOn, []string{"deezer", "applemusic", "soundcloud", "youtube", "spotify"}},
@@ -213,7 +213,7 @@ func TestUnreleased_AsksOnlyTheSourcesThatAreOn(t *testing.T) {
 	geniusOnly.GeniusAccessToken = "genius-token"
 	tests := []struct {
 		name      string
-		providers connections.ProviderSettings
+		providers search.ProviderSettings
 		want      []string
 	}{
 		{"sheets key alone", sheetsOnly, []string{"api.deezer.com", "sheets.googleapis.com"}},
@@ -291,7 +291,7 @@ func TestVocabulary_IsAbsentWithoutRedis(t *testing.T) {
 	}
 }
 
-func searchPage(disc *setup.Discovery) int {
+func searchPage(disc *search.Module) int {
 	return serve(disc, "/search?q=probe+album&kinds=album&save_history=false")
 }
 
@@ -395,7 +395,7 @@ func TestNew_WithEveryKeySetDiscogsServesArtwork(t *testing.T) {
 }
 
 func TestNew_RefusesDepsWithoutTheHandlesItNeeds(t *testing.T) {
-	_, err := setup.New(t.Context(), connections.Deps{})
+	_, err := search.New(t.Context(), search.Deps{})
 	if err == nil {
 		t.Fatal("New accepted deps with no transport or logger")
 	}
@@ -409,7 +409,7 @@ func TestNew_NamesOnlyTheHandleThatIsMissing(t *testing.T) {
 	h := newHarness(t, prodLikeProviders())
 	h.deps.ChartTimeout = 0
 
-	_, err := setup.New(t.Context(), h.deps)
+	_, err := search.New(t.Context(), h.deps)
 	if err == nil || !strings.HasSuffix(err.Error(), "discovery: deps are missing ChartTimeout") {
 		t.Errorf("error = %v, want only ChartTimeout named", err)
 	}
@@ -542,7 +542,7 @@ func TestSearchSettings_BehavioralRankingReadsTheEventStoreOnlyWhenOn(t *testing
 	}
 }
 
-func providerCacheTTLs(t *testing.T, providers connections.ProviderSettings, target string) []time.Duration {
+func providerCacheTTLs(t *testing.T, providers search.ProviderSettings, target string) []time.Duration {
 	t.Helper()
 	h := newHarness(t, providers)
 	redis := miniredis.RunT(t)
@@ -758,7 +758,7 @@ func anchoredArtistContent(t *testing.T) []string {
 	return nil
 }
 
-func storedIdentityHarness(t *testing.T, providers connections.ProviderSettings) *harness {
+func storedIdentityHarness(t *testing.T, providers search.ProviderSettings) *harness {
 	t.Helper()
 	pool := dbtest.Pool(t)
 	ctx := context.Background()
@@ -879,8 +879,8 @@ func (rt *recordingTransport) timeoutsByHost() map[string]time.Duration {
 	return timeouts
 }
 
-func prodLikeProviders() connections.ProviderSettings {
-	return connections.ProviderSettings{
+func prodLikeProviders() search.ProviderSettings {
+	return search.ProviderSettings{
 		MusicBrainzUserAgent: "altune-test/1.0",
 		FanartTVAPIKey:       "fanart-key",
 		GeniusAccessToken:    "genius-token",
@@ -890,31 +890,31 @@ func prodLikeProviders() connections.ProviderSettings {
 	}
 }
 
-func everyProviderOn() connections.ProviderSettings {
+func everyProviderOn() search.ProviderSettings {
 	providers := prodLikeProviders()
 	providers.DiscogsToken = "discogs-token"
 	return providers
 }
 
-func everyProviderOff() connections.ProviderSettings {
-	return connections.ProviderSettings{TrackerHubSheetID: "hub"}
+func everyProviderOff() search.ProviderSettings {
+	return search.ProviderSettings{TrackerHubSheetID: "hub"}
 }
 
 type harness struct {
 	t         *testing.T
 	transport *recordingTransport
 	logs      *bytes.Buffer
-	deps      connections.Deps
+	deps      search.Deps
 }
 
-func newHarness(t *testing.T, providers connections.ProviderSettings) *harness {
+func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	jobs := &background.Tracker{}
 	t.Cleanup(func() { cancel(); jobs.Wait() })
 	logs := &bytes.Buffer{}
 	transport := &recordingTransport{}
-	return &harness{t: t, transport: transport, logs: logs, deps: connections.Deps{
+	return &harness{t: t, transport: transport, logs: logs, deps: search.Deps{
 		Shutdown:        ctx.Done(),
 		Background:      jobs,
 		Tracker:         searchtest.NewTracker(t),
@@ -926,8 +926,8 @@ func newHarness(t *testing.T, providers connections.ProviderSettings) *harness {
 		ChartTimeout:    15 * time.Second,
 		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		Providers:       providers,
-		Search:          connections.SearchSettings{Deadline: 1500 * time.Millisecond},
-		Unreleased:      connections.UnreleasedSettings{Tuning: service.UnreleasedConfig{MaxPages: 1, MaxDetails: 1, DetailConcurrency: 1, Wait: time.Second, JobTimeout: 5 * time.Second}},
+		Search:          search.SearchSettings{Deadline: 1500 * time.Millisecond},
+		Unreleased:      search.UnreleasedSettings{Tuning: service.UnreleasedConfig{MaxPages: 1, MaxDetails: 1, DetailConcurrency: 1, Wait: time.Second, JobTimeout: 5 * time.Second}},
 	}}
 }
 
@@ -938,9 +938,9 @@ func dropTime(_ []string, attr slog.Attr) slog.Attr {
 	return attr
 }
 
-func (h *harness) start() *setup.Discovery {
+func (h *harness) start() *search.Module {
 	h.t.Helper()
-	disc, err := setup.New(h.t.Context(), h.deps)
+	disc, err := search.New(h.t.Context(), h.deps)
 	if err != nil {
 		h.t.Fatalf("New: %v", err)
 	}
@@ -957,11 +957,13 @@ func (h *harness) logLines(message string) []string {
 	return lines
 }
 
-func serve(disc *setup.Discovery, target string) int {
-	req := httptest.NewRequest(http.MethodGet, target, nil)
+func serve(disc *search.Module, target string) int {
+	req := httptest.NewRequest(http.MethodGet, "/discovery"+target, nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
-	disc.Handler.Routes().ServeHTTP(rec, req)
+	router := chi.NewRouter()
+	disc.Routes().Bounded(router)
+	router.ServeHTTP(rec, req)
 	return rec.Code
 }
 
@@ -1016,7 +1018,7 @@ func TestRankingOnlySearch_AsksTheSameSearchersAsTheServingSearch(t *testing.T) 
 
 func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {
 	h := newHarness(t, prodLikeProviders())
-	h.deps.IdentityStore = &memory.FakeIdentityStore{}
+	search.UseIdentityStore(&h.deps, &memory.FakeIdentityStore{})
 	h.start()
 
 	options := h.searchOptions()
