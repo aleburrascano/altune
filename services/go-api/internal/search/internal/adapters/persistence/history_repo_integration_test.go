@@ -1,10 +1,10 @@
 package persistence_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
@@ -155,7 +155,7 @@ func storedSearchTextsOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId) []s
 
 func clearSearchHistoryOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId) {
 	t.Helper()
-	svc := searchtest.NewClearHistory(t, persistence.NewPostgresSearchHistoryRepository(pool))
+	svc := memory.NewClearHistory(t, persistence.NewPostgresSearchHistoryRepository(pool))
 	if err := svc.Execute(context.Background(), owner); err != nil {
 		t.Fatalf("ClearSearchHistoryService.Execute: %v", err)
 	}

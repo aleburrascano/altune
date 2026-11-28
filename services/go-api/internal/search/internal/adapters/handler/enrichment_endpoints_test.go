@@ -3,9 +3,9 @@ package handler_test
 import (
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
 	"encoding/json"
@@ -152,12 +152,12 @@ func mbRouter(t *testing.T, f *scriptedMBEnricher) (chi.Router, *int) {
 }
 
 func deezerRouter(t *testing.T, f *scriptedDeezerEnricher) (chi.Router, *int) {
-	svc := searchtest.NewDeezerEnrichment(t, f, newMemNameCache[domain.DeezerEnrichment]())
+	svc := memory.NewDeezerEnrichment(t, f, newMemNameCache[domain.DeezerEnrichment]())
 	return buildEnrichersRouter(t, handler.DetailEnrichers{Deezer: svc}), &f.calls
 }
 
 func lyricsRouter(t *testing.T, f *scriptedLyricsProvider) (chi.Router, *int) {
-	svc := searchtest.NewLyrics(t, f, newMemNameCache[domain.DeezerLyrics]())
+	svc := memory.NewLyrics(t, f, newMemNameCache[domain.DeezerLyrics]())
 	return buildEnrichersRouter(t, handler.DetailEnrichers{Lyrics: svc}), &f.calls
 }
 
@@ -253,7 +253,7 @@ func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *test
 }
 
 func buildEnrichersRouter(t *testing.T, e handler.DetailEnrichers) chi.Router {
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Enrichers: e}), time.Now)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Enrichers: e}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -276,7 +276,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("artist kind returns 200 empty (only track and album enrich)", func(t *testing.T) {
 		e := domain.EmptyDeezerEnrichment()
 		e.BPM = 90
-		svc := searchtest.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, service.NoNameKeyedCache[domain.DeezerEnrichment]{})
+		svc := memory.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, service.NoNameKeyedCache[domain.DeezerEnrichment]{})
 		router := buildEnrichersRouter(t, handler.DetailEnrichers{Deezer: svc})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=artist&title=Nas", nil)
@@ -318,7 +318,7 @@ func TestHandleLyrics(t *testing.T) {
 		l.Writers = []string{"Nasir Jones"}
 		l.Copyright = "© 1994 Columbia"
 
-		svc := searchtest.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, service.NoNameKeyedCache[domain.DeezerLyrics]{})
+		svc := memory.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, service.NoNameKeyedCache[domain.DeezerLyrics]{})
 		router := buildEnrichersRouter(t, handler.DetailEnrichers{Lyrics: svc})
 
 		rec := discServe(t, router, http.MethodGet,

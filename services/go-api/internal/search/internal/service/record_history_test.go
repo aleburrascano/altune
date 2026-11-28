@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/ids/idstest"
@@ -32,7 +31,7 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	const raw = "zqxj private diagnosis clinic"
 	ring := memory.CaptureDetachedLogs(t)
 
-	searchtest.NewHistoryRecorder(t, repo).Record(logging.ContextWithSubjectUser(context.Background(), user.String()), user, memory.NewQuery(t, raw), raw, time.Now())
+	memory.NewHistoryRecorder(t, repo).Record(logging.ContextWithSubjectUser(context.Background(), user.String()), user, memory.NewQuery(t, raw), raw, time.Now())
 
 	rec := memory.OnlyRecord(t, ring, "search.v2.history_persist_failed")
 	if rec.Attrs["user_id"] != user.String() {

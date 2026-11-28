@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
@@ -919,7 +918,7 @@ func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 	return &harness{t: t, transport: transport, logs: logs, deps: search.Deps{
 		Shutdown:        ctx.Done(),
 		Background:      jobs,
-		Tracker:         searchtest.NewTracker(t),
+		Tracker:         memory.NewTracker(t),
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{ReplaceAttr: dropTime})),
 		Transport:       transport,
 		Activity:        service.NoopActivityFeed{},

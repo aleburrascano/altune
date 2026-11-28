@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -105,9 +104,9 @@ func (stubSearchProvider) SupportedKinds() map[domain.ResultKind]bool {
 
 func runSmokeEvalRecording(t *testing.T, user ids.UserId) int {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	store := &recordingEventStore{}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{stubSearchProvider{}}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{stubSearchProvider{}}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
 	if _, err := service.RunSmokeEval(context.Background(), svc, user); err != nil {
 		t.Fatalf("Run: %v", err)
 	}

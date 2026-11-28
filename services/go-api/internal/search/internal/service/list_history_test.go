@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -97,7 +96,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := searchtest.NewListHistory(t, tt.repo)
+			svc := memory.NewListHistory(t, tt.repo)
 
 			entries, err := svc.Execute(context.Background(), userID, tt.limit)
 

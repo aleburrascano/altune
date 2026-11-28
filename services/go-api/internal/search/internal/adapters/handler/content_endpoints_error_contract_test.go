@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
@@ -59,14 +58,14 @@ func errorContractRouter(t *testing.T) chi.Router {
 	}
 	timingOut := timingOutContentProvider{}
 	healthy := stubContentProvider{provider: domain.ProviderSoundCloud}
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Album: searchtest.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
+		Album: memory.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
 			domain.ProviderITunes: timingOut, domain.ProviderSoundCloud: healthy,
-		}, searchtest.AlbumBreaker(breaker)),
-		Artist: searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		}, memory.AlbumBreaker(breaker)),
+		Artist: memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderITunes: timingOut, domain.ProviderSoundCloud: healthy,
-		}, searchtest.ArtistBreaker(breaker)),
-		Related: searchtest.NewRelatedTracksWithBreaker(t, map[string]ports.RelatedTracksProvider{
+		}, memory.ArtistBreaker(breaker)),
+		Related: memory.NewRelatedTracksWithBreaker(t, map[string]ports.RelatedTracksProvider{
 			domain.ProviderITunes.String(): timingOut, domain.ProviderSoundCloud.String(): healthy,
 		}, breaker),
 	}), time.Now)
@@ -191,8 +190,8 @@ func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-				Artist: searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+			h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
+				Artist: memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 					domain.ProviderDeezer: scriptedArtistProvider{tracksErr: tc.tracksErr, albumsErr: tc.albumsErr},
 				}),
 			}), time.Now)

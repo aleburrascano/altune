@@ -1,10 +1,10 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -57,8 +57,8 @@ func (f *fakeArtistProvider) GetArtistAlbums(_ context.Context, _ domain.Provide
 }
 
 func TestFindRelated_NoOrganicResultsReturnsNil(t *testing.T) {
-	svc := searchtest.NewFindRelated(t)
-	got := svc.Execute(context.Background(), searchtest.NewUser(), nil)
+	svc := memory.NewFindRelated(t)
+	got := svc.Execute(context.Background(), memory.NewUser(), nil)
 	if got != nil {
 		t.Errorf("expected nil for empty organic, got %d groups", len(got))
 	}
@@ -71,18 +71,18 @@ func TestFindRelated_TrackWithAlbumTriggersLibraryLookup(t *testing.T) {
 			{Title: "Sibling Track", Artist: "Same Artist", Album: "The Album", ArtworkURL: &artURL},
 		},
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier))
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier))
 
 	organic := []domain.SearchResult{
 		func() domain.SearchResult {
-			r := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Same Artist",
+			r := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Same Artist",
 				map[string]any{"album": "The Album"})
 			r.Album = "The Album"
 			return r
 		}(),
 	}
 
-	got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	got := svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	if len(got) == 0 {
 		t.Fatal("expected at least 1 related group")
@@ -118,11 +118,11 @@ func TestFindRelated_LibraryArtworkOnlyKeepsHTTPS(t *testing.T) {
 					{Title: "Sibling Track", Artist: "Same Artist", Album: "The Album", ArtworkURL: &art},
 				},
 			}
-			svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier))
-			main := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Same Artist", nil)
+			svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier))
+			main := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Same Artist", nil)
 			main.Album = "The Album"
 
-			got := svc.Execute(context.Background(), searchtest.NewUser(), []domain.SearchResult{main})
+			got := svc.Execute(context.Background(), memory.NewUser(), []domain.SearchResult{main})
 
 			for _, g := range got {
 				if g.Relationship == "library_matches" {
@@ -140,17 +140,17 @@ func TestFindRelated_LibraryArtworkOnlyKeepsHTTPS(t *testing.T) {
 func TestFindRelated_TrackWithDeezerAlbumIDTriggersAlbumTracks(t *testing.T) {
 	albumProvider := &fakeAlbumProvider{
 		tracks: []domain.SearchResult{
-			searchtest.TrackResult(domain.ProviderDeezer, "t1", "Track 1", "Artist", nil),
-			searchtest.TrackResult(domain.ProviderDeezer, "t2", "Track 2", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t1", "Track 1", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t2", "Track 2", "Artist", nil),
 		},
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(albumProvider))
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(albumProvider))
 
-	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.DeezerAlbumID = "12345"
 	organic := []domain.SearchResult{mainTrack}
 
-	got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	got := svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	found := false
 	for _, g := range got {
@@ -169,17 +169,17 @@ func TestFindRelated_TrackWithDeezerAlbumIDTriggersAlbumTracks(t *testing.T) {
 func TestFindRelated_ArtistTriggersArtistAlbums(t *testing.T) {
 	artistProvider := &fakeArtistProvider{
 		albums: []domain.SearchResult{
-			searchtest.AlbumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil),
-			searchtest.AlbumResult(domain.ProviderDeezer, "a2", "Album 2", "Artist", nil),
+			memory.AlbumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil),
+			memory.AlbumResult(domain.ProviderDeezer, "a2", "Album 2", "Artist", nil),
 		},
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedArtistAlbums(artistProvider))
+	svc := memory.NewFindRelated(t, memory.RelatedArtistAlbums(artistProvider))
 
 	organic := []domain.SearchResult{
-		searchtest.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+		memory.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
 	}
 
-	got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	got := svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	found := false
 	for _, g := range got {
@@ -198,17 +198,17 @@ func TestFindRelated_ArtistTriggersArtistAlbums(t *testing.T) {
 func TestFindRelated_DedupAgainstOrganic(t *testing.T) {
 	albumProvider := &fakeAlbumProvider{
 		tracks: []domain.SearchResult{
-			searchtest.TrackResult(domain.ProviderDeezer, "t1", "Main Track", "Artist", nil),
-			searchtest.TrackResult(domain.ProviderDeezer, "t2", "Other Track", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t1", "Main Track", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t2", "Other Track", "Artist", nil),
 		},
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(albumProvider))
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(albumProvider))
 
-	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.DeezerAlbumID = "12345"
 	organic := []domain.SearchResult{mainTrack}
 
-	got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	got := svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	for _, g := range got {
 		for _, item := range g.Items {
@@ -224,20 +224,20 @@ func TestFindRelated_ProviderCallCap(t *testing.T) {
 	var callCount atomic.Int64
 	albumProvider := &fakeAlbumProvider{
 		tracks: []domain.SearchResult{
-			searchtest.TrackResult(domain.ProviderDeezer, "t1", "Track", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t1", "Track", "Artist", nil),
 		},
 	}
 
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(&countingAlbumProvider{inner: albumProvider, count: &callCount}))
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(&countingAlbumProvider{inner: albumProvider, count: &callCount}))
 
 	var organic []domain.SearchResult
 	for i := 0; i < 5; i++ {
-		r := searchtest.TrackResult(domain.ProviderDeezer, fmt.Sprintf("d%d", i), fmt.Sprintf("Track %d", i), "Artist", nil)
+		r := memory.TrackResult(domain.ProviderDeezer, fmt.Sprintf("d%d", i), fmt.Sprintf("Track %d", i), "Artist", nil)
 		r.DeezerAlbumID = fmt.Sprintf("%d", 100+i)
 		organic = append(organic, r)
 	}
 
-	svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	if got := callCount.Load(); got > int64(providerLookupCap) {
 		t.Errorf("expected at most %d provider calls, got %d", providerLookupCap, got)
@@ -257,19 +257,19 @@ func (c *countingAlbumProvider) GetAlbumTracks(ctx context.Context, p domain.Pro
 func TestFindRelated_TimeoutReturnsPartialResults(t *testing.T) {
 	slowProvider := &fakeAlbumProvider{
 		tracks: []domain.SearchResult{
-			searchtest.TrackResult(domain.ProviderDeezer, "t1", "Slow Track", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t1", "Slow Track", "Artist", nil),
 		},
 	}
 
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
 
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(slowProvider))
-	slowTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Track", "Artist", nil)
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(slowProvider))
+	slowTrack := memory.TrackResult(domain.ProviderDeezer, "1", "Track", "Artist", nil)
 	slowTrack.DeezerAlbumID = "123"
 	organic := []domain.SearchResult{slowTrack}
 
-	got := svc.Execute(ctx, searchtest.NewUser(), organic)
+	got := svc.Execute(ctx, memory.NewUser(), organic)
 	_ = got
 }
 
@@ -314,7 +314,7 @@ func (p *scriptedArtistProvider) GetArtistAlbums(_ context.Context, _ domain.Pro
 func manyResults(prefix string, n int) []domain.SearchResult {
 	out := make([]domain.SearchResult, 0, n)
 	for i := range n {
-		out = append(out, searchtest.TrackResult(domain.ProviderDeezer, fmt.Sprintf("%s-%d", prefix, i),
+		out = append(out, memory.TrackResult(domain.ProviderDeezer, fmt.Sprintf("%s-%d", prefix, i),
 			fmt.Sprintf("%s item %d", prefix, i), prefix+" artist", nil))
 	}
 	return out
@@ -329,7 +329,7 @@ func groupsByKind(groups []domain.RelatedGroup) map[domain.RelationshipKind][]do
 }
 
 func trackWithAlbum(i int) domain.SearchResult {
-	r := searchtest.TrackResult(domain.ProviderDeezer, fmt.Sprintf("org-%d", i), fmt.Sprintf("Organic %d", i), "Organic Artist", nil)
+	r := memory.TrackResult(domain.ProviderDeezer, fmt.Sprintf("org-%d", i), fmt.Sprintf("Organic %d", i), "Organic Artist", nil)
 	r.Album = fmt.Sprintf("Album %d", i)
 	r.DeezerAlbumID = fmt.Sprintf("dz-album-%d", i)
 	return r
@@ -349,13 +349,13 @@ func TestFindRelatedDispatch_ProviderGroupsTruncatedLibraryGroupsNot(t *testing.
 	artists := &scriptedArtistProvider{albums: func(string) ([]domain.SearchResult, error) {
 		return manyResults("artistalbum", itemsPerGroup+5), nil
 	}}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(albums), searchtest.RelatedArtistAlbums(artists))
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier), memory.RelatedAlbumTracks(albums), memory.RelatedArtistAlbums(artists))
 
 	organic := []domain.SearchResult{
 		trackWithAlbum(0),
-		searchtest.ArtistResult(domain.ProviderDeezer, "dz-artist", "Organic Artist Name", nil),
+		memory.ArtistResult(domain.ProviderDeezer, "dz-artist", "Organic Artist Name", nil),
 	}
-	byKind := groupsByKind(svc.Execute(context.Background(), searchtest.NewUser(), organic))
+	byKind := groupsByKind(svc.Execute(context.Background(), memory.NewUser(), organic))
 
 	assertGroup := func(kind domain.RelationshipKind, relatedTo string, wantItems int) {
 		t.Helper()
@@ -382,13 +382,13 @@ func TestFindRelatedDispatch_LibraryLookupsNotCountedAgainstProviderBudget(t *te
 	albums := &scriptedAlbumProvider{tracks: func(id string) ([]domain.SearchResult, error) {
 		return manyResults(id, 1), nil
 	}}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(albums))
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier), memory.RelatedAlbumTracks(albums))
 
 	organic := make([]domain.SearchResult, 0, service.RelatedTopN+2)
 	for i := range service.RelatedTopN + 2 {
 		organic = append(organic, trackWithAlbum(i))
 	}
-	byKind := groupsByKind(svc.Execute(context.Background(), searchtest.NewUser(), organic))
+	byKind := groupsByKind(svc.Execute(context.Background(), memory.NewUser(), organic))
 
 	if got := querier.calls.Load(); got != int32(service.RelatedTopN) {
 		t.Errorf("library lookups = %d, want %d", got, service.RelatedTopN)
@@ -417,14 +417,14 @@ func TestFindRelatedDispatch_OneFailingLookupDropsOnlyItsGroup(t *testing.T) {
 	artists := &scriptedArtistProvider{albums: func(string) ([]domain.SearchResult, error) {
 		return nil, nil
 	}}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(albums), searchtest.RelatedArtistAlbums(artists))
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier), memory.RelatedAlbumTracks(albums), memory.RelatedArtistAlbums(artists))
 
 	organic := []domain.SearchResult{
 		trackWithAlbum(0),
 		trackWithAlbum(1),
-		searchtest.ArtistResult(domain.ProviderDeezer, "dz-artist", "Some Artist", nil),
+		memory.ArtistResult(domain.ProviderDeezer, "dz-artist", "Some Artist", nil),
 	}
-	got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	got := svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	if len(got) != 1 {
 		t.Fatalf("got %d groups, want 1: %+v", len(got), got)
@@ -444,13 +444,13 @@ func TestFindRelatedDispatch_PanicInOneLookupIsIsolated(t *testing.T) {
 	artists := &scriptedArtistProvider{albums: func(id string) ([]domain.SearchResult, error) {
 		return manyResults(id, 1), nil
 	}}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(albums), searchtest.RelatedArtistAlbums(artists))
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier), memory.RelatedAlbumTracks(albums), memory.RelatedArtistAlbums(artists))
 
 	organic := []domain.SearchResult{
 		trackWithAlbum(0),
-		searchtest.ArtistResult(domain.ProviderDeezer, "dz-artist", "Some Artist", nil),
+		memory.ArtistResult(domain.ProviderDeezer, "dz-artist", "Some Artist", nil),
 	}
-	got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	got := svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	if len(got) != 1 || got[0].Relationship != domain.RelationshipArtistAlbums {
 		t.Fatalf("want only the artist_albums group, got %+v", got)
@@ -476,11 +476,11 @@ func TestFindRelatedDispatch_LookupsReceiveBoundedCallerContext(t *testing.T) {
 			err = ctx.Err()
 		},
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier))
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier))
 
 	parent := context.WithValue(context.Background(), ctxKey{}, "marker")
 	start := time.Now()
-	svc.Execute(parent, searchtest.NewUser(), []domain.SearchResult{trackWithAlbum(0)})
+	svc.Execute(parent, memory.NewUser(), []domain.SearchResult{trackWithAlbum(0)})
 
 	if querier.calls.Load() != 1 {
 		t.Fatalf("library lookups = %d, want 1", querier.calls.Load())
@@ -497,7 +497,7 @@ func TestFindRelatedDispatch_LookupsReceiveBoundedCallerContext(t *testing.T) {
 
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	svc.Execute(cancelled, searchtest.NewUser(), []domain.SearchResult{trackWithAlbum(0)})
+	svc.Execute(cancelled, memory.NewUser(), []domain.SearchResult{trackWithAlbum(0)})
 	mu.Lock()
 	defer mu.Unlock()
 	if !errors.Is(err, context.Canceled) {
@@ -528,30 +528,30 @@ func (panickingArtistProvider) GetArtistAlbums(context.Context, domain.ProviderN
 }
 
 func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(panickingQuerier{}), searchtest.RelatedAlbumTracks(panickingAlbumProvider{}), searchtest.RelatedArtistAlbums(panickingArtistProvider{}))
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(panickingQuerier{}), memory.RelatedAlbumTracks(panickingAlbumProvider{}), memory.RelatedArtistAlbums(panickingArtistProvider{}))
 
-	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.Album = "Some Album"
 	mainTrack.DeezerAlbumID = "12345"
 	organic := []domain.SearchResult{
 		mainTrack,
-		searchtest.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+		memory.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
 	}
 
-	if got := svc.Execute(context.Background(), searchtest.NewUser(), organic); len(got) != 0 {
+	if got := svc.Execute(context.Background(), memory.NewUser(), organic); len(got) != 0 {
 		t.Errorf("groups = %+v, want none when every lookup panics", got)
 	}
 }
 
 func TestFindRelated_EachPanickingLookupIsLoggedUnderItsOwnEvent(t *testing.T) {
 	ring := logging.CaptureRing(t, "error")
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(panickingQuerier{}), searchtest.RelatedAlbumTracks(panickingAlbumProvider{}), searchtest.RelatedArtistAlbums(panickingArtistProvider{}))
-	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(panickingQuerier{}), memory.RelatedAlbumTracks(panickingAlbumProvider{}), memory.RelatedArtistAlbums(panickingArtistProvider{}))
+	mainTrack := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.Album = "Some Album"
 	mainTrack.DeezerAlbumID = "12345"
-	organic := []domain.SearchResult{mainTrack, searchtest.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil)}
+	organic := []domain.SearchResult{mainTrack, memory.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil)}
 
-	svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	svc.Execute(context.Background(), memory.NewUser(), organic)
 
 	seen := map[string]int{}
 	for _, r := range ring.Snapshot() {
@@ -566,18 +566,18 @@ func TestFindRelated_EachPanickingLookupIsLoggedUnderItsOwnEvent(t *testing.T) {
 
 func TestFindRelated_PanicInOneLookupKeepsTheOthers(t *testing.T) {
 	artistProvider := &fakeArtistProvider{albums: []domain.SearchResult{
-		searchtest.AlbumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil),
+		memory.AlbumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil),
 	}}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(panickingAlbumProvider{}), searchtest.RelatedArtistAlbums(artistProvider))
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(panickingAlbumProvider{}), memory.RelatedArtistAlbums(artistProvider))
 
-	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.DeezerAlbumID = "12345"
 	organic := []domain.SearchResult{
 		mainTrack,
-		searchtest.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+		memory.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
 	}
 
-	got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+	got := svc.Execute(context.Background(), memory.NewUser(), organic)
 	if len(got) != 1 || got[0].Relationship != domain.RelationshipArtistAlbums {
 		t.Errorf("groups = %+v, want only the artist_albums group", got)
 	}
@@ -585,13 +585,13 @@ func TestFindRelated_PanicInOneLookupKeepsTheOthers(t *testing.T) {
 
 func TestFindRelated_PartialArtistAlbumsStillYieldsGroup(t *testing.T) {
 	artistProvider := &fakeArtistProvider{
-		albums: []domain.SearchResult{searchtest.AlbumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil)},
+		albums: []domain.SearchResult{memory.AlbumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil)},
 		err:    &domain.PartialResultError{Page: 2, Err: errors.New("deezer 500")},
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedArtistAlbums(artistProvider))
+	svc := memory.NewFindRelated(t, memory.RelatedArtistAlbums(artistProvider))
 
-	got := svc.Execute(context.Background(), searchtest.NewUser(), []domain.SearchResult{
-		searchtest.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+	got := svc.Execute(context.Background(), memory.NewUser(), []domain.SearchResult{
+		memory.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
 	})
 
 	if len(got) != 1 || got[0].Relationship != "artist_albums" || len(got[0].Items) != 1 {
@@ -610,7 +610,7 @@ func (c *breakerProbeAlbumProvider) GetAlbumTracks(_ context.Context, _ domain.P
 }
 
 func relatedAlbumTrackQuery() []domain.SearchResult {
-	track := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	track := memory.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	track.DeezerAlbumID = "12345"
 	return []domain.SearchResult{track}
 }
@@ -621,9 +621,9 @@ func TestFindRelated_OpenDeezerBreakerSkipsProviderCall(t *testing.T) {
 		cb.RecordFailure(context.Background(), domain.ProviderDeezer, service.Admission{})
 	}
 	provider := &breakerProbeAlbumProvider{}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(provider), searchtest.RelatedBreaker(cb))
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(provider), memory.RelatedBreaker(cb))
 
-	got := svc.Execute(context.Background(), searchtest.NewUser(), relatedAlbumTrackQuery())
+	got := svc.Execute(context.Background(), memory.NewUser(), relatedAlbumTrackQuery())
 
 	if provider.calls.Load() != 0 || len(got) != 0 {
 		t.Errorf("provider calls = %d, groups = %d; want 0, 0", provider.calls.Load(), len(got))
@@ -633,12 +633,12 @@ func TestFindRelated_OpenDeezerBreakerSkipsProviderCall(t *testing.T) {
 func TestFindRelated_DeezerFailureRecordsOnSharedBreaker(t *testing.T) {
 	cb := service.NewCircuitBreaker(clock.Now)
 	provider := &breakerProbeAlbumProvider{err: context.DeadlineExceeded}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(provider), searchtest.RelatedBreaker(cb))
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(provider), memory.RelatedBreaker(cb))
 
 	for range service.FailureThreshold {
-		svc.Execute(context.Background(), searchtest.NewUser(), relatedAlbumTrackQuery())
+		svc.Execute(context.Background(), memory.NewUser(), relatedAlbumTrackQuery())
 	}
-	svc.Execute(context.Background(), searchtest.NewUser(), relatedAlbumTrackQuery())
+	svc.Execute(context.Background(), memory.NewUser(), relatedAlbumTrackQuery())
 
 	if provider.calls.Load() != service.FailureThreshold {
 		t.Errorf("provider calls = %d, want %d then circuit open", provider.calls.Load(), service.FailureThreshold)
@@ -656,10 +656,10 @@ func TestFindRelated_SameAlbumNameOfAnotherArtistIsNotRelated(t *testing.T) {
 		"Queen": {{Title: "Bohemian Rhapsody", Artist: "Queen", Album: "Greatest Hits"}},
 		"ABBA":  {{Title: "Dancing Queen", Artist: "ABBA", Album: "Greatest Hits"}},
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier))
-	user := searchtest.NewUser()
+	svc := memory.NewFindRelated(t, memory.RelatedLibrary(querier))
+	user := memory.NewUser()
 	hit := func(artist string) []domain.SearchResult {
-		r := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main", artist, nil)
+		r := memory.TrackResult(domain.ProviderDeezer, "1", "Main", artist, nil)
 		r.Album = "Greatest Hits"
 		return []domain.SearchResult{r}
 	}
@@ -679,12 +679,12 @@ func TestFindRelated_ACallerWritingToAServedGroupDoesNotChangeWhatTheMemoServesN
 	var callCount atomic.Int64
 	albumProvider := &countingAlbumProvider{
 		inner: &fakeAlbumProvider{tracks: []domain.SearchResult{
-			searchtest.TrackResult(domain.ProviderDeezer, "t1", "Sibling Track", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t1", "Sibling Track", "Artist", nil),
 		}},
 		count: &callCount,
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(albumProvider))
-	user := searchtest.NewUser()
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(albumProvider))
+	user := memory.NewUser()
 
 	first := svc.Execute(context.Background(), user, relatedAlbumTrackQuery())
 	first[0].Items[0].Title = "scribbled on the first answer"
@@ -704,14 +704,14 @@ func TestFindRelated_RepeatedQueryIsServedFromTheMemo(t *testing.T) {
 	var callCount atomic.Int64
 	albumProvider := &countingAlbumProvider{
 		inner: &fakeAlbumProvider{tracks: []domain.SearchResult{
-			searchtest.TrackResult(domain.ProviderDeezer, "t1", "Sibling Track", "Artist", nil),
+			memory.TrackResult(domain.ProviderDeezer, "t1", "Sibling Track", "Artist", nil),
 		}},
 		count: &callCount,
 	}
-	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(albumProvider))
+	svc := memory.NewFindRelated(t, memory.RelatedAlbumTracks(albumProvider))
 
-	first := svc.Execute(context.Background(), searchtest.NewUser(), relatedAlbumTrackQuery())
-	second := svc.Execute(context.Background(), searchtest.NewUser(), relatedAlbumTrackQuery())
+	first := svc.Execute(context.Background(), memory.NewUser(), relatedAlbumTrackQuery())
+	second := svc.Execute(context.Background(), memory.NewUser(), relatedAlbumTrackQuery())
 
 	if got := callCount.Load(); got != 1 {
 		t.Errorf("provider calls = %d, want 1 (the second query is memoized)", got)
@@ -795,23 +795,23 @@ func TestFindRelatedSources_ASubsetDispatchesExactlyTheLookupsPresent(t *testing
 				counts.artists.Add(1)
 				return manyResults("artistalbum", 2), nil
 			}}
-			var parts []searchtest.FindRelatedPart
+			var parts []memory.FindRelatedPart
 			if tc.library {
-				parts = append(parts, searchtest.RelatedLibrary(querier))
+				parts = append(parts, memory.RelatedLibrary(querier))
 			}
 			if tc.albums {
-				parts = append(parts, searchtest.RelatedAlbumTracks(albums))
+				parts = append(parts, memory.RelatedAlbumTracks(albums))
 			}
 			if tc.artists {
-				parts = append(parts, searchtest.RelatedArtistAlbums(artists))
+				parts = append(parts, memory.RelatedArtistAlbums(artists))
 			}
-			svc := searchtest.NewFindRelated(t, parts...)
+			svc := memory.NewFindRelated(t, parts...)
 			organic := []domain.SearchResult{
 				trackWithAlbum(0),
-				searchtest.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+				memory.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
 			}
 
-			got := svc.Execute(context.Background(), searchtest.NewUser(), organic)
+			got := svc.Execute(context.Background(), memory.NewUser(), organic)
 
 			want := map[domain.RelationshipKind]int{}
 			for _, kind := range tc.wantKinds {

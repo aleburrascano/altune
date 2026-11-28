@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"slices"
@@ -15,7 +14,7 @@ import (
 )
 
 type dueStore struct {
-	searchtest.UnreleasedStore
+	memory.UnreleasedStore
 	due      []ports.UnreleasedDueArtist
 	err      error
 	gotLimit int
@@ -55,7 +54,7 @@ func recordedDueStore(due ...ports.UnreleasedDueArtist) *dueStore {
 
 func refreshService(t *testing.T, genius ports.GeniusSongCatalog, store *dueStore) *service.UnreleasedService {
 	cfg := service.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	return searchtest.MustUnreleased(service.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, cfg, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
+	return memory.MustUnreleased(service.NewUnreleasedService(genius, &memory.ArtistCatalogTitles{}, cfg, memory.UnreleasedWiring(t, service.NoUnreleasedCache{}, memory.UnreleasedStored(store))))
 }
 
 func TestService_RefreshDue_RebuildsExactlyTheArtistsDueReturns(t *testing.T) {

@@ -1,10 +1,10 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -69,8 +69,8 @@ func ownable(kind, title, artist string, extras map[string]any) (service.Ownable
 }
 
 func TestStampOwnership_StampsOwnedTracksOnly(t *testing.T) {
-	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
+	bg := memory.NewTracker(t)
+	svc := memory.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
 		domain.OwnershipKey("Song", "Artist"): {TrackID: "0b1f4c0e-6f3a-4a52-9a53-5f0c7a1d0002", AcquisitionStatus: "ready"},
 	}}, service.AbsentTrackNumberFiller{})
 	track, trackExtras := ownable("track", "Song", "Artist", nil)
@@ -91,8 +91,8 @@ func TestStampOwnership_StampsOwnedTracksOnly(t *testing.T) {
 }
 
 func TestStampOwnership_VersionedLibraryTrackDoesNotOwnTheStudioSong(t *testing.T) {
-	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
+	bg := memory.NewTracker(t)
+	svc := memory.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
 		domain.OwnershipKey("Song (Live)", "X"):  {TrackID: "live"},
 		domain.OwnershipKey("Song (Remix)", "X"): {TrackID: "remix"},
 	}}, service.AbsentTrackNumberFiller{})
@@ -110,8 +110,8 @@ func TestStampOwnership_VersionedLibraryTrackDoesNotOwnTheStudioSong(t *testing.
 }
 
 func TestStampOwnership_MatchesByISRCAndRefusesAConflictingISRC(t *testing.T) {
-	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
+	bg := memory.NewTracker(t)
+	svc := memory.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
 		domain.OwnershipISRCKey("USRC17607839"):    {TrackID: "by-isrc", ISRC: "USRC17607839"},
 		domain.OwnershipKey("Song", "X"):           {TrackID: "other-recording", ISRC: "GBAAA0000001"},
 		domain.OwnershipKey("Respelled Song", "X"): {TrackID: "by-name"},
@@ -137,8 +137,8 @@ func TestStampOwnership_MatchesByISRCAndRefusesAConflictingISRC(t *testing.T) {
 }
 
 func TestStampOwnership_LookupFailureLeavesItemsUntouched(t *testing.T) {
-	bg := searchtest.NewTracker(t)
-	failing := searchtest.NewOwnership(t, bg, stubOwnershipReader{err: errors.New("db down")}, service.AbsentTrackNumberFiller{})
+	bg := memory.NewTracker(t)
+	failing := memory.NewOwnership(t, bg, stubOwnershipReader{err: errors.New("db down")}, service.AbsentTrackNumberFiller{})
 	item, extras := ownable("track", "Song", "Artist", nil)
 	failing.StampOwnership(context.Background(), ids.UserId{}, []service.OwnableItem{item})
 	if *extras != nil {
@@ -147,9 +147,9 @@ func TestStampOwnership_LookupFailureLeavesItemsUntouched(t *testing.T) {
 }
 
 func TestEnrichAlbumTracks_PanickingFillerIsContained(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	filler := panickingTrackNumberFiller{called: make(chan struct{})}
-	svc := searchtest.NewOwnership(t, bg, fillableReader(), filler)
+	svc := memory.NewOwnership(t, bg, fillableReader(), filler)
 	item := fillableItem()
 
 	done := svc.EnrichAlbumTracks(context.Background(), ids.UserId{}, []service.OwnableItem{item})
@@ -168,9 +168,9 @@ func TestEnrichAlbumTracks_PanickingFillerIsContained(t *testing.T) {
 
 func TestEnrichAlbumTracks_StalledFillIsAbandonedAtItsTenSecondDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		bg := searchtest.NewTracker(t)
+		bg := memory.NewTracker(t)
 		filler := stallingFiller()
-		svc := searchtest.NewOwnership(t, bg, fillableReader(), filler)
+		svc := memory.NewOwnership(t, bg, fillableReader(), filler)
 		start := time.Now()
 
 		<-svc.EnrichAlbumTracks(context.Background(), ids.UserId{}, []service.OwnableItem{fillableItem()})
@@ -183,9 +183,9 @@ func TestEnrichAlbumTracks_StalledFillIsAbandonedAtItsTenSecondDeadline(t *testi
 
 func TestEnrichAlbumTracks_TheSharedTrackerWaitsUntilTheFillFinishes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		bg := searchtest.NewTracker(t)
+		bg := memory.NewTracker(t)
 		filler := stallingFiller()
-		svc := searchtest.NewOwnership(t, bg, fillableReader(), filler)
+		svc := memory.NewOwnership(t, bg, fillableReader(), filler)
 		item := fillableItem()
 		svc.EnrichAlbumTracks(context.Background(), ids.UserId{}, []service.OwnableItem{item})
 		<-filler.entered
@@ -210,12 +210,12 @@ func TestEnrichAlbumTracks_TheSharedTrackerWaitsUntilTheFillFinishes(t *testing.
 }
 
 func TestEnrichAlbumTracks_AFillTheTrackerRefusesCompletesWithoutWriting(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	if !bg.Drain(context.Background()) {
 		t.Fatal("an idle tracker did not drain")
 	}
 	filler := panickingTrackNumberFiller{called: make(chan struct{})}
-	svc := searchtest.NewOwnership(t, bg, fillableReader(), filler)
+	svc := memory.NewOwnership(t, bg, fillableReader(), filler)
 
 	select {
 	case <-svc.EnrichAlbumTracks(context.Background(), ids.UserId{}, []service.OwnableItem{fillableItem()}):
@@ -230,9 +230,9 @@ func TestEnrichAlbumTracks_AFillTheTrackerRefusesCompletesWithoutWriting(t *test
 }
 
 func TestEnrichAlbumTracks_NothingToFillCompletesImmediately(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	filler := panickingTrackNumberFiller{called: make(chan struct{})}
-	svc := searchtest.NewOwnership(t, bg, stubOwnershipReader{}, filler)
+	svc := memory.NewOwnership(t, bg, stubOwnershipReader{}, filler)
 	item, _ := ownable("track", "", "", map[string]any{"owned_track_id": "0b1f4c0e-6f3a-4a52-9a53-5f0c7a1d0001"})
 	item.TrackPosition = domain.TrackPosition{Disc: 1, Track: 3}
 
@@ -257,9 +257,9 @@ func (f recordingTrackNumberFiller) FillTrackNumber(_ context.Context, _ ids.Use
 
 func enrichAndCollectWrites(t *testing.T, owned ports.OwnedTrack, items ...service.OwnableItem) []fillWrite {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	filler := recordingTrackNumberFiller{writes: make(chan fillWrite, 32)}
-	svc := searchtest.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
+	svc := memory.NewOwnership(t, bg, stubOwnershipReader{owned: map[string]ports.OwnedTrack{
 		domain.OwnershipKey(owned.Title, owned.Artist): owned,
 	}}, filler)
 	select {
@@ -370,7 +370,7 @@ func TestEnrichAlbumTracks_NoTypedWriteWithoutAPositionOrAnISRCMatch(t *testing.
 }
 
 func TestNewOwnershipEnrichmentService_RefusesAMissingCollaborator(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	tests := []struct {
 		name   string
 		bg     *background.Tracker

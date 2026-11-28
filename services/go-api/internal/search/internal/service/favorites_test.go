@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -51,9 +50,9 @@ func searchFor(t *testing.T, svc *service.SearchService, user ids.UserId) []stri
 
 func rankedWithFavorites(t *testing.T, repo *memory.FakeFavoritesRepo, results []domain.SearchResult) []string {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Favorites = repo })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Favorites = repo })
 	return searchFor(t, svc, memory.NewUser())
 }
 
@@ -137,10 +136,10 @@ func TestSearchLift_DoesNotLiftAFavoriteJustOutsideTheWindow(t *testing.T) {
 }
 
 func TestSearchLift_OneUsersFavoritesDoNotReorderTheCachedRankingOthersSee(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	repo := favoritesRepoOf(memory.FavoriteOf(domain.ResultKindArtist, "Don Toliver", ""))
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: threeNoIdeaTracks()}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Favorites = repo; c.ResultCache = memory.NewFakeResultCache() })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Favorites = repo; c.ResultCache = memory.NewFakeResultCache() })
 
 	unlifted := []string{"Cover Band", "Some DJ", "Don Toliver"}
 	assertOrder(t, searchFor(t, svc, ids.SystemUserId()), unlifted)
@@ -150,7 +149,7 @@ func TestSearchLift_OneUsersFavoritesDoNotReorderTheCachedRankingOthersSee(t *te
 
 func TestFavoritesService_AddNormalizesKey(t *testing.T) {
 	repo := &memory.FakeFavoritesRepo{}
-	svc := searchtest.NewFavorites(t, repo)
+	svc := memory.NewFavorites(t, repo)
 
 	err := svc.Add(context.Background(), ids.UserId{}, domain.Favorite{
 		Kind:  domain.ResultKindArtist,
@@ -173,7 +172,7 @@ func TestFavoritesService_RefusesAMissingRepository(t *testing.T) {
 }
 
 func TestFavoritesService_AddRejectsEmptyTitle(t *testing.T) {
-	svc := searchtest.NewFavorites(t, &memory.FakeFavoritesRepo{})
+	svc := memory.NewFavorites(t, &memory.FakeFavoritesRepo{})
 	if err := svc.Add(context.Background(), ids.UserId{}, domain.Favorite{Kind: domain.ResultKindArtist}); err == nil {
 		t.Error("expected an error for a favorite with no title")
 	}
@@ -198,7 +197,7 @@ func assertFavoritesFull(t *testing.T, err error) {
 func assertRejectedWithoutWriting(t *testing.T, fav domain.Favorite) {
 	t.Helper()
 	repo := &memory.FakeFavoritesRepo{}
-	err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav)
+	err := memory.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav)
 
 	assertInvalidFavorite(t, err)
 	if len(repo.Added) != 0 {
@@ -239,7 +238,7 @@ func TestFavoritesAdd_AcceptsFieldsAtTheirCaps(t *testing.T) {
 		ImageURL: "https://img.example/" + strings.Repeat("a", maxFavoriteImageURLBytes-len("https://img.example/")),
 	}
 
-	if err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
+	if err := memory.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
 		t.Fatalf("Add at the caps: %v", err)
 	}
 	if len(repo.Added) != 1 {
@@ -267,7 +266,7 @@ func TestFavoritesAdd_StoresExactlyTheImageURLsSearchWouldShow(t *testing.T) {
 		t.Run(imageURL, func(t *testing.T) {
 			repo := &memory.FakeFavoritesRepo{}
 			fav := domain.Favorite{Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: imageURL}
-			if err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
+			if err := memory.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
 				t.Fatalf("Add rejected an image_url search shows: %v", err)
 			}
 		})
@@ -281,7 +280,7 @@ func TestFavoritesAdd_StoresExactlyTheImageURLsSearchWouldShow(t *testing.T) {
 
 func TestFavoritesRemove_OversizeTitleStillDeletes(t *testing.T) {
 	repo := &memory.FakeFavoritesRepo{}
-	err := searchtest.NewFavorites(t, repo).Remove(context.Background(), ids.UserId{},
+	err := memory.NewFavorites(t, repo).Remove(context.Background(), ids.UserId{},
 		domain.ResultKindAlbum, strings.Repeat("a", maxFavoriteTextRunes+1), "")
 	if err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -293,7 +292,7 @@ func TestFavoritesRemove_OversizeTitleStillDeletes(t *testing.T) {
 
 func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 	repo := &memory.FakeFavoritesRepo{Err: fmt.Errorf("insert favorite: %w", domain.ErrFavoritesFull)}
-	err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{},
+	err := memory.NewFavorites(t, repo).Add(context.Background(), ids.UserId{},
 		domain.Favorite{Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"})
 
 	assertFavoritesFull(t, err)

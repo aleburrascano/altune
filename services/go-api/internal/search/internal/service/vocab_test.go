@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -27,7 +26,7 @@ type ingestedSearch struct {
 
 func searchAndIngest(t *testing.T, query string, kinds map[domain.ResultKind]bool, results ...domain.SearchResult) ingestedSearch {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	var mu sync.Mutex
 	var entries []domain.SpellingHintsEntry
 	store := &memory.FakeVocabularyStore{AddFn: func(e domain.SpellingHintsEntry) error {
@@ -37,7 +36,7 @@ func searchAndIngest(t *testing.T, query string, kinds map[domain.ResultKind]boo
 		return nil
 	}}
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
 	q, err := domain.NewSearchQuery(query, kinds, everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
@@ -170,11 +169,11 @@ func TestSearchIngest_FewerResultsThanTheTopAreAllIngested(t *testing.T) {
 
 func searchWithVocabularyStore(t *testing.T, store *memory.FakeVocabularyStore) {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{
 		deezerResult(domain.ResultKindArtist, "Drake", "", 90),
 	}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
+	svc := memory.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
 	q, err := domain.NewSearchQuery("drake", allKinds(), everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
@@ -189,7 +188,7 @@ func TestSearchIngest_AFailedAddIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
 	const failed = `"msg":"search.v2.vocab_ingest_failed"`
 
 	t.Run("failing store", func(t *testing.T) {
-		logs := searchtest.CaptureLogs(t)
+		logs := memory.CaptureLogs(t)
 		searchWithVocabularyStore(t, &memory.FakeVocabularyStore{AddFn: func(domain.SpellingHintsEntry) error { return errors.New("store down") }})
 
 		if !strings.Contains(logs.String(), failed) {
@@ -197,7 +196,7 @@ func TestSearchIngest_AFailedAddIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
 		}
 	})
 	t.Run("working store", func(t *testing.T) {
-		logs := searchtest.CaptureLogs(t)
+		logs := memory.CaptureLogs(t)
 		searchWithVocabularyStore(t, &memory.FakeVocabularyStore{AddFn: func(domain.SpellingHintsEntry) error { return nil }})
 
 		if strings.Contains(logs.String(), failed) {

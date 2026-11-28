@@ -1,9 +1,9 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -18,8 +18,8 @@ func TestRunAdmitted_SettlesWithMappedOutcome(t *testing.T) {
 	}
 	_, err := service.RunAdmitted(context.Background(), c,
 		func(error) error { return nil },
-		func() (int, error) { return 1, searchtest.ErrUpstreamDown })
-	if !errors.Is(err, searchtest.ErrUpstreamDown) {
+		func() (int, error) { return 1, memory.ErrUpstreamDown })
+	if !errors.Is(err, memory.ErrUpstreamDown) {
 		t.Fatalf("err = %v, want the call's own error returned unmapped", err)
 	}
 	for i := 0; i < 10; i++ {

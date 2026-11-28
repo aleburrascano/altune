@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
@@ -50,7 +49,7 @@ func newPendingFiller(t *testing.T, bg *background.Tracker, store ports.Identity
 }
 
 func TestArtworkFiller_RefusesEveryMissingCollaborator(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	var (
 		lookup     ports.TaggingArtworkLookup = service.NoLookup{}
 		cache      ports.ArtworkCache         = service.NoArtworkCache{}
@@ -83,7 +82,7 @@ func TestPendingFiller_MarksArtworkPendingAndNeverResolvesLive(t *testing.T) {
 	track := memory.NewResult(domain.ResultKindTrack, "Humble", memory.WithSubtitle("Kendrick Lamar"))
 	liveRan := func(build func(*background.Tracker) *service.ArtworkFiller) (domain.ArtworkPath, bool) {
 		logs := logging.CaptureText(t, slog.LevelDebug)
-		bg := searchtest.NewTracker(t)
+		bg := memory.NewTracker(t)
 		got := fillAndSettle(t, bg, build(bg), track)
 		return got[0].ArtworkPath, strings.Contains(logs.String(), "artwork.enriched")
 	}
@@ -105,10 +104,10 @@ func TestPendingFiller_MarksArtworkPendingAndNeverResolvesLive(t *testing.T) {
 
 func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	track := memory.NewResult(domain.ResultKindTrack, "Humble", memory.WithSubtitle("Kendrick Lamar"))
-	cache := &searchtest.FakeArtworkCache{Store: map[string]string{}}
+	cache := &memory.FakeArtworkCache{Store: map[string]string{}}
 	outage := &scriptedResolver{log: &stageLog{}, outage: errors.New("coverartarchive 503")}
 
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	fillAndSettle(t, bg, newFiller(t, bg, outage, cache), track)
 
 	if want := []string{"resolve.name:"}; !reflect.DeepEqual(outage.log.calls, want) {
@@ -139,7 +138,7 @@ func TestArtworkFiller_AFailedCacheWriteIsLogged(t *testing.T) {
 	cache := &failingArtworkCache{scriptedArtworkCache{log: &stageLog{}}}
 	resolver := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
 
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	fillAndSettle(t, bg, newFiller(t, bg, resolver, cache), track)
 
 	if want := []string{"resolve.name:"}; !reflect.DeepEqual(resolver.log.calls, want) {
@@ -230,7 +229,7 @@ func assertDurableXrefApplied(t *testing.T, got []domain.SearchResult) {
 
 func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 	store := &batchingIdentityStore{}
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	f := newPendingFiller(t, bg, store)
 
 	got := f.Fill(context.Background(), fiftyArtlessResults())
@@ -249,7 +248,7 @@ func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 
 func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 	store := &batchingIdentityStore{}
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	f := newPendingFiller(t, bg, store)
 	results := fiftyArtlessResults()[:3]
 	results[0].ImageURL = "https://provider/art.jpg"
@@ -268,7 +267,7 @@ func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 
 func TestArtworkFiller_FallsBackToPerResultLookupWithoutBatch(t *testing.T) {
 	store := &countingIdentityStore{}
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	f := newPendingFiller(t, bg, store)
 
 	got := f.Fill(context.Background(), fiftyArtlessResults())
@@ -647,7 +646,7 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 			if tc.noIndex {
 				index = service.NoArtworkMBIDIndex{}
 			}
-			bg := searchtest.NewTracker(t)
+			bg := memory.NewTracker(t)
 			var f *service.ArtworkFiller
 			if tc.noCache {
 				f = newPendingFiller(t, bg, store)

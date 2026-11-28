@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
@@ -108,7 +107,7 @@ func goldenRouter(t *testing.T, svcs handler.DiscoveryServices, filler ports.Tra
 }
 
 func goldenRouterTracked(t *testing.T, svcs handler.DiscoveryServices, filler ports.TrackNumberFiller) (chi.Router, *background.Tracker) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	h := wireGoldenOwnership(t, bg, handler.MustNewDiscoveryHandler(svcs, time.Now), goldenOwned(), filler)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -117,7 +116,7 @@ func goldenRouterTracked(t *testing.T, svcs handler.DiscoveryServices, filler po
 }
 
 func wireGoldenOwnership(t *testing.T, bg *background.Tracker, h *handler.DiscoveryHandler, reader ports.OwnershipReader, filler ports.TrackNumberFiller) *handler.DiscoveryHandler {
-	if err := h.AttachOwnership(searchtest.NewOwnership(t, bg, reader, filler)); err != nil {
+	if err := h.AttachOwnership(memory.NewOwnership(t, bg, reader, filler)); err != nil {
 		t.Fatal(err)
 	}
 	return h
@@ -143,10 +142,10 @@ const (
 )
 
 func TestOwnershipGolden_Search(t *testing.T) {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	provider := &fakeSearchProvider{name: domain.ProviderDeezer, results: goldenTracks()}
-	router := goldenRouter(t, searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, []ports.SearchProvider{provider}, service.NewCircuitBreaker(clock.Now)),
+	router := goldenRouter(t, memory.CompleteServices(t, handler.DiscoveryServices{
+		Search: memory.NewSearchService(t, bg, []ports.SearchProvider{provider}, service.NewCircuitBreaker(clock.Now)),
 	}), &recordingTrackNumberFiller{done: make(chan struct{})})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=song&save_history=false", nil)
@@ -155,11 +154,11 @@ func TestOwnershipGolden_Search(t *testing.T) {
 }
 
 func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
-	albumSvc := searchtest.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
+	albumSvc := memory.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
 		domain.ProviderDeezer: &memory.AlbumContentProvider{Results: goldenAlbumPageTracks()},
 	})
 	filler := &recordingTrackNumberFiller{done: make(chan struct{}), want: 1}
-	router, bg := goldenRouterTracked(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Album: albumSvc}), filler)
+	router, bg := goldenRouterTracked(t, memory.CompleteServices(t, handler.DiscoveryServices{Album: albumSvc}), filler)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/9/tracks?title=Deluxe", nil)
 	discAssertStatus(t, rec, http.StatusOK)
@@ -180,7 +179,7 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 }
 
 func goldenArtistSvc(t testing.TB) *service.GetArtistContentService {
-	return searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+	return memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 		domain.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: goldenTracks(), Albums: goldenTracks()},
 	})
 }
@@ -196,7 +195,7 @@ func TestOwnershipGolden_ArtistEndpoints(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			filler := &recordingTrackNumberFiller{done: make(chan struct{})}
-			router, bg := goldenRouterTracked(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Artist: goldenArtistSvc(t)}), filler)
+			router, bg := goldenRouterTracked(t, memory.CompleteServices(t, handler.DiscoveryServices{Artist: goldenArtistSvc(t)}), filler)
 
 			rec := discServe(t, router, http.MethodGet, tc.path, nil)
 			discAssertStatus(t, rec, http.StatusOK)
@@ -213,10 +212,10 @@ func TestOwnershipGolden_ArtistEndpoints(t *testing.T) {
 }
 
 func TestOwnershipGolden_Related(t *testing.T) {
-	relatedSvc := searchtest.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
+	relatedSvc := memory.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
 		"soundcloud": &fakeRelatedTracksProvider{results: goldenTracks()},
 	})
-	router := goldenRouter(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Related: relatedSvc}), &recordingTrackNumberFiller{done: make(chan struct{})})
+	router := goldenRouter(t, memory.CompleteServices(t, handler.DiscoveryServices{Related: relatedSvc}), &recordingTrackNumberFiller{done: make(chan struct{})})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/9/related", nil)
 	discAssertStatus(t, rec, http.StatusOK)

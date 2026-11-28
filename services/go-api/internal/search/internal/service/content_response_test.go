@@ -1,9 +1,9 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -20,9 +20,9 @@ func TestFetchProviderResults_ClassifiesFailureStatus(t *testing.T) {
 	}{
 		{name: "client deadline", err: &url.Error{Op: "Get", URL: "https://p.test", Err: context.DeadlineExceeded}, want: domain.ProviderStatusTimeout},
 		{name: "bare deadline", err: fmt.Errorf("fetch: %w", context.DeadlineExceeded), want: domain.ProviderStatusTimeout},
-		{name: "upstream 429", err: fmt.Errorf("fetch: %w", searchtest.UpstreamStatusError(429)), want: domain.ProviderStatusRateLimited},
-		{name: "upstream 503", err: searchtest.UpstreamStatusError(503), want: domain.ProviderStatusError},
-		{name: "connection refused", err: searchtest.ErrUpstreamDown, want: domain.ProviderStatusError},
+		{name: "upstream 429", err: fmt.Errorf("fetch: %w", memory.UpstreamStatusError(429)), want: domain.ProviderStatusRateLimited},
+		{name: "upstream 503", err: memory.UpstreamStatusError(503), want: domain.ProviderStatusError},
+		{name: "connection refused", err: memory.ErrUpstreamDown, want: domain.ProviderStatusError},
 		{name: "plain error", err: errors.New("bad payload"), want: domain.ProviderStatusError},
 	}
 	for _, tc := range cases {

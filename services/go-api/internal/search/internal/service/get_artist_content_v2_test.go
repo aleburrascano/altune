@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
-	"altune/go-api/internal/search/searchtest"
 	"context"
 	"testing"
 	"testing/synctest"
@@ -25,10 +24,10 @@ func TestFanOutByIdentity_SlowProviderIsCutOffAtTheTenSecondDeadline(t *testing.
 			},
 		}
 		store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
-		svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		svc := memory.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderDeezer: fast,
 			domain.ProviderITunes: slow,
-		}, searchtest.ArtistIdentities(store))
+		}, memory.ArtistIdentities(store))
 
 		start := time.Now()
 		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)

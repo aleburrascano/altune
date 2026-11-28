@@ -1,4 +1,4 @@
-package searchtest
+package memory
 
 import (
 	"altune/go-api/internal/search/internal/ports"
@@ -6,15 +6,14 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
-	"testing"
 )
 
-func NewSearchService(t testing.TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *service.CircuitBreaker, opts ...service.Option) *service.SearchService {
+func NewSearchService(t TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *service.CircuitBreaker, opts ...service.Option) *service.SearchService {
 	t.Helper()
 	return NewSearchServiceWith(t, bg, providers, breaker, func(*service.Collaborators) {}, opts...)
 }
 
-func NewSearchServiceWith(t testing.TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *service.CircuitBreaker, with func(*service.Collaborators), opts ...service.Option) *service.SearchService {
+func NewSearchServiceWith(t TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *service.CircuitBreaker, with func(*service.Collaborators), opts ...service.Option) *service.SearchService {
 	t.Helper()
 	collaborators := service.AbsentCollaborators()
 	with(&collaborators)
@@ -50,7 +49,7 @@ func UseMBIDIndex(i ports.MBIDIndex) ArtworkPart {
 	return func(p *artworkParts) { p.mbidIndex = i }
 }
 
-func NewArtworkFill(t testing.TB, bg *background.Tracker, parts ...ArtworkPart) *service.ArtworkFiller {
+func NewArtworkFill(t TB, bg *background.Tracker, parts ...ArtworkPart) *service.ArtworkFiller {
 	t.Helper()
 	p := artworkParts{
 		lookup:     service.NoLookup{},
@@ -74,7 +73,7 @@ func NewArtworkFill(t testing.TB, bg *background.Tracker, parts ...ArtworkPart) 
 	return filler
 }
 
-func NewCorrection(t testing.TB, vocab ports.SpellingHintsReader) *service.CorrectionService {
+func NewCorrection(t TB, vocab ports.SpellingHintsReader) *service.CorrectionService {
 	t.Helper()
 	svc, err := service.NewCorrectionService(vocab)
 	if err != nil {
@@ -83,7 +82,7 @@ func NewCorrection(t testing.TB, vocab ports.SpellingHintsReader) *service.Corre
 	return svc
 }
 
-func NewHistoryRecorder(t testing.TB, repo ports.HistoryWriter) *service.RecordSearchHistoryService {
+func NewHistoryRecorder(t TB, repo ports.HistoryWriter) *service.RecordSearchHistoryService {
 	t.Helper()
 	svc, err := service.NewRecordSearchHistoryService(repo, clock.Now, ids.Real)
 	if err != nil {

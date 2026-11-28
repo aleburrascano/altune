@@ -1,18 +1,16 @@
-package searchtest
+package memory
 
 import (
-	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"
-	"testing"
 )
 
 type UnreleasedPart func(*service.Wiring)
 
-func UnreleasedWiring(t testing.TB, cache ports.UnreleasedCache, parts ...UnreleasedPart) service.Wiring {
+func UnreleasedWiring(t TB, cache ports.UnreleasedCache, parts ...UnreleasedPart) service.Wiring {
 	t.Helper()
 	storage, err := service.NewCachedStorage(cache)
 	if err != nil {
@@ -58,12 +56,3 @@ func MustUnreleased(svc *service.UnreleasedService, err error) *service.Unreleas
 	}
 	return svc
 }
-
-type (
-	GeniusSongCatalog   = memory.GeniusSongCatalog
-	ArtistCatalogTitles = memory.ArtistCatalogTitles
-	TrackerSongs        = memory.TrackerSongs
-	StoreWrite          = memory.StoreWrite
-	StoredArtist        = memory.StoredArtist
-	UnreleasedStore     = memory.UnreleasedStore
-)

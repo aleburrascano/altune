@@ -11,7 +11,7 @@ It owns the tables `discovery_events`, `discovery_favorites`, `discovery_search_
 
 ## Shape
 
-The door is `search.go`: `New(ctx, Deps)`, `Deps` (infrastructure only: the pool, Redis, the transport, the settings and the other outside parts, never a repository, because `New` builds its own), `Module` with `Routes()` (the `Bounded` group mounts `/discovery`, the `LongLived` group is empty), `PublicRoutes` for the unauthenticated auth-failure beacon, and the names `app`, the bridges and `cmd` use. The door also holds the composition: it builds the provider clients, the stores and the services. Everything else is under `internal/`:
+The door is `search.go`: `New(ctx, Deps)`, `Deps` (infrastructure only: the pool, Redis, the transport, the settings, the handler rate limits and the other outside parts, never a repository, because `New` builds its own), `Module` with `Routes()` (the `Bounded` group mounts `/discovery`, the `LongLived` group is empty), `PublicRoutes` for the unauthenticated auth-failure beacon, and the names `app`, the bridges and `cmd` use. The door also holds the composition: it builds the provider clients, the stores and the services. Everything else is under `internal/`:
 
 - `domain/`: one file per entity or value object, and `errors.go` with every error the module defines. Errors from building the module are in the door.
 - `ports/ports.go`: every interface the module needs from outside.
@@ -21,4 +21,4 @@ The door is `search.go`: `New(ctx, Deps)`, `Deps` (infrastructure only: the pool
 - `adapters/cache/`: the Redis caches.
 - `adapters/<provider>/`: one folder per outside system: `applemusic`, `coverartarchive`, `deezer`, `discogs`, `fanarttv`, `fansheets`, `genius`, `itunes`, `musicbrainz`, `soundcloud`, `spotify`, `theaudiodb`, `ytmusic`, `artworkfallback`. `providers/` holds the plumbing they share (query syntax, request shaping, the schema audit target).
 - `adapters/telemetry/`: provider call counters and their live snapshot.
-- `searchtest/` stays at the root because `app`, its bridges and `cmd` import its names and builders in their tests. A door name only tests use lives there too.
+- `searchtest/` stays at the root because `app`, its bridges and `cmd` import its names in their tests. It holds only those names, as aliases of what `adapters/memory` and the inner packages define; the module's own tests, builders included (`*_builders.go` in `adapters/memory`), use `adapters/memory` directly.

@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -57,7 +56,7 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 				called = true
 				return inner(ctx, u)
 			}
-			svc := searchtest.NewClearHistory(t, tt.repo)
+			svc := memory.NewClearHistory(t, tt.repo)
 
 			err := svc.Execute(context.Background(), userID)
 

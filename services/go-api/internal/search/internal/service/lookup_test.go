@@ -1,9 +1,9 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"context"
 	"errors"
@@ -12,9 +12,9 @@ import (
 )
 
 func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
-	store := &searchtest.UnreleasedStore{}
+	store := &memory.UnreleasedStore{}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{}, service.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
+	svc := memory.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &memory.ArtistCatalogTitles{}, service.UnreleasedConfig{}, memory.UnreleasedWiring(t, service.NoUnreleasedCache{}, memory.UnreleasedStored(store), memory.UnreleasedLifecycle(context.Background(), &jobs))))
 
 	svc.Warm(t.Context(), []service.ArtistToRefresh{
 		{Provider: domain.ProviderDeezer, ExternalID: "27", Name: "Drake"},
@@ -30,9 +30,9 @@ func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 }
 
 func TestService_Warm_StoreErrorIsOnlyLogged(t *testing.T) {
-	store := &searchtest.UnreleasedStore{RecordErr: errors.New("db down")}
+	store := &memory.UnreleasedStore{RecordErr: errors.New("db down")}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{}, service.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
+	svc := memory.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &memory.ArtistCatalogTitles{}, service.UnreleasedConfig{}, memory.UnreleasedWiring(t, service.NoUnreleasedCache{}, memory.UnreleasedStored(store), memory.UnreleasedLifecycle(context.Background(), &jobs))))
 
 	svc.Warm(t.Context(), []service.ArtistToRefresh{{Provider: domain.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
 	jobs.Wait()

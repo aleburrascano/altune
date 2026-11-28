@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -163,7 +162,7 @@ func buildDiscoveryRouter(t *testing.T,
 	albumProviders map[domain.ProviderName]ports.AlbumContentProvider,
 	artistProviders map[domain.ProviderName]ports.ArtistContentProvider,
 ) chi.Router {
-	bg := searchtest.NewTracker(t)
+	bg := memory.NewTracker(t)
 	var providers []ports.SearchProvider
 	if searchProvider != nil {
 		providers = append(providers, searchProvider)
@@ -174,24 +173,24 @@ func buildDiscoveryRouter(t *testing.T,
 	if historyRepo != nil {
 		withHistory = func(c *service.Collaborators) { c.History = historyRepo }
 	}
-	searchSvc := searchtest.NewSearchServiceWith(t, bg, providers, cb, withHistory)
-	historySvc := searchtest.NewListHistory(t, historyRepo)
-	clearHistorySvc := searchtest.NewClearHistory(t, historyRepo)
+	searchSvc := memory.NewSearchServiceWith(t, bg, providers, cb, withHistory)
+	historySvc := memory.NewListHistory(t, historyRepo)
+	clearHistorySvc := memory.NewClearHistory(t, historyRepo)
 
 	var albumSvc *service.GetAlbumTracksService
 	if albumProviders != nil {
-		albumSvc = searchtest.NewAlbumTracks(t, albumProviders)
+		albumSvc = memory.NewAlbumTracks(t, albumProviders)
 	}
 
 	var artistSvc *service.GetArtistContentService
 	if artistProviders != nil {
-		artistSvc = searchtest.NewArtistContent(t, artistProviders)
+		artistSvc = memory.NewArtistContent(t, artistProviders)
 	}
 
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
-		RecordHistory: searchtest.NewHistoryRecorder(t, historyRepo),
+		RecordHistory: memory.NewHistoryRecorder(t, historyRepo),
 		ClearHistory:  clearHistorySvc,
 		Album:         albumSvc,
 		Artist:        artistSvc,
@@ -229,10 +228,10 @@ type nopEventStore struct{}
 func (nopEventStore) Append(context.Context, domain.InteractionEvent) error { return nil }
 
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
-	bg := searchtest.NewTracker(t)
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
-		Event:  searchtest.NewRecordEvent(t, nopEventStore{}),
+	bg := memory.NewTracker(t)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
+		Search: memory.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
+		Event:  memory.NewRecordEvent(t, nopEventStore{}),
 	}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -259,10 +258,10 @@ func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 
 func TestHandleRecordEvent_StoresTheCorrelationId(t *testing.T) {
 	store := &recordingEventStore{}
-	bg := searchtest.NewTracker(t)
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
-		Event:  searchtest.NewRecordEvent(t, store),
+	bg := memory.NewTracker(t)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
+		Search: memory.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
+		Event:  memory.NewRecordEvent(t, store),
 	}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -279,10 +278,10 @@ func TestHandleRecordEvent_StoresTheCorrelationId(t *testing.T) {
 
 func TestHandleRecordEvent_DropsAnOversizedCorrelationId(t *testing.T) {
 	store := &recordingEventStore{}
-	bg := searchtest.NewTracker(t)
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
-		Event:  searchtest.NewRecordEvent(t, store),
+	bg := memory.NewTracker(t)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{
+		Search: memory.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
+		Event:  memory.NewRecordEvent(t, store),
 	}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -664,7 +663,7 @@ func mustEnrichment(svc *service.DetailsService, err error) *service.DetailsServ
 }
 
 func buildEnrichmentRouter(t *testing.T, svc handler.Enricher) chi.Router {
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Enrich: svc}), time.Now)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Enrich: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -742,10 +741,10 @@ func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ domain
 }
 
 func buildRelatedRouter(t testing.TB, provider *fakeRelatedTracksProvider) chi.Router {
-	svc := searchtest.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
+	svc := memory.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Related: svc}), time.Now)
+	h := handler.MustNewDiscoveryHandler(memory.CompleteServices(t, handler.DiscoveryServices{Related: svc}), time.Now)
 
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)

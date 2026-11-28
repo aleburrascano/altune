@@ -1,9 +1,9 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/textnorm"
 	"testing"
 )
@@ -17,74 +17,74 @@ func ent(r domain.SearchResult) service.Entity {
 }
 
 func TestRank_ExactTitleOutranksPartial(t *testing.T) {
-	exact := searchtest.DeezerTrack("Humble", "Artist A", 10)
-	partial := searchtest.DeezerTrack("Humble Beginnings", "Artist B", 99)
+	exact := memory.DeezerTrack("Humble", "Artist A", 10)
+	partial := memory.DeezerTrack("Humble Beginnings", "Artist B", 99)
 
 	got := service.Rank([]service.Entity{ent(partial), ent(exact)}, "humble")
 
 	if len(got) == 0 || got[0].Title != "Humble" {
-		t.Fatalf("ranking = %v, want exact 'Humble' first", searchtest.Titles(got))
+		t.Fatalf("ranking = %v, want exact 'Humble' first", memory.Titles(got))
 	}
 }
 
 func TestRank_DashVariantOutranksParenForRemasterQuery(t *testing.T) {
-	dash := searchtest.DeezerTrack("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", 50)
-	paren := searchtest.DeezerTrack("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", 99)
+	dash := memory.DeezerTrack("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", 50)
+	paren := memory.DeezerTrack("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", 99)
 
 	got := service.Rank([]service.Entity{ent(paren), ent(dash)}, "big poppa 2005 remaster")
 
 	if len(got) == 0 || got[0].Title != "Big Poppa - 2005 Remaster" {
-		t.Fatalf("ranking = %v, want the dash-form variant first", searchtest.Titles(got))
+		t.Fatalf("ranking = %v, want the dash-form variant first", memory.Titles(got))
 	}
 }
 
 func TestRank_PopularityBreaksRelevanceTie(t *testing.T) {
-	a := searchtest.DeezerTrack("Crazy", "Artist A", 30)
-	b := searchtest.DeezerTrack("Crazy", "Artist B", 90)
+	a := memory.DeezerTrack("Crazy", "Artist A", 30)
+	b := memory.DeezerTrack("Crazy", "Artist B", 90)
 
 	got := service.Rank([]service.Entity{ent(a), ent(b)}, "crazy")
 
 	if len(got) != 2 || got[0].Subtitle != "Artist B" {
-		t.Fatalf("ranking = %v, want the more popular 'Crazy' first", searchtest.Titles(got))
+		t.Fatalf("ranking = %v, want the more popular 'Crazy' first", memory.Titles(got))
 	}
 }
 
 func TestRank_SharesQueryWordGate(t *testing.T) {
-	relevant := searchtest.DeezerTrack("Humble", "Artist A", 50)
-	noise := searchtest.DeezerTrack("Completely Different", "Other", 99)
+	relevant := memory.DeezerTrack("Humble", "Artist A", 50)
+	noise := memory.DeezerTrack("Completely Different", "Other", 99)
 
 	got := service.Rank([]service.Entity{ent(noise), ent(relevant)}, "humble")
 
 	if len(got) != 1 || got[0].Title != "Humble" {
-		t.Fatalf("expected only the relevant result, got %v", searchtest.Titles(got))
+		t.Fatalf("expected only the relevant result, got %v", memory.Titles(got))
 	}
 }
 
 func TestRank_SingleCharQueryIsNotGatedOut(t *testing.T) {
-	artist := searchtest.DeezerTrack("U", "U", 50)
+	artist := memory.DeezerTrack("U", "U", 50)
 
 	got := service.Rank([]service.Entity{ent(artist)}, "u")
 
 	if len(got) != 1 {
-		t.Fatalf("single-char query gated out every result, got %v", searchtest.Titles(got))
+		t.Fatalf("single-char query gated out every result, got %v", memory.Titles(got))
 	}
 }
 
 func TestRank_BrowseableSourceGate(t *testing.T) {
-	itunesAlbum := searchtest.WithPop(searchtest.Res(domain.ResultKindAlbum, "Humble", "Artist A", domain.ProviderITunes, nil), 99)
-	trk := searchtest.DeezerTrack("Humble", "Artist A", 10)
+	itunesAlbum := memory.WithPop(memory.Res(domain.ResultKindAlbum, "Humble", "Artist A", domain.ProviderITunes, nil), 99)
+	trk := memory.DeezerTrack("Humble", "Artist A", 10)
 
 	got := service.Rank([]service.Entity{ent(itunesAlbum), ent(trk)}, "humble")
 
 	if len(got) != 1 || got[0].Kind != domain.ResultKindTrack {
-		t.Fatalf("expected the album dropped (no Deezer source), got %v", searchtest.Titles(got))
+		t.Fatalf("expected the album dropped (no Deezer source), got %v", memory.Titles(got))
 	}
 }
 
 func TestRank_MultiSourceTiebreakWithinEqualRelevanceAndPopularity(t *testing.T) {
-	single := searchtest.DeezerTrack("Crazy", "Artist A", 50)
+	single := memory.DeezerTrack("Crazy", "Artist A", 50)
 
-	multi := searchtest.WithPop(searchtest.Track("Crazy", "Artist A", domain.ProviderDeezer, nil), 50)
+	multi := memory.WithPop(memory.Track("Crazy", "Artist A", domain.ProviderDeezer, nil), 50)
 	multi.Sources = append(multi.Sources, domain.ProviderLink{
 		Provider: domain.ProviderITunes, ExternalID: "x", URL: "https://x",
 	})
@@ -96,7 +96,7 @@ func TestRank_MultiSourceTiebreakWithinEqualRelevanceAndPopularity(t *testing.T)
 	got := service.Rank([]service.Entity{ent(single), multiEntity}, "crazy")
 
 	if len(got) != 2 || len(got[0].Sources) != 2 {
-		t.Fatalf("expected the multi-source result first, got %v", searchtest.Titles(got))
+		t.Fatalf("expected the multi-source result first, got %v", memory.Titles(got))
 	}
 }
 
@@ -118,37 +118,37 @@ func TestIsLowConfidenceTail(t *testing.T) {
 	}{
 		{
 			name: "single-source soundcloud, no identity → demoted",
-			r:    searchtest.Track("che rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil),
+			r:    memory.Track("che rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil),
 			want: true,
 		},
 		{
 			name: "single-source spotify, no identity → never demoted",
-			r:    searchtest.Track("Intro", "che rest in bass", domain.ProviderSpotify, nil),
+			r:    memory.Track("Intro", "che rest in bass", domain.ProviderSpotify, nil),
 			want: false,
 		},
 		{
 			name: "single-source soundcloud but carries album → rescued",
-			r:    withAlbum(searchtest.Track("Real Song", "Artist", domain.ProviderSoundCloud, nil), "Real Album"),
+			r:    withAlbum(memory.Track("Real Song", "Artist", domain.ProviderSoundCloud, nil), "Real Album"),
 			want: false,
 		},
 		{
 			name: "single-source soundcloud but carries isrc → rescued",
-			r:    searchtest.WithISRC(searchtest.Track("Real Song", "Artist", domain.ProviderSoundCloud, nil), "US1234567890"),
+			r:    memory.WithISRC(memory.Track("Real Song", "Artist", domain.ProviderSoundCloud, nil), "US1234567890"),
 			want: false,
 		},
 		{
 			name: "single-source deezer (curated catalog) → never demoted",
-			r:    searchtest.Track("Real Song", "Artist", domain.ProviderDeezer, nil),
+			r:    memory.Track("Real Song", "Artist", domain.ProviderDeezer, nil),
 			want: false,
 		},
 		{
 			name: "single-source itunes (curated catalog) → never demoted",
-			r:    searchtest.Track("Real Song", "Artist", domain.ProviderITunes, nil),
+			r:    memory.Track("Real Song", "Artist", domain.ProviderITunes, nil),
 			want: false,
 		},
 		{
 			name: "multi-source soundcloud+deezer (corroborated) → never demoted",
-			r:    multiSource(searchtest.Track("BA$$", "che", domain.ProviderSoundCloud, nil), domain.ProviderDeezer),
+			r:    multiSource(memory.Track("BA$$", "che", domain.ProviderSoundCloud, nil), domain.ProviderDeezer),
 			want: false,
 		},
 	}
@@ -163,43 +163,43 @@ func TestIsLowConfidenceTail(t *testing.T) {
 }
 
 func TestRankWith_DemotesUGCNoiseBelowCleanResult(t *testing.T) {
-	junk := searchtest.Track("rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil)
-	clean := searchtest.DeezerTrack("Encore", "Che", 10)
+	junk := memory.Track("rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil)
+	clean := memory.DeezerTrack("Encore", "Che", 10)
 
 	base := service.Rank([]service.Entity{ent(clean), ent(junk)}, "rest in bass encore")
 	if len(base) != 2 || base[0].Subtitle != "prodguy" {
-		t.Fatalf("baseline precondition: expected junk first on relevance, got %v", searchtest.Titles(base))
+		t.Fatalf("baseline precondition: expected junk first on relevance, got %v", memory.Titles(base))
 	}
 
 	got := service.RankWith([]service.Entity{ent(clean), ent(junk)}, "rest in bass encore", service.RankOptions{TailDemotion: true})
 	if len(got) != 2 || got[0].Subtitle != "Che" {
-		t.Fatalf("with demotion: expected clean 'Che' first, got %v", searchtest.Titles(got))
+		t.Fatalf("with demotion: expected clean 'Che' first, got %v", memory.Titles(got))
 	}
 	if got[1].Subtitle != "prodguy" {
-		t.Fatalf("with demotion: expected UGC noise last, got %v", searchtest.Titles(got))
+		t.Fatalf("with demotion: expected UGC noise last, got %v", memory.Titles(got))
 	}
 }
 
 func TestRankWith_NilPredicateMatchesRank(t *testing.T) {
-	junk := searchtest.Track("crazy bootleg edit", "uploader", domain.ProviderSoundCloud, nil)
-	clean := searchtest.DeezerTrack("Crazy", "Gnarls Barkley", 50)
+	junk := memory.Track("crazy bootleg edit", "uploader", domain.ProviderSoundCloud, nil)
+	clean := memory.DeezerTrack("Crazy", "Gnarls Barkley", 50)
 	entities := []service.Entity{ent(clean), ent(junk)}
 
 	a := service.Rank(entities, "crazy")
 	b := service.RankWith(entities, "crazy", service.RankOptions{})
 	if len(a) != len(b) {
-		t.Fatalf("length mismatch: %v vs %v", searchtest.Titles(a), searchtest.Titles(b))
+		t.Fatalf("length mismatch: %v vs %v", memory.Titles(a), memory.Titles(b))
 	}
 	for i := range a {
 		if a[i].Title != b[i].Title || a[i].Subtitle != b[i].Subtitle {
-			t.Fatalf("ordering mismatch at %d: %v vs %v", i, searchtest.Titles(a), searchtest.Titles(b))
+			t.Fatalf("ordering mismatch at %d: %v vs %v", i, memory.Titles(a), memory.Titles(b))
 		}
 	}
 }
 
 func TestRankWith_BehavioralScoresMapAppliedBySignature(t *testing.T) {
-	satisfied := searchtest.DeezerTrack("Humble", "Kendrick Lamar", 10)
-	skipped := searchtest.DeezerTrack("Humble", "Cover Band", 90)
+	satisfied := memory.DeezerTrack("Humble", "Kendrick Lamar", 10)
+	skipped := memory.DeezerTrack("Humble", "Cover Band", 90)
 	entities := []service.Entity{ent(skipped), ent(satisfied)}
 
 	scores := map[string]float64{
@@ -220,7 +220,7 @@ func TestRankWith_BehavioralScoresMapAppliedBySignature(t *testing.T) {
 func TestRankPipelineNoReshape_SkipsListShaping(t *testing.T) {
 	group := []domain.SearchResult{}
 	for _, title := range []string{"Humble A", "Humble B", "Humble C", "Humble D", "Humble E", "Humble F"} {
-		group = append(group, searchtest.DeezerTrack(title, "Kendrick Lamar", 50))
+		group = append(group, memory.DeezerTrack(title, "Kendrick Lamar", 50))
 	}
 	perProvider := [][]domain.SearchResult{group}
 
@@ -235,7 +235,7 @@ func TestRankPipelineNoReshape_SkipsListShaping(t *testing.T) {
 }
 
 func twoSourceTrack(title, artist string, rank int64) domain.SearchResult {
-	r := searchtest.Track(title, artist, domain.ProviderITunes, nil)
+	r := memory.Track(title, artist, domain.ProviderITunes, nil)
 	r.ProviderRank = rank
 	r.Sources = append(r.Sources, domain.ProviderLink{
 		Provider: domain.ProviderMusicBrainz, ExternalID: title + ":mb", URL: "https://x/" + title,
@@ -244,7 +244,7 @@ func twoSourceTrack(title, artist string, rank int64) domain.SearchResult {
 }
 
 func artistWithFans(name string, nbFan int64) domain.SearchResult {
-	r := searchtest.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil)
+	r := memory.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil)
 	r.FanCount = nbFan
 	return r
 }
@@ -277,9 +277,9 @@ func TestProminence_ObscureArtistStaysBelowProminentTrack(t *testing.T) {
 }
 
 func TestProminence_SameKindEqualProminenceFallsThrough(t *testing.T) {
-	hi := searchtest.Track("Echo", "Artist Hi", domain.ProviderDeezer, nil)
+	hi := memory.Track("Echo", "Artist Hi", domain.ProviderDeezer, nil)
 	hi.ProviderRank = 900_000
-	lo := searchtest.Track("Echo", "Artist Lo", domain.ProviderDeezer, nil)
+	lo := memory.Track("Echo", "Artist Lo", domain.ProviderDeezer, nil)
 	lo.ProviderRank = 900_000
 	entities := []service.Entity{ent(hi), ent(lo)}
 
@@ -297,8 +297,8 @@ func TestProminence_SameKindEqualProminenceFallsThrough(t *testing.T) {
 }
 
 func TestTailNoiseInTopK(t *testing.T) {
-	clean := searchtest.DeezerTrack("Clean", "Artist", 50)
-	noise := searchtest.Track("type beat", "uploader", domain.ProviderSoundCloud, nil)
+	clean := memory.DeezerTrack("Clean", "Artist", 50)
+	noise := memory.Track("type beat", "uploader", domain.ProviderSoundCloud, nil)
 	results := []domain.SearchResult{clean, noise, noise, clean}
 
 	if got := service.TailNoiseInTopK(results, 5); got != 2 {
@@ -313,7 +313,7 @@ func TestTailNoiseInTopK(t *testing.T) {
 }
 
 func dzArtist(name string, pop float64) domain.SearchResult {
-	return searchtest.WithPop(searchtest.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil), pop)
+	return memory.WithPop(memory.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil), pop)
 }
 
 func norm(raw string) string { return textnorm.NormalizeForMatch(raw) }
@@ -348,12 +348,12 @@ func inTopN(t *testing.T, got []domain.SearchResult, n int, wantTitle string) {
 			return
 		}
 	}
-	t.Fatalf("want %q in top-%d, got order %v", wantTitle, n, searchtest.Titles(got))
+	t.Fatalf("want %q in top-%d, got order %v", wantTitle, n, memory.Titles(got))
 }
 
 func TestRankPipeline_GateDominatesPopularity(t *testing.T) {
-	itunesOnlyAlbum := searchtest.WithPop(searchtest.Res(domain.ResultKindAlbum, "Mirage", "Some Artist", domain.ProviderITunes, nil), 1_000_000)
-	deezerTrack := searchtest.DeezerTrack("Mirage", "Some Artist", 10)
+	itunesOnlyAlbum := memory.WithPop(memory.Res(domain.ResultKindAlbum, "Mirage", "Some Artist", domain.ProviderITunes, nil), 1_000_000)
+	deezerTrack := memory.DeezerTrack("Mirage", "Some Artist", 10)
 
 	got := service.RankPipeline([][]domain.SearchResult{{itunesOnlyAlbum}, {deezerTrack}}, norm("Mirage"))
 
@@ -362,14 +362,14 @@ func TestRankPipeline_GateDominatesPopularity(t *testing.T) {
 	}
 	for _, r := range got {
 		if r.Kind == domain.ResultKindAlbum {
-			t.Fatalf("non-browseable album leaked into results despite the gate: %v", searchtest.Titles(got))
+			t.Fatalf("non-browseable album leaked into results despite the gate: %v", memory.Titles(got))
 		}
 	}
 }
 
 func TestRankPipeline_NoKindFavoritism(t *testing.T) {
-	albumFirst := searchtest.WithPop(searchtest.Res(domain.ResultKindAlbum, "Echo", "Band", domain.ProviderDeezer, nil), 50)
-	trackSecond := searchtest.WithPop(searchtest.Res(domain.ResultKindTrack, "Echo", "Band", domain.ProviderDeezer, nil), 50)
+	albumFirst := memory.WithPop(memory.Res(domain.ResultKindAlbum, "Echo", "Band", domain.ProviderDeezer, nil), 50)
+	trackSecond := memory.WithPop(memory.Res(domain.ResultKindTrack, "Echo", "Band", domain.ProviderDeezer, nil), 50)
 
 	got := service.RankPipeline([][]domain.SearchResult{{albumFirst, trackSecond}}, norm("Echo"))
 
@@ -385,7 +385,7 @@ func TestRankPipeline_NoKindFavoritism(t *testing.T) {
 		}
 	}
 	if albumPos == -1 || trackPos == -1 {
-		t.Fatalf("expected both album and track to survive, got %v", searchtest.Titles(got))
+		t.Fatalf("expected both album and track to survive, got %v", memory.Titles(got))
 	}
 	if albumPos > trackPos {
 		t.Fatalf("kind favoritism: track was promoted above the album that preceded it in input (album=%d track=%d)", albumPos, trackPos)
@@ -394,11 +394,11 @@ func TestRankPipeline_NoKindFavoritism(t *testing.T) {
 
 func TestRankPipeline_DiversityPreservesOrder(t *testing.T) {
 	in := []domain.SearchResult{
-		searchtest.DeezerTrack("Song A", "Solo", 90),
-		searchtest.DeezerTrack("Song B", "Solo", 80),
-		searchtest.DeezerTrack("Song C", "Solo", 70),
-		searchtest.DeezerTrack("Song D", "Solo", 60),
-		searchtest.DeezerTrack("Song E", "Solo", 50),
+		memory.DeezerTrack("Song A", "Solo", 90),
+		memory.DeezerTrack("Song B", "Solo", 80),
+		memory.DeezerTrack("Song C", "Solo", 70),
+		memory.DeezerTrack("Song D", "Solo", 60),
+		memory.DeezerTrack("Song E", "Solo", 50),
 	}
 	got := service.RankPipeline([][]domain.SearchResult{in}, norm("Solo"))
 
@@ -407,10 +407,10 @@ func TestRankPipeline_DiversityPreservesOrder(t *testing.T) {
 	for _, title := range order {
 		idx := indexOfTitle(got, title)
 		if idx == -1 {
-			t.Fatalf("%q dropped by the pipeline: %v", title, searchtest.Titles(got))
+			t.Fatalf("%q dropped by the pipeline: %v", title, memory.Titles(got))
 		}
 		if idx <= prev {
-			t.Fatalf("diversity promoted %q above its popularity rank: %v", title, searchtest.Titles(got))
+			t.Fatalf("diversity promoted %q above its popularity rank: %v", title, memory.Titles(got))
 		}
 		prev = idx
 	}
@@ -427,10 +427,10 @@ func TestRankPipeline_CollapseKeepsSurvivors(t *testing.T) {
 	)
 
 	if c := countTitle(got, "Aurora"); c != 1 {
-		t.Fatalf("expected the two 'Aurora' artists to collapse to 1, got %d: %v", c, searchtest.Titles(got))
+		t.Fatalf("expected the two 'Aurora' artists to collapse to 1, got %d: %v", c, memory.Titles(got))
 	}
 	if indexOfTitle(got, "Aurora Borealis") == -1 {
-		t.Fatalf("distinct artist 'Aurora Borealis' was wrongly collapsed: %v", searchtest.Titles(got))
+		t.Fatalf("distinct artist 'Aurora Borealis' was wrongly collapsed: %v", memory.Titles(got))
 	}
 	survivor := got[indexOfTitle(got, "Aurora")]
 	if survivor.Popularity != 95 {
@@ -450,8 +450,8 @@ func TestRankPipeline_CanonicalTopThree(t *testing.T) {
 			query: "Humble",
 			groups: [][]domain.SearchResult{
 				{dzArtist("Humble", 90)},
-				{searchtest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 40)},
-				{searchtest.DeezerAlbum("Humble", "Some Artist", 30)},
+				{memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 40)},
+				{memory.DeezerAlbum("Humble", "Some Artist", 30)},
 			},
 			wantTitle: "HUMBLE.",
 		},
@@ -461,10 +461,10 @@ func TestRankPipeline_CanonicalTopThree(t *testing.T) {
 			groups: [][]domain.SearchResult{
 				{dzArtist("Drake", 100)},
 				{
-					searchtest.DeezerTrack("God's Plan", "Drake", 999),
-					searchtest.DeezerTrack("Hotline Bling", "Drake", 950),
-					searchtest.DeezerTrack("In My Feelings", "Drake", 900),
-					searchtest.DeezerTrack("One Dance", "Drake", 880),
+					memory.DeezerTrack("God's Plan", "Drake", 999),
+					memory.DeezerTrack("Hotline Bling", "Drake", 950),
+					memory.DeezerTrack("In My Feelings", "Drake", 900),
+					memory.DeezerTrack("One Dance", "Drake", 880),
 				},
 			},
 			wantTitle: "Drake",
@@ -474,8 +474,8 @@ func TestRankPipeline_CanonicalTopThree(t *testing.T) {
 			query: "Kendrick Lamar Humble",
 			groups: [][]domain.SearchResult{
 				{dzArtist("Humble", 90)},
-				{searchtest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 40)},
-				{searchtest.DeezerTrack("DNA.", "Kendrick Lamar", 55)},
+				{memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 40)},
+				{memory.DeezerTrack("DNA.", "Kendrick Lamar", 55)},
 			},
 			wantTitle: "HUMBLE.",
 		},
@@ -495,65 +495,65 @@ func topPick(r domain.SearchResult) domain.SearchResult {
 }
 
 func TestRank_ProvidersTopPickOutranksASameTitleSongByAnotherArtist(t *testing.T) {
-	song := searchtest.DeezerTrack("Cochise", "Audioslave", 90)
-	rapper := multiSource(searchtest.Res(domain.ResultKindArtist, "Cochise", "", domain.ProviderSpotify, nil), domain.ProviderDeezer)
+	song := memory.DeezerTrack("Cochise", "Audioslave", 90)
+	rapper := multiSource(memory.Res(domain.ResultKindArtist, "Cochise", "", domain.ProviderSpotify, nil), domain.ProviderDeezer)
 
 	base := service.Rank([]service.Entity{ent(rapper), ent(song)}, "cochise")
 	if len(base) != 2 || base[0].Kind != domain.ResultKindTrack {
-		t.Fatalf("baseline precondition: expected the Audioslave song first, got %v", searchtest.Titles(base))
+		t.Fatalf("baseline precondition: expected the Audioslave song first, got %v", memory.Titles(base))
 	}
 
 	got := service.Rank([]service.Entity{ent(song), ent(topPick(rapper))}, "cochise")
 	if len(got) != 2 || got[0].Kind != domain.ResultKindArtist {
-		t.Fatalf("ranking = %v, want Spotify's top pick (the artist) first", searchtest.Titles(got))
+		t.Fatalf("ranking = %v, want Spotify's top pick (the artist) first", memory.Titles(got))
 	}
 }
 
 func TestRank_TopPickStillHasToShareAQueryWord(t *testing.T) {
-	unrelated := topPick(searchtest.Res(domain.ResultKindArtist, "Someone Else", "", domain.ProviderSpotify, nil))
-	match := searchtest.DeezerTrack("Humble", "Kendrick Lamar", 10)
+	unrelated := topPick(memory.Res(domain.ResultKindArtist, "Someone Else", "", domain.ProviderSpotify, nil))
+	match := memory.DeezerTrack("Humble", "Kendrick Lamar", 10)
 
 	got := service.Rank([]service.Entity{ent(unrelated), ent(match)}, "humble")
 	if len(got) != 1 || got[0].Title != "Humble" {
-		t.Fatalf("ranking = %v, want only the result that shares a query word", searchtest.Titles(got))
+		t.Fatalf("ranking = %v, want only the result that shares a query word", memory.Titles(got))
 	}
 }
 
 func TestRankWith_DemotedTopPickStaysBelowCleanResults(t *testing.T) {
-	junk := topPick(searchtest.Track("rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil))
-	clean := searchtest.DeezerTrack("Encore", "Che", 10)
+	junk := topPick(memory.Track("rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil))
+	clean := memory.DeezerTrack("Encore", "Che", 10)
 
 	got := service.RankWith([]service.Entity{ent(junk), ent(clean)}, "rest in bass encore", service.RankOptions{TailDemotion: true})
 	if len(got) != 2 || got[0].Subtitle != "Che" {
-		t.Fatalf("ranking = %v, want the clean result above the demoted top pick", searchtest.Titles(got))
+		t.Fatalf("ranking = %v, want the clean result above the demoted top pick", memory.Titles(got))
 	}
 }
 
 func pickedArtist(name string) domain.SearchResult {
-	return topPick(multiSource(searchtest.Res(domain.ResultKindArtist, name, "", domain.ProviderSpotify, nil), domain.ProviderDeezer))
+	return topPick(multiSource(memory.Res(domain.ResultKindArtist, name, "", domain.ProviderSpotify, nil), domain.ProviderDeezer))
 }
 
 func TestRank_ThePickedArtistsSongsOutrankSameTitleSongsByOthers(t *testing.T) {
-	other := searchtest.DeezerTrack("Cochise", "Audioslave", 90)
-	own := searchtest.DeezerTrack("Hatchback", "Cochise", 10)
+	other := memory.DeezerTrack("Cochise", "Audioslave", 90)
+	own := memory.DeezerTrack("Hatchback", "Cochise", 10)
 
 	got := service.Rank([]service.Entity{ent(other), ent(own), ent(pickedArtist("Cochise"))}, "cochise")
 
 	want := []string{"Cochise", "Hatchback", "Cochise"}
 	if len(got) != 3 || got[1].Subtitle != "Cochise" || got[2].Subtitle != "Audioslave" {
-		t.Fatalf("ranking = %v by %v, want %v (pick, its song, then Audioslave's)", searchtest.Titles(got), searchtest.Subtitles(got), want)
+		t.Fatalf("ranking = %v by %v, want %v (pick, its song, then Audioslave's)", memory.Titles(got), memory.Subtitles(got), want)
 	}
 }
 
 func TestRank_ThePickedArtistsSongsOutrankLookalikeArtists(t *testing.T) {
-	lookalike := multiSource(searchtest.Res(domain.ResultKindArtist, "Drake Bell", "", domain.ProviderDeezer, nil), domain.ProviderSpotify)
-	lookalikeSong := searchtest.DeezerTrack("Found a Way", "Drake Bell", 80)
-	own := searchtest.DeezerTrack("One Dance", "Drake", 10)
+	lookalike := multiSource(memory.Res(domain.ResultKindArtist, "Drake Bell", "", domain.ProviderDeezer, nil), domain.ProviderSpotify)
+	lookalikeSong := memory.DeezerTrack("Found a Way", "Drake Bell", 80)
+	own := memory.DeezerTrack("One Dance", "Drake", 10)
 
 	got := service.Rank([]service.Entity{ent(lookalike), ent(lookalikeSong), ent(own), ent(pickedArtist("Drake"))}, "drake")
 
 	if len(got) != 4 || got[0].Title != "Drake" || got[1].Title != "One Dance" {
-		t.Fatalf("ranking = %v, want Drake then One Dance above Drake Bell", searchtest.Titles(got))
+		t.Fatalf("ranking = %v, want Drake then One Dance above Drake Bell", memory.Titles(got))
 	}
 }
 
@@ -577,36 +577,36 @@ func TestCreditsArtist(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			song := searchtest.DeezerTrack("Some Song", tt.credit, 10)
-			decoy := searchtest.DeezerTrack("Some Song", "Someone Else", 99)
+			song := memory.DeezerTrack("Some Song", tt.credit, 10)
+			decoy := memory.DeezerTrack("Some Song", "Someone Else", 99)
 
 			got := service.Rank([]service.Entity{ent(decoy), ent(song), ent(pickedArtist(tt.artist))}, "")
 
 			if len(got) != 3 {
-				t.Fatalf("ranking = %v by %v, want the pick and both songs", searchtest.Titles(got), searchtest.Subtitles(got))
+				t.Fatalf("ranking = %v by %v, want the pick and both songs", memory.Titles(got), memory.Subtitles(got))
 			}
 			if credited := got[1].Subtitle == tt.credit; credited != tt.want {
-				t.Errorf("credit %q ranked as the picked artist %q's song = %v, want %v (ranking by %v)", tt.credit, tt.artist, credited, tt.want, searchtest.Subtitles(got))
+				t.Errorf("credit %q ranked as the picked artist %q's song = %v, want %v (ranking by %v)", tt.credit, tt.artist, credited, tt.want, memory.Subtitles(got))
 			}
 		})
 	}
 }
 
 func TestRank_ATrackPickDoesNotLiftItsArtistsOtherSongs(t *testing.T) {
-	pick := topPick(searchtest.DeezerTrack("Humble", "Kendrick Lamar", 10))
-	exact := searchtest.DeezerTrack("Humble", "Someone", 50)
-	sameArtist := searchtest.DeezerTrack("Humble Beginnings", "Kendrick Lamar", 99)
+	pick := topPick(memory.DeezerTrack("Humble", "Kendrick Lamar", 10))
+	exact := memory.DeezerTrack("Humble", "Someone", 50)
+	sameArtist := memory.DeezerTrack("Humble Beginnings", "Kendrick Lamar", 99)
 
 	got := service.Rank([]service.Entity{ent(sameArtist), ent(exact), ent(pick)}, "humble")
 
 	if len(got) != 3 || got[0].Subtitle != "Kendrick Lamar" || got[1].Subtitle != "Someone" {
-		t.Fatalf("ranking = %v by %v, want the pick, then the exact title, then the partial", searchtest.Titles(got), searchtest.Subtitles(got))
+		t.Fatalf("ranking = %v by %v, want the pick, then the exact title, then the partial", memory.Titles(got), memory.Subtitles(got))
 	}
 }
 
 func TestRank_CorroboratedResultOutranksABetterSingleProviderRank(t *testing.T) {
-	single := searchtest.DeezerTrack("Echo", "Artist A", 10)
-	corroborated := multiSource(searchtest.DeezerTrack("Echo", "Artist B", 10), domain.ProviderSpotify)
+	single := memory.DeezerTrack("Echo", "Artist A", 10)
+	corroborated := multiSource(memory.DeezerTrack("Echo", "Artist B", 10), domain.ProviderSpotify)
 	entities := []service.Entity{
 		{Result: single, BestRank: map[domain.ProviderName]int{domain.ProviderDeezer: 0}},
 		{Result: corroborated, BestRank: map[domain.ProviderName]int{domain.ProviderDeezer: 200, domain.ProviderSpotify: 200}},
@@ -615,6 +615,6 @@ func TestRank_CorroboratedResultOutranksABetterSingleProviderRank(t *testing.T) 
 	got := service.Rank(entities, "echo")
 
 	if len(got) != 2 || got[0].Subtitle != "Artist B" {
-		t.Fatalf("ranking = %v, want the two-provider Artist B first over the single provider's better rank", searchtest.Subtitles(got))
+		t.Fatalf("ranking = %v, want the two-provider Artist B first over the single provider's better rank", memory.Subtitles(got))
 	}
 }

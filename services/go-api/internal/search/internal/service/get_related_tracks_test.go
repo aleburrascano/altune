@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
-	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -86,7 +85,7 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := searchtest.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
+			svc := memory.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
 				"soundcloud": tt.fake,
 			})
 
