@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
@@ -35,7 +34,7 @@ func postAuthFailure(r chi.Router, body, remoteAddr string) *httptest.ResponseRe
 
 func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 	store := &recordingEventStore{}
-	r := buildAuthFailureRouter(t, store, search.DefaultAuthFailureLimit)
+	r := buildAuthFailureRouter(t, store, handler.DefaultAuthFailureLimit)
 
 	rec := postAuthFailure(r, validAuthFailureBody, "203.0.113.5:1000")
 
@@ -74,7 +73,7 @@ func TestAuthFailureEndpoint_RateLimitsPerClientIP(t *testing.T) {
 
 func TestAuthFailureEndpoint_OversizedBodyIsTooLarge(t *testing.T) {
 	store := &recordingEventStore{}
-	r := buildAuthFailureRouter(t, store, search.DefaultAuthFailureLimit)
+	r := buildAuthFailureRouter(t, store, handler.DefaultAuthFailureLimit)
 
 	rec := postAuthFailure(r, `{"reason":"network","app_version":"1.2.3","pad":"`+strings.Repeat("x", 600)+`"}`, "203.0.113.5:1000")
 
@@ -98,7 +97,7 @@ func TestAuthFailureEndpoint_RejectsInvalidBodies(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &recordingEventStore{}
-			r := buildAuthFailureRouter(t, store, search.DefaultAuthFailureLimit)
+			r := buildAuthFailureRouter(t, store, handler.DefaultAuthFailureLimit)
 
 			rec := postAuthFailure(r, body, "203.0.113.5:1000")
 

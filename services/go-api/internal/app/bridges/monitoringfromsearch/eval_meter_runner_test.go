@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/bridges/monitoringfromsearch"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"reflect"
@@ -39,7 +40,7 @@ func TestNewEvalMeterRunner_CarriesEveryScorecardField(t *testing.T) {
 			Baseline:  0.9,
 			Regressed: true,
 			Errored:   2,
-			Queries: []search.SmokeQueryResult{
+			Queries: []searchtest.SmokeQueryResult{
 				{Query: "radiohead", Expect: "Radiohead", Passed: true, Position: 1},
 				{Query: "bjork", Expect: "Björk", Passed: false, Position: 7},
 			},

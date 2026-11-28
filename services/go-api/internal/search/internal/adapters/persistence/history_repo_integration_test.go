@@ -3,7 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/history"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
@@ -251,7 +251,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
 
-	recorder, err := history.NewRecordSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool), time.Now, ids.Real)
+	recorder, err := service.NewRecordSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool), time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewRecordSearchHistoryService: %v", err)
 	}

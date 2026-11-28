@@ -1,7 +1,6 @@
 package searchtest_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -33,7 +32,7 @@ func TestLyricsProvider_LookupErrorReturnsEmptyLyrics(t *testing.T) {
 func TestDeezerEnricher_ResolveRecordsArgumentsAndReturnsResolvedID(t *testing.T) {
 	f := &memory.DeezerEnricher{ResolvedID: "42"}
 
-	id, err := f.ResolveID(context.Background(), search.ResultKindTrack, "a", "t")
+	id, err := f.ResolveID(context.Background(), domain.ResultKindTrack, "a", "t")
 
 	if err != nil || id != "42" || f.Resolves != 1 || f.LastArtist != "a" || f.LastTitle != "t" {
 		t.Fatalf("got (%q, %v), resolves=%d last=(%q,%q)", id, err, f.Resolves, f.LastArtist, f.LastTitle)
@@ -44,7 +43,7 @@ func TestDeezerEnricher_ResolveErrorReturnsEmptyID(t *testing.T) {
 	boom := errors.New("boom")
 	f := &memory.DeezerEnricher{ResolvedID: "42", ResolveErr: boom}
 
-	id, err := f.ResolveID(context.Background(), search.ResultKindTrack, "a", "t")
+	id, err := f.ResolveID(context.Background(), domain.ResultKindTrack, "a", "t")
 
 	if id != "" || !errors.Is(err, boom) {
 		t.Fatalf("got (%q, %v), want (\"\", boom)", id, err)

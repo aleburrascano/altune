@@ -1,0 +1,207 @@
+package service_test
+
+import (
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
+	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+)
+
+const (
+	vocabIngestTop       = 5
+	everyResultOnOnePage = 50
+)
+
+type ingestedSearch struct {
+	shown   []domain.SearchResult
+	entries []domain.SpellingHintsEntry
+}
+
+func searchAndIngest(t *testing.T, query string, kinds map[domain.ResultKind]bool, results ...domain.SearchResult) ingestedSearch {
+	t.Helper()
+	bg := searchtest.NewTracker(t)
+	var mu sync.Mutex
+	var entries []domain.SpellingHintsEntry
+	store := &memory.FakeVocabularyStore{AddFn: func(e domain.SpellingHintsEntry) error {
+		mu.Lock()
+		defer mu.Unlock()
+		entries = append(entries, e)
+		return nil
+	}}
+	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: results}
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
+	q, err := domain.NewSearchQuery(query, kinds, everyResultOnOnePage)
+	if err != nil {
+		t.Fatalf("NewSearchQuery: %v", err)
+	}
+	out, err := svc.Execute(context.Background(), memory.NewUser(), q)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	bg.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	return ingestedSearch{shown: out.Results, entries: entries}
+}
+
+func deezerResult(kind domain.ResultKind, title, subtitle string, popularity float64) domain.SearchResult {
+	return memory.NewResult(
+		kind,
+		title,
+		memory.WithSubtitle(subtitle),
+		memory.WithPopularity(popularity),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: title, URL: "https://x/" + title}}),
+	)
+}
+
+func allKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
+	}
+}
+
+func entryFor(t *testing.T, entries []domain.SpellingHintsEntry, term string) domain.SpellingHintsEntry {
+	t.Helper()
+	for _, e := range entries {
+		if e.Term == term {
+			return e
+		}
+	}
+	t.Fatalf("no vocabulary entry for %q in %+v", term, entries)
+	return domain.SpellingHintsEntry{}
+}
+
+func TestSearchIngest_MapsEachShownResultToVocabularyEntries(t *testing.T) {
+	got := searchAndIngest(t, "drake", allKinds(),
+		deezerResult(domain.ResultKindArtist, "Drake", "", 90),
+		memory.DeezerTrack("Hotline Bling", "Drake", 80),
+		memory.DeezerAlbum("Scorpion", "Drake", 70),
+	)
+
+	if len(got.entries) != 4 {
+		t.Fatalf("want 4 entries, got %d: %+v", len(got.entries), got.entries)
+	}
+	want := []domain.SpellingHintsEntry{
+		{Term: "Drake", TermNorm: "drake", Kind: domain.VocabKindArtist, Popularity: 90},
+		{Term: "Hotline Bling - Drake", TermNorm: "hotline bling drake", Kind: domain.VocabKindTrack, Popularity: 80},
+		{Term: "Drake", TermNorm: "drake", Kind: domain.VocabKindArtist, Popularity: 80},
+		{Term: "Scorpion - Drake", TermNorm: "scorpion drake", Kind: domain.VocabKindAlbum, Popularity: 70},
+	}
+	for _, w := range want {
+		if !slices.Contains(got.entries, w) {
+			t.Errorf("missing entry %+v in %+v", w, got.entries)
+		}
+	}
+	for _, e := range got.entries {
+		if e.Kind == domain.VocabKindQuery || e.Term == "drake" {
+			t.Errorf("the raw query must not be ingested, got %+v", e)
+		}
+	}
+}
+
+func TestSearchIngest_AResultOfAnotherKindIsIngestedAsAQuery(t *testing.T) {
+	got := searchAndIngest(t, "chill mix", map[domain.ResultKind]bool{domain.ResultKindPlaylist: true},
+		deezerResult(domain.ResultKindPlaylist, "Chill Mix", "", 0),
+	)
+
+	if e := entryFor(t, got.entries, "Chill Mix"); e.Kind != domain.VocabKindQuery {
+		t.Errorf("playlist entry kind = %q, want %q", e.Kind, domain.VocabKindQuery)
+	}
+}
+
+func TestSearchIngest_IngestsOnlyTheTopShownResults(t *testing.T) {
+	var results []domain.SearchResult
+	for _, name := range []string{"Drake A", "Drake B", "Drake C", "Drake D", "Drake E", "Drake F", "Drake G"} {
+		results = append(results, deezerResult(domain.ResultKindArtist, name, "", 0))
+	}
+
+	got := searchAndIngest(t, "drake", allKinds(), results...)
+
+	if len(got.shown) <= vocabIngestTop {
+		t.Fatalf("precondition: want more than %d shown results, got %d", vocabIngestTop, len(got.shown))
+	}
+	if len(got.entries) != vocabIngestTop {
+		t.Fatalf("want %d entries, got %d: %+v", vocabIngestTop, len(got.entries), got.entries)
+	}
+	for i, e := range got.entries {
+		if e.Term != got.shown[i].Title {
+			t.Errorf("entry %d = %q, want the shown result %q", i, e.Term, got.shown[i].Title)
+		}
+	}
+}
+
+func TestSearchIngest_AnEmptyTitleIsIngestedAsAnEmptyTerm(t *testing.T) {
+	untitled := memory.NewResult(
+		domain.ResultKindTrack,
+		"",
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "untitled", URL: "https://x/untitled"}}),
+	)
+	queryWithNoRankableWord := "a"
+
+	got := searchAndIngest(t, queryWithNoRankableWord, allKinds(), untitled)
+
+	if len(got.entries) != 1 {
+		t.Fatalf("want 1 entry, got %d: %+v", len(got.entries), got.entries)
+	}
+	if got.entries[0].Term != "" || got.entries[0].TermNorm != "" {
+		t.Errorf("want the empty term ingested as-is, got %+v", got.entries[0])
+	}
+}
+
+func TestSearchIngest_FewerResultsThanTheTopAreAllIngested(t *testing.T) {
+	got := searchAndIngest(t, "drake", allKinds(),
+		deezerResult(domain.ResultKindArtist, "Drake", "", 0),
+	)
+
+	if len(got.entries) != 1 {
+		t.Fatalf("want 1 entry, got %d: %+v", len(got.entries), got.entries)
+	}
+}
+
+func searchWithVocabularyStore(t *testing.T, store *memory.FakeVocabularyStore) {
+	t.Helper()
+	bg := searchtest.NewTracker(t)
+	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{
+		deezerResult(domain.ResultKindArtist, "Drake", "", 90),
+	}}
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
+	q, err := domain.NewSearchQuery("drake", allKinds(), everyResultOnOnePage)
+	if err != nil {
+		t.Fatalf("NewSearchQuery: %v", err)
+	}
+	if _, err := svc.Execute(context.Background(), memory.NewUser(), q); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	bg.Wait()
+}
+
+func TestSearchIngest_AFailedAddIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
+	const failed = `"msg":"search.v2.vocab_ingest_failed"`
+
+	t.Run("failing store", func(t *testing.T) {
+		logs := searchtest.CaptureLogs(t)
+		searchWithVocabularyStore(t, &memory.FakeVocabularyStore{AddFn: func(domain.SpellingHintsEntry) error { return errors.New("store down") }})
+
+		if !strings.Contains(logs.String(), failed) {
+			t.Errorf("logs = %s, want a vocab_ingest_failed warning", logs)
+		}
+	})
+	t.Run("working store", func(t *testing.T) {
+		logs := searchtest.CaptureLogs(t)
+		searchWithVocabularyStore(t, &memory.FakeVocabularyStore{AddFn: func(domain.SpellingHintsEntry) error { return nil }})
+
+		if strings.Contains(logs.String(), failed) {
+			t.Errorf("logs = %s, want no vocab_ingest_failed warning", logs)
+		}
+	})
+}

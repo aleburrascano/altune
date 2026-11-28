@@ -1,8 +1,8 @@
 package searchtest_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"sync"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestAlbumContentProvider_ZeroValueReturnsNothing(t *testing.T) {
-	got, err := (&memory.AlbumContentProvider{}).GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
+	got, err := (&memory.AlbumContentProvider{}).GetAlbumTracks(context.Background(), domain.ProviderDeezer, "1")
 
 	if got != nil || err != nil {
 		t.Fatalf("got (%v, %v), want (nil, nil)", got, err)
@@ -18,10 +18,10 @@ func TestAlbumContentProvider_ZeroValueReturnsNothing(t *testing.T) {
 }
 
 func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
-	want := []search.SearchResult{memory.NewResult(0, "a")}
+	want := []domain.SearchResult{memory.NewResult(0, "a")}
 	p := &memory.AlbumContentProvider{Results: want}
 
-	got, err := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
+	got, err := p.GetAlbumTracks(context.Background(), domain.ProviderDeezer, "1")
 
 	if err != nil || len(got) != 1 || got[0].Title != "a" {
 		t.Fatalf("got (%v, %v), want the canned result", got, err)
@@ -30,13 +30,13 @@ func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
 
 func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
 	p := &memory.AlbumContentProvider{
-		Results: []search.SearchResult{memory.NewResult(0, "canned")},
-		GetAlbumTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{memory.NewResult(0, "override")}, nil
+		Results: []domain.SearchResult{memory.NewResult(0, "canned")},
+		GetAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{memory.NewResult(0, "override")}, nil
 		},
 	}
 
-	got, _ := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
+	got, _ := p.GetAlbumTracks(context.Background(), domain.ProviderDeezer, "1")
 
 	if len(got) != 1 || got[0].Title != "override" {
 		t.Fatalf("got %v, want the override result", got)
@@ -45,11 +45,11 @@ func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
 
 func TestAlbumContentProvider_ErrorSetBetweenCallsFailsOnlyTheSecond(t *testing.T) {
 	boom := errors.New("boom")
-	p := &memory.AlbumContentProvider{Results: []search.SearchResult{memory.NewResult(0, "a")}}
+	p := &memory.AlbumContentProvider{Results: []domain.SearchResult{memory.NewResult(0, "a")}}
 
-	_, first := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
+	_, first := p.GetAlbumTracks(context.Background(), domain.ProviderDeezer, "1")
 	p.Err = boom
-	_, second := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
+	_, second := p.GetAlbumTracks(context.Background(), domain.ProviderDeezer, "1")
 
 	if first != nil || !errors.Is(second, boom) {
 		t.Fatalf("errors = (%v, %v), want (nil, boom)", first, second)
@@ -67,7 +67,7 @@ func TestArtworkResolver_CountsConcurrentCallsExactly(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _, _ = r.ResolveTagged(context.Background(), search.ResultKindTrack, "t", "s", "")
+			_, _, _ = r.ResolveTagged(context.Background(), domain.ResultKindTrack, "t", "s", "")
 		}()
 	}
 	wg.Wait()

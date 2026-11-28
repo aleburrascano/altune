@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"fmt"
@@ -33,7 +33,7 @@ func (r *PostgresFavoritesRepository) Add(ctx context.Context, userId ids.UserId
 		return fmt.Errorf("insert favorite: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("insert favorite: %w", ports.ErrFavoritesFull)
+		return fmt.Errorf("insert favorite: %w", domain.ErrFavoritesFull)
 	}
 	return nil
 }

@@ -70,7 +70,7 @@ func (s *fakeStore) Update(_ context.Context, track *librarydoor.Track, expected
 	}
 	cur, ok := s.tracks[track.ID()]
 	if !ok || cur == nil {
-		return librarydoor.ErrTrackMissing
+		return librarytest.ErrTrackMissing
 	}
 	if cur.Version() != expectedVersion {
 		return librarydoor.ErrTrackVersionConflict
@@ -92,7 +92,7 @@ func (s *fakeStore) AudioRefInUse(context.Context, string, librarydoor.TrackId) 
 func newTrack(t *testing.T, version int) (*librarydoor.Track, ids.UserId) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := librarydoor.NewTrack(librarydoor.NewTrackInput{UserId: userId, Title: "Title", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: userId, Title: "Title", Artist: "Artist", Album: "Album"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -736,7 +736,7 @@ func (s *reclaimingStore) UpdateFenced(ctx context.Context, track *librarydoor.T
 		s.reclaimed = true
 		stored, ok := s.tracks[track.ID()]
 		if !ok || stored == nil {
-			return librarydoor.ErrTrackMissing
+			return librarytest.ErrTrackMissing
 		}
 		current := *stored
 		librarytest.AmendTrack(&current, func(s *librarytest.TrackSnapshot) { s.AcquisitionFence++ })
@@ -895,7 +895,7 @@ func goldenRelabel() *download.TrackLabel {
 func studioLabelledTrack(t *testing.T) (*librarydoor.Track, ids.UserId) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := librarydoor.NewTrack(librarydoor.NewTrackInput{UserId: userId, Title: "It's Only Love", Artist: "Bryan Adams", Album: "Reckless"}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: userId, Title: "It's Only Love", Artist: "Bryan Adams", Album: "Reckless"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,6 @@ package downloadfromlibrary_test
 
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
-	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
 	"io"
 	"os"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestStoredAudioReader_CopiesTheStoredFileKeepingItsExtension(t *testing.T) {
-	store := library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics())
+	store := librarytest.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics())
 	source := filepath.Join(t.TempDir(), "in.m4a")
 	if err := os.WriteFile(source, []byte("stored audio bytes"), 0o600); err != nil {
 		t.Fatalf("write source: %v", err)
@@ -41,7 +40,7 @@ func TestStoredAudioReader_CopiesTheStoredFileKeepingItsExtension(t *testing.T) 
 }
 
 func TestStoredAudioReader_ReportsAMissingStoredFile(t *testing.T) {
-	store := library.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics())
+	store := librarytest.NewFilesystemAudioStore(t.TempDir(), librarytest.DiscardFSCallMetrics())
 
 	if _, err := downloadfromlibrary.NewStoredAudioReader(store).CopyStored(t.Context(), "audio/missing.m4a", t.TempDir()); err == nil {
 		t.Fatal("CopyStored of a ref that is not stored: want error, got nil")

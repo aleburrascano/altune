@@ -75,7 +75,7 @@ func TestPayloads_NameTheSubjectTheTapShows(t *testing.T) {
 	}
 }
 
-func TestTrackAddedToLibrary_RefusesAnUnmarshalableTrack(t *testing.T) {
+func TestTrackAddedToLibrary_RefusesAnEventWithoutATrackBody(t *testing.T) {
 	_, err := json.Marshal(events.TrackAddedToLibrary{TrackID: "t1"})
 	if err == nil {
 		t.Fatal("marshal succeeded, want the error so the stream resyncs instead of sending a half frame")

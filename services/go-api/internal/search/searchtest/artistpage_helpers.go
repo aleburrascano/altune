@@ -1,10 +1,9 @@
 package searchtest
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/artistpage"
-	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"testing"
@@ -15,7 +14,7 @@ type artistContentParts struct {
 	anchor     ports.MusicBrainzDiscographyAnchor
 	events     ports.EventStore
 	tracker    *background.Tracker
-	breaker    *providerguard.CircuitBreaker
+	breaker    *service.CircuitBreaker
 	tracklists map[domain.ProviderName]ports.AlbumContentProvider
 }
 
@@ -37,41 +36,41 @@ func ArtistEvents(store ports.EventStore, tracker *background.Tracker) ArtistCon
 	return func(p *artistContentParts) { p.events, p.tracker = store, tracker }
 }
 
-func ArtistBreaker(breaker *providerguard.CircuitBreaker) ArtistContentPart {
+func ArtistBreaker(breaker *service.CircuitBreaker) ArtistContentPart {
 	return func(p *artistContentParts) { p.breaker = breaker }
 }
 
-func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.ArtistContentProvider, parts ...ArtistContentPart) *artistpage.GetArtistContentService {
+func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.ArtistContentProvider, parts ...ArtistContentPart) *service.GetArtistContentService {
 	t.Helper()
-	p := artistContentParts{breaker: providerguard.NewCircuitBreaker(clock.Now), tracklists: map[domain.ProviderName]ports.AlbumContentProvider{}}
+	p := artistContentParts{breaker: service.NewCircuitBreaker(clock.Now), tracklists: map[domain.ProviderName]ports.AlbumContentProvider{}}
 	for _, part := range parts {
 		part(&p)
 	}
-	var identity artistpage.ArtistIdentity = artistpage.SeedPathIdentity{}
+	var identity service.ArtistIdentity = service.SeedPathIdentity{}
 	if p.identities != nil {
-		store, err := artistpage.NewStoreIdentity(p.identities)
+		store, err := service.NewStoreIdentity(p.identities)
 		if err != nil {
 			t.Fatalf("artistpage.NewStoreIdentity: %v", err)
 		}
 		identity = store
 	}
-	var anchoring artistpage.Anchoring = artistpage.NoAnchoring{}
+	var anchoring service.Anchoring = service.NoAnchoring{}
 	if p.anchor != nil {
-		musicBrainz, err := artistpage.NewMusicBrainzAnchoring(p.anchor, p.breaker)
+		musicBrainz, err := service.NewMusicBrainzAnchoring(p.anchor, p.breaker)
 		if err != nil {
 			t.Fatalf("artistpage.NewMusicBrainzAnchoring: %v", err)
 		}
 		anchoring = musicBrainz
 	}
-	var observer artistpage.DiscographyObserver = artistpage.NoDiscographyObserver{}
+	var observer service.DiscographyObserver = service.NoDiscographyObserver{}
 	if p.events != nil {
-		telemetry, err := artistpage.NewDiscographyTelemetry(p.events, p.tracker, clock.Now)
+		telemetry, err := service.NewDiscographyTelemetry(p.events, p.tracker, clock.Now)
 		if err != nil {
 			t.Fatalf("artistpage.NewDiscographyTelemetry: %v", err)
 		}
 		observer = telemetry
 	}
-	svc, err := artistpage.NewGetArtistContentService(providers, p.tracklists, identity, anchoring, observer, p.breaker)
+	svc, err := service.NewGetArtistContentService(providers, p.tracklists, identity, anchoring, observer, p.breaker)
 	if err != nil {
 		t.Fatalf("artistpage.NewGetArtistContentService: %v", err)
 	}
@@ -79,14 +78,14 @@ func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.Arti
 }
 
 type albumTracksParts struct {
-	featured artistpage.DeezerFeaturedLookup
+	featured service.DeezerFeaturedLookup
 	fallback ports.SearchProvider
-	breaker  *providerguard.CircuitBreaker
+	breaker  *service.CircuitBreaker
 }
 
 type AlbumTracksPart func(*albumTracksParts)
 
-func AlbumFeatured(lookup artistpage.DeezerFeaturedLookup) AlbumTracksPart {
+func AlbumFeatured(lookup service.DeezerFeaturedLookup) AlbumTracksPart {
 	return func(p *albumTracksParts) { p.featured = lookup }
 }
 
@@ -94,42 +93,42 @@ func AlbumFallbackSearcher(searcher ports.SearchProvider) AlbumTracksPart {
 	return func(p *albumTracksParts) { p.fallback = searcher }
 }
 
-func AlbumBreaker(breaker *providerguard.CircuitBreaker) AlbumTracksPart {
+func AlbumBreaker(breaker *service.CircuitBreaker) AlbumTracksPart {
 	return func(p *albumTracksParts) { p.breaker = breaker }
 }
 
-func NewAlbumTracks(t testing.TB, providers map[domain.ProviderName]ports.AlbumContentProvider, parts ...AlbumTracksPart) *artistpage.GetAlbumTracksService {
+func NewAlbumTracks(t testing.TB, providers map[domain.ProviderName]ports.AlbumContentProvider, parts ...AlbumTracksPart) *service.GetAlbumTracksService {
 	t.Helper()
-	p := albumTracksParts{breaker: providerguard.NewCircuitBreaker(clock.Now)}
+	p := albumTracksParts{breaker: service.NewCircuitBreaker(clock.Now)}
 	for _, part := range parts {
 		part(&p)
 	}
-	var featured artistpage.FeaturedEnrichment = artistpage.NoFeaturedEnrichment{}
+	var featured service.FeaturedEnrichment = service.NoFeaturedEnrichment{}
 	if p.featured != nil {
-		deezer, err := artistpage.NewDeezerFeaturedEnrichment(p.featured, p.breaker)
+		deezer, err := service.NewDeezerFeaturedEnrichment(p.featured, p.breaker)
 		if err != nil {
 			t.Fatalf("artistpage.NewDeezerFeaturedEnrichment: %v", err)
 		}
 		featured = deezer
 	}
-	var fallback artistpage.AlbumFallback = artistpage.NoAlbumFallback{}
+	var fallback service.AlbumFallback = service.NoAlbumFallback{}
 	if p.fallback != nil {
-		search, err := artistpage.NewSearchAlbumFallback(p.fallback, p.breaker)
+		search, err := service.NewSearchAlbumFallback(p.fallback, p.breaker)
 		if err != nil {
 			t.Fatalf("artistpage.NewSearchAlbumFallback: %v", err)
 		}
 		fallback = search
 	}
-	svc, err := artistpage.NewGetAlbumTracksService(providers, featured, fallback, p.breaker)
+	svc, err := service.NewGetAlbumTracksService(providers, featured, fallback, p.breaker)
 	if err != nil {
 		t.Fatalf("artistpage.NewGetAlbumTracksService: %v", err)
 	}
 	return svc
 }
 
-func NewFeaturedResolver(t testing.TB, mb artistpage.MBFeaturedSearcher, deezer artistpage.DeezerFeaturedLookup) *artistpage.FeaturedArtistResolver {
+func NewFeaturedResolver(t testing.TB, mb service.MBFeaturedSearcher, deezer service.DeezerFeaturedLookup) *service.FeaturedArtistResolver {
 	t.Helper()
-	resolver, err := artistpage.NewFeaturedArtistResolver(mb, deezer)
+	resolver, err := service.NewFeaturedArtistResolver(mb, deezer)
 	if err != nil {
 		t.Fatalf("artistpage.NewFeaturedArtistResolver: %v", err)
 	}

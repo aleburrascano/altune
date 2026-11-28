@@ -43,6 +43,20 @@ func MustNewQueueHandler(svc *service.QueueService, limit QueueSaveLimit, now fu
 	return h
 }
 
+type Routes struct {
+	queue *QueueHandler
+}
+
+func NewRoutes(queue *QueueHandler) Routes {
+	return Routes{queue: queue}
+}
+
+func (rt Routes) Bounded(r chi.Router) {
+	r.Mount("/playback", rt.queue.Routes())
+}
+
+func (rt Routes) LongLived(chi.Router) {}
+
 func (h *QueueHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(h.limiter).Put("/queue-state", h.handleSave)

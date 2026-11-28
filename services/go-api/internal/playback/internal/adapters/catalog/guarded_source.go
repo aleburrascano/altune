@@ -13,6 +13,12 @@ import (
 
 var _ ports.TrackSource = (*GuardedSource)(nil)
 
+var (
+	ErrCollaboratorRequired = errors.New("nowplaying: a required collaborator is missing")
+	ErrClockRequired        = errors.New("nowplaying: the reader requires a clock")
+	ErrInvalidTimeout       = errors.New("nowplaying: the lookup timeout must be positive")
+)
+
 type GuardedSource struct {
 	next    ports.TrackSource
 	breaker *enrichmentBreaker
@@ -23,13 +29,13 @@ type GuardedSource struct {
 func NewGuardedSource(next ports.TrackSource, metrics ports.EnrichmentMetrics, now func() time.Time, lookupTimeout time.Duration) (*GuardedSource, error) {
 	switch {
 	case next == nil:
-		return nil, fmt.Errorf("NewGuardedSource: the track source: %w", domain.ErrEnrichmentCollaboratorRequired)
+		return nil, fmt.Errorf("NewGuardedSource: the track source: %w", ErrCollaboratorRequired)
 	case metrics == nil:
-		return nil, fmt.Errorf("NewGuardedSource: the enrichment metrics: %w", domain.ErrEnrichmentCollaboratorRequired)
+		return nil, fmt.Errorf("NewGuardedSource: the enrichment metrics: %w", ErrCollaboratorRequired)
 	case now == nil:
-		return nil, fmt.Errorf("NewGuardedSource: %w", domain.ErrEnrichmentClockRequired)
+		return nil, fmt.Errorf("NewGuardedSource: %w", ErrClockRequired)
 	case lookupTimeout <= 0:
-		return nil, fmt.Errorf("NewGuardedSource: %w", domain.ErrEnrichmentInvalidTimeout)
+		return nil, fmt.Errorf("NewGuardedSource: %w", ErrInvalidTimeout)
 	}
 	return &GuardedSource{next: next, breaker: newEnrichmentBreaker(metrics, now), metrics: metrics, timeout: lookupTimeout}, nil
 }

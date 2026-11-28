@@ -1,28 +1,24 @@
 package searchtest
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/artwork"
-	"altune/go-api/internal/search/internal/service/history"
-	"altune/go-api/internal/search/internal/service/providerguard"
-	"altune/go-api/internal/search/internal/service/query"
-	"altune/go-api/internal/search/internal/service/vocabulary"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"testing"
 )
 
-func NewSearchService(t testing.TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *providerguard.CircuitBreaker, opts ...query.Option) *query.Service {
+func NewSearchService(t testing.TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *service.CircuitBreaker, opts ...service.Option) *service.SearchService {
 	t.Helper()
-	return NewSearchServiceWith(t, bg, providers, breaker, func(*query.Collaborators) {}, opts...)
+	return NewSearchServiceWith(t, bg, providers, breaker, func(*service.Collaborators) {}, opts...)
 }
 
-func NewSearchServiceWith(t testing.TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *providerguard.CircuitBreaker, with func(*query.Collaborators), opts ...query.Option) *query.Service {
+func NewSearchServiceWith(t testing.TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *service.CircuitBreaker, with func(*service.Collaborators), opts ...service.Option) *service.SearchService {
 	t.Helper()
-	collaborators := query.AbsentCollaborators()
+	collaborators := service.AbsentCollaborators()
 	with(&collaborators)
-	svc, err := query.NewService(bg, providers, breaker, collaborators, opts...)
+	svc, err := service.NewSearchService(bg, providers, breaker, collaborators, opts...)
 	if err != nil {
 		t.Fatalf("query.NewService: %v", err)
 	}
@@ -54,42 +50,42 @@ func UseMBIDIndex(i ports.MBIDIndex) ArtworkPart {
 	return func(p *artworkParts) { p.mbidIndex = i }
 }
 
-func NewArtworkFill(t testing.TB, bg *background.Tracker, parts ...ArtworkPart) *artwork.ArtworkFiller {
+func NewArtworkFill(t testing.TB, bg *background.Tracker, parts ...ArtworkPart) *service.ArtworkFiller {
 	t.Helper()
 	p := artworkParts{
-		lookup:     artwork.NoLookup{},
-		identities: artwork.NoIdentities{},
-		mbidIndex:  artwork.NoMBIDIndex{},
+		lookup:     service.NoLookup{},
+		identities: service.NoIdentities{},
+		mbidIndex:  service.NoArtworkMBIDIndex{},
 	}
 	for _, part := range parts {
 		part(&p)
 	}
 	if p.cache == nil {
-		pending, err := artwork.NewPendingFiller(p.identities, bg)
+		pending, err := service.NewPendingFiller(p.identities, bg)
 		if err != nil {
 			t.Fatalf("artwork.NewPendingFiller: %v", err)
 		}
 		return pending
 	}
-	filler, err := artwork.NewArtworkFiller(p.lookup, p.cache, p.identities, p.mbidIndex, bg)
+	filler, err := service.NewArtworkFiller(p.lookup, p.cache, p.identities, p.mbidIndex, bg)
 	if err != nil {
 		t.Fatalf("artwork.NewArtworkFiller: %v", err)
 	}
 	return filler
 }
 
-func NewCorrection(t testing.TB, vocab ports.SpellingHintsReader) *vocabulary.CorrectionService {
+func NewCorrection(t testing.TB, vocab ports.SpellingHintsReader) *service.CorrectionService {
 	t.Helper()
-	svc, err := vocabulary.NewCorrectionService(vocab)
+	svc, err := service.NewCorrectionService(vocab)
 	if err != nil {
 		t.Fatalf("vocabulary.NewCorrectionService: %v", err)
 	}
 	return svc
 }
 
-func NewHistoryRecorder(t testing.TB, repo ports.HistoryWriter) *history.RecordSearchHistoryService {
+func NewHistoryRecorder(t testing.TB, repo ports.HistoryWriter) *service.RecordSearchHistoryService {
 	t.Helper()
-	svc, err := history.NewRecordSearchHistoryService(repo, clock.Now, ids.Real)
+	svc, err := service.NewRecordSearchHistoryService(repo, clock.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("history.NewRecordSearchHistoryService: %v", err)
 	}

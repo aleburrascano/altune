@@ -8,7 +8,7 @@ import (
 
 type evalRunner func(ctx context.Context) (search.SmokeResult, error)
 
-func (a *application) keepSearches(disc *search.Discovery) {
+func (a *application) keepSearches(disc *search.Module) {
 	a.evalSearch = disc.RankingOnlySearch()
 }
 

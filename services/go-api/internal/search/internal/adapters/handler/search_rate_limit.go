@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
@@ -46,10 +45,10 @@ func (l RequestLimit) rateLimit() httpserver.RateLimit {
 }
 
 func newUserRateLimiter(limit RequestLimit, now clock.Func) func(http.Handler) http.Handler {
-	return requestuser.LimitPerUser(limit.rateLimit(), now, domain.ErrRateLimited, nil)
+	return requestuser.LimitPerUser(limit.rateLimit(), now, ErrRateLimited, nil)
 }
 
 func newClientRateLimiter(limit RequestLimit, now clock.Func) func(http.Handler) http.Handler {
 	return httpserver.MustNewUserRateLimiter(limit.rateLimit(), now).
-		Middleware(func(r *http.Request) (string, bool) { return requestuser.ClientKey(r), true }, domain.ErrRateLimited, nil)
+		Middleware(func(r *http.Request) (string, bool) { return requestuser.ClientKey(r), true }, ErrRateLimited, nil)
 }

@@ -2,8 +2,8 @@ package cache_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/cache"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"fmt"
 	"sync"

@@ -1,0 +1,99 @@
+package service
+
+import (
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
+	"context"
+	"log/slog"
+	"time"
+)
+
+const artistEmitTimeout = 3 * time.Second
+
+type DiscographyObserver interface {
+	emit(ctx context.Context, artistRef string, merged []domain.MergedRelease)
+}
+
+type NoDiscographyObserver struct{}
+
+func (NoDiscographyObserver) emit(context.Context, string, []domain.MergedRelease) {}
+
+type DiscographyTelemetry struct {
+	eventStore ports.EventStore
+	bg         *background.Tracker
+	now        clock.Func
+}
+
+func NewDiscographyTelemetry(eventStore ports.EventStore, bg *background.Tracker, now clock.Func) (*DiscographyTelemetry, error) {
+	if err := requireCollaborators("the discography telemetry",
+		collaborator{"an event store", eventStore == nil},
+		collaborator{"a background tracker", bg == nil},
+		collaborator{"a clock", now == nil},
+	); err != nil {
+		return nil, err
+	}
+	return &DiscographyTelemetry{eventStore: eventStore, bg: bg, now: now}, nil
+}
+
+func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string, merged []domain.MergedRelease) {
+	payload, ok := t.safePayload(parentCtx, artistRef, merged)
+	if !ok {
+		return
+	}
+	occurredAt := t.now().UTC()
+	t.bg.LaunchWithin(parentCtx, "discography.telemetry.emit", artistEmitTimeout, func(ctx context.Context) {
+		t.append(ctx, occurredAt, payload)
+	})
+}
+
+func (t *DiscographyTelemetry) append(ctx context.Context, occurredAt time.Time, payload map[string]any) {
+	event := domain.InteractionEvent{
+		OccurredAt: occurredAt,
+		UserId:     ids.SystemUserId(),
+		Type:       domain.InteractionTypeDiscographyObserved,
+		Payload:    payload,
+	}
+	if err := t.eventStore.Append(ctx, event); err != nil {
+		slog.WarnContext(ctx, "discography.telemetry.emit_failed", logging.KeyError, err)
+	}
+}
+
+func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string, merged []domain.MergedRelease) (payload map[string]any, ok bool) {
+	defer background.RecoverContext(ctx, "discography.telemetry.build_panicked")
+	return buildDiscographyPayload(artistRef, merged), true
+}
+
+func buildDiscographyPayload(artistRef string, merged []domain.MergedRelease) map[string]any {
+	providerCounts, singleProvider, singleProviderNoID := countProviders(merged)
+	return map[string]any{
+		domain.PayloadKeyArtistRef:          artistRef,
+		domain.PayloadKeyReleases:           len(merged),
+		domain.PayloadKeySingleProvider:     singleProvider,
+		domain.PayloadKeySingleProviderNoId: singleProviderNoID,
+		domain.PayloadKeyProviderCounts:     providerCounts,
+	}
+}
+
+func countProviders(merged []domain.MergedRelease) (providerCounts map[string]int, singleProvider, singleProviderNoID int) {
+	providerCounts = make(map[string]int)
+	for _, m := range merged {
+		if len(m.Providers) == 1 {
+			singleProvider++
+			if !idBacked(m) {
+				singleProviderNoID++
+			}
+		}
+		for p := range m.Providers {
+			providerCounts[p.String()]++
+		}
+	}
+	return providerCounts, singleProvider, singleProviderNoID
+}
+
+func idBacked(m domain.MergedRelease) bool {
+	return m.HasStrongID || m.IDVerified
+}

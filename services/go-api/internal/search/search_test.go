@@ -2,13 +2,15 @@ package search_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/rank"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/queuetimeout"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
 	"bytes"
@@ -27,14 +29,15 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 )
 
-func searchOrder(t *testing.T, h *harness, disc *search.Discovery) []string {
+func searchOrder(t *testing.T, h *harness, disc *search.Module) []string {
 	t.Helper()
-	query := &search.SearchQuery{Raw: "probe song", Kinds: map[search.ResultKind]bool{search.ResultKindAlbum: true}}
+	query := &domain.SearchQuery{Raw: "probe song", Kinds: map[domain.ResultKind]bool{domain.ResultKindAlbum: true}}
 	_, statuses := disc.Search.InspectSearchWithStatuses(context.Background(), query)
 	h.deps.Tracker.Wait()
 	var names []string
@@ -74,7 +77,7 @@ func TestSearch_SoundCloudFallsBackToYtDlpWhenItsAPIFails(t *testing.T) {
 	h := newHarness(t, providers)
 	disc := h.start()
 
-	query := &search.SearchQuery{Raw: "probe song", Kinds: map[search.ResultKind]bool{search.ResultKindTrack: true}}
+	query := &domain.SearchQuery{Raw: "probe song", Kinds: map[domain.ResultKind]bool{domain.ResultKindTrack: true}}
 	disc.Search.InspectSearchWithStatuses(context.Background(), query)
 	h.deps.Tracker.Wait()
 
@@ -107,7 +110,7 @@ func TestProviderCalls_UseTheProviderTimeoutAndChartsTheChartTimeout(t *testing.
 func TestCharts_AreDeezerAloneEvenWithEveryKeyMissing(t *testing.T) {
 	disc := newHarness(t, everyProviderOff()).start()
 
-	if len(disc.Charts) != 1 || disc.Charts[0].Name() != search.ProviderDeezer {
+	if len(disc.Charts) != 1 || disc.Charts[0].Name() != domain.ProviderDeezer {
 		t.Errorf("charts = %v, want Deezer alone", disc.Charts)
 	}
 }
@@ -289,7 +292,7 @@ func TestVocabulary_IsAbsentWithoutRedis(t *testing.T) {
 	}
 }
 
-func searchPage(disc *search.Discovery) int {
+func searchPage(disc *search.Module) int {
 	return serve(disc, "/search?q=probe+album&kinds=album&save_history=false")
 }
 
@@ -496,8 +499,8 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 	}
 }
 
-func twoResults() []search.SearchResult {
-	return []search.SearchResult{memory.NewResult(0, "First"), memory.NewResult(0, "Second")}
+func twoResults() []domain.SearchResult {
+	return []domain.SearchResult{memory.NewResult(0, "First"), memory.NewResult(0, "Second")}
 }
 
 func TestSearchSettings_ExplorationUsesTheConfiguredRate(t *testing.T) {
@@ -568,7 +571,7 @@ func TestSearchSettings_ProviderResultsAreCachedForTheConfiguredTTL(t *testing.T
 func TestSearch_NeverAsksMusicBrainzEvenWithItsUserAgentSet(t *testing.T) {
 	h := newHarness(t, everyProviderOn())
 	disc := h.start()
-	query := &search.SearchQuery{Raw: "probe song", Kinds: search.AllKinds()}
+	query := &domain.SearchQuery{Raw: "probe song", Kinds: domain.AllKinds()}
 
 	_, statuses := disc.Search.InspectSearchWithStatuses(context.Background(), query)
 	h.deps.Tracker.Wait()
@@ -918,14 +921,14 @@ func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 		Tracker:         searchtest.NewTracker(t),
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{ReplaceAttr: dropTime})),
 		Transport:       transport,
-		Activity:        search.NoActivityFeed{},
-		ClientEvents:    search.NoClientEvents{},
+		Activity:        service.NoopActivityFeed{},
+		ClientEvents:    handler.NoClientEvents{},
 		ProviderTimeout: 10 * time.Second,
 		ChartTimeout:    15 * time.Second,
 		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		Providers:       providers,
 		Search:          search.SearchSettings{Deadline: 1500 * time.Millisecond},
-		Unreleased:      search.UnreleasedSettings{Tuning: search.UnreleasedConfig{MaxPages: 1, MaxDetails: 1, DetailConcurrency: 1, Wait: time.Second, JobTimeout: 5 * time.Second}},
+		Unreleased:      search.UnreleasedSettings{Tuning: service.UnreleasedConfig{MaxPages: 1, MaxDetails: 1, DetailConcurrency: 1, Wait: time.Second, JobTimeout: 5 * time.Second}},
 	}}
 }
 
@@ -936,7 +939,7 @@ func dropTime(_ []string, attr slog.Attr) slog.Attr {
 	return attr
 }
 
-func (h *harness) start() *search.Discovery {
+func (h *harness) start() *search.Module {
 	h.t.Helper()
 	disc, err := search.New(h.t.Context(), h.deps)
 	if err != nil {
@@ -955,11 +958,13 @@ func (h *harness) logLines(message string) []string {
 	return lines
 }
 
-func serve(disc *search.Discovery, target string) int {
-	req := httptest.NewRequest(http.MethodGet, target, nil)
+func serve(disc *search.Module, target string) int {
+	req := httptest.NewRequest(http.MethodGet, "/discovery"+target, nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
-	disc.Handler.Routes().ServeHTTP(rec, req)
+	router := chi.NewRouter()
+	disc.Routes().Bounded(router)
+	router.ServeHTTP(rec, req)
 	return rec.Code
 }
 
@@ -1002,7 +1007,7 @@ func TestRankingOnlySearch_WithoutRedisKeepsOnlyTheHistory(t *testing.T) {
 func TestRankingOnlySearch_AsksTheSameSearchersAsTheServingSearch(t *testing.T) {
 	h := newHarness(t, everyProviderOn())
 	disc := h.start()
-	query := &search.SearchQuery{Raw: "probe song", Kinds: map[search.ResultKind]bool{search.ResultKindAlbum: true}}
+	query := &domain.SearchQuery{Raw: "probe song", Kinds: map[domain.ResultKind]bool{domain.ResultKindAlbum: true}}
 
 	_, statuses := disc.RankingOnlySearch().InspectSearchWithStatuses(context.Background(), query)
 	var asked []string
@@ -1014,7 +1019,7 @@ func TestRankingOnlySearch_AsksTheSameSearchersAsTheServingSearch(t *testing.T) 
 
 func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {
 	h := newHarness(t, prodLikeProviders())
-	h.deps.IdentityStore = &memory.FakeIdentityStore{}
+	search.UseIdentityStore(&h.deps, &memory.FakeIdentityStore{})
 	h.start()
 
 	options := h.searchOptions()
@@ -1023,40 +1028,40 @@ func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {
 	}
 }
 
-func sourced(kind search.ResultKind, title, credit string, provider search.ProviderName, id string) search.SearchResult {
+func sourced(kind domain.ResultKind, title, credit string, provider domain.ProviderName, id string) domain.SearchResult {
 	return memory.NewResult(
 		kind,
 		title,
 		memory.WithSubtitle(credit),
-		memory.WithSources([]search.ProviderLink{{Provider: provider, ExternalID: id}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: provider, ExternalID: id}}),
 	)
 }
 
-func merged(groups ...[]search.SearchResult) []search.SearchResult {
-	var out []search.SearchResult
-	for _, entity := range rank.Merge(groups) {
+func merged(groups ...[]domain.SearchResult) []domain.SearchResult {
+	var out []domain.SearchResult
+	for _, entity := range service.Merge(groups) {
 		out = append(out, entity.Result)
 	}
 	return out
 }
 
 func TestMerge_AlbumsWithoutAUPCNeverMergeAtTheUPCTier(t *testing.T) {
-	queen := sourced(search.ResultKindAlbum, "Greatest Hits", "Queen", search.ProviderDeezer, "1")
-	abba := sourced(search.ResultKindAlbum, "Greatest Hits", "ABBA", search.ProviderSpotify, "2")
+	queen := sourced(domain.ResultKindAlbum, "Greatest Hits", "Queen", domain.ProviderDeezer, "1")
+	abba := sourced(domain.ResultKindAlbum, "Greatest Hits", "ABBA", domain.ProviderSpotify, "2")
 
-	if got := merged([]search.SearchResult{queen}, []search.SearchResult{abba}); len(got) != 2 {
+	if got := merged([]domain.SearchResult{queen}, []domain.SearchResult{abba}); len(got) != 2 {
 		t.Fatalf("got %d albums, want Queen's and ABBA's kept apart when neither has a UPC", len(got))
 	}
 }
 
 func TestMerge_ASecondSameNameArtistFromOneProviderJoinsNoOtherCard(t *testing.T) {
-	famous := sourced(search.ResultKindArtist, "Che", "", search.ProviderDeezer, "1")
+	famous := sourced(domain.ResultKindArtist, "Che", "", domain.ProviderDeezer, "1")
 	famous.FanCount = 100
-	lesser := sourced(search.ResultKindArtist, "Che", "", search.ProviderDeezer, "2")
+	lesser := sourced(domain.ResultKindArtist, "Che", "", domain.ProviderDeezer, "2")
 	lesser.FanCount = 50
-	spotify := sourced(search.ResultKindArtist, "Che", "", search.ProviderSpotify, "s1")
+	spotify := sourced(domain.ResultKindArtist, "Che", "", domain.ProviderSpotify, "s1")
 
-	got := merged([]search.SearchResult{famous, lesser}, []search.SearchResult{spotify})
+	got := merged([]domain.SearchResult{famous, lesser}, []domain.SearchResult{spotify})
 
 	if len(got) != 2 || len(got[0].Sources) != 2 || len(got[1].Sources) != 1 {
 		t.Fatalf("got %+v, want the famous Che joined by Spotify and the lesser Che alone", got)
@@ -1067,12 +1072,12 @@ func TestMerge_ASecondSameNameArtistFromOneProviderJoinsNoOtherCard(t *testing.T
 }
 
 func TestMerge_OfTwoSameNameArtistsWithEqualFansTheFirstListedWins(t *testing.T) {
-	first := sourced(search.ResultKindArtist, "Che", "", search.ProviderDeezer, "1")
-	second := sourced(search.ResultKindArtist, "Che", "", search.ProviderDeezer, "2")
+	first := sourced(domain.ResultKindArtist, "Che", "", domain.ProviderDeezer, "1")
+	second := sourced(domain.ResultKindArtist, "Che", "", domain.ProviderDeezer, "2")
 	first.FanCount, second.FanCount = 50, 50
-	spotify := sourced(search.ResultKindArtist, "Che", "", search.ProviderSpotify, "s1")
+	spotify := sourced(domain.ResultKindArtist, "Che", "", domain.ProviderSpotify, "s1")
 
-	got := merged([]search.SearchResult{first, second}, []search.SearchResult{spotify})
+	got := merged([]domain.SearchResult{first, second}, []domain.SearchResult{spotify})
 
 	if len(got) != 2 || len(got[0].Sources) != 2 || len(got[1].Sources) != 1 {
 		t.Fatalf("got %+v, want the first Che joined by Spotify and the second Che alone", got)
@@ -1083,12 +1088,12 @@ func TestMerge_OfTwoSameNameArtistsWithEqualFansTheFirstListedWins(t *testing.T)
 }
 
 func TestMerge_ATitleWithNoLettersCannotProveTwoTakesAreOneVersion(t *testing.T) {
-	complete := sourced(search.ResultKindTrack, "÷", "Ed Sheeran", search.ProviderDeezer, "1")
+	complete := sourced(domain.ResultKindTrack, "÷", "Ed Sheeran", domain.ProviderDeezer, "1")
 	complete.Album, complete.ImageURL, complete.Duration = "÷", "https://x/art.jpg", 200
-	coded := sourced(search.ResultKindTrack, "÷", "Ed Sheeran", search.ProviderSpotify, "2")
+	coded := sourced(domain.ResultKindTrack, "÷", "Ed Sheeran", domain.ProviderSpotify, "2")
 	coded.ISRC, coded.Duration = "GBAHS1700001", 200
 
-	got := merged([]search.SearchResult{complete}, []search.SearchResult{coded})
+	got := merged([]domain.SearchResult{complete}, []domain.SearchResult{coded})
 
 	if len(got) != 1 {
 		t.Fatalf("got %d results, want the two takes merged into one track", len(got))
@@ -1099,10 +1104,43 @@ func TestMerge_ATitleWithNoLettersCannotProveTwoTakesAreOneVersion(t *testing.T)
 }
 
 func TestCollapseArtistDuplicates_FoldsCardsWhoseNamesDifferOnlyInCaseAndAccents(t *testing.T) {
-	accented := sourced(search.ResultKindArtist, "Beyoncé", "", search.ProviderDeezer, "1")
-	plain := sourced(search.ResultKindArtist, "BEYONCE", "", search.ProviderSpotify, "2")
+	accented := sourced(domain.ResultKindArtist, "Beyoncé", "", domain.ProviderDeezer, "1")
+	plain := sourced(domain.ResultKindArtist, "BEYONCE", "", domain.ProviderSpotify, "2")
 
-	if got := rank.CollapseArtistDuplicates([]search.SearchResult{accented, plain}); len(got) != 1 {
+	if got := service.CollapseArtistDuplicates([]domain.SearchResult{accented, plain}); len(got) != 1 {
 		t.Fatalf("got %d artist cards, want one", len(got))
+	}
+}
+
+func depsWithProviderTimeout(timeout time.Duration) search.Deps {
+	return search.Deps{
+		Background:      &background.Tracker{},
+		Tracker:         &background.Tracker{},
+		Logger:          slog.Default(),
+		Transport:       http.DefaultTransport,
+		Activity:        search.NoActivityFeed{},
+		ClientEvents:    search.NoClientEvents{},
+		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
+		ProviderTimeout: timeout,
+		ChartTimeout:    time.Second,
+	}
+}
+
+func TestDeps_RefusesAProviderTimeoutThatCannotOutlastTheLongestRateLimitQueueWait(t *testing.T) {
+	for _, timeout := range []time.Duration{queuetimeout.MaxWait / 2, queuetimeout.MaxWait} {
+		if _, err := search.New(t.Context(), depsWithProviderTimeout(timeout)); err == nil || !strings.Contains(err.Error(), "ProviderTimeout") {
+			t.Errorf("ProviderTimeout %v: New = %v, want a refusal naming ProviderTimeout", timeout, err)
+		}
+	}
+	if _, err := search.New(t.Context(), depsWithProviderTimeout(queuetimeout.MaxWait+time.Second)); err != nil {
+		t.Errorf("a ProviderTimeout past the queue wait was refused: %v", err)
+	}
+}
+
+func TestDeps_MissingHandlesNamesTheTrackerWhenItIsAbsent(t *testing.T) {
+	_, err := search.New(t.Context(), search.Deps{})
+
+	if err == nil || !strings.Contains(err.Error(), "Tracker") {
+		t.Fatalf("New = %v, want an error naming Tracker", err)
 	}
 }

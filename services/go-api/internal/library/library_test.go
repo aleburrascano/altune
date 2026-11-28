@@ -32,9 +32,8 @@ func completeDeps(t *testing.T) library.Deps {
 	t.Cleanup(pool.Close)
 	metrics := library.NewDBCallMetrics(telemetry.NewRegistry())
 	return library.Deps{
-		CatalogTracks:  library.NewPostgresCatalogTrackRepository(pool, metrics),
-		Playlists:      library.NewPostgresPlaylistRepository(pool, metrics),
-		OrphanedAudio:  library.NewPostgresOrphanedAudioRepository(pool, metrics),
+		DB:             pool,
+		DBMetrics:      metrics,
 		Events:         events.NoopPublisher(),
 		Scheduler:      library.NoopAcquisitionScheduler(),
 		AudioLinks:     noLinks{},
@@ -103,14 +102,13 @@ func TestNewRefusesDepsMissingARequiredPart(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]func(*library.Deps){
-		"catalog tracks":  func(d *library.Deps) { d.CatalogTracks = nil },
-		"playlists":       func(d *library.Deps) { d.Playlists = nil },
-		"orphaned audio":  func(d *library.Deps) { d.OrphanedAudio = nil },
-		"events":          func(d *library.Deps) { d.Events = nil },
-		"scheduler":       func(d *library.Deps) { d.Scheduler = nil },
-		"audio links":     func(d *library.Deps) { d.AudioLinks = nil },
-		"audio metrics":   func(d *library.Deps) { d.AudioMetrics = nil },
-		"stream recovery": func(d *library.Deps) { d.StreamRecovery = nil },
+		"database":         func(d *library.Deps) { d.DB = nil },
+		"database metrics": func(d *library.Deps) { d.DBMetrics = nil },
+		"events":           func(d *library.Deps) { d.Events = nil },
+		"scheduler":        func(d *library.Deps) { d.Scheduler = nil },
+		"audio links":      func(d *library.Deps) { d.AudioLinks = nil },
+		"audio metrics":    func(d *library.Deps) { d.AudioMetrics = nil },
+		"stream recovery":  func(d *library.Deps) { d.StreamRecovery = nil },
 	}
 	for name, strip := range cases {
 		t.Run(name, func(t *testing.T) {

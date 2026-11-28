@@ -1,0 +1,415 @@
+package theaudiodb_test
+
+import (
+	"altune/go-api/internal/search/internal/adapters/theaudiodb"
+	"altune/go-api/internal/search/internal/contracttest"
+	"altune/go-api/internal/search/internal/domain"
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestTheAudioDBAdapter_Search(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "search.php") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"artists": [{
+				"idArtist": "111239",
+				"strArtist": "Coldplay",
+				"strArtistThumb": "https://www.theaudiodb.com/images/media/artist/thumb/coldplay.jpg"
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	results, err := adapter.Search(context.Background(), "coldplay", map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
+	})
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	r := results[0]
+	if r.Kind != domain.ResultKindArtist {
+		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindArtist)
+	}
+	if r.Title != "Coldplay" {
+		t.Errorf("title: got %q, want %q", r.Title, "Coldplay")
+	}
+	if r.ImageURL != "https://www.theaudiodb.com/images/media/artist/thumb/coldplay.jpg" {
+		t.Errorf("imageURL: got %q, want theaudiodb artist thumb URL", r.ImageURL)
+	}
+	if r.Confidence != domain.ConfidenceLow {
+		t.Errorf("confidence: got %v, want %v", r.Confidence, domain.ConfidenceLow)
+	}
+	if len(r.Sources) != 1 {
+		t.Fatalf("expected 1 source, got %d", len(r.Sources))
+	}
+	if r.Sources[0].Provider != domain.ProviderTheAudioDB {
+		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, domain.ProviderTheAudioDB)
+	}
+	if r.Sources[0].ExternalID != "111239" {
+		t.Errorf("source externalID: got %q, want %q", r.Sources[0].ExternalID, "111239")
+	}
+}
+
+func TestTheAudioDBAdapter_Search_Empty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"artists": null}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	results, err := adapter.Search(context.Background(), "nonexistent artist xyz", map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
+	})
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for null artists, got %d", len(results))
+	}
+}
+
+func TestTheAudioDBAdapter_Search_UnsupportedKind(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("server should not be called for unsupported kind")
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
+		domain.ResultKindTrack: true,
+	})
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for unsupported kind, got %d", len(results))
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_Artist(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"artists": [{
+				"idArtist": "111239",
+				"strArtist": "Coldplay",
+				"strArtistThumb": "https://www.theaudiodb.com/images/media/artist/thumb/coldplay.jpg"
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Coldplay", "", "")
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	if url != "https://www.theaudiodb.com/images/media/artist/thumb/coldplay.jpg" {
+		t.Errorf("resolve URL: got %q, want theaudiodb artist thumb", url)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_Album(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "searchalbum.php") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"album": [{
+				"strAlbumThumb": "https://www.theaudiodb.com/images/media/album/thumb/okcomputer.jpg"
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	if url != "https://www.theaudiodb.com/images/media/album/thumb/okcomputer.jpg" {
+		t.Errorf("resolve URL: got %q, want theaudiodb album thumb", url)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_ArtistSearchNoResultsIsEmptyMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"artists": null}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Nobody", "", "")
+	if err != nil || url != "" {
+		t.Errorf("Resolve with zero results = (%q, %v), want (\"\", nil) — a verified miss", url, err)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_AlbumSearchHTTPErrorIsUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
+		t.Fatalf("Resolve on 500 error = %v, want ports.ErrArtworkUnavailable", err)
+	}
+	if url != "" {
+		t.Errorf("url = %q, want empty on 500", url)
+	}
+}
+
+func TestTheAudioDBAdapter_Search_transportErrorSurfaces(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
+	})
+	if err == nil {
+		t.Fatal("expected an error on HTTP 500, got nil (dead provider indistinguishable from no-matches)")
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_ArtistByMBID(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "artist-mb.php") {
+			_, _ = w.Write([]byte(`{"artists": [{"strArtistThumb": "https://img/mbid-thumb.jpg"}]}`))
+			return
+		}
+		t.Errorf("unexpected fallback to %q when the MBID lookup succeeds", r.URL.Path)
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "mbid-che-1")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if url != "https://img/mbid-thumb.jpg" {
+		t.Errorf("url = %q, want the identity-keyed MBID thumb", url)
+	}
+	if len(paths) != 1 || !strings.Contains(paths[0], "artist-mb.php") {
+		t.Errorf("paths = %v, want the single artist-mb.php lookup", paths)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_MBIDMissFallsBackToNameSearch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "artist-mb.php") {
+			_, _ = w.Write([]byte(`{"artists": null}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"artists": [{"idArtist": "1", "strArtist": "Che", "strArtistThumb": "https://img/name-thumb.jpg"}]}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "mbid-unknown")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if url != "https://img/name-thumb.jpg" {
+		t.Errorf("url = %q, want the name-search fallback thumb", url)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_ArtistSearchErrorIsUnavailableNotEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "")
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
+		t.Fatalf("Resolve on 500 = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
+	}
+	if url != "" {
+		t.Errorf("url = %q, want empty on 500", url)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_AlbumWithoutSubtitleIsEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("no HTTP request expected without an artist subtitle")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "", "")
+	if err != nil || url != "" {
+		t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestTheAudioDBAdapter_Search_http500Propagates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
+	_, err := adapter.Search(context.Background(), "che", map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
+	})
+	if err == nil {
+		t.Fatal("expected the HTTP 500 to propagate from Search")
+	}
+}
+
+func TestTheAudioDBAdapter_meta(t *testing.T) {
+	adapter := theaudiodb.New(http.DefaultClient, theaudiodb.WithAPIKey("k"))
+	if adapter.Name() != domain.ProviderTheAudioDB {
+		t.Errorf("Name = %v", adapter.Name())
+	}
+	kinds := adapter.SupportedKinds()
+	if !kinds[domain.ResultKindArtist] || kinds[domain.ResultKindTrack] || kinds[domain.ResultKindAlbum] {
+		t.Errorf("SupportedKinds = %v, want artist-only", kinds)
+	}
+	if adapter.ArtworkSource() != "theaudiodb" {
+		t.Errorf("ArtworkSource = %q", adapter.ArtworkSource())
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
+	for name, handler := range contracttest.ArtworkFailureHandlers() {
+		for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
+			t.Run(name+" "+kind.String(), func(t *testing.T) {
+				srv := httptest.NewServer(handler)
+				defer srv.Close()
+
+				adapter := theaudiodb.New(contracttest.NewClient(srv.URL), theaudiodb.WithAPIKey("k"))
+				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
+				if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
+					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
+				}
+				if !strings.Contains(err.Error(), "theaudiodb") {
+					t.Errorf("err = %q, want it to name the theaudiodb source", err)
+				}
+			})
+		}
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
+	handlers := contracttest.ArtworkVerifiedMissHandlers()
+	handlers["200 with no albums"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"album":null}`))
+	}
+	handlers["200 with an empty album list"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"album":[]}`))
+	}
+	for name, handler := range handlers {
+		for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
+			t.Run(name+" "+kind.String(), func(t *testing.T) {
+				srv := httptest.NewServer(handler)
+				defer srv.Close()
+
+				adapter := theaudiodb.New(contracttest.NewClient(srv.URL), theaudiodb.WithAPIKey("k"))
+				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
+				if url != "" || err != nil {
+					t.Errorf("Resolve(%s) on %s = (%q, %v), want (\"\", nil)", kind, name, url, err)
+				}
+			})
+		}
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
+	for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
+		t.Run(kind.String(), func(t *testing.T) {
+			srv, ctx := contracttest.CancelMidRequestServer(t)
+
+			adapter := theaudiodb.New(contracttest.NewClient(srv.URL), theaudiodb.WithAPIKey("k"))
+			url, err := adapter.Resolve(ctx, kind, "OK Computer", "Radiohead", "")
+			if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Errorf("Resolve(%s) cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", kind, url, err)
+			}
+		})
+	}
+}
+
+func TestArtworkSourceTags(t *testing.T) {
+	tests := []struct {
+		got  domain.ProviderKey
+		want string
+	}{
+		{(&theaudiodb.Adapter{}).ArtworkSource(), "theaudiodb"},
+	}
+	for _, tt := range tests {
+		if tt.got.String() != tt.want {
+			t.Errorf("ArtworkSource = %q, want %q", tt.got, tt.want)
+		}
+	}
+}
+
+func TestTheAudioDBAdapter_DisabledWithoutAPIKey(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "coldplay", map[domain.ResultKind]bool{domain.ResultKindArtist: true})
+	if err != nil || len(results) != 0 {
+		t.Errorf("Search = %v, %v; want no results, no error", results, err)
+	}
+	art, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Parachutes", "Coldplay", "")
+	if err != nil || art != "" {
+		t.Errorf("Resolve = %q, %v; want empty, no error", art, err)
+	}
+	if calls != 0 {
+		t.Errorf("made %d requests without an API key, want 0", calls)
+	}
+}
+
+func TestTheAudioDBAdapter_KeyGoesInRequestPath(t *testing.T) {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k123"))
+	_, _ = adapter.Search(context.Background(), "coldplay", map[domain.ResultKind]bool{domain.ResultKindArtist: true})
+	if !strings.Contains(path, "/json/k123/search.php") {
+		t.Errorf("path = %q, want the key in it", path)
+	}
+}

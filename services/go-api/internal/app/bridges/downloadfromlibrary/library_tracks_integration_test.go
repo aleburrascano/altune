@@ -20,7 +20,7 @@ import (
 
 func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(library.NewTrackInput{UserId: ids.NewUserId(uuid.New()), Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours"}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: ids.NewUserId(uuid.New()), Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours"}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -133,7 +133,7 @@ var downloadStatusOf = map[download.TrackStatus]library.DownloadStatus{
 
 func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) {
 	t.Helper()
-	track, err := library.NewTrack(library.NewTrackInput{UserId: snapshot.UserId, Title: snapshot.Title, Artist: snapshot.Artist, Album: snapshot.Album}, time.Now, ids.Real)
+	track, err := librarytest.NewTrack(librarytest.NewTrackInput{UserId: snapshot.UserId, Title: snapshot.Title, Artist: snapshot.Artist, Album: snapshot.Album}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}

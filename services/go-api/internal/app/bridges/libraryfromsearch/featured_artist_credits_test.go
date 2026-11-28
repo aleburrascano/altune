@@ -3,6 +3,7 @@ package libraryfromsearch_test
 import (
 	"altune/go-api/internal/app/bridges/libraryfromsearch"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"context"
@@ -29,12 +30,12 @@ func (f fakeDeezerFeatured) LookupTrackFeatured(_ context.Context, trackID strin
 	return f.feats, nil
 }
 
-func resolverOverCatalogCredits(t *testing.T, feats []library.FeaturedArtist, err error) library.FeaturedArtistResolver {
+func resolverOverCatalogCredits(t *testing.T, feats []librarytest.FeaturedArtist, err error) library.FeaturedArtistResolver {
 	upstream := make([]search.FeaturedArtist, 0, len(feats))
 	for _, f := range feats {
 		upstream = append(upstream, search.FeaturedArtist{Name: f.Name, MBID: f.MBID, DeezerID: f.DeezerID})
 	}
-	discovered := searchtest.NewFeaturedResolver(t, search.NoMBFeatured{}, fakeDeezerFeatured{feats: upstream, err: err})
+	discovered := searchtest.NewFeaturedResolver(t, searchtest.NoMBFeatured{}, fakeDeezerFeatured{feats: upstream, err: err})
 	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(discovered))
 }
 
@@ -85,8 +86,8 @@ func TestFeaturedArtistCredits_ReturnsDiscoverysError(t *testing.T) {
 
 func liveDiscoveryProviderNames() []string {
 	var names []string
-	for p := search.ProviderUnknown + 1; p <= search.ProviderSpotify; p++ {
-		if _, err := search.ParseProviderName(p.String()); err == nil {
+	for p := searchtest.ProviderUnknown + 1; p <= searchtest.ProviderSpotify; p++ {
+		if _, err := searchtest.ParseProviderName(p.String()); err == nil {
 			names = append(names, p.String())
 		}
 	}
@@ -95,7 +96,7 @@ func liveDiscoveryProviderNames() []string {
 
 func TestKnownCatalogProviders_AcceptEveryLiveDiscoveryProvider(t *testing.T) {
 	accepted := map[string]bool{}
-	for _, name := range library.KnownCatalogProviders() {
+	for _, name := range librarytest.KnownCatalogProviders() {
 		accepted[name] = true
 	}
 	live := liveDiscoveryProviderNames()

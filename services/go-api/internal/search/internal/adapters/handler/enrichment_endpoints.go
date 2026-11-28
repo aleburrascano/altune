@@ -2,7 +2,6 @@ package handler
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/details"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
@@ -63,7 +62,7 @@ func titleAndSubtitle(w http.ResponseWriter, r *http.Request) (string, string, b
 }
 
 func splitDegraded(err error) (bool, error) {
-	if errors.Is(err, details.ErrDegraded) {
+	if errors.Is(err, domain.ErrEnrichmentDegraded) {
 		return true, nil
 	}
 	return false, err
@@ -116,20 +115,6 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 			enrichmentToDTO,
 			func(d *EnrichmentResponseDTO, v bool) { d.Degraded = v }),
 		fmt.Sprintf("enrich %s %q", kind, title))
-}
-
-type EnrichmentResponseDTO struct {
-	MBID           string                        `json:"mbid"`
-	Genres         []string                      `json:"genres"`
-	Year           int                           `json:"year"`
-	Rating         float64                       `json:"rating"`
-	RatingVotes    int                           `json:"rating_votes"`
-	PrimaryType    string                        `json:"primary_type"`
-	SecondaryTypes []string                      `json:"secondary_types"`
-	ExternalIDs    map[domain.ProviderKey]string `json:"external_ids"`
-	ArtworkURL     string                        `json:"artwork_url"`
-	HasContent     bool                          `json:"has_content"`
-	Degraded       bool                          `json:"degraded"`
 }
 
 func enrichmentToDTO(e domain.MusicBrainzEnrichment) EnrichmentResponseDTO {
@@ -204,19 +189,6 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 		"deezer")
 }
 
-type DeezerEnrichmentResponseDTO struct {
-	BPM             int              `json:"bpm"`
-	Gain            float64          `json:"gain"`
-	Explicit        bool             `json:"explicit"`
-	Label           string           `json:"label"`
-	Genres          []string         `json:"genres"`
-	UPC             string           `json:"upc"`
-	RecordType      string           `json:"record_type"`
-	FeaturedArtists []map[string]any `json:"featured_artists,omitempty"`
-	HasContent      bool             `json:"has_content"`
-	Degraded        bool             `json:"degraded"`
-}
-
 func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDTO {
 	return DeezerEnrichmentResponseDTO{
 		BPM:             e.BPM,
@@ -248,21 +220,6 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 			lyricsToDTO,
 			func(d *LyricsResponseDTO, v bool) { d.Degraded = v }),
 		fmt.Sprintf("fetch lyrics for %q", title))
-}
-
-type LyricsResponseDTO struct {
-	Plain       string          `json:"plain"`
-	SyncedLines []SyncedLineDTO `json:"synced_lines"`
-	Writers     []string        `json:"writers"`
-	Copyright   string          `json:"copyright"`
-	Degraded    bool            `json:"degraded"`
-}
-
-type SyncedLineDTO struct {
-	Timecode     string `json:"timecode"`
-	Line         string `json:"line"`
-	Milliseconds int64  `json:"milliseconds"`
-	Duration     int64  `json:"duration"`
 }
 
 func lyricsToDTO(l domain.DeezerLyrics) LyricsResponseDTO {

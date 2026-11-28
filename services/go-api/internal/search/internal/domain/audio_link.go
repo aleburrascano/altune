@@ -11,9 +11,9 @@ const maxAudioLinkLength = 200
 var youtubeIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 type AudioLink struct {
-	Provider   AudioProvider `json:"provider"`
-	ExternalID string        `json:"external_id"`
-	URL        string        `json:"url"`
+	Provider   AudioProvider
+	ExternalID string
+	URL        string
 }
 
 func SoundCloudLink(raw string) (AudioLink, bool) {

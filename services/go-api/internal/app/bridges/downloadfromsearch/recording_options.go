@@ -34,7 +34,7 @@ func searchOnlyRecording(none RecordingWiring, searcher Search) (RecordingWiring
 	return none, nil
 }
 
-func RecordingOptions(disc *search.Discovery) (RecordingWiring, error) {
+func RecordingOptions(disc *search.Module) (RecordingWiring, error) {
 	none := NoRecording()
 	if disc.Search == nil {
 		return none, nil

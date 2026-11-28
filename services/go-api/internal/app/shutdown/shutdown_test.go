@@ -80,7 +80,7 @@ type gatedStore struct {
 	once    sync.Once
 }
 
-func (s *gatedStore) Append(ctx context.Context, _ search.InteractionEvent) error {
+func (s *gatedStore) Append(ctx context.Context, _ searchtest.InteractionEvent) error {
 	s.once.Do(func() { close(s.entered) })
 	select {
 	case <-s.release:
@@ -93,8 +93,8 @@ func TestDetachedTasksStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testi
 	bg := searchtest.NewTracker(t)
 	drain := func(ctx context.Context) { bg.Drain(ctx) }
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
-	svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
-	query, err := search.NewSearchQuery("humble", search.AllKinds(), 10)
+	svc := searchtest.NewSearchServiceWith(t, bg, nil, searchtest.NewCircuitBreaker(clock.Now), func(c *searchtest.Collaborators) { c.Events = store })
+	query, err := search.NewSearchQuery("humble", searchtest.AllKinds(), 10)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each import of a test-support package from production code, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size and how much of it is used outside; side doors are checked by go-arch-lint (.go-arch-lint.doors.yml)"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each import of a test-support package from production code, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); a flattened module is a feature module (internal/<module>, not one under a grouping directory such as platform or shared) whose root holds exactly one non-test .go file, named after the module (library.go for library): for it only a use by production code of another module counts, so a name used only by _test.go files, by test-support packages or by the module's own test door is listed too and moves to <module>test or is unexported; a module on the older layout, with more root files, keeps the broader rule above; --summary prints, per module, its door size and how much of it is used outside; side doors are checked by go-arch-lint (.go-arch-lint.doors.yml)"
 
 var groups = map[string]bool{"platform": true, "shared": true}
 
@@ -31,6 +31,7 @@ type violation struct {
 	importer string
 	kind     int
 	col      int
+	flat     bool
 }
 
 const (
@@ -91,6 +92,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		for _, v := range s.violations {
+			if v.kind == kindUnusedExport && v.flat {
+				say(stdout, "%s:%d:%d: %s is exported by module %s but no production code outside it uses it; move it to the module's test door or unexport it\n", v.file, v.line, v.col, v.pkg, v.module)
+				continue
+			}
 			if v.kind == kindUnusedExport {
 				say(stdout, "%s:%d:%d: %s is exported by module %s but no file outside it uses it; unexport it and let the module's own tests go through the real door\n", v.file, v.line, v.col, v.pkg, v.module)
 				continue
@@ -262,7 +267,7 @@ func (s *scan) scanFile(file string) error {
 			v.kind = kindTestSupport
 			s.violations = append(s.violations, v)
 		case sub == "" && module != ownModule:
-			s.recordUse(f, imp, module, outsideFlag(file))
+			s.recordUse(f, imp, module, outsideFlag(file, importer))
 		case sub == "" && importer != "internal/"+module:
 			s.recordUse(f, imp, module, usedInside)
 		}
@@ -270,8 +275,8 @@ func (s *scan) scanFile(file string) error {
 	return nil
 }
 
-func outsideFlag(file string) int {
-	if strings.HasSuffix(file, "_test.go") {
+func outsideFlag(file, importer string) int {
+	if strings.HasSuffix(file, "_test.go") || isTestSupport(importer) {
 		return usedByTests
 	}
 	return usedByProduction
@@ -358,9 +363,17 @@ func (s *scan) addUnusedExports() error {
 		if err != nil {
 			return err
 		}
+		flat, err := isFlattened(filepath.Join(s.root, "internal", filepath.FromSlash(m)), m)
+		if err != nil {
+			return err
+		}
 		for name, pos := range names {
-			if s.used[m][name] == 0 {
-				s.violations = append(s.violations, violation{file: pos.file, line: pos.line, col: pos.col, pkg: name, module: m, kind: kindUnusedExport})
+			unused := s.used[m][name] == 0
+			if flat {
+				unused = s.used[m][name]&usedByProduction == 0
+			}
+			if unused {
+				s.violations = append(s.violations, violation{file: pos.file, line: pos.line, col: pos.col, pkg: name, module: m, kind: kindUnusedExport, flat: flat})
 			}
 		}
 	}
@@ -375,6 +388,24 @@ func (s *scan) addUnusedExports() error {
 		return a.col < b.col
 	})
 	return nil
+}
+
+func isFlattened(dir, module string) (bool, error) {
+	if strings.Contains(module, "/") {
+		return false, nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, fmt.Errorf("read dir: %w", err)
+	}
+	var files []string
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() && strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+			files = append(files, name)
+		}
+	}
+	return len(files) == 1 && files[0] == lastSegment(module)+".go", nil
 }
 
 func rootExports(dir string) (map[string]declPos, error) {

@@ -16,27 +16,27 @@ type GeniusSongDetail struct {
 }
 
 type UnreleasedSong struct {
-	GeniusID     int         `json:"genius_id"`
-	Title        string      `json:"title"`
-	CoverURL     string      `json:"cover_url,omitempty"`
-	GeniusURL    string      `json:"genius_url"`
-	ReleaseDate  string      `json:"release_date,omitempty"`
-	HasMedia     *bool       `json:"has_media"`
-	Quality      string      `json:"quality,omitempty"`
-	TrackerKey   string      `json:"tracker_key,omitempty"`
-	AudioLinks   []AudioLink `json:"audio_links,omitempty"`
-	OffStreaming bool        `json:"off_streaming,omitempty"`
-	OpenURL      string      `json:"open_url,omitempty"`
-	OpenHost     string      `json:"open_host,omitempty"`
+	GeniusID     int
+	Title        string
+	CoverURL     string
+	GeniusURL    string
+	ReleaseDate  string
+	HasMedia     *bool
+	Quality      string
+	TrackerKey   string
+	AudioLinks   []AudioLink
+	OffStreaming bool
+	OpenURL      string
+	OpenHost     string
 
-	Versions []UnreleasedVersion `json:"versions,omitempty"`
+	Versions []UnreleasedVersion
 }
 
 type UnreleasedVersion struct {
-	Title      string      `json:"title"`
-	Label      string      `json:"label,omitempty"`
-	Quality    string      `json:"quality,omitempty"`
-	AudioLinks []AudioLink `json:"audio_links,omitempty"`
-	OpenURL    string      `json:"open_url,omitempty"`
-	OpenHost   string      `json:"open_host,omitempty"`
+	Title      string
+	Label      string
+	Quality    string
+	AudioLinks []AudioLink
+	OpenURL    string
+	OpenHost   string
 }

@@ -2,9 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/service/history"
-	"altune/go-api/internal/search/internal/service/unreleased"
-	"altune/go-api/internal/search/internal/service/useractivity"
+	"altune/go-api/internal/search/internal/service"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -35,7 +33,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -93,7 +91,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	result, err := execute(r.Context(), userId, query, continues)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -137,7 +135,7 @@ const (
 )
 
 func (h *DiscoveryHandler) warmUnreleased(ctx context.Context, results []domain.SearchResult) {
-	var artists []unreleased.ArtistToRefresh
+	var artists []service.ArtistToRefresh
 	for _, res := range results {
 		if res.Kind != domain.ResultKindArtist || len(res.Sources) == 0 {
 			continue
@@ -147,7 +145,7 @@ func (h *DiscoveryHandler) warmUnreleased(ctx context.Context, results []domain.
 			known[src.Provider] = src.ExternalID
 		}
 		first := res.Sources[0]
-		artists = append(artists, unreleased.ArtistToRefresh{Provider: first.Provider, ExternalID: first.ExternalID, Name: res.Title, Known: known})
+		artists = append(artists, service.ArtistToRefresh{Provider: first.Provider, ExternalID: first.ExternalID, Name: res.Title, Known: known})
 		if len(artists) == warmArtistLimit {
 			break
 		}
@@ -165,7 +163,7 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -178,10 +176,6 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	})
 
 	httpserver.WriteJSON(w, http.StatusOK, httpserver.NewList(items))
-}
-
-type RecordSearchHistoryRequest struct {
-	Query string `json:"query"`
 }
 
 func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *http.Request) {
@@ -204,8 +198,8 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
 		slog.WarnContext(r.Context(), "clear search history failed",
-			"action", history.ClearSearchHistoryAction)
-		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", history.ClearSearchHistoryAction, err))
+			"action", service.ClearSearchHistoryAction)
+		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", service.ClearSearchHistoryAction, err))
 		return
 	}
 
@@ -233,7 +227,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	input := useractivity.RecordEventInput{
+	input := service.RecordEventInput{
 		Type:             eventType,
 		SearchId:         req.SearchID,
 		EventId:          req.EventID,
@@ -242,7 +236,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		Payload:          req.Payload,
 	}
 	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -270,8 +264,6 @@ func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.Int
 		Payload:       req.Payload,
 	})
 }
-
-var errAllProvidersFailed = apierror.NewError(apierror.CodeDiscoveryAllProvidersFailed, "")
 
 func anyProviderAnswered(statuses []domain.ProviderSearchResponse) bool {
 	if len(statuses) == 0 {

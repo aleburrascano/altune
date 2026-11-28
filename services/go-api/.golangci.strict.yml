@@ -57,14 +57,14 @@ linters:
         - '(^|/)[a-z]*test/'
     wrapcheck:
       extra-ignore-sigs:
-        - providerrequests.ArtworkFailure(
+        - providers.ArtworkFailure(
         - database.WrapUnreadable(
         - journey.StepFailed(
         - journey.Run(
-        - providersearch.KindsOutcome(
-        - providersearch.SearchAcrossKinds(
-        - providerrequests.WithAuthRetry[
-        - providerrequests.FetchPaged[
+        - providers.KindsOutcome(
+        - providers.SearchAcrossKinds(
+        - providers.WithAuthRetry[
+        - providers.FetchPaged[
         - outbound.GetJSON
         - outbound.PostJSON
         - outbound.PostBytesCapped

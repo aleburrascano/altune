@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -61,7 +61,7 @@ func TestPostgresFavoritesRepo_AddRefusesANewRowAtThePerUserCap(t *testing.T) {
 
 	err := repo.Add(context.Background(), userId, albumFavorite("one too many"))
 
-	if !errors.Is(err, ports.ErrFavoritesFull) {
+	if !errors.Is(err, domain.ErrFavoritesFull) {
 		t.Fatalf("Add at the cap = %v, want ErrFavoritesFull", err)
 	}
 	if got := countFavorites(t, pool, userId); got != ports.MaxFavoritesPerUser {

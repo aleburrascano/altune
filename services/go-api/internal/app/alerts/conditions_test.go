@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
-	"altune/go-api/internal/playback"
+	"altune/go-api/internal/playback/playbacktest"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -377,7 +377,7 @@ func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *test
 	s := sources()
 	jc := s.Jobs.Control(jobs.DeletedUserDataErasure)
 	cond := condition(t, s, "job_failing:deleted identity erasure")
-	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playback.ErrIdentityStoreUnavailable)
+	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playbacktest.ErrIdentityStoreUnavailable)
 
 	for range jobFailureEscalation {
 		jc.Record(clock.Now(), sweepErr)

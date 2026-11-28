@@ -2,8 +2,8 @@ package searchtest
 
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
-	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/internal/service/history"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"testing"
 )
@@ -14,18 +14,18 @@ type (
 	FakeHistoryEraser = memory.FakeHistoryEraser
 )
 
-func NewClearHistory(t testing.TB, eraser ports.HistoryEraser) *history.ClearSearchHistoryService {
+func NewClearHistory(t testing.TB, eraser ports.HistoryEraser) *service.ClearSearchHistoryService {
 	t.Helper()
-	svc, err := history.NewClearSearchHistoryService(eraser, clock.Now)
+	svc, err := service.NewClearSearchHistoryService(eraser, clock.Now)
 	if err != nil {
 		t.Fatalf("history.NewClearSearchHistoryService: %v", err)
 	}
 	return svc
 }
 
-func NewListHistory(t testing.TB, reader ports.HistoryReader) *history.ListSearchHistoryService {
+func NewListHistory(t testing.TB, reader ports.HistoryReader) *service.ListSearchHistoryService {
 	t.Helper()
-	svc, err := history.NewListSearchHistoryService(reader)
+	svc, err := service.NewListSearchHistoryService(reader)
 	if err != nil {
 		t.Fatalf("history.NewListSearchHistoryService: %v", err)
 	}

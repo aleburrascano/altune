@@ -3,7 +3,7 @@ package monitoringfromsearch_test
 import (
 	"altune/go-api/internal/app/bridges/monitoringfromsearch"
 	"altune/go-api/internal/platform/monitoring"
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"reflect"
@@ -14,21 +14,21 @@ import (
 type recordingQualityStore struct {
 	calls      int
 	gotSince   time.Time
-	gotGroupBy search.DiscographyGroupBy
+	gotGroupBy searchtest.DiscographyGroupBy
 	gotLimit   int
-	cases      []search.DiscographyCase
+	cases      []searchtest.DiscographyCase
 	casesErr   error
-	rate       search.DiscographySuspectRate
+	rate       searchtest.DiscographySuspectRate
 	rateErr    error
 }
 
-func (s *recordingQualityStore) DiscographyQuality(_ context.Context, since time.Time, groupBy search.DiscographyGroupBy, limit int) ([]search.DiscographyCase, error) {
+func (s *recordingQualityStore) DiscographyQuality(_ context.Context, since time.Time, groupBy searchtest.DiscographyGroupBy, limit int) ([]searchtest.DiscographyCase, error) {
 	s.calls++
 	s.gotSince, s.gotGroupBy, s.gotLimit = since, groupBy, limit
 	return s.cases, s.casesErr
 }
 
-func (s *recordingQualityStore) SuspectRate(_ context.Context, since time.Time) (search.DiscographySuspectRate, error) {
+func (s *recordingQualityStore) SuspectRate(_ context.Context, since time.Time) (searchtest.DiscographySuspectRate, error) {
 	s.gotSince = since
 	return s.rate, s.rateErr
 }
@@ -52,7 +52,7 @@ func TestDiscographyQualityReader_AsksTheStoreForTheSameWindowGroupingAndLimit(t
 
 func TestDiscographyQualityReader_CarriesEveryCaseField(t *testing.T) {
 	seen := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
-	store := &recordingQualityStore{cases: []search.DiscographyCase{
+	store := &recordingQualityStore{cases: []searchtest.DiscographyCase{
 		{ArtistRef: "spotify:a", Releases: 4, SingleProvider: 1, SingleProviderNoID: 2, ProviderCounts: map[string]int{"spotify": 4}, LastSeen: seen},
 		{ArtistRef: "spotify:b"},
 	}}
@@ -92,7 +92,7 @@ func TestDiscographyQualityReader_StoreErrorsKeepTheirIdentity(t *testing.T) {
 func TestDiscographyQualityReader_SuspectRateCarriesTheStoresRate(t *testing.T) {
 	since := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	sample := since.Add(time.Hour)
-	store := &recordingQualityStore{rate: search.DiscographySuspectRate{Rate: 0.25, LastSample: sample}}
+	store := &recordingQualityStore{rate: searchtest.DiscographySuspectRate{Rate: 0.25, LastSample: sample}}
 
 	got, err := monitoringfromsearch.NewDiscographyQualityReader(store).SuspectRate(t.Context(), since)
 
@@ -102,7 +102,7 @@ func TestDiscographyQualityReader_SuspectRateCarriesTheStoresRate(t *testing.T) 
 }
 
 func TestDiscographyQualityReader_SuspectRateErrorGivesAZeroRate(t *testing.T) {
-	store := &recordingQualityStore{rate: search.DiscographySuspectRate{Rate: 0.25}, rateErr: errors.New("boom")}
+	store := &recordingQualityStore{rate: searchtest.DiscographySuspectRate{Rate: 0.25}, rateErr: errors.New("boom")}
 
 	got, err := monitoringfromsearch.NewDiscographyQualityReader(store).SuspectRate(t.Context(), time.Now())
 

@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
@@ -245,7 +245,7 @@ func TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted(
 
 	for _, eraser := range deletedIdentityErasers(pool) {
 		erased, err := eraser.EraseRowsOfDeletedIdentities(context.Background())
-		if !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+		if !errors.Is(err, domain.ErrIdentityStoreUnavailable) {
 			t.Errorf("error = %v, want one satisfying ErrIdentityStoreUnavailable", err)
 		}
 		if erased != 0 {

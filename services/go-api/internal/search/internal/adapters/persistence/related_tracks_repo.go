@@ -1,7 +1,7 @@
 package persistence
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/songfields"
 	"context"

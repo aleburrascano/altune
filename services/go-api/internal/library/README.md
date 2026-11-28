@@ -11,7 +11,7 @@ It owns the tables `featured_artists`, `orphaned_audio`, `playlist_tracks`, `pla
 
 ## Shape
 
-The door is `library.go`: `New(Deps)`, `Deps`, `Module` with `Routes()` (the `Bounded` group for the API request timeout, the `LongLived` group for the audio stream), and the names `app`, the bridges and `cmd` use. Everything else is under `internal/`:
+The door is `library.go`: `New(Deps)`, `Deps` (infrastructure only: the database, its call metrics, the events publisher and the other outside parts, never a repository, because `New` builds its own), `Module` with `Routes()` (the `Bounded` group for the API request timeout, the `LongLived` group for the audio stream), and the names `app`, the bridges and `cmd` use. Everything else is under `internal/`:
 
 - `domain/`: one file per entity or value object, and `errors.go` with every error the module defines.
 - `ports/ports.go`: every interface the module needs from outside.
@@ -20,7 +20,7 @@ The door is `library.go`: `New(Deps)`, `Deps`, `Module` with `Routes()` (the `Bo
 - `adapters/persistence/` and `adapters/memory/`: one repository per table, Postgres and memory side by side; `contracttest/` holds the suites that run against both (the Postgres half runs with `INTEGRATION=1`).
 - `adapters/storage/`: the audio files, on a filesystem or in object storage.
 - `adapters/telemetry/`: the metrics registry and its live snapshot.
-- `librarytest/` stays at the root because `app`, its bridges and `cmd` import its builders and fakes in their tests.
+- `librarytest/` stays at the root because `app`, its bridges and `cmd` import its builders and fakes in their tests. A door name only tests use lives there too.
 
 ## Who reads our tables
 

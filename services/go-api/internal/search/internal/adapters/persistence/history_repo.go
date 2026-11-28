@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -26,7 +26,7 @@ const historyResendWindow = time.Minute
 func eraseRowsOfDeletedIdentities(ctx context.Context, pool *pgxpool.Pool, op, deleteSQL string) (int64, error) {
 	tag, err := pool.Exec(ctx, deleteSQL, ids.SystemUserId().UUID())
 	if err != nil {
-		return 0, database.WrapUnreadable(op, ports.ErrIdentityStoreUnavailable, err)
+		return 0, database.WrapUnreadable(op, domain.ErrIdentityStoreUnavailable, err)
 	}
 	return tag.RowsAffected(), nil
 }

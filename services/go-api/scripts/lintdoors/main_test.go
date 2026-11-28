@@ -31,6 +31,7 @@ func newTree(t *testing.T) string {
 	dir := t.TempDir()
 	writeFile(t, dir, "go.mod", "module example/api\n\ngo 1.26\n")
 	writeFile(t, dir, "internal/lib/lib.go", "package lib\n\nconst Door = 1\n\nconst hidden = 2\n\nfunc Open() {}\n\ntype Thing struct{}\n\nfunc (Thing) Method() {}\n")
+	writeFile(t, dir, "internal/lib/second_door.go", "package lib\n")
 	writeFile(t, dir, "internal/lib/service/track/track.go", "package track\n")
 	writeFile(t, dir, "internal/lib/internal/core/core.go", "package core\n")
 	writeFile(t, dir, "internal/other/other.go", "package other\n")
@@ -177,5 +178,78 @@ func TestExportsKeepsNamesTheModulesOwnSubpackagesAndTestDoorUse(t *testing.T) {
 	}
 	if !strings.Contains(out, "Open is exported") {
 		t.Fatalf("Open is used by nobody and must be listed:\n%s", out)
+	}
+}
+
+func flatTree(t *testing.T) string {
+	t.Helper()
+	dir := newTree(t)
+	if err := os.Remove(filepath.Join(dir, "internal/lib/second_door.go")); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestExportsOnAFlattenedModuleCountOnlyProductionCallersOutsideIt(t *testing.T) {
+	dir := flatTree(t)
+	writeFile(t, dir, "internal/other/o_test.go", "package other\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Open\n")
+	writeFile(t, dir, "internal/lib/lib_test.go", "package lib_test\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Thing{}\n")
+	writeFile(t, dir, "internal/lib/libtest/libtest.go", "package libtest\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Door\n")
+	writeFile(t, dir, "internal/other/othertest/othertest.go", "package othertest\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Thing{}\n")
+
+	code, out, _ := lint(t, "--exports", dir)
+
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1:\n%s", code, out)
+	}
+	for _, name := range []string{"Open", "Thing", "Door"} {
+		if !strings.Contains(out, name+" is exported by module lib but no production code outside it uses it") {
+			t.Fatalf("%s is used only by tests and must be listed:\n%s", name, out)
+		}
+	}
+	if !strings.Contains(out, "unused root exports: 3") {
+		t.Fatalf("count missing:\n%s", out)
+	}
+}
+
+func TestExportsOnAFlattenedModuleKeepANameAProductionCallerUses(t *testing.T) {
+	dir := flatTree(t)
+	writeFile(t, dir, "internal/other/other.go", "package other\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Open\n\nvar _ = lib.Door\n\nvar _ lib.Thing\n")
+
+	code, out, _ := lint(t, "--exports", dir)
+
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 when production code uses every name:\n%s", code, out)
+	}
+}
+
+func TestExportsKeepTestOnlyNamesOnAModuleWithMoreThanItsDoorFile(t *testing.T) {
+	dir := newTree(t)
+	writeFile(t, dir, "internal/other/o_test.go", "package other\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Open\n")
+
+	_, out, _ := lint(t, "--exports", dir)
+
+	if strings.Contains(out, "Open is exported") {
+		t.Fatalf("a module with a second root file keeps the older rule, where a test use counts:\n%s", out)
+	}
+}
+
+func TestExportsKeepTestOnlyNamesOnAOneFileModuleUnderAGroupingDirectory(t *testing.T) {
+	dir := flatTree(t)
+	writeFile(t, dir, "internal/platform/clock/clock.go", "package clock\n\nfunc Now() {}\n")
+	writeFile(t, dir, "internal/other/o_test.go", "package other\n\nimport \"example/api/internal/platform/clock\"\n\nvar _ = clock.Now\n")
+
+	_, out, _ := lint(t, "--exports", dir)
+
+	if strings.Contains(out, "Now is exported") {
+		t.Fatalf("the production-only rule is for feature modules, a platform module keeps the older rule:\n%s", out)
+	}
+}
+
+func TestUsageStatesTheFlattenedModuleScope(t *testing.T) {
+	_, _, stderr := lint(t, "--nope")
+
+	if !strings.Contains(stderr, "flattened module is a feature module") {
+		t.Fatalf("usage does not state the scope of the production-only rule:\n%s", stderr)
 	}
 }
