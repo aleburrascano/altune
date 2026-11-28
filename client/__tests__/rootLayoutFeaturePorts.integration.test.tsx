@@ -1,14 +1,13 @@
 import 'react-native-gesture-handler/jestSetup';
-import { Text } from 'react-native';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 
-import { useSettingsPort } from '@testing/fakes/settings/useSettingsPort';
+import { transientRetryOptions } from '@shared/query';
+import { SettingsScreen } from '@features/settings';
 
 import RootLayout from '@/app/_layout';
 
 function RouteChild() {
-  const port = useSettingsPort();
-  return <Text>{typeof port === 'object' ? 'settings port resolved' : 'no port'}</Text>;
+  return <SettingsScreen retryOptions={transientRetryOptions} />;
 }
 
 describe('the root layout provides the feature ports to its routes', () => {
@@ -16,6 +15,6 @@ describe('the root layout provides the feature ports to its routes', () => {
     renderRouter({ _layout: RootLayout, '(auth)/index': RouteChild });
     await act(async () => undefined);
 
-    expect(await screen.findByText('settings port resolved')).toBeTruthy();
+    expect(await screen.findByTestId('settings-backfill-featured')).toBeTruthy();
   }, 60_000);
 });
