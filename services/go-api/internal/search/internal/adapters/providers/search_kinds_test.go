@@ -1,7 +1,6 @@
 package providers_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/adapters/providers"
 	"altune/go-api/internal/search/internal/contracttest"
@@ -19,7 +18,7 @@ func TestSearchAcrossKinds_DoesNotLogQueryText(t *testing.T) {
 	all := providers.AllSearchKinds()
 
 	_, _ = providers.SearchAcrossKinds(context.Background(), "deezer", contracttest.SensitiveQuery, all, all,
-		func(_ context.Context, _ search.ResultKind) ([]search.SearchResult, error) {
+		func(_ context.Context, _ domain.ResultKind) ([]domain.SearchResult, error) {
 			return nil, fmt.Errorf("get \"https://api.example/search?q=%s\": timeout", url.QueryEscape(contracttest.SensitiveQuery))
 		})
 
@@ -34,11 +33,11 @@ func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testin
 	all := providers.AllSearchKinds()
 
 	got, err := providers.SearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
-		func(_ context.Context, kind search.ResultKind) ([]search.SearchResult, error) {
-			if kind == search.ResultKindAlbum {
+		func(_ context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
+			if kind == domain.ResultKindAlbum {
 				return nil, context.DeadlineExceeded
 			}
-			return []search.SearchResult{memory.NewResult(kind, "Humble")}, nil
+			return []domain.SearchResult{memory.NewResult(kind, "Humble")}, nil
 		})
 
 	if len(got) != 2 {
@@ -48,7 +47,7 @@ func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testin
 	if !errors.As(err, &partial) {
 		t.Fatalf("err = %v, want a PartialKindsError", err)
 	}
-	if len(partial.Failed) != 1 || partial.Failed[0] != search.ResultKindAlbum {
+	if len(partial.Failed) != 1 || partial.Failed[0] != domain.ResultKindAlbum {
 		t.Errorf("failed kinds = %v, want [album]", partial.Failed)
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -60,7 +59,7 @@ func TestSearchAcrossKinds_AllKindsFailedIsAPlainError(t *testing.T) {
 	all := providers.AllSearchKinds()
 
 	_, err := providers.SearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
-		func(context.Context, search.ResultKind) ([]search.SearchResult, error) {
+		func(context.Context, domain.ResultKind) ([]domain.SearchResult, error) {
 			return nil, errors.New("down")
 		})
 

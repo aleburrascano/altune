@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
@@ -17,42 +16,42 @@ import (
 	"time"
 )
 
-func catalogAlbum(provider search.ProviderName, id, title string) search.SearchResult {
-	return memory.NewResult(search.ResultKindAlbum, title,
+func catalogAlbum(provider domain.ProviderName, id, title string) domain.SearchResult {
+	return memory.NewResult(domain.ResultKindAlbum, title,
 		memory.WithSubtitle("Che"),
 		memory.WithSource(provider, id, ""),
 		memory.WithExtras(map[string]any{}))
 }
 
 type artistRecordingEventStore struct {
-	events chan search.InteractionEvent
+	events chan domain.InteractionEvent
 }
 
 func newRecordingEventStore() *artistRecordingEventStore {
-	return &artistRecordingEventStore{events: make(chan search.InteractionEvent, 8)}
+	return &artistRecordingEventStore{events: make(chan domain.InteractionEvent, 8)}
 }
 
-func (s *artistRecordingEventStore) Append(_ context.Context, e search.InteractionEvent) error {
+func (s *artistRecordingEventStore) Append(_ context.Context, e domain.InteractionEvent) error {
 	s.events <- e
 	return nil
 }
 
-func (s *artistRecordingEventStore) next(t *testing.T) search.InteractionEvent {
+func (s *artistRecordingEventStore) next(t *testing.T) domain.InteractionEvent {
 	t.Helper()
 	select {
 	case e := <-s.events:
 		return e
 	case <-time.After(5 * time.Second):
 		t.Fatal("no event recorded within 5s")
-		return search.InteractionEvent{}
+		return domain.InteractionEvent{}
 	}
 }
 
-func albumsFrom(albums map[search.ProviderName][]search.SearchResult) map[search.ProviderName]ports.ArtistContentProvider {
-	providers := make(map[search.ProviderName]ports.ArtistContentProvider, len(albums))
+func albumsFrom(albums map[domain.ProviderName][]domain.SearchResult) map[domain.ProviderName]ports.ArtistContentProvider {
+	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(albums))
 	for name, served := range albums {
 		providers[name] = artistContentFuncs{
-			albums: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+			albums: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 				return served, nil
 			},
 		}
@@ -60,16 +59,16 @@ func albumsFrom(albums map[search.ProviderName][]search.SearchResult) map[search
 	return providers
 }
 
-func observeDiscography(t *testing.T, albums map[search.ProviderName][]search.SearchResult) search.InteractionEvent {
+func observeDiscography(t *testing.T, albums map[domain.ProviderName][]domain.SearchResult) domain.InteractionEvent {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
-	known := map[search.ProviderName]string{}
+	known := map[domain.ProviderName]string{}
 	for name := range albums {
 		known[name] = name.String() + "-che"
 	}
 	store := newRecordingEventStore()
 	svc := searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, bg))
-	if _, err := svc.GetAlbums(context.Background(), search.ProviderSpotify, "abc123", known, 50); err != nil {
+	if _, err := svc.GetAlbums(context.Background(), domain.ProviderSpotify, "abc123", known, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
 	return store.next(t)
@@ -80,16 +79,16 @@ func TestNoDiscographyObserver_LeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 }
 
 func noDiscographyObserverLeavesTheAlbumsAnswerUnchanged(t *testing.T) {
-	albums := map[search.ProviderName][]search.SearchResult{
-		search.ProviderSpotify: {
-			catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded"),
-			catalogAlbum(search.ProviderSpotify, "sp-b", "Sundown"),
+	albums := map[domain.ProviderName][]domain.SearchResult{
+		domain.ProviderSpotify: {
+			catalogAlbum(domain.ProviderSpotify, "sp-a", "Fully Loaded"),
+			catalogAlbum(domain.ProviderSpotify, "sp-b", "Sundown"),
 		},
 		domain.ProviderMusicBrainz: {catalogAlbum(domain.ProviderMusicBrainz, "mb-a", "Fully Loaded")},
 	}
-	known := map[search.ProviderName]string{search.ProviderSpotify: "sp-che", domain.ProviderMusicBrainz: "mb-che"}
+	known := map[domain.ProviderName]string{domain.ProviderSpotify: "sp-che", domain.ProviderMusicBrainz: "mb-che"}
 	fetch := func(svc *service.GetArtistContentService) []string {
-		resp, err := svc.GetAlbums(context.Background(), search.ProviderSpotify, "abc123", known, 50)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderSpotify, "abc123", known, 50)
 		if err != nil {
 			t.Fatalf("GetAlbums: %v", err)
 		}
@@ -103,7 +102,7 @@ func noDiscographyObserverLeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 
 	observed := fetch(searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, searchtest.NewTracker(t))))
 	store.next(t)
-	silent, err := service.NewGetArtistContentService(albumsFrom(albums), map[search.ProviderName]ports.AlbumContentProvider{}, service.SeedPathIdentity{}, service.NoAnchoring{}, service.NoDiscographyObserver{}, search.NewCircuitBreaker(clock.Now))
+	silent, err := service.NewGetArtistContentService(albumsFrom(albums), map[domain.ProviderName]ports.AlbumContentProvider{}, service.SeedPathIdentity{}, service.NoAnchoring{}, service.NoDiscographyObserver{}, service.NewCircuitBreaker(clock.Now))
 	if err != nil {
 		t.Fatalf("NewGetArtistContentService: %v", err)
 	}
@@ -120,10 +119,10 @@ func noDiscographyObserverLeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 }
 
 func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
-	ev := observeDiscography(t, map[search.ProviderName][]search.SearchResult{
-		search.ProviderSpotify: {
-			catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded"),
-			catalogAlbum(search.ProviderSpotify, "sp-b", "Sundown"),
+	ev := observeDiscography(t, map[domain.ProviderName][]domain.SearchResult{
+		domain.ProviderSpotify: {
+			catalogAlbum(domain.ProviderSpotify, "sp-a", "Fully Loaded"),
+			catalogAlbum(domain.ProviderSpotify, "sp-b", "Sundown"),
 		},
 		domain.ProviderMusicBrainz: {
 			catalogAlbum(domain.ProviderMusicBrainz, "mb-a", "Fully Loaded"),
@@ -168,13 +167,13 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 }
 
 func TestDiscographyEmit_ReleasesFromTheIdentityFanOutAreNeverSuspects(t *testing.T) {
-	ev := observeDiscography(t, map[search.ProviderName][]search.SearchResult{
-		search.ProviderSpotify: {
-			catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded"),
-			catalogAlbum(search.ProviderSpotify, "sp-c", "Sundown"),
+	ev := observeDiscography(t, map[domain.ProviderName][]domain.SearchResult{
+		domain.ProviderSpotify: {
+			catalogAlbum(domain.ProviderSpotify, "sp-a", "Fully Loaded"),
+			catalogAlbum(domain.ProviderSpotify, "sp-c", "Sundown"),
 		},
-		search.ProviderDeezer: {
-			catalogAlbum(search.ProviderDeezer, "dz-b", "Closer to God"),
+		domain.ProviderDeezer: {
+			catalogAlbum(domain.ProviderDeezer, "dz-b", "Closer to God"),
 		},
 		domain.ProviderMusicBrainz: {
 			catalogAlbum(domain.ProviderMusicBrainz, "mb-c", "Sundown"),
@@ -191,11 +190,11 @@ func discographyEmitLogs(t *testing.T, appendErr error) string {
 	logs := searchtest.CaptureLogs(t)
 	bg := searchtest.NewTracker(t)
 	store := &searchtest.FakeEventStore{Err: appendErr}
-	albums := map[search.ProviderName][]search.SearchResult{
-		search.ProviderSpotify: {catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded")},
+	albums := map[domain.ProviderName][]domain.SearchResult{
+		domain.ProviderSpotify: {catalogAlbum(domain.ProviderSpotify, "sp-a", "Fully Loaded")},
 	}
 	svc := searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, bg))
-	if _, err := svc.GetAlbums(context.Background(), search.ProviderSpotify, "abc123", map[search.ProviderName]string{search.ProviderSpotify: "sp-che"}, 50); err != nil {
+	if _, err := svc.GetAlbums(context.Background(), domain.ProviderSpotify, "abc123", map[domain.ProviderName]string{domain.ProviderSpotify: "sp-che"}, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
 	bg.Wait()
@@ -215,7 +214,7 @@ func TestDiscographyEmit_AFailedAppendIsLoggedAndASuccessfulOneIsNot(t *testing.
 
 type panickingEventStore struct{ asked chan struct{} }
 
-func (s panickingEventStore) Append(context.Context, search.InteractionEvent) error {
+func (s panickingEventStore) Append(context.Context, domain.InteractionEvent) error {
 	close(s.asked)
 	panic("event store exploded")
 }
@@ -223,9 +222,9 @@ func (s panickingEventStore) Append(context.Context, search.InteractionEvent) er
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := panickingEventStore{asked: make(chan struct{})}
-	svc := identityFanOut(t, func(search.ProviderName) bool { return false }, searchtest.ArtistEvents(store, bg))
+	svc := identityFanOut(t, func(domain.ProviderName) bool { return false }, searchtest.ArtistEvents(store, bg))
 
-	resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "id-deezer", nil, 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil (emit must never fail the response)", err)
 	}
@@ -240,8 +239,8 @@ func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 }
 
 func TestDiscographyEmit_NoEventStoreStillServesAlbums(t *testing.T) {
-	svc := identityFanOut(t, func(search.ProviderName) bool { return false })
-	if _, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "id-deezer", nil, 50); err != nil {
+	svc := identityFanOut(t, func(domain.ProviderName) bool { return false })
+	if _, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50); err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil", err)
 	}
 }

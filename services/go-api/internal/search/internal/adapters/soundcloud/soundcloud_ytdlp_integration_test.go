@@ -1,8 +1,8 @@
 package soundcloud_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/soundcloud"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"os/exec"
@@ -20,8 +20,8 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	results, err := adapter.Search(ctx, "Daft Punk Around The World", map[search.ResultKind]bool{
-		search.ResultKindTrack: true,
+	results, err := adapter.Search(ctx, "Daft Punk Around The World", map[domain.ResultKind]bool{
+		domain.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
@@ -31,8 +31,8 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 	}
 
 	first := results[0]
-	if first.Kind != search.ResultKindTrack {
-		t.Errorf("kind: got %v, want %v", first.Kind, search.ResultKindTrack)
+	if first.Kind != domain.ResultKindTrack {
+		t.Errorf("kind: got %v, want %v", first.Kind, domain.ResultKindTrack)
 	}
 	if first.Title == "" {
 		t.Error("first result has empty title")
@@ -40,8 +40,8 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 	if len(first.Sources) != 1 {
 		t.Fatalf("expected 1 source, got %d", len(first.Sources))
 	}
-	if first.Sources[0].Provider != search.ProviderSoundCloud {
-		t.Errorf("provider: got %v, want %v", first.Sources[0].Provider, search.ProviderSoundCloud)
+	if first.Sources[0].Provider != domain.ProviderSoundCloud {
+		t.Errorf("provider: got %v, want %v", first.Sources[0].Provider, domain.ProviderSoundCloud)
 	}
 	if pc, ok := first.Extras["playback_count"]; ok {
 		if _, isInt := pc.(int64); !isInt {

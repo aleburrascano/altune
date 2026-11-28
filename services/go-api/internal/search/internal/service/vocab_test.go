@@ -1,9 +1,10 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -20,11 +21,11 @@ const (
 )
 
 type ingestedSearch struct {
-	shown   []search.SearchResult
+	shown   []domain.SearchResult
 	entries []domain.SpellingHintsEntry
 }
 
-func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]bool, results ...search.SearchResult) ingestedSearch {
+func searchAndIngest(t *testing.T, query string, kinds map[domain.ResultKind]bool, results ...domain.SearchResult) ingestedSearch {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	var mu sync.Mutex
@@ -35,9 +36,9 @@ func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]boo
 		entries = append(entries, e)
 		return nil
 	}}
-	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
-	q, err := search.NewSearchQuery(query, kinds, everyResultOnOnePage)
+	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: results}
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
+	q, err := domain.NewSearchQuery(query, kinds, everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
@@ -51,21 +52,21 @@ func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]boo
 	return ingestedSearch{shown: out.Results, entries: entries}
 }
 
-func deezerResult(kind search.ResultKind, title, subtitle string, popularity float64) search.SearchResult {
+func deezerResult(kind domain.ResultKind, title, subtitle string, popularity float64) domain.SearchResult {
 	return memory.NewResult(
 		kind,
 		title,
 		memory.WithSubtitle(subtitle),
 		memory.WithPopularity(popularity),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: title, URL: "https://x/" + title}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: title, URL: "https://x/" + title}}),
 	)
 }
 
-func allKinds() map[search.ResultKind]bool {
-	return map[search.ResultKind]bool{
-		search.ResultKindArtist: true,
-		search.ResultKindTrack:  true,
-		search.ResultKindAlbum:  true,
+func allKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
 	}
 }
 
@@ -82,7 +83,7 @@ func entryFor(t *testing.T, entries []domain.SpellingHintsEntry, term string) do
 
 func TestSearchIngest_MapsEachShownResultToVocabularyEntries(t *testing.T) {
 	got := searchAndIngest(t, "drake", allKinds(),
-		deezerResult(search.ResultKindArtist, "Drake", "", 90),
+		deezerResult(domain.ResultKindArtist, "Drake", "", 90),
 		memory.DeezerTrack("Hotline Bling", "Drake", 80),
 		memory.DeezerAlbum("Scorpion", "Drake", 70),
 	)
@@ -109,7 +110,7 @@ func TestSearchIngest_MapsEachShownResultToVocabularyEntries(t *testing.T) {
 }
 
 func TestSearchIngest_AResultOfAnotherKindIsIngestedAsAQuery(t *testing.T) {
-	got := searchAndIngest(t, "chill mix", map[search.ResultKind]bool{domain.ResultKindPlaylist: true},
+	got := searchAndIngest(t, "chill mix", map[domain.ResultKind]bool{domain.ResultKindPlaylist: true},
 		deezerResult(domain.ResultKindPlaylist, "Chill Mix", "", 0),
 	)
 
@@ -119,9 +120,9 @@ func TestSearchIngest_AResultOfAnotherKindIsIngestedAsAQuery(t *testing.T) {
 }
 
 func TestSearchIngest_IngestsOnlyTheTopShownResults(t *testing.T) {
-	var results []search.SearchResult
+	var results []domain.SearchResult
 	for _, name := range []string{"Drake A", "Drake B", "Drake C", "Drake D", "Drake E", "Drake F", "Drake G"} {
-		results = append(results, deezerResult(search.ResultKindArtist, name, "", 0))
+		results = append(results, deezerResult(domain.ResultKindArtist, name, "", 0))
 	}
 
 	got := searchAndIngest(t, "drake", allKinds(), results...)
@@ -141,9 +142,9 @@ func TestSearchIngest_IngestsOnlyTheTopShownResults(t *testing.T) {
 
 func TestSearchIngest_AnEmptyTitleIsIngestedAsAnEmptyTerm(t *testing.T) {
 	untitled := memory.NewResult(
-		search.ResultKindTrack,
+		domain.ResultKindTrack,
 		"",
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "untitled", URL: "https://x/untitled"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "untitled", URL: "https://x/untitled"}}),
 	)
 	queryWithNoRankableWord := "a"
 
@@ -159,7 +160,7 @@ func TestSearchIngest_AnEmptyTitleIsIngestedAsAnEmptyTerm(t *testing.T) {
 
 func TestSearchIngest_FewerResultsThanTheTopAreAllIngested(t *testing.T) {
 	got := searchAndIngest(t, "drake", allKinds(),
-		deezerResult(search.ResultKindArtist, "Drake", "", 0),
+		deezerResult(domain.ResultKindArtist, "Drake", "", 0),
 	)
 
 	if len(got.entries) != 1 {
@@ -170,11 +171,11 @@ func TestSearchIngest_FewerResultsThanTheTopAreAllIngested(t *testing.T) {
 func searchWithVocabularyStore(t *testing.T, store *memory.FakeVocabularyStore) {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
-	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
-		deezerResult(search.ResultKindArtist, "Drake", "", 90),
+	p := &memory.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{
+		deezerResult(domain.ResultKindArtist, "Drake", "", 90),
 	}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
-	q, err := search.NewSearchQuery("drake", allKinds(), everyResultOnOnePage)
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
+	q, err := domain.NewSearchQuery("drake", allKinds(), everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}

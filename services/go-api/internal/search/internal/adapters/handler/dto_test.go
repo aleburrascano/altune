@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
@@ -12,7 +11,7 @@ import (
 	"testing"
 )
 
-func servedItems(t *testing.T, results ...search.SearchResult) []json.RawMessage {
+func servedItems(t *testing.T, results ...domain.SearchResult) []json.RawMessage {
 	t.Helper()
 	router := buildRelatedRouter(t, &fakeRelatedTracksProvider{results: results})
 	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/id-1/related", nil)
@@ -27,7 +26,7 @@ func servedItems(t *testing.T, results ...search.SearchResult) []json.RawMessage
 	return body.Items
 }
 
-func servedItem(t *testing.T, result search.SearchResult) handler.SearchResultDTO {
+func servedItem(t *testing.T, result domain.SearchResult) handler.SearchResultDTO {
 	t.Helper()
 	var dto handler.SearchResultDTO
 	if err := json.Unmarshal(servedItems(t, result)[0], &dto); err != nil {
@@ -53,52 +52,52 @@ const searchDTOTypedExtrasGolden = `[{"kind":"album","title":"Blue","subtitle":"
 
 func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 	dz := memory.NewResult(
-		search.ResultKindAlbum,
+		domain.ResultKindAlbum,
 		"Blue",
 		memory.WithSubtitle("Band"),
 		memory.WithUPC("123"),
 		memory.WithRecordType("ep"),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "1"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "1"}}),
 		memory.WithExtras(map[string]any{"genre_id": 1}),
 	)
 	am := memory.NewResult(
-		search.ResultKindAlbum,
+		domain.ResultKindAlbum,
 		"Blue",
 		memory.WithSubtitle("Band"),
 		memory.WithUPC("123"),
 		memory.WithTrackCount(5),
 		memory.WithRecordType("album"),
-		memory.WithSources([]search.ProviderLink{{Provider: domain.ProviderAppleMusic, ExternalID: "2"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderAppleMusic, ExternalID: "2"}}),
 		memory.WithExtras(map[string]any{"upc": "123"}),
 	)
 	solo := memory.NewResult(
-		search.ResultKindAlbum,
+		domain.ResultKindAlbum,
 		"Red",
 		memory.WithSubtitle("Band"),
 		memory.WithRecordType("compile"),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "3"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "3"}}),
 	)
 	primary := memory.NewResult(
-		search.ResultKindArtist,
+		domain.ResultKindArtist,
 		"Band",
 		memory.WithPopularity(9),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "4"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "4"}}),
 		memory.WithExtras(map[string]any{}),
 	)
 	dup := memory.NewResult(
-		search.ResultKindArtist,
+		domain.ResultKindArtist,
 		"Band",
 		memory.WithPopularity(1),
 		memory.WithArtistMBID("m1"),
 		memory.WithResolutionTier(domain.StampResolutionTier(domain.EntityResolutionISRC)),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderSpotify, ExternalID: "5"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderSpotify, ExternalID: "5"}}),
 	)
 
-	results := make([]search.SearchResult, 0, 3)
-	for _, e := range service.Merge([][]search.SearchResult{{dz, solo}, {am}}) {
+	results := make([]domain.SearchResult, 0, 3)
+	for _, e := range service.Merge([][]domain.SearchResult{{dz, solo}, {am}}) {
 		results = append(results, e.Result)
 	}
-	results = append(results, service.CollapseArtistDuplicates([]search.SearchResult{primary, dup})...)
+	results = append(results, service.CollapseArtistDuplicates([]domain.SearchResult{primary, dup})...)
 
 	got, err := json.Marshal(servedItems(t, results...))
 	if err != nil {
@@ -112,11 +111,11 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 func TestSearchResultToDTO_FillsExtrasDurationFromTheResult(t *testing.T) {
 	tests := []struct {
 		name   string
-		result search.SearchResult
+		result domain.SearchResult
 		want   any
 	}{
-		{"result duration fills a missing extra", memory.NewResult(search.ResultKindTrack, "T", memory.WithDuration(226)), 226},
-		{"no duration leaves the extra absent", memory.NewResult(search.ResultKindTrack, "T"), nil},
+		{"result duration fills a missing extra", memory.NewResult(domain.ResultKindTrack, "T", memory.WithDuration(226)), 226},
+		{"no duration leaves the extra absent", memory.NewResult(domain.ResultKindTrack, "T"), nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,12 +137,12 @@ func TestSearchResultToDTO_mbidKeyIsProjectedFromTheKindsTypedField(t *testing.T
 		memory.WithArtistMBID("art"),
 	)
 	cases := []struct {
-		kind search.ResultKind
+		kind domain.ResultKind
 		want string
 	}{
-		{search.ResultKindTrack, "rec"},
-		{search.ResultKindAlbum, "rg"},
-		{search.ResultKindArtist, "art"},
+		{domain.ResultKindTrack, "rec"},
+		{domain.ResultKindAlbum, "rg"},
+		{domain.ResultKindArtist, "art"},
 	}
 	for _, c := range cases {
 		t.Run(c.kind.String(), func(t *testing.T) {
@@ -162,23 +161,23 @@ func TestSearchResultToDTO_mbidKeyIsProjectedFromTheKindsTypedField(t *testing.T
 
 func TestSearchResultToDTO_AMergedCleanEditSendsExplicitFalseOnTheWire(t *testing.T) {
 	clean := memory.NewResult(
-		search.ResultKindTrack,
+		domain.ResultKindTrack,
 		"Been Waiting!",
 		memory.WithSubtitle("Autumn!"),
 		memory.WithISRCCode("QM42K1903228"),
 		memory.WithDuration(123),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "642332252"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "642332252"}}),
 		memory.WithExplicit(domain.BoolPtr(false)),
 	)
 	unknown := memory.NewResult(
-		search.ResultKindTrack,
+		domain.ResultKindTrack,
 		"Been Waiting!",
 		memory.WithSubtitle("Autumn!"),
 		memory.WithISRCCode("QM42K1903228"),
 		memory.WithDuration(123),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderSpotify, ExternalID: "s1"}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderSpotify, ExternalID: "s1"}}),
 	)
-	for i, groups := range [][][]search.SearchResult{{{clean}, {unknown}}, {{unknown}, {clean}}} {
+	for i, groups := range [][][]domain.SearchResult{{{clean}, {unknown}}, {{unknown}, {clean}}} {
 		entities := service.Merge(groups)
 		if len(entities) != 1 {
 			t.Fatalf("order %d: got %d entities, want one merged track", i, len(entities))
@@ -197,7 +196,7 @@ func TestSearchResultToDTO_AMergedCleanEditSendsExplicitFalseOnTheWire(t *testin
 }
 
 func TestSearchResultToDTO_AnUnknownExplicitLeavesTheWireKeyAbsent(t *testing.T) {
-	raw := servedItems(t, memory.NewResult(search.ResultKindTrack, "T"))[0]
+	raw := servedItems(t, memory.NewResult(domain.ResultKindTrack, "T"))[0]
 	var wire struct {
 		Extras map[string]json.RawMessage `json:"extras"`
 	}

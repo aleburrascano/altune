@@ -1,8 +1,8 @@
 package musicbrainz_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/musicbrainz"
+	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"net/http"
 	"reflect"
@@ -38,12 +38,12 @@ func TestMusicBrainzAdapter_RecordingByMBID(t *testing.T) {
 	tests := []struct {
 		name string
 		mbid string
-		want search.MusicBrainzRecording
+		want ports.MusicBrainzRecording
 	}{
 		{
 			name: "isrcs, length and artists of a studio recording",
 			mbid: bohemianMBID,
-			want: search.MusicBrainzRecording{
+			want: ports.MusicBrainzRecording{
 				MBID: bohemianMBID, Title: "Bohemian Rhapsody", Artists: []string{"Queen"},
 				ISRCs:    []string{"GBCEE0100112", "GBCEE0500364", "GBUM71029604"},
 				Duration: 355.106,
@@ -52,7 +52,7 @@ func TestMusicBrainzAdapter_RecordingByMBID(t *testing.T) {
 		{
 			name: "disambiguation of a live recording",
 			mbid: " " + cureLiveMBID + " ",
-			want: search.MusicBrainzRecording{
+			want: ports.MusicBrainzRecording{
 				MBID: cureLiveMBID, Title: "Boys Don’t Cry", Artists: []string{"The Cure"},
 				Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
 				ISRCs:          []string{},

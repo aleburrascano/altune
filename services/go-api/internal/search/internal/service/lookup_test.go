@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
@@ -14,13 +14,13 @@ import (
 func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 	store := &searchtest.UnreleasedStore{}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
+	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{}, service.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
 	svc.Warm(t.Context(), []service.ArtistToRefresh{
-		{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"},
-		{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"},
-		{Provider: search.ProviderDeezer, ExternalID: "5", Name: "  "},
-		{Provider: search.ProviderDeezer, ExternalID: "9", Name: "Yeat"},
+		{Provider: domain.ProviderDeezer, ExternalID: "27", Name: "Drake"},
+		{Provider: domain.ProviderDeezer, ExternalID: "27", Name: "Drake"},
+		{Provider: domain.ProviderDeezer, ExternalID: "5", Name: "  "},
+		{Provider: domain.ProviderDeezer, ExternalID: "9", Name: "Yeat"},
 	})
 	jobs.Wait()
 
@@ -32,9 +32,9 @@ func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 func TestService_Warm_StoreErrorIsOnlyLogged(t *testing.T) {
 	store := &searchtest.UnreleasedStore{RecordErr: errors.New("db down")}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
+	svc := searchtest.MustUnreleased(service.NewUnreleasedService(service.NoGenius{}, &searchtest.ArtistCatalogTitles{}, service.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
-	svc.Warm(t.Context(), []service.ArtistToRefresh{{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
+	svc.Warm(t.Context(), []service.ArtistToRefresh{{Provider: domain.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
 	jobs.Wait()
 
 	if got := store.Calls(); len(got) != 1 {

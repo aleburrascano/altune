@@ -1,7 +1,6 @@
 package spotify_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/artworkfallback"
 	"altune/go-api/internal/search/internal/adapters/spotify"
 	"altune/go-api/internal/search/internal/contracttest"
@@ -36,7 +35,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 		r := spotify.NewSpotifyArtworkLookup(oembedClient(200,
 			"https://image-cdn-ak.spotifycdn.com/image/ab67616100005174HASH", &gotURL))
 
-		url, err := r.ResolveByIdentity(context.Background(), search.ResultKindArtist,
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
 			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -52,7 +51,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 
 	t.Run("no spotify id is a clean miss", func(t *testing.T) {
 		r := spotify.NewSpotifyArtworkLookup(oembedClient(200, "x", nil))
-		url, err := r.ResolveByIdentity(context.Background(), search.ResultKindArtist,
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
 			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "1"}})
 		if err != nil || url != "" {
 			t.Errorf("got (%q, %v), want clean miss", url, err)
@@ -70,7 +69,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 
 	t.Run("non-200 is a clean miss, not an error", func(t *testing.T) {
 		r := spotify.NewSpotifyArtworkLookup(oembedClient(404, "x", nil))
-		url, err := r.ResolveByIdentity(context.Background(), search.ResultKindArtist,
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
 			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}})
 		if err != nil || url != "" {
 			t.Errorf("got (%q, %v), want clean miss", url, err)
@@ -80,7 +79,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 
 func TestSpotifyArtworkResolver_ResolveByIdentity_500IsArtworkUnavailable(t *testing.T) {
 	r := spotify.NewSpotifyArtworkLookup(oembedClient(500, "x", nil))
-	url, err := r.ResolveByIdentity(context.Background(), search.ResultKindArtist,
+	url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
 		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}})
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("got (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
@@ -93,7 +92,7 @@ func TestSpotifyArtworkResolver_NameResolveIsNoop(t *testing.T) {
 		called = true
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
 	}}})
-	url, _ := r.Resolve(context.Background(), search.ResultKindArtist, "Che", "", "")
+	url, _ := r.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "")
 	if url != "" || called {
 		t.Errorf("Resolve should be a no-op (url=%q called=%v)", url, called)
 	}
@@ -112,7 +111,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_RateLimitIsArtworkUnavailable(
 	}))
 	defer server.Close()
 
-	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), search.ResultKindArtist, spotifyIdentity())
+	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
@@ -124,7 +123,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_BadRequestIsAVerifiedMiss(t *t
 	}))
 	defer server.Close()
 
-	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), search.ResultKindAlbum, spotifyIdentity())
+	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindAlbum, spotifyIdentity())
 	if url != "" || err != nil {
 		t.Errorf("ResolveByIdentity on HTTP 400 = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -137,7 +136,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_MalformedBodyIsArtworkUnavaila
 	}))
 	defer server.Close()
 
-	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), search.ResultKindArtist, spotifyIdentity())
+	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
@@ -150,7 +149,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_EmptyThumbnailIsAVerifiedMiss(
 	}))
 	defer server.Close()
 
-	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), search.ResultKindArtist, spotifyIdentity())
+	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
 	if url != "" || err != nil {
 		t.Errorf("ResolveByIdentity with no thumbnail = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -161,7 +160,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_TransportErrorIsArtworkUnavail
 	serverURL := server.URL
 	server.Close()
 
-	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(serverURL)).ResolveByIdentity(context.Background(), search.ResultKindArtist, spotifyIdentity())
+	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(serverURL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
@@ -173,7 +172,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_CancelledContextIsUnavailableA
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(ctx, search.ResultKindArtist, spotifyIdentity())
+	url, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(ctx, domain.ResultKindArtist, spotifyIdentity())
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("ResolveByIdentity with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", url, err)
 	}
@@ -185,7 +184,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_FailureNamesSpotify(t *testing
 	}))
 	defer server.Close()
 
-	_, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), search.ResultKindArtist, spotifyIdentity())
+	_, err := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
 	if err == nil || !strings.Contains(err.Error(), "spotify") {
 		t.Errorf("err = %v, want a failure that names spotify", err)
 	}
@@ -199,7 +198,7 @@ func TestChainedArtworkResolver_SpotifyIdentityOn503IsDegradedAndUnavailable(t *
 
 	lookup := spotify.NewSpotifyArtworkLookup(contracttest.NewClient(server.URL))
 	chain := artworkfallback.NewChainedArtworkLookup().WithIdentityLookups(lookup)
-	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), search.ResultKindArtist, "Che", "", spotifyIdentity())
+	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), domain.ResultKindArtist, "Che", "", spotifyIdentity())
 	if url != "" || !errors.Is(err, domain.ErrArtworkDegraded) || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("ResolveWithIdentityTagged on Spotify 503 = (%q, %v), want (\"\", ErrArtworkDegraded and ErrArtworkUnavailable)", url, err)
 	}

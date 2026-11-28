@@ -1,7 +1,6 @@
 package itunes_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/itunes"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
@@ -41,8 +40,8 @@ func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	defer server.Close()
 
 	adapter := itunes.NewITunesAdapter(contracttest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "stairway to heaven", map[search.ResultKind]bool{
-		search.ResultKindTrack: true,
+	results, err := adapter.Search(context.Background(), "stairway to heaven", map[domain.ResultKind]bool{
+		domain.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -52,8 +51,8 @@ func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != search.ResultKindTrack {
-		t.Errorf("kind: got %v, want %v", r.Kind, search.ResultKindTrack)
+	if r.Kind != domain.ResultKindTrack {
+		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindTrack)
 	}
 	if r.Title != "Stairway to Heaven" {
 		t.Errorf("title: got %q, want %q", r.Title, "Stairway to Heaven")
@@ -108,8 +107,8 @@ func TestITunesAdapter_Search_Artists(t *testing.T) {
 	defer server.Close()
 
 	adapter := itunes.NewITunesAdapter(contracttest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "pink floyd", map[search.ResultKind]bool{
-		search.ResultKindArtist: true,
+	results, err := adapter.Search(context.Background(), "pink floyd", map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -119,8 +118,8 @@ func TestITunesAdapter_Search_Artists(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != search.ResultKindArtist {
-		t.Errorf("kind: got %v, want %v", r.Kind, search.ResultKindArtist)
+	if r.Kind != domain.ResultKindArtist {
+		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindArtist)
 	}
 	if r.Title != "Pink Floyd" {
 		t.Errorf("title: got %q, want %q", r.Title, "Pink Floyd")
@@ -141,7 +140,7 @@ func TestITunesAdapter_Resolve_HighRes(t *testing.T) {
 	defer server.Close()
 
 	adapter := itunes.NewITunesAdapter(contracttest.NewClient(server.URL))
-	art, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -172,7 +171,7 @@ func TestITunesAdapter_GetArtistAlbums(t *testing.T) {
 		t.Fatalf("expected 2 albums, got %d", len(results))
 	}
 	first := results[0]
-	if first.Kind != search.ResultKindAlbum {
+	if first.Kind != domain.ResultKindAlbum {
 		t.Errorf("kind: got %v, want album", first.Kind)
 	}
 	if first.Title != "DAMN." {
@@ -207,7 +206,7 @@ func TestITunesAdapter_GetAlbumTracks(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 tracks, got %d", len(results))
 	}
-	if results[0].Kind != search.ResultKindTrack {
+	if results[0].Kind != domain.ResultKindTrack {
 		t.Errorf("kind: got %v, want track", results[0].Kind)
 	}
 	if results[0].Title != "BLOOD." {
@@ -225,8 +224,8 @@ func TestITunesAdapter_Search_HTTPError(t *testing.T) {
 	defer server.Close()
 
 	adapter := itunes.NewITunesAdapter(contracttest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "anything", map[search.ResultKind]bool{
-		search.ResultKindTrack: true,
+	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
+		domain.ResultKindTrack: true,
 	})
 	if err == nil {
 		t.Fatal("expected an error when all attempted kinds fail on HTTP 500, got nil")
@@ -258,7 +257,7 @@ func TestITunesAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
 	defer server.Close()
 
 	adapter := itunes.NewITunesAdapter(contracttest.NewClient(server.URL))
-	art, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
@@ -273,7 +272,7 @@ func TestITunesAdapter_Resolve_ContextCancelledBeforeTheRequestIsArtworkUnavaila
 	adapter := itunes.NewITunesAdapter(contracttest.NewClient(server.URL))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	art, err := adapter.Resolve(ctx, search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := adapter.Resolve(ctx, domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
@@ -285,7 +284,7 @@ func TestITunesAdapter_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
@@ -297,7 +296,7 @@ func TestITunesAdapter_Resolve_ForbiddenIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 403 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
@@ -309,7 +308,7 @@ func TestITunesAdapter_Resolve_BadRequestIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || err != nil {
 		t.Errorf("Resolve on HTTP 400 = (%q, %v), want (\"\", nil)", art, err)
 	}
@@ -322,7 +321,7 @@ func TestITunesAdapter_Resolve_NoResultsIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Nothing", "Nobody", "")
+	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Nothing", "Nobody", "")
 	if art != "" || err != nil {
 		t.Errorf("Resolve with no results = (%q, %v), want (\"\", nil)", art, err)
 	}
@@ -335,7 +334,7 @@ func TestITunesAdapter_Resolve_MalformedBodyIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
@@ -346,7 +345,7 @@ func TestITunesAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T) 
 	serverURL := server.URL
 	server.Close()
 
-	art, err := itunes.NewITunesAdapter(contracttest.NewClient(serverURL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := itunes.NewITunesAdapter(contracttest.NewClient(serverURL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
@@ -358,7 +357,7 @@ func TestITunesAdapter_Resolve_CancelledContextKeepsTheCause(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(ctx, search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	_, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(ctx, domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled kept in the chain", err)
 	}
@@ -370,7 +369,7 @@ func TestITunesAdapter_Resolve_FailureNamesITunes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	_, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err == nil || !strings.Contains(err.Error(), "itunes") {
 		t.Errorf("err = %v, want a failure that names itunes", err)
 	}
@@ -378,7 +377,7 @@ func TestITunesAdapter_Resolve_FailureNamesITunes(t *testing.T) {
 
 func TestAdapterNames(t *testing.T) {
 	tests := []struct {
-		got, want search.ProviderName
+		got, want domain.ProviderName
 	}{
 		{(&itunes.ITunesAdapter{}).Name(), domain.ProviderITunes},
 	}

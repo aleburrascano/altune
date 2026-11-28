@@ -1,7 +1,6 @@
 package itunes_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/itunes"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
@@ -36,7 +35,7 @@ func TestITunesAdapter_GetArtistTopTracks(t *testing.T) {
 	if len(tracks) != 1 {
 		t.Fatalf("tracks = %d, want 1 (parent wrapper dropped)", len(tracks))
 	}
-	if tracks[0].Kind != search.ResultKindTrack || tracks[0].Title != "Los Santos" {
+	if tracks[0].Kind != domain.ResultKindTrack || tracks[0].Title != "Los Santos" {
 		t.Errorf("track = %+v", tracks[0])
 	}
 }

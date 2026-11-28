@@ -1,8 +1,8 @@
 package musicbrainz_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/musicbrainz"
+	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"net/http"
 	"reflect"
@@ -56,7 +56,7 @@ func TestMusicBrainzAdapter_WorkRecordings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []search.MusicBrainzWorkRecording{
+	want := []ports.MusicBrainzWorkRecording{
 		{MBID: classicVersionMBID, Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdamsID, tinaTurnerID}, Duration: 194},
 		{MBID: hammersmithLiveMBID, Title: "It’s Only Love", Disambiguation: "live, 1985-04: Hammersmith Odeon, London, England, UK", ArtistIDs: []string{bryanAdamsID}, Live: true},
 	}
@@ -87,11 +87,11 @@ func TestMusicBrainzAdapter_RecordingDetail(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("got ok=%v err=%v", ok, err)
 	}
-	want := search.MusicBrainzRecordingDetail{
+	want := ports.MusicBrainzRecordingDetail{
 		MBID: classicVersionMBID, Title: "It’s Only Love (classic version)",
 		ArtistIDs: []string{bryanAdamsID, tinaTurnerID}, ISRCs: []string{"IETLH2500023"},
 		Duration: 194, FirstReleaseDate: "2025-04-25",
-		Releases: []search.MusicBrainzRelease{{Title: "It’s Only Love", Date: "2025-04-25", Status: "Official"}},
+		Releases: []ports.MusicBrainzRelease{{Title: "It’s Only Love", Date: "2025-04-25", Status: "Official"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -226,7 +226,7 @@ func TestMusicBrainzAdapter_RecordingDetail_recordingWithoutISRCOrLength(t *test
 	if len(got.ISRCs) != 0 || got.Duration != 0 || got.FirstReleaseDate != "" {
 		t.Fatalf("got ISRCs=%v Duration=%v FirstReleaseDate=%q; want none, 0, \"\"", got.ISRCs, got.Duration, got.FirstReleaseDate)
 	}
-	if want := []search.MusicBrainzRelease{{Title: "Bryan Adams: Classic", Date: "2025-05-09", Status: "Official"}}; !reflect.DeepEqual(got.Releases, want) {
+	if want := []ports.MusicBrainzRelease{{Title: "Bryan Adams: Classic", Date: "2025-05-09", Status: "Official"}}; !reflect.DeepEqual(got.Releases, want) {
 		t.Fatalf("releases %+v, want %+v", got.Releases, want)
 	}
 	if got.MBID != classicDupMBID || !reflect.DeepEqual(got.ArtistIDs, []string{bryanAdamsID}) {

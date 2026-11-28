@@ -1,11 +1,11 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -24,50 +24,50 @@ import (
 
 type timingOutContentProvider struct{}
 
-func (timingOutContentProvider) fail() ([]search.SearchResult, error) {
+func (timingOutContentProvider) fail() ([]domain.SearchResult, error) {
 	return nil, &url.Error{Op: "Get", URL: "https://upstream.example/x", Err: context.DeadlineExceeded}
 }
 
-func (p timingOutContentProvider) GetAlbumTracks(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+func (p timingOutContentProvider) GetAlbumTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	return p.fail()
 }
 
-func (p timingOutContentProvider) GetArtistTopTracks(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+func (p timingOutContentProvider) GetArtistTopTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	return p.fail()
 }
 
-func (p timingOutContentProvider) GetArtistAlbums(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+func (p timingOutContentProvider) GetArtistAlbums(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	return p.fail()
 }
 
-func (p timingOutContentProvider) GetRelatedTracks(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+func (p timingOutContentProvider) GetRelatedTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	return p.fail()
 }
 
 func errorContractRouter(t *testing.T) chi.Router {
 	t.Helper()
-	breaker := search.NewCircuitBreaker(clock.Now)
+	breaker := service.NewCircuitBreaker(clock.Now)
 	for i := 0; ; i++ {
-		adm, ok := breaker.AllowRequest(context.Background(), search.ProviderSoundCloud)
+		adm, ok := breaker.AllowRequest(context.Background(), domain.ProviderSoundCloud)
 		if !ok {
 			break
 		}
 		if i > 100 {
 			t.Fatal("circuit breaker never opened for soundcloud")
 		}
-		breaker.RecordFailure(context.Background(), search.ProviderSoundCloud, adm)
+		breaker.RecordFailure(context.Background(), domain.ProviderSoundCloud, adm)
 	}
 	timingOut := timingOutContentProvider{}
-	healthy := stubContentProvider{provider: search.ProviderSoundCloud}
+	healthy := stubContentProvider{provider: domain.ProviderSoundCloud}
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Album: searchtest.NewAlbumTracks(t, map[search.ProviderName]ports.AlbumContentProvider{
-			domain.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
+		Album: searchtest.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
+			domain.ProviderITunes: timingOut, domain.ProviderSoundCloud: healthy,
 		}, searchtest.AlbumBreaker(breaker)),
-		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-			domain.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
+		Artist: searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderITunes: timingOut, domain.ProviderSoundCloud: healthy,
 		}, searchtest.ArtistBreaker(breaker)),
 		Related: searchtest.NewRelatedTracksWithBreaker(t, map[string]ports.RelatedTracksProvider{
-			domain.ProviderITunes.String(): timingOut, search.ProviderSoundCloud.String(): healthy,
+			domain.ProviderITunes.String(): timingOut, domain.ProviderSoundCloud.String(): healthy,
 		}, breaker),
 	}), time.Now)
 	router := chi.NewRouter()
@@ -143,25 +143,25 @@ type scriptedArtistProvider struct {
 	tracksErr, albumsErr error
 }
 
-func (p scriptedArtistProvider) answer(kind search.ResultKind, id string, err error) ([]search.SearchResult, error) {
+func (p scriptedArtistProvider) answer(kind domain.ResultKind, id string, err error) ([]domain.SearchResult, error) {
 	var partial *domain.PartialResultError
 	if err != nil && !errors.As(err, &partial) {
 		return nil, err
 	}
-	return []search.SearchResult{memory.NewResult(
+	return []domain.SearchResult{memory.NewResult(
 		kind,
 		"Real Song",
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: id}}),
 		memory.WithExtras(map[string]any{}),
 	)}, err
 }
 
-func (p scriptedArtistProvider) GetArtistTopTracks(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
-	return p.answer(search.ResultKindTrack, id, p.tracksErr)
+func (p scriptedArtistProvider) GetArtistTopTracks(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	return p.answer(domain.ResultKindTrack, id, p.tracksErr)
 }
 
-func (p scriptedArtistProvider) GetArtistAlbums(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
-	return p.answer(search.ResultKindAlbum, id, p.albumsErr)
+func (p scriptedArtistProvider) GetArtistAlbums(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	return p.answer(domain.ResultKindAlbum, id, p.albumsErr)
 }
 
 func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
@@ -192,8 +192,8 @@ func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-				Artist: searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-					search.ProviderDeezer: scriptedArtistProvider{tracksErr: tc.tracksErr, albumsErr: tc.albumsErr},
+				Artist: searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+					domain.ProviderDeezer: scriptedArtistProvider{tracksErr: tc.tracksErr, albumsErr: tc.albumsErr},
 				}),
 			}), time.Now)
 			router := chi.NewRouter()

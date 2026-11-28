@@ -1,8 +1,10 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
@@ -15,24 +17,24 @@ import (
 	"github.com/google/uuid"
 )
 
-type answering []search.SearchResult
+type answering []domain.SearchResult
 
-func (a answering) Execute(context.Context, ids.UserId, *search.SearchQuery) (*search.SearchOutput, error) {
-	return &search.SearchOutput{Results: a}, nil
+func (a answering) Execute(context.Context, ids.UserId, *domain.SearchQuery) (*service.SearchOutput, error) {
+	return &service.SearchOutput{Results: a}, nil
 }
 
-func listedChecks(t *testing.T) []search.SmokeQueryResult {
+func listedChecks(t *testing.T) []service.SmokeQueryResult {
 	t.Helper()
-	res, err := search.RunSmokeEval(context.Background(), answering(nil), ids.SystemUserId())
+	res, err := service.RunSmokeEval(context.Background(), answering(nil), ids.SystemUserId())
 	if err != nil || len(res.Queries) == 0 {
 		t.Fatalf("listing the smoke checks: %+v, %v", res, err)
 	}
 	return res.Queries
 }
 
-func positionFor(t *testing.T, query string, results []search.SearchResult) int {
+func positionFor(t *testing.T, query string, results []domain.SearchResult) int {
 	t.Helper()
-	res, err := search.RunSmokeEval(context.Background(), answering(results), ids.SystemUserId())
+	res, err := service.RunSmokeEval(context.Background(), answering(results), ids.SystemUserId())
 	if err != nil {
 		t.Fatalf("RunSmokeEval: %v", err)
 	}
@@ -50,13 +52,13 @@ func TestRunSmokeEval_ReportsWhereEachCheckFoundItsExpectedResult(t *testing.T) 
 	other := memory.NewResult(0, "Some Other Track", memory.WithSubtitle("Artist"))
 	tests := []struct {
 		name    string
-		results []search.SearchResult
+		results []domain.SearchResult
 		want    int
 	}{
-		{"hit at position 0 (case-insensitive)", []search.SearchResult{memory.NewResult(0, strings.ToUpper(check.Expect))}, 0},
-		{"hit via subtitle", []search.SearchResult{memory.NewResult(0, "x", memory.WithSubtitle(check.Expect))}, 0},
-		{"later match reports its position", []search.SearchResult{other, other, other, memory.NewResult(0, check.Expect)}, 3},
-		{"miss", []search.SearchResult{other}, -1},
+		{"hit at position 0 (case-insensitive)", []domain.SearchResult{memory.NewResult(0, strings.ToUpper(check.Expect))}, 0},
+		{"hit via subtitle", []domain.SearchResult{memory.NewResult(0, "x", memory.WithSubtitle(check.Expect))}, 0},
+		{"later match reports its position", []domain.SearchResult{other, other, other, memory.NewResult(0, check.Expect)}, 3},
+		{"miss", []domain.SearchResult{other}, -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -69,10 +71,10 @@ func TestRunSmokeEval_ReportsWhereEachCheckFoundItsExpectedResult(t *testing.T) 
 
 type recordingEventStore struct {
 	mu     sync.Mutex
-	events []search.InteractionEvent
+	events []domain.InteractionEvent
 }
 
-func (r *recordingEventStore) Append(_ context.Context, e search.InteractionEvent) error {
+func (r *recordingEventStore) Append(_ context.Context, e domain.InteractionEvent) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, e)
@@ -87,17 +89,17 @@ func (r *recordingEventStore) count() int {
 
 type stubSearchProvider struct{}
 
-func (stubSearchProvider) Name() search.ProviderName { return search.ProviderDeezer }
+func (stubSearchProvider) Name() domain.ProviderName { return domain.ProviderDeezer }
 
-func (stubSearchProvider) Search(_ context.Context, _ string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
+func (stubSearchProvider) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	return nil, nil
 }
 
-func (stubSearchProvider) SupportedKinds() map[search.ResultKind]bool {
-	return map[search.ResultKind]bool{
-		search.ResultKindTrack:  true,
-		search.ResultKindAlbum:  true,
-		search.ResultKindArtist: true,
+func (stubSearchProvider) SupportedKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
+		domain.ResultKindArtist: true,
 	}
 }
 
@@ -105,8 +107,8 @@ func runSmokeEvalRecording(t *testing.T, user ids.UserId) int {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	store := &recordingEventStore{}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{stubSearchProvider{}}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
-	if _, err := search.RunSmokeEval(context.Background(), svc, user); err != nil {
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{stubSearchProvider{}}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Events = store })
+	if _, err := service.RunSmokeEval(context.Background(), svc, user); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	bg.Wait()
@@ -150,13 +152,13 @@ func searcherFailingEveryQuery(t *testing.T) scriptedSearcher {
 func (s scriptedSearcher) Execute(
 	_ context.Context,
 	_ ids.UserId,
-	query *search.SearchQuery,
-) (*search.SearchOutput, error) {
+	query *domain.SearchQuery,
+) (*service.SearchOutput, error) {
 	if s.failing[query.Raw] {
 		return nil, errors.New("transient upstream failure")
 	}
-	return &search.SearchOutput{
-		Results: []search.SearchResult{memory.NewResult(0, query.Raw)},
+	return &service.SearchOutput{
+		Results: []domain.SearchResult{memory.NewResult(0, query.Raw)},
 	}, nil
 }
 
@@ -164,7 +166,7 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 	const failing = "Drake"
 	svc := searcherFailing(failing)
 
-	res, err := search.RunSmokeEval(context.Background(), svc, ids.SystemUserId())
+	res, err := service.RunSmokeEval(context.Background(), svc, ids.SystemUserId())
 	if err != nil {
 		t.Fatalf("one erroring query made the whole eval fatal: %v", err)
 	}
@@ -201,7 +203,7 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 	svc := searcherFailingEveryQuery(t)
 
-	res, err := search.RunSmokeEval(context.Background(), svc, ids.SystemUserId())
+	res, err := service.RunSmokeEval(context.Background(), svc, ids.SystemUserId())
 
 	if err == nil || !strings.Contains(err.Error(), "every smoke-eval query errored") {
 		t.Fatalf("err = %v, want the every-query-errored failure so the meter reports an error state", err)
@@ -214,7 +216,7 @@ func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 func TestSmokeEval_PartialOutageIsNotReportedAsARegression(t *testing.T) {
 	svc := searcherFailing("Drake", "Bad Bunny")
 
-	res, err := search.RunSmokeEval(context.Background(), svc, ids.SystemUserId())
+	res, err := service.RunSmokeEval(context.Background(), svc, ids.SystemUserId())
 	if err != nil {
 		t.Fatalf("a partial outage must still return a scorecard: %v", err)
 	}

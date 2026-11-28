@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
@@ -13,44 +12,44 @@ import (
 )
 
 type fakeMBFeat struct {
-	results []search.SearchResult
+	results []domain.SearchResult
 	err     error
 }
 
-func (f fakeMBFeat) SearchStructured(_ context.Context, _, _ string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
+func (f fakeMBFeat) SearchStructured(_ context.Context, _, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	return f.results, f.err
 }
 
 type fakeDeezerFeat struct {
 	id        string
-	feats     []search.FeaturedArtist
+	feats     []domain.FeaturedArtist
 	err       error
 	lookupErr error
 }
 
-func (f fakeDeezerFeat) ResolveID(_ context.Context, _ search.ResultKind, _, _ string) (string, error) {
+func (f fakeDeezerFeat) ResolveID(_ context.Context, _ domain.ResultKind, _, _ string) (string, error) {
 	return f.id, f.err
 }
 
-func (f fakeDeezerFeat) LookupTrackFeatured(_ context.Context, _ string) ([]search.FeaturedArtist, error) {
+func (f fakeDeezerFeat) LookupTrackFeatured(_ context.Context, _ string) ([]domain.FeaturedArtist, error) {
 	return f.feats, f.lookupErr
 }
 
-func mbResultWithFeatured(feats ...search.FeaturedArtist) search.SearchResult {
+func mbResultWithFeatured(feats ...domain.FeaturedArtist) domain.SearchResult {
 	extras := make([]map[string]any, 0, len(feats))
 	for _, f := range feats {
 		extras = append(extras, f.ToExtrasMap())
 	}
 	return memory.NewResult(
-		search.ResultKindTrack,
+		domain.ResultKindTrack,
 		"Song",
 		memory.WithExtras(map[string]any{"featured_artists": extras}),
 	)
 }
 
-func resolveFeatured(t *testing.T, mb, dz []search.FeaturedArtist) []search.FeaturedArtist {
+func resolveFeatured(t *testing.T, mb, dz []domain.FeaturedArtist) []domain.FeaturedArtist {
 	t.Helper()
-	got, err := searchtest.NewFeaturedResolver(t, fakeMBFeat{results: []search.SearchResult{mbResultWithFeatured(mb...)}}, fakeDeezerFeat{id: "42", feats: dz}).Resolve(context.Background(), "Artist", "Song")
+	got, err := searchtest.NewFeaturedResolver(t, fakeMBFeat{results: []domain.SearchResult{mbResultWithFeatured(mb...)}}, fakeDeezerFeat{id: "42", feats: dz}).Resolve(context.Background(), "Artist", "Song")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -61,10 +60,10 @@ func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("merges mb + deezer, mb-primary", func(t *testing.T) {
-		mb := fakeMBFeat{results: []search.SearchResult{mbResultWithFeatured(
-			search.FeaturedArtist{Name: "SZA", MBID: "m1", Role: "featured"},
+		mb := fakeMBFeat{results: []domain.SearchResult{mbResultWithFeatured(
+			domain.FeaturedArtist{Name: "SZA", MBID: "m1", Role: "featured"},
 		)}}
-		dz := fakeDeezerFeat{id: "42", feats: []search.FeaturedArtist{
+		dz := fakeDeezerFeat{id: "42", feats: []domain.FeaturedArtist{
 			{Name: "SZA", DeezerID: 7, Role: "featured"},
 			{Name: "Doja", DeezerID: 8, Role: "featured"},
 		}}
@@ -82,7 +81,7 @@ func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 
 	t.Run("mb error degrades to deezer only", func(t *testing.T) {
 		mb := fakeMBFeat{err: errors.New("mb down")}
-		dz := fakeDeezerFeat{id: "1", feats: []search.FeaturedArtist{{Name: "Guest", DeezerID: 9}}}
+		dz := fakeDeezerFeat{id: "1", feats: []domain.FeaturedArtist{{Name: "Guest", DeezerID: 9}}}
 		got, _ := searchtest.NewFeaturedResolver(t, mb, dz).Resolve(ctx, "A", "B")
 		if len(got) != 1 || got[0].Name != "Guest" {
 			t.Fatalf("got %+v", got)
@@ -90,8 +89,8 @@ func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 	})
 
 	t.Run("deezer unresolved degrades to mb only", func(t *testing.T) {
-		mb := fakeMBFeat{results: []search.SearchResult{mbResultWithFeatured(
-			search.FeaturedArtist{Name: "Only MB", MBID: "m"},
+		mb := fakeMBFeat{results: []domain.SearchResult{mbResultWithFeatured(
+			domain.FeaturedArtist{Name: "Only MB", MBID: "m"},
 		)}}
 		dz := fakeDeezerFeat{id: ""}
 		got, _ := searchtest.NewFeaturedResolver(t, mb, dz).Resolve(ctx, "A", "B")
@@ -170,15 +169,15 @@ func TestFeaturedArtistResolver_ASwitchedOffSourceIsNotAnAttempt(t *testing.T) {
 	cancel()
 
 	t.Run("both switched off is none even when cancelled", func(t *testing.T) {
-		got, err := searchtest.NewFeaturedResolver(t, search.NoMBFeatured{}, service.NoDeezerFeatured{}).Resolve(cancelled, "A", "B")
+		got, err := searchtest.NewFeaturedResolver(t, service.NoMBFeatured{}, service.NoDeezerFeatured{}).Resolve(cancelled, "A", "B")
 		if err != nil || got != nil {
 			t.Fatalf("got %+v, err %v; want nil, nil", got, err)
 		}
 	})
 
 	t.Run("switched off musicbrainz leaves deezer's credits", func(t *testing.T) {
-		dz := fakeDeezerFeat{id: "1", feats: []search.FeaturedArtist{{Name: "SZA", DeezerID: 7}}}
-		got, err := searchtest.NewFeaturedResolver(t, search.NoMBFeatured{}, dz).Resolve(ctx, "A", "B")
+		dz := fakeDeezerFeat{id: "1", feats: []domain.FeaturedArtist{{Name: "SZA", DeezerID: 7}}}
+		got, err := searchtest.NewFeaturedResolver(t, service.NoMBFeatured{}, dz).Resolve(ctx, "A", "B")
 		if err != nil || len(got) != 1 || got[0].DeezerID != 7 {
 			t.Fatalf("got %+v, err %v; want deezer's one credit", got, err)
 		}
@@ -186,7 +185,7 @@ func TestFeaturedArtistResolver_ASwitchedOffSourceIsNotAnAttempt(t *testing.T) {
 
 	t.Run("switched off musicbrainz and a failing deezer is all sources failed", func(t *testing.T) {
 		dz := fakeDeezerFeat{err: errors.New("dz down")}
-		got, err := searchtest.NewFeaturedResolver(t, search.NoMBFeatured{}, dz).Resolve(ctx, "A", "B")
+		got, err := searchtest.NewFeaturedResolver(t, service.NoMBFeatured{}, dz).Resolve(ctx, "A", "B")
 		if err == nil || got != nil {
 			t.Fatalf("got %+v, err %v; want the all-sources-failed error", got, err)
 		}
@@ -209,7 +208,7 @@ func TestFeaturedArtistResolver_ASwitchedOffSourceIsNotAnAttempt(t *testing.T) {
 
 func TestFeaturedArtistResolver_MergesMusicBrainzAndDeezerCredits(t *testing.T) {
 	t.Run("mb only", func(t *testing.T) {
-		mb := []search.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
+		mb := []domain.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
 		got := resolveFeatured(t, mb, nil)
 		if len(got) != 1 || got[0].MBID != "m1" {
 			t.Fatalf("got %+v", got)
@@ -217,7 +216,7 @@ func TestFeaturedArtistResolver_MergesMusicBrainzAndDeezerCredits(t *testing.T) 
 	})
 
 	t.Run("deezer only", func(t *testing.T) {
-		dz := []search.FeaturedArtist{{Name: "SZA", DeezerID: 7}}
+		dz := []domain.FeaturedArtist{{Name: "SZA", DeezerID: 7}}
 		got := resolveFeatured(t, nil, dz)
 		if len(got) != 1 || got[0].DeezerID != 7 {
 			t.Fatalf("got %+v", got)
@@ -225,8 +224,8 @@ func TestFeaturedArtistResolver_MergesMusicBrainzAndDeezerCredits(t *testing.T) 
 	})
 
 	t.Run("both agree — same name merges ids, MB order kept", func(t *testing.T) {
-		mb := []search.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
-		dz := []search.FeaturedArtist{{Name: "sza", DeezerID: 7}}
+		mb := []domain.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
+		dz := []domain.FeaturedArtist{{Name: "sza", DeezerID: 7}}
 		got := resolveFeatured(t, mb, dz)
 		if len(got) != 1 {
 			t.Fatalf("expected 1 merged, got %d (%+v)", len(got), got)
@@ -237,8 +236,8 @@ func TestFeaturedArtistResolver_MergesMusicBrainzAndDeezerCredits(t *testing.T) 
 	})
 
 	t.Run("deezer fills gap MB missed", func(t *testing.T) {
-		mb := []search.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
-		dz := []search.FeaturedArtist{{Name: "SZA", DeezerID: 7}, {Name: "Doja", DeezerID: 8}}
+		mb := []domain.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
+		dz := []domain.FeaturedArtist{{Name: "SZA", DeezerID: 7}, {Name: "Doja", DeezerID: 8}}
 		got := resolveFeatured(t, mb, dz)
 		if len(got) != 2 {
 			t.Fatalf("expected 2, got %d (%+v)", len(got), got)

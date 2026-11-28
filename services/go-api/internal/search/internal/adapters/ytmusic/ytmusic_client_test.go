@@ -1,7 +1,7 @@
 package ytmusic_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/domain"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -89,7 +89,7 @@ func servePage(t *testing.T, body []byte) *httptest.Server {
 	return srv
 }
 
-func searchTrack(t *testing.T, item any) search.SearchResult {
+func searchTrack(t *testing.T, item any) domain.SearchResult {
 	t.Helper()
 	results := searchTracks(t, item)
 	if len(results) != 1 {
@@ -138,7 +138,7 @@ func TestYouTubeMusicAdapter_Search_MapsAMusicVideo(t *testing.T) {
 	got := searchTrack(t, ytmPlayable("MUSIC_VIDEO_TYPE_OMV", "Obscure Track", "abc123", byline,
 		jsonObj{"thumbnail": ytmThumbs("https://img/small", "https://img/large")}))
 
-	if got.Kind != search.ResultKindTrack {
+	if got.Kind != domain.ResultKindTrack {
 		t.Errorf("Kind = %v, want track", got.Kind)
 	}
 	if got.Title != "Obscure Track" {
@@ -154,7 +154,7 @@ func TestYouTubeMusicAdapter_Search_MapsAMusicVideo(t *testing.T) {
 		t.Fatalf("Sources = %d, want 1", len(got.Sources))
 	}
 	src := got.Sources[0]
-	if src.Provider != search.ProviderYouTube || src.ExternalID != "abc123" {
+	if src.Provider != domain.ProviderYouTube || src.ExternalID != "abc123" {
 		t.Errorf("source = %+v, want youtube/abc123", src)
 	}
 	if src.URL != "https://music.youtube.com/watch?v=abc123" {

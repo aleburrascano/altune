@@ -1,7 +1,6 @@
 package applemusic_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/domain"
 	"net/http"
 	"strings"
@@ -166,7 +165,7 @@ func TestAppleMusicAdapter_meta(t *testing.T) {
 
 	a := newTestAppleMusicAdapter(t, api)
 	kinds := a.SupportedKinds()
-	if !kinds[search.ResultKindTrack] || !kinds[search.ResultKindAlbum] || !kinds[search.ResultKindArtist] {
+	if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
 		t.Errorf("SupportedKinds = %v, want all three", kinds)
 	}
 	if a.SearchTimeout() != 4*time.Second {

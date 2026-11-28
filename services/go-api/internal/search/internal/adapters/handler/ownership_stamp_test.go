@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
@@ -23,10 +22,10 @@ import (
 )
 
 type goldenOwnershipReader struct {
-	owned map[string]search.OwnedTrack
+	owned map[string]ports.OwnedTrack
 }
 
-func (r goldenOwnershipReader) OwnedByTitleArtist(context.Context, ids.UserId) (map[string]search.OwnedTrack, error) {
+func (r goldenOwnershipReader) OwnedByTitleArtist(context.Context, ids.UserId) (map[string]ports.OwnedTrack, error) {
 	return r.owned, nil
 }
 
@@ -53,41 +52,41 @@ func (f *recordingTrackNumberFiller) FillTrackNumber(_ context.Context, _ ids.Us
 }
 
 func goldenOwned() goldenOwnershipReader {
-	return goldenOwnershipReader{owned: map[string]search.OwnedTrack{
+	return goldenOwnershipReader{owned: map[string]ports.OwnedTrack{
 		domain.OwnershipKey("Owned Song", "Artist"):  {TrackID: "0b1f4c0e-6f3a-4a52-9a53-5f0c7a1d0001", AcquisitionStatus: "ready", ISRC: "USRC17607839", Album: "Deluxe"},
 		domain.OwnershipKey("Placed Song", "Artist"): {TrackID: "track-2", AcquisitionStatus: "pending"},
 	}}
 }
 
-func goldenTrack(title, id string, extras map[string]any) search.SearchResult {
+func goldenTrack(title, id string, extras map[string]any) domain.SearchResult {
 	return memory.NewResult(
-		search.ResultKindTrack,
+		domain.ResultKindTrack,
 		title,
 		memory.WithSubtitle("Artist"),
 		memory.WithConfidence(domain.ConfidenceHigh),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: id}}),
 		memory.WithExtras(extras),
 	)
 }
 
-func goldenPlaced(title, id string, track int) search.SearchResult {
+func goldenPlaced(title, id string, track int) domain.SearchResult {
 	r := goldenTrack(title, id, map[string]any{})
 	r.TrackPosition = domain.TrackPosition{Track: track}
 	return r
 }
 
-func goldenAlbum(title, id string) search.SearchResult {
+func goldenAlbum(title, id string) domain.SearchResult {
 	return memory.NewResult(
-		search.ResultKindAlbum,
+		domain.ResultKindAlbum,
 		title,
 		memory.WithSubtitle("Artist"),
 		memory.WithConfidence(domain.ConfidenceHigh),
-		memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: id}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: id}}),
 	)
 }
 
-func goldenTracks() []search.SearchResult {
-	return []search.SearchResult{
+func goldenTracks() []domain.SearchResult {
+	return []domain.SearchResult{
 		goldenTrack("Owned Song", "1", nil),
 		goldenTrack("Stranger Song", "2", map[string]any{}),
 		goldenPlaced("Placed Song", "3", 7),
@@ -95,7 +94,7 @@ func goldenTracks() []search.SearchResult {
 	}
 }
 
-func goldenAlbumPageTracks() []search.SearchResult {
+func goldenAlbumPageTracks() []domain.SearchResult {
 	tracks := goldenTracks()
 	tracks[0] = goldenTrack("Owned Song", "1", map[string]any{})
 	tracks[0].ISRC = "USRC17607839"
@@ -103,12 +102,12 @@ func goldenAlbumPageTracks() []search.SearchResult {
 	return tracks
 }
 
-func goldenRouter(t *testing.T, svcs handler.DiscoveryServices, filler search.TrackNumberFiller) chi.Router {
+func goldenRouter(t *testing.T, svcs handler.DiscoveryServices, filler ports.TrackNumberFiller) chi.Router {
 	r, _ := goldenRouterTracked(t, svcs, filler)
 	return r
 }
 
-func goldenRouterTracked(t *testing.T, svcs handler.DiscoveryServices, filler search.TrackNumberFiller) (chi.Router, *background.Tracker) {
+func goldenRouterTracked(t *testing.T, svcs handler.DiscoveryServices, filler ports.TrackNumberFiller) (chi.Router, *background.Tracker) {
 	bg := searchtest.NewTracker(t)
 	h := wireGoldenOwnership(t, bg, handler.MustNewDiscoveryHandler(svcs, time.Now), goldenOwned(), filler)
 	r := chi.NewRouter()
@@ -117,7 +116,7 @@ func goldenRouterTracked(t *testing.T, svcs handler.DiscoveryServices, filler se
 	return r, bg
 }
 
-func wireGoldenOwnership(t *testing.T, bg *background.Tracker, h *search.DiscoveryHandler, reader ports.OwnershipReader, filler search.TrackNumberFiller) *search.DiscoveryHandler {
+func wireGoldenOwnership(t *testing.T, bg *background.Tracker, h *handler.DiscoveryHandler, reader ports.OwnershipReader, filler ports.TrackNumberFiller) *handler.DiscoveryHandler {
 	if err := h.AttachOwnership(searchtest.NewOwnership(t, bg, reader, filler)); err != nil {
 		t.Fatal(err)
 	}
@@ -145,9 +144,9 @@ const (
 
 func TestOwnershipGolden_Search(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: goldenTracks()}
+	provider := &fakeSearchProvider{name: domain.ProviderDeezer, results: goldenTracks()}
 	router := goldenRouter(t, searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(clock.Now)),
+		Search: searchtest.NewSearchService(t, bg, []ports.SearchProvider{provider}, service.NewCircuitBreaker(clock.Now)),
 	}), &recordingTrackNumberFiller{done: make(chan struct{})})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=song&save_history=false", nil)
@@ -156,8 +155,8 @@ func TestOwnershipGolden_Search(t *testing.T) {
 }
 
 func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
-	albumSvc := searchtest.NewAlbumTracks(t, map[search.ProviderName]ports.AlbumContentProvider{
-		search.ProviderDeezer: &memory.AlbumContentProvider{Results: goldenAlbumPageTracks()},
+	albumSvc := searchtest.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
+		domain.ProviderDeezer: &memory.AlbumContentProvider{Results: goldenAlbumPageTracks()},
 	})
 	filler := &recordingTrackNumberFiller{done: make(chan struct{}), want: 1}
 	router, bg := goldenRouterTracked(t, searchtest.CompleteServices(t, handler.DiscoveryServices{Album: albumSvc}), filler)
@@ -181,8 +180,8 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 }
 
 func goldenArtistSvc(t testing.TB) *service.GetArtistContentService {
-	return searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: goldenTracks(), Albums: goldenTracks()},
+	return searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: goldenTracks(), Albums: goldenTracks()},
 	})
 }
 

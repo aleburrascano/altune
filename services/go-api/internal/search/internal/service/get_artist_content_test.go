@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
@@ -19,45 +18,45 @@ import (
 )
 
 func TestGetArtistContentService_GetTopTracks(t *testing.T) {
-	sampleTracks := []search.SearchResult{
+	sampleTracks := []domain.SearchResult{
 		memory.NewResult(
-			search.ResultKindTrack,
+			domain.ResultKindTrack,
 			"Blinding Lights",
 			memory.WithSubtitle("The Weeknd"),
-			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}),
+			memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "t1"}}),
 		),
 		memory.NewResult(
-			search.ResultKindTrack,
+			domain.ResultKindTrack,
 			"Save Your Tears",
 			memory.WithSubtitle("The Weeknd"),
-			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t2"}}),
+			memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "t2"}}),
 		),
 		memory.NewResult(
-			search.ResultKindTrack,
+			domain.ResultKindTrack,
 			"Starboy",
 			memory.WithSubtitle("The Weeknd"),
-			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t3"}}),
+			memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "t3"}}),
 		),
 	}
 
 	tests := []struct {
 		name          string
-		providerName  search.ProviderName
+		providerName  domain.ProviderName
 		externalID    string
 		limit         int
-		providers     map[search.ProviderName]ports.ArtistContentProvider
+		providers     map[domain.ProviderName]ports.ArtistContentProvider
 		wantStatus    domain.ProviderStatus
 		wantItemCount int
 	}{
 		{
 			name:         "valid provider returns top tracks",
-			providerName: search.ProviderDeezer,
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
-			providers: map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{
-					GetTopTracksFn: func(_ context.Context, pn search.ProviderName, extID string) ([]search.SearchResult, error) {
-						if pn != search.ProviderDeezer {
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, extID string) ([]domain.SearchResult, error) {
+						if pn != domain.ProviderDeezer {
 							t.Errorf("expected provider deezer, got %s", pn.String())
 						}
 						if extID != "artist-42" {
@@ -72,21 +71,21 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 		},
 		{
 			name:          "unknown provider returns error status",
-			providerName:  search.ProviderSoundCloud,
+			providerName:  domain.ProviderSoundCloud,
 			externalID:    "artist-42",
 			limit:         0,
-			providers:     map[search.ProviderName]ports.ArtistContentProvider{},
+			providers:     map[domain.ProviderName]ports.ArtistContentProvider{},
 			wantStatus:    domain.ProviderStatusError,
 			wantItemCount: 0,
 		},
 		{
 			name:         "provider error returns error status",
-			providerName: search.ProviderDeezer,
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-err",
 			limit:        0,
-			providers: map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{
-					GetTopTracksFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return nil, errors.New("network error")
 					},
 				},
@@ -96,12 +95,12 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 		},
 		{
 			name:         "limit truncates results",
-			providerName: search.ProviderDeezer,
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        2,
-			providers: map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{
-					GetTopTracksFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return sampleTracks, nil
 					},
 				},
@@ -135,31 +134,31 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 func TestGetArtistContentService_GetAlbums(t *testing.T) {
 	tests := []struct {
 		name          string
-		providerName  search.ProviderName
+		providerName  domain.ProviderName
 		externalID    string
 		limit         int
-		providers     map[search.ProviderName]ports.ArtistContentProvider
+		providers     map[domain.ProviderName]ports.ArtistContentProvider
 		wantStatus    domain.ProviderStatus
 		wantItemCount int
 	}{
 		{
 			name:         "valid provider returns albums",
-			providerName: search.ProviderDeezer,
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
-			providers: map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{
-					GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-						return []search.SearchResult{
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return []domain.SearchResult{
 							memory.NewResult(
-								search.ResultKindAlbum,
+								domain.ResultKindAlbum,
 								"After Hours",
-								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+								memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "a1"}}),
 							),
 							memory.NewResult(
-								search.ResultKindAlbum,
+								domain.ResultKindAlbum,
 								"Starboy",
-								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}),
+								memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "a2"}}),
 							),
 						}, nil
 					},
@@ -170,38 +169,38 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		},
 		{
 			name:          "unknown provider returns error status",
-			providerName:  search.ProviderSoundCloud,
+			providerName:  domain.ProviderSoundCloud,
 			externalID:    "artist-42",
 			limit:         0,
-			providers:     map[search.ProviderName]ports.ArtistContentProvider{},
+			providers:     map[domain.ProviderName]ports.ArtistContentProvider{},
 			wantStatus:    domain.ProviderStatusError,
 			wantItemCount: 0,
 		},
 		{
 			name:         "dedup by normalized title keeps album with higher track_count",
-			providerName: search.ProviderDeezer,
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
-			providers: map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{
-					GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-						return []search.SearchResult{
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return []domain.SearchResult{
 							memory.NewResult(
-								search.ResultKindAlbum,
+								domain.ResultKindAlbum,
 								"After Hours",
-								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+								memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "a1"}}),
 								memory.WithTrackCount(14),
 							),
 							memory.NewResult(
-								search.ResultKindAlbum,
+								domain.ResultKindAlbum,
 								"After Hours (Deluxe)",
-								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}),
+								memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "a2"}}),
 								memory.WithTrackCount(18),
 							),
 							memory.NewResult(
-								search.ResultKindAlbum,
+								domain.ResultKindAlbum,
 								"Starboy",
-								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a3"}}),
+								memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "a3"}}),
 								memory.WithTrackCount(18),
 							),
 						}, nil
@@ -213,23 +212,23 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		},
 		{
 			name:         "dedup keeps higher track_count version",
-			providerName: search.ProviderDeezer,
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
-			providers: map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{
-					GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-						return []search.SearchResult{
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return []domain.SearchResult{
 							memory.NewResult(
-								search.ResultKindAlbum,
+								domain.ResultKindAlbum,
 								"Dawn FM",
-								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}),
+								memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "a1"}}),
 								memory.WithTrackCount(10),
 							),
 							memory.NewResult(
-								search.ResultKindAlbum,
+								domain.ResultKindAlbum,
 								"Dawn FM (Alternate World)",
-								memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}),
+								memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: "a2"}}),
 								memory.WithTrackCount(20),
 							),
 						}, nil
@@ -241,12 +240,12 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		},
 		{
 			name:         "provider error returns error status",
-			providerName: search.ProviderDeezer,
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-err",
 			limit:        0,
-			providers: map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{
-					GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return nil, errors.New("api failure")
 					},
 				},
@@ -275,20 +274,20 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 }
 
 func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
-	album := func(title, releaseDate, extID string) search.SearchResult {
+	album := func(title, releaseDate, extID string) domain.SearchResult {
 		return memory.NewResult(
-			search.ResultKindAlbum,
+			domain.ResultKindAlbum,
 			title,
-			memory.WithSources([]search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: extID}}),
+			memory.WithSources([]domain.ProviderLink{{Provider: domain.ProviderDeezer, ExternalID: extID}}),
 			memory.WithReleaseDate(releaseDate),
 		)
 	}
 
 	t.Run("sorts newest-first and normalizes year from release_date", func(t *testing.T) {
-		providers := map[search.ProviderName]ports.ArtistContentProvider{
-			search.ProviderDeezer: &memory.ArtistContentProvider{
-				GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-					return []search.SearchResult{
+		providers := map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &memory.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
 						album("Older", "2016-09-09", "a1"),
 						album("Newest", "2022-01-07", "a3"),
 						album("Middle", "2020-03-20", "a2"),
@@ -298,7 +297,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := searchtest.NewArtistContent(t, providers)
 
-		resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "artist-1", nil, 0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -320,10 +319,10 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 	})
 
 	t.Run("albums with no date sort to the end", func(t *testing.T) {
-		providers := map[search.ProviderName]ports.ArtistContentProvider{
-			search.ProviderDeezer: &memory.ArtistContentProvider{
-				GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-					return []search.SearchResult{
+		providers := map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &memory.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
 						album("NoDate", "", "a1"),
 						album("Dated", "2019-05-01", "a2"),
 					}, nil
@@ -332,7 +331,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := searchtest.NewArtistContent(t, providers)
 
-		resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "artist-1", nil, 0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -342,10 +341,10 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 	})
 
 	t.Run("limit keeps the newest after sorting", func(t *testing.T) {
-		providers := map[search.ProviderName]ports.ArtistContentProvider{
-			search.ProviderDeezer: &memory.ArtistContentProvider{
-				GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-					return []search.SearchResult{
+		providers := map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &memory.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
 						album("Old", "2010-01-01", "a1"),
 						album("New", "2024-01-01", "a2"),
 						album("Mid", "2017-01-01", "a3"),
@@ -355,7 +354,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := searchtest.NewArtistContent(t, providers)
 
-		resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "artist-1", nil, 2)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -390,8 +389,8 @@ func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) 
 	leaky := &url.Error{Op: "Get", URL: "https://ws.audioscrobbler.com/2.0/?api_key=" + secret, Err: errors.New("connection refused")}
 	for name, fetch := range identityContentFetchers {
 		t.Run(name, func(t *testing.T) {
-			svc := identityFanOutWithErr(t, func(pn search.ProviderName) error {
-				if pn == domain.ProviderTheAudioDB || pn == search.ProviderSpotify {
+			svc := identityFanOutWithErr(t, func(pn domain.ProviderName) error {
+				if pn == domain.ProviderTheAudioDB || pn == domain.ProviderSpotify {
 					return leaky
 				}
 				return nil
@@ -414,7 +413,7 @@ func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) 
 			if len(failed) != 2 {
 				t.Fatalf("failed = %v, want exactly theaudiodb and spotify", rec["failed"])
 			}
-			for _, pn := range []search.ProviderName{domain.ProviderTheAudioDB, search.ProviderSpotify} {
+			for _, pn := range []domain.ProviderName{domain.ProviderTheAudioDB, domain.ProviderSpotify} {
 				entry, _ := failed[pn.String()].(map[string]any)
 				if entry["external_id"] != "id-"+pn.String() {
 					t.Errorf("%s external_id = %v, want %q", pn, entry["external_id"], "id-"+pn.String())
@@ -431,10 +430,10 @@ func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) 
 }
 
 func TestIdentityFanOut_NoFailureWarnWhenAllAnswer(t *testing.T) {
-	svc := identityFanOutWithErr(t, func(search.ProviderName) error { return nil })
+	svc := identityFanOutWithErr(t, func(domain.ProviderName) error { return nil })
 	buf := memory.CaptureProductionLogs(t)
 
-	if _, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "id-deezer", nil, 10); err != nil {
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
 		t.Fatalf("error = %v", err)
 	}
 	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
@@ -445,8 +444,8 @@ func TestIdentityFanOut_NoFailureWarnWhenAllAnswer(t *testing.T) {
 func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	svc := identityFanOutWithErr(t, func(pn search.ProviderName) error {
-		if pn == search.ProviderDeezer {
+	svc := identityFanOutWithErr(t, func(pn domain.ProviderName) error {
+		if pn == domain.ProviderDeezer {
 			return nil
 		}
 		cancel()
@@ -454,7 +453,7 @@ func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
 	})
 	buf := memory.CaptureProductionLogs(t)
 
-	if _, err := svc.GetTopTracks(ctx, search.ProviderDeezer, "id-deezer", nil, 10); err != nil {
+	if _, err := svc.GetTopTracks(ctx, domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
 		t.Fatalf("error = %v", err)
 	}
 	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
@@ -463,12 +462,12 @@ func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
 }
 
 func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
-	tripCircuit(t, cb, search.ProviderSpotify)
-	svc := identityFanOutWithErr(t, func(search.ProviderName) error { return nil }, searchtest.ArtistBreaker(cb))
+	cb := service.NewCircuitBreaker(clock.Now)
+	tripCircuit(t, cb, domain.ProviderSpotify)
+	svc := identityFanOutWithErr(t, func(domain.ProviderName) error { return nil }, searchtest.ArtistBreaker(cb))
 	buf := memory.CaptureProductionLogs(t)
 
-	if _, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "id-deezer", nil, 10); err != nil {
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
 		t.Fatalf("error = %v", err)
 	}
 	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
@@ -476,23 +475,23 @@ func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
 	}
 }
 
-func identityFanOutWithErr(t testing.TB, errFor func(search.ProviderName) error, opts ...searchtest.ArtistContentPart) *service.GetArtistContentService {
-	providers := make(map[search.ProviderName]ports.ArtistContentProvider, len(everyContentProvider))
+func identityFanOutWithErr(t testing.TB, errFor func(domain.ProviderName) error, opts ...searchtest.ArtistContentPart) *service.GetArtistContentService {
+	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(everyContentProvider))
 	xref := make(map[domain.ProviderKey]string, len(everyContentProvider))
 	for _, name := range everyContentProvider {
 		xref[name.Key()] = "id-" + name.String()
 		providers[name] = &memory.ArtistContentProvider{
-			GetTopTracksFn: func(_ context.Context, pn search.ProviderName, id string) ([]search.SearchResult, error) {
+			GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				if err := errFor(pn); err != nil {
 					return nil, err
 				}
-				return []search.SearchResult{memory.TrackFrom(pn, id, "Real Song", "Che")}, nil
+				return []domain.SearchResult{memory.TrackFrom(pn, id, "Real Song", "Che")}, nil
 			},
-			GetAlbumsFn: func(_ context.Context, pn search.ProviderName, id string) ([]search.SearchResult, error) {
+			GetAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				if err := errFor(pn); err != nil {
 					return nil, err
 				}
-				return []search.SearchResult{memory.V2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, nil
+				return []domain.SearchResult{memory.V2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, nil
 			},
 		}
 	}
@@ -500,15 +499,15 @@ func identityFanOutWithErr(t testing.TB, errFor func(search.ProviderName) error,
 	return searchtest.NewArtistContent(t, providers, append(opts, searchtest.ArtistIdentities(store))...)
 }
 
-var everyContentProvider = []search.ProviderName{
-	search.ProviderDeezer, domain.ProviderMusicBrainz, search.ProviderSoundCloud,
+var everyContentProvider = []domain.ProviderName{
+	domain.ProviderDeezer, domain.ProviderMusicBrainz, domain.ProviderSoundCloud,
 	domain.ProviderITunes, domain.ProviderTheAudioDB,
-	domain.ProviderDiscogs, search.ProviderYouTube,
-	domain.ProviderAppleMusic, search.ProviderSpotify,
+	domain.ProviderDiscogs, domain.ProviderYouTube,
+	domain.ProviderAppleMusic, domain.ProviderSpotify,
 }
 
-func identityFanOut(t testing.TB, fail func(search.ProviderName) bool, opts ...searchtest.ArtistContentPart) *service.GetArtistContentService {
-	return identityFanOutWithErr(t, func(pn search.ProviderName) error {
+func identityFanOut(t testing.TB, fail func(domain.ProviderName) bool, opts ...searchtest.ArtistContentPart) *service.GetArtistContentService {
+	return identityFanOutWithErr(t, func(pn domain.ProviderName) error {
 		if fail(pn) {
 			return memory.ErrUpstreamDown
 		}
@@ -520,17 +519,17 @@ type contentFetcher func(*service.GetArtistContentService) (*service.ContentFetc
 
 var identityContentFetchers = map[string]contentFetcher{
 	"top tracks": func(s *service.GetArtistContentService) (*service.ContentFetchResponse, error) {
-		return s.GetTopTracks(context.Background(), search.ProviderDeezer, "id-deezer", nil, 10)
+		return s.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10)
 	},
 	"albums": func(s *service.GetArtistContentService) (*service.ContentFetchResponse, error) {
-		return s.GetAlbums(context.Background(), search.ProviderDeezer, "id-deezer", nil, 50)
+		return s.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
 	},
 }
 
 func TestIdentityFanOut_MostProvidersFailedReportsPartial(t *testing.T) {
 	for name, fetch := range identityContentFetchers {
 		t.Run(name, func(t *testing.T) {
-			svc := identityFanOut(t, func(pn search.ProviderName) bool { return pn != search.ProviderDeezer })
+			svc := identityFanOut(t, func(pn domain.ProviderName) bool { return pn != domain.ProviderDeezer })
 
 			resp, err := fetch(svc)
 			if err != nil {
@@ -549,7 +548,7 @@ func TestIdentityFanOut_MostProvidersFailedReportsPartial(t *testing.T) {
 func TestIdentityFanOut_AllProvidersAnsweredIsNotPartial(t *testing.T) {
 	for name, fetch := range identityContentFetchers {
 		t.Run(name, func(t *testing.T) {
-			resp, err := fetch(identityFanOut(t, func(search.ProviderName) bool { return false }))
+			resp, err := fetch(identityFanOut(t, func(domain.ProviderName) bool { return false }))
 			if err != nil {
 				t.Fatalf("error = %v", err)
 			}
@@ -561,11 +560,11 @@ func TestIdentityFanOut_AllProvidersAnsweredIsNotPartial(t *testing.T) {
 }
 
 func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
-	tripCircuit(t, cb, search.ProviderSpotify)
-	svc := identityFanOut(t, func(search.ProviderName) bool { return false }, searchtest.ArtistBreaker(cb))
+	cb := service.NewCircuitBreaker(clock.Now)
+	tripCircuit(t, cb, domain.ProviderSpotify)
+	svc := identityFanOut(t, func(domain.ProviderName) bool { return false }, searchtest.ArtistBreaker(cb))
 
-	resp, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "id-deezer", nil, 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -576,25 +575,25 @@ func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
 
 func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 	answer := &memory.ArtistContentProvider{
-		GetTopTracksFn: func(_ context.Context, pn search.ProviderName, id string) ([]search.SearchResult, error) {
-			return []search.SearchResult{memory.TrackFrom(pn, id, "Real Song", "Che")}, nil
+		GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{memory.TrackFrom(pn, id, "Real Song", "Che")}, nil
 		},
 	}
 	unreachable := &memory.ArtistContentProvider{
-		GetTopTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+		GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			t.Error("provider without a stored ID was called")
 			return nil, memory.ErrUpstreamDown
 		},
 	}
-	cb := search.NewCircuitBreaker(clock.Now)
-	tripCircuit(t, cb, search.ProviderYouTube)
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer:  answer,
+	cb := service.NewCircuitBreaker(clock.Now)
+	tripCircuit(t, cb, domain.ProviderYouTube)
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer:  answer,
 		domain.ProviderDiscogs: unreachable,
-		search.ProviderYouTube: unreachable,
+		domain.ProviderYouTube: unreachable,
 	}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}), searchtest.ArtistBreaker(cb))
 
-	resp, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "d1", nil, 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -604,21 +603,21 @@ func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 }
 
 func TestGetTopTracks_PanickingProviderIsContained(t *testing.T) {
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: &memory.ArtistContentProvider{
-			GetTopTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: &memory.ArtistContentProvider{
+			GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 				panic("deezer exploded")
 			},
 		},
 		domain.ProviderITunes: &memory.ArtistContentProvider{
-			GetTopTracksFn: func(_ context.Context, provider search.ProviderName, id string) ([]search.SearchResult, error) {
-				return []search.SearchResult{memory.TrackFrom(provider, id, "Track", "Artist")}, nil
+			GetTopTracksFn: func(_ context.Context, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+				return []domain.SearchResult{memory.TrackFrom(provider, id, "Track", "Artist")}, nil
 			},
 		},
 	})
-	known := map[search.ProviderName]string{search.ProviderDeezer: "dz", domain.ProviderITunes: "it"}
+	known := map[domain.ProviderName]string{domain.ProviderDeezer: "dz", domain.ProviderITunes: "it"}
 
-	resp, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "dz", known, 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "dz", known, 10)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -635,8 +634,8 @@ func TestGetArtistContent_LaterPageFailureReportsPartial(t *testing.T) {
 	truncated := &domain.PartialResultError{Page: 2, Err: memory.ErrUpstreamDown}
 	for name, fetch := range identityContentFetchers {
 		t.Run("identity fan-out "+name, func(t *testing.T) {
-			svc := identityFanOutWithErr(t, func(pn search.ProviderName) error {
-				if pn == search.ProviderDeezer {
+			svc := identityFanOutWithErr(t, func(pn domain.ProviderName) error {
+				if pn == domain.ProviderDeezer {
 					return truncated
 				}
 				return nil
@@ -655,14 +654,14 @@ func TestGetArtistContent_LaterPageFailureReportsPartial(t *testing.T) {
 	}
 
 	t.Run("single provider albums", func(t *testing.T) {
-		svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-			search.ProviderDeezer: &memory.ArtistContentProvider{
-				GetAlbumsFn: func(_ context.Context, pn search.ProviderName, id string) ([]search.SearchResult, error) {
-					return []search.SearchResult{memory.V2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, truncated
+		svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &memory.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{memory.V2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, truncated
 				},
 			},
 		})
-		resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "id-deezer", nil, 50)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
 		if err != nil {
 			t.Fatalf("error = %v", err)
 		}
@@ -674,7 +673,7 @@ func TestGetArtistContent_LaterPageFailureReportsPartial(t *testing.T) {
 
 const artistBreakerTripsAfter = 5
 
-func tripCircuit(t *testing.T, cb *service.CircuitBreaker, provider search.ProviderName) {
+func tripCircuit(t *testing.T, cb *service.CircuitBreaker, provider domain.ProviderName) {
 	t.Helper()
 	for range artistBreakerTripsAfter {
 		cb.RecordFailure(context.Background(), provider, service.Admission{})
@@ -684,45 +683,45 @@ func tripCircuit(t *testing.T, cb *service.CircuitBreaker, provider search.Provi
 	}
 }
 
-func withDate(d string) func(*search.SearchResult) {
-	return func(r *search.SearchResult) { r.ReleaseDate = d }
+func withDate(d string) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.ReleaseDate = d }
 }
 
-func withTracks(n int) func(*search.SearchResult) {
-	return func(r *search.SearchResult) { r.TrackCount = n }
+func withTracks(n int) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.TrackCount = n }
 }
 
-func withCover(u string) func(*search.SearchResult) {
-	return func(r *search.SearchResult) { r.ImageURL = u }
+func withCover(u string) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.ImageURL = u }
 }
 
-func withType(t domain.RecordType) func(*search.SearchResult) {
-	return func(r *search.SearchResult) { r.RecordType = t }
+func withType(t domain.RecordType) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.RecordType = t }
 }
 
 func TestGetAlbums_v2_bestOfMerge(t *testing.T) {
 	deezer := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-			return []search.SearchResult{
-				memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded",
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{
+				memory.V2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded",
 					withDate("2026-04-01"), withCover("cover-dz"), withType("ep")),
 			}, nil
 		},
 	}
 	itunes := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-			return []search.SearchResult{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{
 				memory.V2Album(domain.ProviderITunes, "i-fl", "Fully Loaded", withTracks(5)),
 			}, nil
 		},
 	}
 	store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: deezer,
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: deezer,
 		domain.ProviderITunes: itunes,
 	}, searchtest.ArtistIdentities(store))
 
-	resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -752,18 +751,18 @@ func TestGetAlbums_v2_bestOfMerge(t *testing.T) {
 
 func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 	deezer := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			if id != "399574001" {
 				t.Errorf("deezer queried id %q, want the seed 399574001", id)
 			}
-			return []search.SearchResult{
-				memory.V2Album(search.ProviderDeezer, "d-rib", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c")),
+			return []domain.SearchResult{
+				memory.V2Album(domain.ProviderDeezer, "d-rib", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c")),
 			}, nil
 		},
 	}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
 
-	resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "399574001", nil, 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "399574001", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -774,27 +773,27 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 
 func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
 	deezer := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-			return []search.SearchResult{
-				memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01")),
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{
+				memory.V2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01")),
 			}, nil
 		},
 	}
 	itunes := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-			return []search.SearchResult{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{
 				memory.V2Album(domain.ProviderITunes, "i-fl", "FULLY LOADED", withTracks(5)),
 			}, nil
 		},
 	}
 	store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: deezer,
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: deezer,
 		domain.ProviderITunes: itunes,
 	}, searchtest.ArtistIdentities(store))
 
 	for i := 0; i < 25; i++ {
-		resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 		if err != nil {
 			t.Fatalf("run %d: GetAlbums error = %v", i, err)
 		}
@@ -810,14 +809,14 @@ func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
 func failOnceThenEmptyProvider() *memory.ArtistContentProvider {
 	var albumCalls, trackCalls int
 	return &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			albumCalls++
 			if albumCalls == 1 {
 				return nil, errors.New("provider down")
 			}
 			return nil, nil
 		},
-		GetTopTracksFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			trackCalls++
 			if trackCalls == 1 {
 				return nil, errors.New("provider down")
@@ -829,11 +828,11 @@ func failOnceThenEmptyProvider() *memory.ArtistContentProvider {
 
 func fallbackPartialService(t testing.TB, p *memory.ArtistContentProvider) *service.GetArtistContentService {
 	store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}
-	return searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: p}, searchtest.ArtistIdentities(store))
+	return searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p}, searchtest.ArtistIdentities(store))
 }
 
 func TestGetAlbums_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T) {
-	resp, err := fallbackPartialService(t, failOnceThenEmptyProvider()).GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+	resp, err := fallbackPartialService(t, failOnceThenEmptyProvider()).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -843,7 +842,7 @@ func TestGetAlbums_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T)
 }
 
 func TestGetTopTracks_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T) {
-	resp, err := fallbackPartialService(t, failOnceThenEmptyProvider()).GetTopTracks(context.Background(), search.ProviderDeezer, "d1", nil, 10)
+	resp, err := fallbackPartialService(t, failOnceThenEmptyProvider()).GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
@@ -854,21 +853,21 @@ func TestGetTopTracks_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing
 
 func TestGetArtistContent_v2_fallbackNotPartialWhenNoProviderFailed(t *testing.T) {
 	svc := fallbackPartialService(t, &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return nil, nil
 		},
-		GetTopTracksFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return nil, nil
 		},
 	})
-	albums, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+	albums, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
 	if albums.Partial {
 		t.Errorf("GetAlbums Partial = true, want false when no provider failed")
 	}
-	tracks, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "d1", nil, 10)
+	tracks, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
@@ -879,25 +878,25 @@ func TestGetArtistContent_v2_fallbackNotPartialWhenNoProviderFailed(t *testing.T
 
 func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 	deezer := &memory.ArtistContentProvider{
-		GetTopTracksFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-			return []search.SearchResult{
-				memory.TrackFrom(search.ProviderDeezer, "d-real", "Real Song", "Che"),
-				memory.TrackFrom(search.ProviderDeezer, "d-solo", "Solo", "Che"),
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{
+				memory.TrackFrom(domain.ProviderDeezer, "d-real", "Real Song", "Che"),
+				memory.TrackFrom(domain.ProviderDeezer, "d-solo", "Solo", "Che"),
 			}, nil
 		},
 	}
 	itunes := &memory.ArtistContentProvider{
-		GetTopTracksFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-			return []search.SearchResult{memory.TrackFrom(domain.ProviderITunes, "i-real", "Real Song", "Che")}, nil
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{memory.TrackFrom(domain.ProviderITunes, "i-real", "Real Song", "Che")}, nil
 		},
 	}
 	store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: deezer,
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: deezer,
 		domain.ProviderITunes: itunes,
 	}, searchtest.ArtistIdentities(store))
 
-	resp, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "d1", nil, 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
@@ -910,8 +909,8 @@ func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 }
 
 type artistContentArgs struct {
-	providers   map[search.ProviderName]ports.ArtistContentProvider
-	tracklists  map[search.ProviderName]ports.AlbumContentProvider
+	providers   map[domain.ProviderName]ports.ArtistContentProvider
+	tracklists  map[domain.ProviderName]ports.AlbumContentProvider
 	identity    service.ArtistIdentity
 	anchoring   service.Anchoring
 	discography service.DiscographyObserver
@@ -920,12 +919,12 @@ type artistContentArgs struct {
 
 func completeArtistContentArgs() artistContentArgs {
 	return artistContentArgs{
-		providers:   map[search.ProviderName]ports.ArtistContentProvider{},
-		tracklists:  map[search.ProviderName]ports.AlbumContentProvider{},
+		providers:   map[domain.ProviderName]ports.ArtistContentProvider{},
+		tracklists:  map[domain.ProviderName]ports.AlbumContentProvider{},
 		identity:    service.SeedPathIdentity{},
 		anchoring:   service.NoAnchoring{},
 		discography: service.NoDiscographyObserver{},
-		breaker:     search.NewCircuitBreaker(clock.Now),
+		breaker:     service.NewCircuitBreaker(clock.Now),
 	}
 }
 
@@ -969,7 +968,7 @@ func TestNewMusicBrainzAnchoring_RefusesEveryMissingCollaborator(t *testing.T) {
 	if _, err := service.NewMusicBrainzAnchoring(stubMBAnchor{}, nil); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
 		t.Errorf("without a breaker: err = %v, want artistpage.ErrCollaboratorRequired naming the circuit breaker", err)
 	}
-	if _, err := service.NewMusicBrainzAnchoring(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "discography anchor") {
+	if _, err := service.NewMusicBrainzAnchoring(nil, service.NewCircuitBreaker(clock.Now)); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "discography anchor") {
 		t.Errorf("without an anchor: err = %v, want artistpage.ErrCollaboratorRequired naming the discography anchor", err)
 	}
 }
@@ -985,22 +984,22 @@ func TestNewDiscographyTelemetry_RefusesEveryMissingCollaborator(t *testing.T) {
 
 func TestNoAnchoring_LeavesTheAnswerAndTheBreakerUntouched(t *testing.T) {
 	deezer := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{memory.V2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},
-		GetTopTracksFn: func(_ context.Context, pn search.ProviderName, id string) ([]search.SearchResult, error) {
-			return []search.SearchResult{memory.TrackFrom(pn, id, "Real Song", "Che")}, nil
+		GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{memory.TrackFrom(pn, id, "Real Song", "Che")}, nil
 		},
 	}
 	identity, err := service.NewStoreIdentity(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}})
 	if err != nil {
 		t.Fatalf("NewStoreIdentity: %v", err)
 	}
-	breaker := search.NewCircuitBreaker(clock.Now)
+	breaker := service.NewCircuitBreaker(clock.Now)
 	before := breaker.Snapshot(domain.ProviderMusicBrainz)
 	svc, err := service.NewGetArtistContentService(
-		map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer},
-		map[search.ProviderName]ports.AlbumContentProvider{},
+		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer},
+		map[domain.ProviderName]ports.AlbumContentProvider{},
 		identity, service.NoAnchoring{}, service.NoDiscographyObserver{}, breaker)
 	if err != nil {
 		t.Fatalf("NewGetArtistContentService: %v", err)
@@ -1033,15 +1032,15 @@ func (a stubMBAnchor) ReleaseGroupTitles(context.Context, string) ([]string, err
 
 func anchoredAlbumsService(t testing.TB, anchor stubMBAnchor, extra ...searchtest.ArtistContentPart) *service.GetArtistContentService {
 	deezer := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{memory.V2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},
 	}
 	opts := append([]searchtest.ArtistContentPart{
 		searchtest.ArtistIdentities(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}),
 		searchtest.ArtistAnchor(anchor),
 	}, extra...)
-	return searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer}, opts...)
+	return searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer}, opts...)
 }
 
 func anchorFailedRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
@@ -1065,7 +1064,7 @@ func anchorFailedRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
 func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *testing.T) {
 	const secret = "0123456789abcdef0123456789abcdef"
 	leaky := &url.Error{Op: "Get", URL: "https://musicbrainz.org/ws/2/?api_key=" + secret, Err: errors.New("connection refused")}
-	openBreaker := search.NewCircuitBreaker(clock.Now)
+	openBreaker := service.NewCircuitBreaker(clock.Now)
 	for range artistBreakerTripsAfter {
 		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz, service.Admission{})
 	}
@@ -1076,7 +1075,7 @@ func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *te
 	for name, svc := range cases {
 		t.Run(name, func(t *testing.T) {
 			buf := memory.CaptureProductionLogs(t)
-			resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+			resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 			if err != nil {
 				t.Fatalf("GetAlbums error = %v", err)
 			}
@@ -1096,7 +1095,7 @@ func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *te
 
 func TestGetAlbums_v2_anchorWithNoTitlesIsSilentNoOp(t *testing.T) {
 	buf := memory.CaptureProductionLogs(t)
-	resp, err := anchoredAlbumsService(t, stubMBAnchor{}).GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+	resp, err := anchoredAlbumsService(t, stubMBAnchor{}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -1113,7 +1112,7 @@ func TestGetAlbums_v2_anchorErrorAfterCallerLeftIsSilent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := anchoredAlbumsService(t, stubMBAnchor{err: context.Canceled})
 	cancel()
-	resp, err := svc.GetAlbums(ctx, search.ProviderDeezer, "d1", nil, 50)
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -1133,15 +1132,15 @@ func (f funcMBAnchor) ReleaseGroupTitles(ctx context.Context, mbid string) ([]st
 
 func anchoredAlbumsServiceWith(t testing.TB, anchor ports.MusicBrainzDiscographyAnchor, extra ...searchtest.ArtistContentPart) *service.GetArtistContentService {
 	deezer := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
-			return []search.SearchResult{memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{memory.V2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},
 	}
 	opts := append([]searchtest.ArtistContentPart{
 		searchtest.ArtistIdentities(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}),
 		searchtest.ArtistAnchor(anchor),
 	}, extra...)
-	return searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer}, opts...)
+	return searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer}, opts...)
 }
 
 func TestGetAlbums_v2_callerLeavingDuringAnchorLookupIsSilentAndNotPartial(t *testing.T) {
@@ -1154,7 +1153,7 @@ func TestGetAlbums_v2_callerLeavingDuringAnchorLookupIsSilentAndNotPartial(t *te
 		cancel()
 		return nil, context.Canceled
 	}))
-	resp, err := svc.GetAlbums(ctx, search.ProviderDeezer, "d1", nil, 50)
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if !anchorCalled {
 		t.Fatalf("anchor was never consulted, the test did not reach the anchor path")
 	}
@@ -1182,7 +1181,7 @@ func TestGetAlbums_v2_callerDeadlinePassingDuringAnchorLookupIsSilent(t *testing
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}))
-	resp, err := svc.GetAlbums(ctx, search.ProviderDeezer, "d1", nil, 50)
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if !anchorCalled {
 		t.Fatalf("anchor was never consulted, the test did not reach the anchor path")
 	}
@@ -1212,7 +1211,7 @@ func TestGetAlbums_v2_anchorTimeoutWhileCallerStillWaitingIsPartialWithOneWarn(t
 			svc := anchoredAlbumsServiceWith(t, funcMBAnchor(func(context.Context, string) ([]string, error) {
 				return nil, anchorErr
 			}))
-			resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+			resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 			if err != nil {
 				t.Fatalf("GetAlbums error = %v", err)
 			}
@@ -1229,14 +1228,14 @@ func TestGetAlbums_v2_anchorTimeoutWhileCallerStillWaitingIsPartialWithOneWarn(t
 
 func TestGetAlbums_v2_openBreakerAndFailingAnchorWarnOnce(t *testing.T) {
 	buf := memory.CaptureProductionLogs(t)
-	openBreaker := search.NewCircuitBreaker(clock.Now)
+	openBreaker := service.NewCircuitBreaker(clock.Now)
 	for range artistBreakerTripsAfter {
 		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz, service.Admission{})
 	}
 	svc := anchoredAlbumsServiceWith(t, funcMBAnchor(func(context.Context, string) ([]string, error) {
 		return nil, errors.New("mb unavailable")
 	}), searchtest.ArtistBreaker(openBreaker))
-	resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -1251,20 +1250,20 @@ func TestGetAlbums_v2_openBreakerAndFailingAnchorWarnOnce(t *testing.T) {
 
 func TestGetAlbums_v2_openBreakerAfterCallerLeftIsSilent(t *testing.T) {
 	buf := memory.CaptureProductionLogs(t)
-	openBreaker := search.NewCircuitBreaker(clock.Now)
+	openBreaker := service.NewCircuitBreaker(clock.Now)
 	for range artistBreakerTripsAfter {
 		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz, service.Admission{})
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	deezer := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			cancel()
-			return []search.SearchResult{memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
+			return []domain.SearchResult{memory.V2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},
 	}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}), searchtest.ArtistAnchor(stubMBAnchor{titles: []string{"Fully Loaded"}}), searchtest.ArtistBreaker(openBreaker))
-	resp, err := svc.GetAlbums(ctx, search.ProviderDeezer, "d1", nil, 50)
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}), searchtest.ArtistAnchor(stubMBAnchor{titles: []string{"Fully Loaded"}}), searchtest.ArtistBreaker(openBreaker))
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -1291,7 +1290,7 @@ func TestGetAlbums_v2_anchorFailureWarnCarriesNoSecretFromTheErrorURL(t *testing
 		t.Run(name, func(t *testing.T) {
 			buf := memory.CaptureProductionLogs(t)
 			leaky := &url.Error{Op: "Get", URL: u, Err: errors.New("i/o timeout")}
-			resp, err := anchoredAlbumsService(t, stubMBAnchor{err: leaky}).GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+			resp, err := anchoredAlbumsService(t, stubMBAnchor{err: leaky}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 			if err != nil {
 				t.Fatalf("GetAlbums error = %v", err)
 			}
@@ -1312,7 +1311,7 @@ func TestGetAlbums_v2_anchorFailureWarnCarriesNoBearerToken(t *testing.T) {
 	const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl"
 	buf := memory.CaptureProductionLogs(t)
 	anchorErr := errors.New("mb anchor: 401 for request with Authorization: Bearer " + token)
-	resp, err := anchoredAlbumsService(t, stubMBAnchor{err: anchorErr}).GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+	resp, err := anchoredAlbumsService(t, stubMBAnchor{err: anchorErr}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -1324,10 +1323,10 @@ func TestGetAlbums_v2_anchorFailureWarnCarriesNoBearerToken(t *testing.T) {
 	}
 }
 
-func albumsByID(t *testing.T, want string, albums ...search.SearchResult) *memory.ArtistContentProvider {
+func albumsByID(t *testing.T, want string, albums ...domain.SearchResult) *memory.ArtistContentProvider {
 	t.Helper()
 	return &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			if id != want {
 				t.Errorf("queried id %q, want %q", id, want)
 			}
@@ -1337,12 +1336,12 @@ func albumsByID(t *testing.T, want string, albums ...search.SearchResult) *memor
 }
 
 func TestGetAlbums_v2_asksEveryProviderTheSearchCardKnows(t *testing.T) {
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer:  albumsByID(t, "d1", memory.V2Album(search.ProviderDeezer, "d-rib", "REST IN BASS")),
-		search.ProviderSpotify: albumsByID(t, "sp1", memory.V2Album(search.ProviderSpotify, "s-rib", "REST IN BASS"), memory.V2Album(search.ProviderSpotify, "s-fl", "Fully Loaded")),
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer:  albumsByID(t, "d1", memory.V2Album(domain.ProviderDeezer, "d-rib", "REST IN BASS")),
+		domain.ProviderSpotify: albumsByID(t, "sp1", memory.V2Album(domain.ProviderSpotify, "s-rib", "REST IN BASS"), memory.V2Album(domain.ProviderSpotify, "s-fl", "Fully Loaded")),
 	}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
 
-	resp, err := svc.GetAlbums(t.Context(), search.ProviderDeezer, "d1", map[search.ProviderName]string{search.ProviderSpotify: "sp1"}, 50)
+	resp, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSpotify: "sp1"}, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1359,23 +1358,23 @@ func TestGetAlbums_v2_asksEveryProviderTheSearchCardKnows(t *testing.T) {
 
 func TestGetAlbums_v2_savedIdentityWinsOverTheSearchCard(t *testing.T) {
 	store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"spotify": "sp-saved"}}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer:  albumsByID(t, "d1", memory.V2Album(search.ProviderDeezer, "d-rib", "REST IN BASS")),
-		search.ProviderSpotify: albumsByID(t, "sp-saved", memory.V2Album(search.ProviderSpotify, "s-rib", "REST IN BASS")),
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer:  albumsByID(t, "d1", memory.V2Album(domain.ProviderDeezer, "d-rib", "REST IN BASS")),
+		domain.ProviderSpotify: albumsByID(t, "sp-saved", memory.V2Album(domain.ProviderSpotify, "s-rib", "REST IN BASS")),
 	}, searchtest.ArtistIdentities(store))
 
-	if _, err := svc.GetAlbums(t.Context(), search.ProviderDeezer, "d1", map[search.ProviderName]string{search.ProviderSpotify: "sp-card"}, 50); err != nil {
+	if _, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSpotify: "sp-card"}, 50); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestGetAlbums_v2_dropsSoundCloudOnlyReleasesWhenACatalogKnowsTheArtist(t *testing.T) {
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer:     albumsByID(t, "d1", memory.V2Album(search.ProviderDeezer, "d-nv", "Nevermind")),
-		search.ProviderSoundCloud: albumsByID(t, "sc1", memory.V2Album(search.ProviderSoundCloud, "sc-nv", "Nevermind"), memory.V2Album(search.ProviderSoundCloud, "sc-rc", "Rainbow Chaser")),
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer:     albumsByID(t, "d1", memory.V2Album(domain.ProviderDeezer, "d-nv", "Nevermind")),
+		domain.ProviderSoundCloud: albumsByID(t, "sc1", memory.V2Album(domain.ProviderSoundCloud, "sc-nv", "Nevermind"), memory.V2Album(domain.ProviderSoundCloud, "sc-rc", "Rainbow Chaser")),
 	}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
 
-	resp, err := svc.GetAlbums(t.Context(), search.ProviderDeezer, "d1", map[search.ProviderName]string{search.ProviderSoundCloud: "sc1"}, 50)
+	resp, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSoundCloud: "sc1"}, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1388,16 +1387,16 @@ func TestGetAlbums_v2_dropsSoundCloudOnlyReleasesWhenACatalogKnowsTheArtist(t *t
 func TestGetAlbums_v2_keepsSoundCloudReleasesForAnArtistOnlyOnSoundCloud(t *testing.T) {
 	calls := 0
 	soundcloud := &memory.ArtistContentProvider{
-		GetAlbumsFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			calls++
-			return []search.SearchResult{memory.V2Album(search.ProviderSoundCloud, "sc-tape", "First Tape")}, nil
+			return []domain.SearchResult{memory.V2Album(domain.ProviderSoundCloud, "sc-tape", "First Tape")}, nil
 		},
 	}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderSoundCloud: soundcloud,
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderSoundCloud: soundcloud,
 	}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
 
-	resp, err := svc.GetAlbums(t.Context(), search.ProviderSoundCloud, "sc1", map[search.ProviderName]string{search.ProviderYouTube: "yt1"}, 50)
+	resp, err := svc.GetAlbums(t.Context(), domain.ProviderSoundCloud, "sc1", map[domain.ProviderName]string{domain.ProviderYouTube: "yt1"}, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1411,19 +1410,19 @@ func TestGetAlbums_v2_keepsSoundCloudReleasesForAnArtistOnlyOnSoundCloud(t *test
 }
 
 func TestGetTopTracks_v2_dropsSoundCloudOnlyTracksWhenACatalogKnowsTheArtist(t *testing.T) {
-	topTracks := func(tracks ...search.SearchResult) *memory.ArtistContentProvider {
+	topTracks := func(tracks ...domain.SearchResult) *memory.ArtistContentProvider {
 		return &memory.ArtistContentProvider{
-			GetTopTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+			GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 				return tracks, nil
 			},
 		}
 	}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer:     topTracks(memory.TrackFrom(search.ProviderDeezer, "d-l", "Lithium", "Nirvana")),
-		search.ProviderSoundCloud: topTracks(memory.TrackFrom(search.ProviderSoundCloud, "sc-r", "Rainbow Chaser", "Nirvana")),
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer:     topTracks(memory.TrackFrom(domain.ProviderDeezer, "d-l", "Lithium", "Nirvana")),
+		domain.ProviderSoundCloud: topTracks(memory.TrackFrom(domain.ProviderSoundCloud, "sc-r", "Rainbow Chaser", "Nirvana")),
 	}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
 
-	resp, err := svc.GetTopTracks(t.Context(), search.ProviderDeezer, "d1", map[search.ProviderName]string{search.ProviderSoundCloud: "sc1"}, 5)
+	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSoundCloud: "sc1"}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1435,11 +1434,11 @@ func TestGetTopTracks_v2_dropsSoundCloudOnlyTracksWhenACatalogKnowsTheArtist(t *
 
 func countingEmptyProvider(albumCalls, trackCalls *int) *memory.ArtistContentProvider {
 	return &memory.ArtistContentProvider{
-		GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			*albumCalls++
 			return nil, nil
 		},
-		GetTopTracksFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			*trackCalls++
 			return nil, nil
 		},
@@ -1448,13 +1447,13 @@ func countingEmptyProvider(albumCalls, trackCalls *int) *memory.ArtistContentPro
 
 func TestGetArtistContent_v2_anEmptyAnswerIsNotFoundWithoutAskingAgain(t *testing.T) {
 	var albumCalls, trackCalls int
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: countingEmptyProvider(&albumCalls, &trackCalls)}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: countingEmptyProvider(&albumCalls, &trackCalls)}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{}))
 
-	albums, err := svc.GetAlbums(t.Context(), search.ProviderDeezer, "d1", nil, 50)
+	albums, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tracks, err := svc.GetTopTracks(t.Context(), search.ProviderDeezer, "d1", nil, 10)
+	tracks, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1472,33 +1471,33 @@ func TestGetTopTracks_v2_mixedDeezerPageTracksAreFilteredAgainstMB(t *testing.T)
 	for i := 1; i <= 30; i++ {
 		mbTitles = append(mbTitles, "che "+strings.Repeat("i", i))
 	}
-	mixedPage := func() []search.SearchResult {
-		page := make([]search.SearchResult, 0, 24)
+	mixedPage := func() []domain.SearchResult {
+		page := make([]domain.SearchResult, 0, 24)
 		for i := 1; i <= 20; i++ {
-			page = append(page, memory.V2Album(search.ProviderDeezer, "d-o"+strings.Repeat("i", i), "other "+strings.Repeat("i", i)))
+			page = append(page, memory.V2Album(domain.ProviderDeezer, "d-o"+strings.Repeat("i", i), "other "+strings.Repeat("i", i)))
 		}
 		for _, title := range mbTitles[:4] {
-			page = append(page, memory.V2Album(search.ProviderDeezer, "d-"+title, title))
+			page = append(page, memory.V2Album(domain.ProviderDeezer, "d-"+title, title))
 		}
 		return page
 	}
-	cleanPage := func() []search.SearchResult {
-		page := make([]search.SearchResult, 0, 10)
+	cleanPage := func() []domain.SearchResult {
+		page := make([]domain.SearchResult, 0, 10)
 		for _, title := range mbTitles[:10] {
-			page = append(page, memory.V2Album(search.ProviderDeezer, "d-"+title, title))
+			page = append(page, memory.V2Album(domain.ProviderDeezer, "d-"+title, title))
 		}
 		return page
 	}
-	deezerOnly := func() []search.SearchResult {
-		wtf := memory.TrackFrom(search.ProviderDeezer, "d-wtf", "wtf", "Che")
+	deezerOnly := func() []domain.SearchResult {
+		wtf := memory.TrackFrom(domain.ProviderDeezer, "d-wtf", "wtf", "Che")
 		wtf.Album = "other i"
-		hugo := memory.TrackFrom(search.ProviderDeezer, "d-hugo", "hugo", "Che")
+		hugo := memory.TrackFrom(domain.ProviderDeezer, "d-hugo", "hugo", "Che")
 		hugo.Album = "other ii"
-		return []search.SearchResult{wtf, hugo}
+		return []domain.SearchResult{wtf, hugo}
 	}
 	tests := []struct {
 		name   string
-		albums []search.SearchResult
+		albums []domain.SearchResult
 		anchor stubMBAnchor
 		want   []string
 	}{
@@ -1509,16 +1508,16 @@ func TestGetTopTracks_v2_mixedDeezerPageTracksAreFilteredAgainstMB(t *testing.T)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			deezer := &memory.ArtistContentProvider{
-				GetAlbumsFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+				GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					return tc.albums, nil
 				},
-				GetTopTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+				GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					return deezerOnly(), nil
 				},
 			}
-			svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}), searchtest.ArtistAnchor(tc.anchor))
+			svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer}, searchtest.ArtistIdentities(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}), searchtest.ArtistAnchor(tc.anchor))
 
-			resp, err := svc.GetTopTracks(t.Context(), search.ProviderDeezer, "d1", nil, 10)
+			resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", nil, 10)
 			if err != nil {
 				t.Fatalf("GetTopTracks error = %v", err)
 			}

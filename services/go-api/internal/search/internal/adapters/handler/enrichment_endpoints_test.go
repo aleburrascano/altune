@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
@@ -58,21 +57,21 @@ func newMemMBCache() *memMBCache {
 	return &memMBCache{pos: map[string]domain.MusicBrainzEnrichment{}, neg: map[string]bool{}}
 }
 
-func (c *memMBCache) Get(_ context.Context, kind search.ResultKind, mbid string) (domain.MusicBrainzEnrichment, bool, error) {
+func (c *memMBCache) Get(_ context.Context, kind domain.ResultKind, mbid string) (domain.MusicBrainzEnrichment, bool, error) {
 	v, ok := c.pos[kind.String()+mbid]
 	return v, ok, nil
 }
 
-func (c *memMBCache) Set(_ context.Context, kind search.ResultKind, mbid string, e domain.MusicBrainzEnrichment) error {
+func (c *memMBCache) Set(_ context.Context, kind domain.ResultKind, mbid string, e domain.MusicBrainzEnrichment) error {
 	c.pos[kind.String()+mbid] = e
 	return nil
 }
 
-func (c *memMBCache) GetNegative(_ context.Context, kind search.ResultKind, nameKey string) (bool, error) {
+func (c *memMBCache) GetNegative(_ context.Context, kind domain.ResultKind, nameKey string) (bool, error) {
 	return c.neg[kind.String()+nameKey], nil
 }
 
-func (c *memMBCache) SetNegative(_ context.Context, kind search.ResultKind, nameKey string) error {
+func (c *memMBCache) SetNegative(_ context.Context, kind domain.ResultKind, nameKey string) error {
 	c.neg[kind.String()+nameKey] = true
 	return nil
 }
@@ -84,12 +83,12 @@ type scriptedMBEnricher struct {
 	calls      int
 }
 
-func (f *scriptedMBEnricher) ResolveMBID(context.Context, search.ResultKind, string, string) (string, error) {
+func (f *scriptedMBEnricher) ResolveMBID(context.Context, domain.ResultKind, string, string) (string, error) {
 	f.calls++
 	return f.mbid, f.resolveErr
 }
 
-func (f *scriptedMBEnricher) Lookup(context.Context, search.ResultKind, string) (domain.MusicBrainzEnrichment, error) {
+func (f *scriptedMBEnricher) Lookup(context.Context, domain.ResultKind, string) (domain.MusicBrainzEnrichment, error) {
 	f.calls++
 	if f.lookupErr != nil {
 		return domain.EmptyEnrichment(), f.lookupErr
@@ -105,12 +104,12 @@ type scriptedDeezerEnricher struct {
 	calls      int
 }
 
-func (f *scriptedDeezerEnricher) ResolveID(context.Context, search.ResultKind, string, string) (string, error) {
+func (f *scriptedDeezerEnricher) ResolveID(context.Context, domain.ResultKind, string, string) (string, error) {
 	f.calls++
 	return f.id, f.resolveErr
 }
 
-func (f *scriptedDeezerEnricher) Lookup(context.Context, search.ResultKind, string) (domain.DeezerEnrichment, error) {
+func (f *scriptedDeezerEnricher) Lookup(context.Context, domain.ResultKind, string) (domain.DeezerEnrichment, error) {
 	f.calls++
 	if f.found != nil {
 		return *f.found, f.lookupErr
@@ -277,7 +276,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("artist kind returns 200 empty (only track and album enrich)", func(t *testing.T) {
 		e := domain.EmptyDeezerEnrichment()
 		e.BPM = 90
-		svc := searchtest.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, search.NoNameKeyedCache[domain.DeezerEnrichment]{})
+		svc := searchtest.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, service.NoNameKeyedCache[domain.DeezerEnrichment]{})
 		router := buildEnrichersRouter(t, handler.DetailEnrichers{Deezer: svc})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=artist&title=Nas", nil)
@@ -319,7 +318,7 @@ func TestHandleLyrics(t *testing.T) {
 		l.Writers = []string{"Nasir Jones"}
 		l.Copyright = "© 1994 Columbia"
 
-		svc := searchtest.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, search.NoNameKeyedCache[domain.DeezerLyrics]{})
+		svc := searchtest.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, service.NoNameKeyedCache[domain.DeezerLyrics]{})
 		router := buildEnrichersRouter(t, handler.DetailEnrichers{Lyrics: svc})
 
 		rec := discServe(t, router, http.MethodGet,
@@ -356,11 +355,11 @@ func TestHandleLyrics(t *testing.T) {
 
 type bareMBEnricher struct{}
 
-func (bareMBEnricher) ResolveMBID(context.Context, search.ResultKind, string, string) (string, error) {
+func (bareMBEnricher) ResolveMBID(context.Context, domain.ResultKind, string, string) (string, error) {
 	return "mbid-1", nil
 }
 
-func (bareMBEnricher) Lookup(context.Context, search.ResultKind, string) (domain.MusicBrainzEnrichment, error) {
+func (bareMBEnricher) Lookup(context.Context, domain.ResultKind, string) (domain.MusicBrainzEnrichment, error) {
 	return domain.MusicBrainzEnrichment{MBID: "mbid-1"}, nil
 }
 

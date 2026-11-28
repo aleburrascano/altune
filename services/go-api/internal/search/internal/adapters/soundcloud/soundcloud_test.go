@@ -1,7 +1,6 @@
 package soundcloud_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/artworkfallback"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/adapters/soundcloud"
@@ -30,7 +29,7 @@ const (
 )
 
 type searchFallback interface {
-	Search(ctx context.Context, query string, kinds map[search.ResultKind]bool) ([]search.SearchResult, error)
+	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
 }
 
 func soundCloudSite(api http.HandlerFunc) http.HandlerFunc {
@@ -128,14 +127,14 @@ func scSinglesAPI(t *testing.T, albumsJSON string, tracks http.HandlerFunc) http
 func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T) {
 	a := newTestSoundCloudAPI(t, scContentAPI(t), nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
 	if len(albums) != 2 {
 		t.Fatalf("got %d items, want 2 (1 EP + 1 standalone single): %+v", len(albums), albums)
 	}
-	var ep, single search.SearchResult
+	var ep, single domain.SearchResult
 	for _, r := range albums {
 		if r.RecordType == "single" {
 			single = r
@@ -146,7 +145,7 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 	if ep.Title != "Empty Clip" || ep.RecordType != "ep" {
 		t.Errorf("EP = %+v", ep)
 	}
-	if single.Title != "14 HAHAHA LOL" || single.Kind != search.ResultKindAlbum || single.TrackCount != 1 {
+	if single.Title != "14 HAHAHA LOL" || single.Kind != domain.ResultKindAlbum || single.TrackCount != 1 {
 		t.Errorf("single = %+v", single)
 	}
 	for _, r := range albums {
@@ -161,7 +160,7 @@ func TestSoundCloud_GetArtistAlbums_standaloneSinglesFailureStillReturnsPlaylist
 		w.WriteHeader(http.StatusInternalServerError)
 	}), nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -188,7 +187,7 @@ func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	ep, err := a.GetAlbumTracks(t.Context(), search.ProviderSoundCloud, "500")
+	ep, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "500")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(playlist): %v", err)
 	}
@@ -196,7 +195,7 @@ func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 		t.Fatalf("playlist tracks = %+v, want [Track A, Track B]", ep)
 	}
 
-	single, err := a.GetAlbumTracks(t.Context(), search.ProviderSoundCloud, "99")
+	single, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "99")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(single): %v", err)
 	}
@@ -215,7 +214,7 @@ func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 		inner(w, r)
 	}, nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "che")
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums(handle): %v", err)
 	}
@@ -229,15 +228,15 @@ func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 
 func TestSoundCloudAPIAdapter_Name(t *testing.T) {
 	a := mustSoundCloudAPI(t, http.DefaultClient, soundcloud.NoFallback{})
-	if got := a.Name(); got != search.ProviderSoundCloud {
-		t.Errorf("Name() = %v, want %v", got, search.ProviderSoundCloud)
+	if got := a.Name(); got != domain.ProviderSoundCloud {
+		t.Errorf("Name() = %v, want %v", got, domain.ProviderSoundCloud)
 	}
 }
 
 func TestSoundCloudAPIAdapter_SupportedKinds(t *testing.T) {
 	a := mustSoundCloudAPI(t, http.DefaultClient, soundcloud.NoFallback{})
 	kinds := a.SupportedKinds()
-	if !kinds[search.ResultKindTrack] || !kinds[search.ResultKindAlbum] || !kinds[search.ResultKindArtist] {
+	if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
 		t.Errorf("expected track+album+artist supported, got %+v", kinds)
 	}
 }
@@ -251,7 +250,7 @@ func TestSoundCloudAPIAdapter_SearchTimeout(t *testing.T) {
 
 func TestSoundCloudAPIAdapter_Search_NoKindsRequested(t *testing.T) {
 	a := mustSoundCloudAPI(t, http.DefaultClient, soundcloud.NoFallback{})
-	results, err := a.Search(context.Background(), "q", map[search.ResultKind]bool{})
+	results, err := a.Search(context.Background(), "q", map[domain.ResultKind]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -284,25 +283,25 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 	})
 
 	a := newTestSoundCloudAPI(t, api, nil)
-	results, err := a.Search(context.Background(), "Ken Carson", map[search.ResultKind]bool{
-		search.ResultKindTrack:  true,
-		search.ResultKindAlbum:  true,
-		search.ResultKindArtist: true,
+	results, err := a.Search(context.Background(), "Ken Carson", map[domain.ResultKind]bool{
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
+		domain.ResultKindArtist: true,
 	})
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
 
 	var nTrack, nAlbum, nArtist int
-	var album, artist search.SearchResult
+	var album, artist domain.SearchResult
 	for _, r := range results {
 		switch r.Kind {
-		case search.ResultKindTrack:
+		case domain.ResultKindTrack:
 			nTrack++
-		case search.ResultKindAlbum:
+		case domain.ResultKindAlbum:
 			nAlbum++
 			album = r
-		case search.ResultKindArtist:
+		case domain.ResultKindArtist:
 			nArtist++
 			artist = r
 		case domain.ResultKindUnknown, domain.ResultKindPlaylist:
@@ -321,7 +320,7 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 	if album.ImageURL != "https://i1.sndcdn.com/artworks-x-t500x500.jpg" {
 		t.Errorf("album artwork not upgraded: %q", album.ImageURL)
 	}
-	if artist.Title != "Ken Carson" || artist.Kind != search.ResultKindArtist {
+	if artist.Title != "Ken Carson" || artist.Kind != domain.ResultKindArtist {
 		t.Errorf("artist mapped wrong: %+v", artist)
 	}
 	if artist.ImageURL != "https://i1.sndcdn.com/avatars-y-t500x500.jpg" {
@@ -370,7 +369,7 @@ func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != search.ResultKindTrack {
+	if r.Kind != domain.ResultKindTrack {
 		t.Errorf("kind = %v, want track", r.Kind)
 	}
 	if r.Title != "Olympics" {
@@ -382,7 +381,7 @@ func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
 	if r.ImageURL != "https://i1.sndcdn.com/artworks-abc-t500x500.jpg" {
 		t.Errorf("artwork not upgraded to 500px: %q", r.ImageURL)
 	}
-	if len(r.Sources) != 1 || r.Sources[0].Provider != search.ProviderSoundCloud {
+	if len(r.Sources) != 1 || r.Sources[0].Provider != domain.ProviderSoundCloud {
 		t.Fatalf("source not soundcloud: %+v", r.Sources)
 	}
 	if r.Sources[0].ExternalID != "12345" {
@@ -509,8 +508,8 @@ func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_FallsBackOnResolveFailure(t *testing.T) {
-	fb := &recordingFallback{results: []search.SearchResult{
-		memory.NewResult(search.ResultKindTrack, "from yt-dlp"),
+	fb := &recordingFallback{results: []domain.SearchResult{
+		memory.NewResult(domain.ResultKindTrack, "from yt-dlp"),
 	}}
 	a := newSoundCloudAdapter(t, scHomeDown, fb)
 
@@ -551,7 +550,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), search.ResultKindArtist, "Underground Artist", "", "")
+	got, err := a.Resolve(context.Background(), domain.ResultKindArtist, "Underground Artist", "", "")
 	if err != nil {
 		t.Fatalf("Resolve(artist) error: %v", err)
 	}
@@ -559,7 +558,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 		t.Errorf("artist artwork = %q", got)
 	}
 
-	got, err = a.Resolve(context.Background(), search.ResultKindTrack, "Leak", "Some Artist", "")
+	got, err = a.Resolve(context.Background(), domain.ResultKindTrack, "Leak", "Some Artist", "")
 	if err != nil {
 		t.Fatalf("Resolve(track) error: %v", err)
 	}
@@ -585,7 +584,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_RejectsUnrelatedUpload(t *testing.T
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), search.ResultKindTrack, "No Idea", "Don Toliver", "")
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "No Idea", "Don Toliver", "")
 	if err != nil {
 		t.Fatalf("Resolve(track) error: %v", err)
 	}
@@ -593,7 +592,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_RejectsUnrelatedUpload(t *testing.T
 		t.Errorf("unrelated upload accepted as track artwork: %q", got)
 	}
 
-	got, err = a.Resolve(context.Background(), search.ResultKindArtist, "Don Toliver", "", "")
+	got, err = a.Resolve(context.Background(), domain.ResultKindArtist, "Don Toliver", "", "")
 	if err != nil {
 		t.Fatalf("Resolve(artist) error: %v", err)
 	}
@@ -611,7 +610,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_AcceptsUploaderCreditedInTitle(t *t
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), search.ResultKindTrack, "No Idea", "Don Toliver", "")
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "No Idea", "Don Toliver", "")
 	if err != nil {
 		t.Fatalf("Resolve(track) error: %v", err)
 	}
@@ -627,7 +626,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_MissReturnsEmpty(t *testing.T) {
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), search.ResultKindTrack, "Nothing Here", "", "")
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Nothing Here", "", "")
 	if err != nil || got != "" {
 		t.Fatalf("expected empty+nil on miss, got %q / %v", got, err)
 	}
@@ -639,7 +638,7 @@ func TestSoundCloudAPIAdapter_Resolve_SearchErrorIsUnavailable(t *testing.T) {
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), search.ResultKindTrack, "Nothing Here", "", "")
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Nothing Here", "", "")
 	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on search failure = %v, want discovery.ErrArtworkUnavailable", err)
 	}
@@ -669,19 +668,19 @@ func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	tracks, err := a.GetArtistTopTracks(context.Background(), search.ProviderSoundCloud, "659062284")
+	tracks, err := a.GetArtistTopTracks(context.Background(), domain.ProviderSoundCloud, "659062284")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks error: %v", err)
 	}
-	if len(tracks) != 2 || tracks[0].Title != "Yale" || tracks[0].Kind != search.ResultKindTrack {
+	if len(tracks) != 2 || tracks[0].Title != "Yale" || tracks[0].Kind != domain.ResultKindTrack {
 		t.Fatalf("unexpected top tracks: %+v", tracks)
 	}
 
-	albums, err := a.GetArtistAlbums(context.Background(), search.ProviderSoundCloud, "659062284")
+	albums, err := a.GetArtistAlbums(context.Background(), domain.ProviderSoundCloud, "659062284")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums error: %v", err)
 	}
-	if len(albums) != 1 || albums[0].Title != "More Chaos" || albums[0].Kind != search.ResultKindAlbum {
+	if len(albums) != 1 || albums[0].Title != "More Chaos" || albums[0].Kind != domain.ResultKindAlbum {
 		t.Fatalf("unexpected albums: %+v", albums)
 	}
 	if albums[0].RecordType != "album" {
@@ -748,10 +747,10 @@ func TestSoundCloudAPIAdapter_Search_UpgradesArtworkToTheLargestSize(t *testing.
 
 type recordingFallback struct {
 	called  bool
-	results []search.SearchResult
+	results []domain.SearchResult
 }
 
-func (f *recordingFallback) Search(_ context.Context, _ string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
+func (f *recordingFallback) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	f.called = true
 	return f.results, nil
 }
@@ -771,7 +770,7 @@ func TestSoundCloud_GetAlbumTracks_transientPlaylistErrorPropagates(t *testing.T
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	tracks, err := a.GetAlbumTracks(t.Context(), search.ProviderSoundCloud, "500")
+	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "500")
 	if err == nil {
 		t.Fatalf("expected an error on a 500 playlist fetch, got tracks: %+v", tracks)
 	}
@@ -882,7 +881,7 @@ func TestSoundCloud_GetArtistAlbums_singleReleaseDatePrefersReleaseThenDisplayTh
 				_, _ = w.Write([]byte(tracks))
 			}), nil)
 
-			albums, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "909010162")
+			albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
 			if err != nil || len(albums) != 1 {
 				t.Fatalf("GetArtistAlbums = (%+v, %v), want the one standalone single", albums, err)
 			}
@@ -904,7 +903,7 @@ func TestSoundCloud_GetArtistAlbums_mapsAStandaloneSingleAndSkipsUnusableTracks(
 		_, _ = w.Write([]byte(tracksJSON))
 	}), nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -912,7 +911,7 @@ func TestSoundCloud_GetArtistAlbums_mapsAStandaloneSingleAndSkipsUnusableTracks(
 		t.Fatalf("albums = %+v, want only the usable single (a non-track kind, a blank title and a zero id are skipped)", albums)
 	}
 	r := albums[0]
-	if r.Kind != search.ResultKindAlbum || r.RecordType != "single" || r.TrackCount != 1 {
+	if r.Kind != domain.ResultKindAlbum || r.RecordType != "single" || r.TrackCount != 1 {
 		t.Errorf("result = %+v, want an album-kind single with one track", r)
 	}
 	if r.ReleaseDate != "2026-07-20T00:00:00Z" {
@@ -942,7 +941,7 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_MapsCollection(t *testing.T) {
 	})
 
 	a := newTestSoundCloudAPI(t, api, nil)
-	results, err := a.GetRelatedTracks(context.Background(), search.ProviderSoundCloud, "12345")
+	results, err := a.GetRelatedTracks(context.Background(), domain.ProviderSoundCloud, "12345")
 	if err != nil {
 		t.Fatalf("GetRelatedTracks error: %v", err)
 	}
@@ -951,14 +950,14 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_MapsCollection(t *testing.T) {
 	}
 
 	first := results[0]
-	if first.Kind != search.ResultKindTrack {
+	if first.Kind != domain.ResultKindTrack {
 		t.Errorf("kind = %v, want track", first.Kind)
 	}
 	if first.Title != "Fell In Love" || first.Subtitle != "Lil Tecca" {
 		t.Errorf("first mapped wrong: %+v", first)
 	}
 	if len(first.Sources) != 1 ||
-		first.Sources[0].Provider != search.ProviderSoundCloud ||
+		first.Sources[0].Provider != domain.ProviderSoundCloud ||
 		first.Sources[0].ExternalID != "555" {
 		t.Errorf("source not soundcloud/555: %+v", first.Sources)
 	}
@@ -977,7 +976,7 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_Empty(t *testing.T) {
 	})
 
 	a := newTestSoundCloudAPI(t, api, nil)
-	results, err := a.GetRelatedTracks(context.Background(), search.ProviderSoundCloud, "999")
+	results, err := a.GetRelatedTracks(context.Background(), domain.ProviderSoundCloud, "999")
 	if err != nil {
 		t.Fatalf("GetRelatedTracks error: %v", err)
 	}
@@ -992,7 +991,7 @@ func TestSoundCloud_GetArtistAlbums_singlesFailureLogsAWarningNamingTheUser(t *t
 		w.WriteHeader(http.StatusInternalServerError)
 	}), nil)
 
-	if _, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "909010162"); err != nil {
+	if _, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162"); err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
 
@@ -1021,7 +1020,7 @@ func TestSoundCloud_GetArtistAlbums_malformedSinglesBodyStillReturnsPlaylistAlbu
 		_, _ = w.Write([]byte(`{"collection":[{"id":`))
 	}), nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -1045,7 +1044,7 @@ func TestSoundCloud_GetArtistAlbums_playlistsFailureIsStillAnError(t *testing.T)
 	})
 	a := newTestSoundCloudAPI(t, api, nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), search.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
 	if err == nil {
 		t.Fatalf("GetArtistAlbums with playlists answering 500 = (%+v, nil), want an error", albums)
 	}
@@ -1056,7 +1055,7 @@ func TestSoundCloudAPIAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			a := newTestSoundCloudAPI(t, handler, nil)
 
-			url, err := a.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
+			url, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
 			if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
 			}
@@ -1072,7 +1071,7 @@ func TestSoundCloudAPIAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing
 		t.Run(name, func(t *testing.T) {
 			a := newTestSoundCloudAPI(t, handler, nil)
 
-			url, err := a.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
+			url, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
 			if url != "" || err != nil {
 				t.Errorf("Resolve on %s = (%q, %v), want (\"\", nil)", name, url, err)
 			}
@@ -1084,7 +1083,7 @@ func TestSoundCloudAPIAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testin
 	srv, ctx := contracttest.CancelMidRequestServer(t)
 	a := newTestSoundCloudAPI(t, srv.Config.Handler.ServeHTTP, nil)
 
-	url, err := a.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
+	url, err := a.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
@@ -1099,7 +1098,7 @@ func TestSoundCloudAPIAdapter_Resolve_AlreadyCancelledContextIsUnavailableNotAMi
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	url, err := a.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
+	url, err := a.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
@@ -1238,7 +1237,7 @@ func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFai
 	for name, broken := range map[string]ports.ArtworkLookup{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
 		t.Run(name, func(t *testing.T) {
 			chain := artworkfallback.NewChainedArtworkLookup(broken, theaudiodb.New(contracttest.NewClient(healthy.URL), theaudiodb.WithAPIKey("k")))
-			url, source, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
+			url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
 			if err != nil {
 				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)
 			}
@@ -1257,7 +1256,7 @@ func TestChainedArtworkResolver_MissAfterAProviderFailsIsDegradedAndUnavailable(
 	for name, broken := range map[string]ports.ArtworkLookup{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
 		t.Run(name, func(t *testing.T) {
 			chain := artworkfallback.NewChainedArtworkLookup(broken, &memory.ArtworkLookup{})
-			url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
+			url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
 			if url != "" || !errors.Is(err, domain.ErrArtworkDegraded) || !errors.Is(err, domain.ErrArtworkUnavailable) {
 				t.Errorf("ResolveTagged after %s fails then a miss = (%q, %v), want ErrArtworkDegraded and ErrArtworkUnavailable", name, url, err)
 			}

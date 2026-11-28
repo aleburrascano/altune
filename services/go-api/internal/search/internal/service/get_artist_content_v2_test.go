@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
@@ -15,24 +14,24 @@ import (
 func TestFanOutByIdentity_SlowProviderIsCutOffAtTheTenSecondDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fast := &memory.ArtistContentProvider{
-			GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-				return []search.SearchResult{memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
+			GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+				return []domain.SearchResult{memory.V2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 			},
 		}
 		slow := &memory.ArtistContentProvider{
-			GetAlbumsFn: func(ctx context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+			GetAlbumsFn: func(ctx context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 				<-ctx.Done()
 				return nil, ctx.Err()
 			},
 		}
 		store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
-		svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-			search.ProviderDeezer: fast,
+		svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: fast,
 			domain.ProviderITunes: slow,
 		}, searchtest.ArtistIdentities(store))
 
 		start := time.Now()
-		resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "d1", nil, 50)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 		if err != nil {
 			t.Fatalf("GetAlbums error = %v", err)
 		}

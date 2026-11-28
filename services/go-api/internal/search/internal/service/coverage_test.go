@@ -1,9 +1,9 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"strings"
@@ -24,8 +24,8 @@ func TestCoverage_BuildLogsHowManySongsArePlayableLinkOutOrSilent(t *testing.T) 
 		Songs:       list,
 		DetailByID:  map[int]domain.GeniusSongDetail{1: {AudioLinks: link}, 2: {AudioLinks: link}},
 	}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{})))
-	if _, err := svc.List(context.Background(), search.ProviderDeezer, "27", "Drake", nil); err != nil {
+	svc := searchtest.MustUnreleased(service.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, service.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2}, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{})))
+	if _, err := svc.List(context.Background(), domain.ProviderDeezer, "27", "Drake", nil); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	out := logs.String()

@@ -1,8 +1,8 @@
 package soundcloud_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/soundcloud"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"net/http"
 	"os"
@@ -17,7 +17,7 @@ func TestSoundCloudDiscographyLive(t *testing.T) {
 	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, soundcloud.NoFallback{})
 	ctx := context.Background()
 
-	albums, err := a.GetArtistAlbums(ctx, search.ProviderSoundCloud, "che")
+	albums, err := a.GetArtistAlbums(ctx, domain.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums(handle): %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, soundcloud.NoFallback{})
 	ctx := context.Background()
 
-	albums, err := a.GetArtistAlbums(ctx, search.ProviderSoundCloud, "che")
+	albums, err := a.GetArtistAlbums(ctx, domain.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 		t.Fatal("did not find '14 HAHAHA LOL' to test")
 	}
 
-	single, err := a.GetAlbumTracks(ctx, search.ProviderSoundCloud, singleID)
+	single, err := a.GetAlbumTracks(ctx, domain.ProviderSoundCloud, singleID)
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(single): %v", err)
 	}
@@ -77,7 +77,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	}
 
 	if epID != "" {
-		ep, err := a.GetAlbumTracks(ctx, search.ProviderSoundCloud, epID)
+		ep, err := a.GetAlbumTracks(ctx, domain.ProviderSoundCloud, epID)
 		if err != nil {
 			t.Fatalf("GetAlbumTracks(ep): %v", err)
 		}
@@ -88,7 +88,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	}
 }
 
-func titleOf(rs []search.SearchResult) string {
+func titleOf(rs []domain.SearchResult) string {
 	if len(rs) == 0 {
 		return ""
 	}

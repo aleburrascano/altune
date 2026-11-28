@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/artworkfallback"
 	"altune/go-api/internal/search/internal/adapters/coverartarchive"
 	"altune/go-api/internal/search/internal/adapters/discogs"
@@ -36,11 +35,11 @@ type callerMBIDEnricher struct {
 	enrichment domain.MusicBrainzEnrichment
 }
 
-func (f *callerMBIDEnricher) ResolveMBID(context.Context, search.ResultKind, string, string) (string, error) {
+func (f *callerMBIDEnricher) ResolveMBID(context.Context, domain.ResultKind, string, string) (string, error) {
 	return "", nil
 }
 
-func (f *callerMBIDEnricher) Lookup(context.Context, search.ResultKind, string) (domain.MusicBrainzEnrichment, error) {
+func (f *callerMBIDEnricher) Lookup(context.Context, domain.ResultKind, string) (domain.MusicBrainzEnrichment, error) {
 	return f.enrichment, nil
 }
 
@@ -53,21 +52,21 @@ func newMemEnrichmentCache() *memEnrichmentCache {
 	return &memEnrichmentCache{positive: map[string]domain.MusicBrainzEnrichment{}, negative: map[string]bool{}}
 }
 
-func (c *memEnrichmentCache) Get(_ context.Context, kind search.ResultKind, mbid string) (domain.MusicBrainzEnrichment, bool, error) {
+func (c *memEnrichmentCache) Get(_ context.Context, kind domain.ResultKind, mbid string) (domain.MusicBrainzEnrichment, bool, error) {
 	e, ok := c.positive[kind.String()+"|"+mbid]
 	return e, ok, nil
 }
 
-func (c *memEnrichmentCache) Set(_ context.Context, kind search.ResultKind, mbid string, e domain.MusicBrainzEnrichment) error {
+func (c *memEnrichmentCache) Set(_ context.Context, kind domain.ResultKind, mbid string, e domain.MusicBrainzEnrichment) error {
 	c.positive[kind.String()+"|"+mbid] = e
 	return nil
 }
 
-func (c *memEnrichmentCache) GetNegative(_ context.Context, kind search.ResultKind, nameKey string) (bool, error) {
+func (c *memEnrichmentCache) GetNegative(_ context.Context, kind domain.ResultKind, nameKey string) (bool, error) {
 	return c.negative[kind.String()+"|"+nameKey], nil
 }
 
-func (c *memEnrichmentCache) SetNegative(_ context.Context, kind search.ResultKind, nameKey string) error {
+func (c *memEnrichmentCache) SetNegative(_ context.Context, kind domain.ResultKind, nameKey string) error {
 	c.negative[kind.String()+"|"+nameKey] = true
 	return nil
 }
@@ -86,7 +85,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 	enrichment.MBID, enrichment.Genres, enrichment.Year = "mbid-1", []string{"hip hop"}, 2017
 	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), service.NoDetailsMBIDIndex{})
 
-	got, err := svc.Execute(context.Background(), search.ResultKindAlbum, "Some Other Album", "Other Artist", "mbid-1")
+	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "Some Other Album", "Other Artist", "mbid-1")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -111,7 +110,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 	enrichment.ExternalIDs = map[domain.ProviderKey]string{"discogs": "38"}
 	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), service.NoDetailsMBIDIndex{})
 
-	got, err := svc.Execute(context.Background(), search.ResultKindArtist, "Some Other Artist Name", "", "mbid-artist-1")
+	got, err := svc.Execute(context.Background(), domain.ResultKindArtist, "Some Other Artist Name", "", "mbid-artist-1")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}

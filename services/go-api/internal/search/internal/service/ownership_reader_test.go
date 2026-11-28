@@ -1,8 +1,9 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -13,11 +14,11 @@ import (
 )
 
 type fakeLister struct {
-	tracks []search.OwnedTrack
+	tracks []ports.OwnedTrack
 	err    error
 }
 
-func (f *fakeLister) ListOwnedTracks(context.Context, ids.UserId) ([]search.OwnedTrack, error) {
+func (f *fakeLister) ListOwnedTracks(context.Context, ids.UserId) ([]ports.OwnedTrack, error) {
 	return f.tracks, f.err
 }
 
@@ -26,7 +27,7 @@ func testUser() ids.UserId {
 }
 
 func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
-	reader := search.NewOwnershipReader(&fakeLister{tracks: []search.OwnedTrack{
+	reader := service.NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
 		{TrackID: "track-1", Title: "Bohemian Rhapsody", Artist: "Queen", AcquisitionStatus: "ready"},
 	}})
 
@@ -45,7 +46,7 @@ func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
-	reader := search.NewOwnershipReader(&fakeLister{tracks: []search.OwnedTrack{
+	reader := service.NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
 		{TrackID: "first", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "ready"},
 		{TrackID: "second", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "failed"},
 	}})
@@ -58,7 +59,7 @@ func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_LiveLibraryTrackIsNotKeyedAsTheStudioSong(t *testing.T) {
-	reader := search.NewOwnershipReader(&fakeLister{tracks: []search.OwnedTrack{
+	reader := service.NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
 		{TrackID: "live", Title: "Song (Live)", Artist: "X"},
 	}})
 
@@ -75,7 +76,7 @@ func TestOwnedByTitleArtist_LiveLibraryTrackIsNotKeyedAsTheStudioSong(t *testing
 }
 
 func TestOwnedByTitleArtist_ISRCReachesTheTrackThatLostTheNameKey(t *testing.T) {
-	reader := search.NewOwnershipReader(&fakeLister{tracks: []search.OwnedTrack{
+	reader := service.NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
 		{TrackID: "first", Title: "Alive", Artist: "Pearl Jam", ISRC: "USSM19100001"},
 		{TrackID: "second", Title: "Alive", Artist: "Pearl Jam", ISRC: "us-sm1-91-00002"},
 	}})
@@ -93,7 +94,7 @@ func TestOwnedByTitleArtist_ISRCReachesTheTrackThatLostTheNameKey(t *testing.T) 
 }
 
 func TestOwnedByTitleArtist_PropagatesError(t *testing.T) {
-	reader := search.NewOwnershipReader(&fakeLister{err: errors.New("db down")})
+	reader := service.NewOwnershipReader(&fakeLister{err: errors.New("db down")})
 
 	if _, err := reader.OwnedByTitleArtist(context.Background(), testUser()); err == nil {
 		t.Fatal("expected an error")
@@ -101,7 +102,7 @@ func TestOwnedByTitleArtist_PropagatesError(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_ZeroRefsGivesEmptyMap(t *testing.T) {
-	reader := search.NewOwnershipReader(&fakeLister{})
+	reader := service.NewOwnershipReader(&fakeLister{})
 
 	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
 	if err != nil {
@@ -114,7 +115,7 @@ func TestOwnedByTitleArtist_ZeroRefsGivesEmptyMap(t *testing.T) {
 
 func TestOwnedByTitleArtist_OneTrackKeepsEveryField(t *testing.T) {
 	num := 4
-	reader := search.NewOwnershipReader(&fakeLister{tracks: []search.OwnedTrack{
+	reader := service.NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
 		{TrackID: "t-1", Title: "Black", Artist: "Pearl Jam", AcquisitionStatus: "ready", TrackNumber: &num},
 	}})
 
@@ -133,7 +134,7 @@ func TestOwnedByTitleArtist_OneTrackKeepsEveryField(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_SameTitleArtistDifferentCaseKeepsFirst(t *testing.T) {
-	reader := search.NewOwnershipReader(&fakeLister{tracks: []search.OwnedTrack{
+	reader := service.NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
 		{TrackID: "first", Title: "Alive", Artist: "Pearl Jam"},
 		{TrackID: "second", Title: "ALIVE", Artist: "PEARL JAM"},
 	}})
@@ -152,7 +153,7 @@ func TestOwnedByTitleArtist_SameTitleArtistDifferentCaseKeepsFirst(t *testing.T)
 
 func TestOwnedByTitleArtist_WrapsListerError(t *testing.T) {
 	cause := errors.New("db down")
-	reader := search.NewOwnershipReader(&fakeLister{err: cause})
+	reader := service.NewOwnershipReader(&fakeLister{err: cause})
 
 	_, err := reader.OwnedByTitleArtist(context.Background(), testUser())
 	if !errors.Is(err, cause) {
@@ -164,14 +165,14 @@ func TestOwnedByTitleArtist_WrapsListerError(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_SecondCallReturnsSecondMap(t *testing.T) {
-	lister := &fakeLister{tracks: []search.OwnedTrack{{TrackID: "a", Title: "One", Artist: "X"}}}
-	reader := search.NewOwnershipReader(lister)
+	lister := &fakeLister{tracks: []ports.OwnedTrack{{TrackID: "a", Title: "One", Artist: "X"}}}
+	reader := service.NewOwnershipReader(lister)
 
 	first, err := reader.OwnedByTitleArtist(context.Background(), testUser())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	lister.tracks = []search.OwnedTrack{{TrackID: "b", Title: "Two", Artist: "Y"}}
+	lister.tracks = []ports.OwnedTrack{{TrackID: "b", Title: "Two", Artist: "Y"}}
 	second, err := reader.OwnedByTitleArtist(context.Background(), testUser())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

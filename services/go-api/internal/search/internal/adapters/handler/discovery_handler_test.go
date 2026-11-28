@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
@@ -50,24 +49,24 @@ func signedInAs(userFor func(token string) ids.UserId) func(http.Handler) http.H
 var discAsTestUser = signedInAs(func(string) ids.UserId { return discTestUserId })
 
 type fakeSearchProvider struct {
-	name    search.ProviderName
-	results []search.SearchResult
+	name    domain.ProviderName
+	results []domain.SearchResult
 	err     error
 }
 
-func (p *fakeSearchProvider) Name() search.ProviderName { return p.name }
-func (p *fakeSearchProvider) Search(_ context.Context, _ string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
+func (p *fakeSearchProvider) Name() domain.ProviderName { return p.name }
+func (p *fakeSearchProvider) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	if p.err != nil {
 		return nil, p.err
 	}
 	return p.results, nil
 }
 
-func (p *fakeSearchProvider) SupportedKinds() map[search.ResultKind]bool {
-	return map[search.ResultKind]bool{
-		search.ResultKindTrack:  true,
-		search.ResultKindAlbum:  true,
-		search.ResultKindArtist: true,
+func (p *fakeSearchProvider) SupportedKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
+		domain.ResultKindArtist: true,
 	}
 }
 
@@ -161,19 +160,19 @@ func discAssertProblem(t *testing.T, rec *httptest.ResponseRecorder) {
 func buildDiscoveryRouter(t *testing.T,
 	searchProvider *fakeSearchProvider,
 	historyRepo *fakeSearchHistoryRepo,
-	albumProviders map[search.ProviderName]ports.AlbumContentProvider,
-	artistProviders map[search.ProviderName]ports.ArtistContentProvider,
+	albumProviders map[domain.ProviderName]ports.AlbumContentProvider,
+	artistProviders map[domain.ProviderName]ports.ArtistContentProvider,
 ) chi.Router {
 	bg := searchtest.NewTracker(t)
-	var providers []search.SearchProvider
+	var providers []ports.SearchProvider
 	if searchProvider != nil {
 		providers = append(providers, searchProvider)
 	}
 
-	cb := search.NewCircuitBreaker(clock.Now)
-	withHistory := func(*search.Collaborators) {}
+	cb := service.NewCircuitBreaker(clock.Now)
+	withHistory := func(*service.Collaborators) {}
 	if historyRepo != nil {
-		withHistory = func(c *search.Collaborators) { c.History = historyRepo }
+		withHistory = func(c *service.Collaborators) { c.History = historyRepo }
 	}
 	searchSvc := searchtest.NewSearchServiceWith(t, bg, providers, cb, withHistory)
 	historySvc := searchtest.NewListHistory(t, historyRepo)
@@ -227,12 +226,12 @@ func TestHandleRecordEvent(t *testing.T) {
 
 type nopEventStore struct{}
 
-func (nopEventStore) Append(context.Context, search.InteractionEvent) error { return nil }
+func (nopEventStore) Append(context.Context, domain.InteractionEvent) error { return nil }
 
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now)),
+		Search: searchtest.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
 		Event:  searchtest.NewRecordEvent(t, nopEventStore{}),
 	}), time.Now)
 	router := chi.NewRouter()
@@ -262,7 +261,7 @@ func TestHandleRecordEvent_StoresTheCorrelationId(t *testing.T) {
 	store := &recordingEventStore{}
 	bg := searchtest.NewTracker(t)
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now)),
+		Search: searchtest.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
 		Event:  searchtest.NewRecordEvent(t, store),
 	}), time.Now)
 	router := chi.NewRouter()
@@ -282,7 +281,7 @@ func TestHandleRecordEvent_DropsAnOversizedCorrelationId(t *testing.T) {
 	store := &recordingEventStore{}
 	bg := searchtest.NewTracker(t)
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now)),
+		Search: searchtest.NewSearchService(t, bg, nil, service.NewCircuitBreaker(clock.Now)),
 		Event:  searchtest.NewRecordEvent(t, store),
 	}), time.Now)
 	router := chi.NewRouter()
@@ -302,20 +301,20 @@ func TestHandleSearch(t *testing.T) {
 	tests := []struct {
 		name       string
 		query      string
-		results    []search.SearchResult
+		results    []domain.SearchResult
 		wantStatus int
 	}{
 		{
 			name:  "valid query returns results",
 			query: "?q=test+query",
-			results: []search.SearchResult{
+			results: []domain.SearchResult{
 				memory.NewResult(
-					search.ResultKindTrack,
+					domain.ResultKindTrack,
 					"Test Song",
 					memory.WithSubtitle("Test Artist"),
 					memory.WithConfidence(domain.ConfidenceLow),
-					memory.WithSources([]search.ProviderLink{
-						{Provider: search.ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/123"},
+					memory.WithSources([]domain.ProviderLink{
+						{Provider: domain.ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/123"},
 					}),
 				),
 			},
@@ -334,7 +333,7 @@ func TestHandleSearch(t *testing.T) {
 		{
 			name:       "valid query with explicit kinds",
 			query:      "?q=test&kinds=track,album",
-			results:    []search.SearchResult{},
+			results:    []domain.SearchResult{},
 			wantStatus: http.StatusOK,
 		},
 	}
@@ -342,7 +341,7 @@ func TestHandleSearch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			provider := &fakeSearchProvider{
-				name:    search.ProviderDeezer,
+				name:    domain.ProviderDeezer,
 				results: tt.results,
 			}
 			historyRepo := &fakeSearchHistoryRepo{}
@@ -372,16 +371,16 @@ func TestHandleSearch(t *testing.T) {
 
 func TestHandleSearch_ResponseShape(t *testing.T) {
 	provider := &fakeSearchProvider{
-		name: search.ProviderDeezer,
-		results: []search.SearchResult{
+		name: domain.ProviderDeezer,
+		results: []domain.SearchResult{
 			memory.NewResult(
-				search.ResultKindTrack,
+				domain.ResultKindTrack,
 				"Shape Test",
 				memory.WithSubtitle("Shape Artist"),
 				memory.WithImageURL("https://img.example.com/art.jpg"),
 				memory.WithConfidence(domain.ConfidenceHigh),
-				memory.WithSources([]search.ProviderLink{
-					{Provider: search.ProviderDeezer, ExternalID: "456", URL: "https://deezer.com/456"},
+				memory.WithSources([]domain.ProviderLink{
+					{Provider: domain.ProviderDeezer, ExternalID: "456", URL: "https://deezer.com/456"},
 				}),
 				memory.WithExtras(map[string]any{"duration": 180}),
 			),
@@ -495,13 +494,13 @@ func TestHandleAlbumTracks(t *testing.T) {
 			name: "valid request returns OK with items",
 			path: "/discovery/albums/deezer/12345/tracks",
 			albumProv: &memory.AlbumContentProvider{
-				Results: []search.SearchResult{
+				Results: []domain.SearchResult{
 					memory.NewResult(
-						search.ResultKindTrack,
+						domain.ResultKindTrack,
 						"Album Track 1",
 						memory.WithConfidence(domain.ConfidenceLow),
-						memory.WithSources([]search.ProviderLink{
-							{Provider: search.ProviderDeezer, ExternalID: "t1", URL: "https://deezer.com/t1"},
+						memory.WithSources([]domain.ProviderLink{
+							{Provider: domain.ProviderDeezer, ExternalID: "t1", URL: "https://deezer.com/t1"},
 						}),
 					),
 				},
@@ -511,15 +510,15 @@ func TestHandleAlbumTracks(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/albums/unknown_provider/12345/tracks",
-			albumProv:  &memory.AlbumContentProvider{Results: []search.SearchResult{}},
+			albumProv:  &memory.AlbumContentProvider{Results: []domain.SearchResult{}},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
-				search.ProviderDeezer: tt.albumProv,
+			albumProviders := map[domain.ProviderName]ports.AlbumContentProvider{
+				domain.ProviderDeezer: tt.albumProv,
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -554,13 +553,13 @@ func TestHandleArtistTopTracks(t *testing.T) {
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/top-tracks",
 			artistProv: &memory.ArtistContentProvider{
-				TopTracks: []search.SearchResult{
+				TopTracks: []domain.SearchResult{
 					memory.NewResult(
-						search.ResultKindTrack,
+						domain.ResultKindTrack,
 						"Top Song",
 						memory.WithConfidence(domain.ConfidenceLow),
-						memory.WithSources([]search.ProviderLink{
-							{Provider: search.ProviderDeezer, ExternalID: "t1", URL: "https://deezer.com/t1"},
+						memory.WithSources([]domain.ProviderLink{
+							{Provider: domain.ProviderDeezer, ExternalID: "t1", URL: "https://deezer.com/t1"},
 						}),
 					),
 				},
@@ -577,8 +576,8 @@ func TestHandleArtistTopTracks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: tt.artistProv,
+			artistProviders := map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -605,13 +604,13 @@ func TestHandleArtistAlbums(t *testing.T) {
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/albums",
 			artistProv: &memory.ArtistContentProvider{
-				Albums: []search.SearchResult{
+				Albums: []domain.SearchResult{
 					memory.NewResult(
-						search.ResultKindAlbum,
+						domain.ResultKindAlbum,
 						"Greatest Hits",
 						memory.WithConfidence(domain.ConfidenceLow),
-						memory.WithSources([]search.ProviderLink{
-							{Provider: search.ProviderDeezer, ExternalID: "a1", URL: "https://deezer.com/a1"},
+						memory.WithSources([]domain.ProviderLink{
+							{Provider: domain.ProviderDeezer, ExternalID: "a1", URL: "https://deezer.com/a1"},
 						}),
 					),
 				},
@@ -628,8 +627,8 @@ func TestHandleArtistAlbums(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: tt.artistProv,
+			artistProviders := map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -649,11 +648,11 @@ type fakeMetadataEnricher struct {
 	enrichment domain.MusicBrainzEnrichment
 }
 
-func (f *fakeMetadataEnricher) ResolveMBID(_ context.Context, _ search.ResultKind, _, _ string) (string, error) {
+func (f *fakeMetadataEnricher) ResolveMBID(_ context.Context, _ domain.ResultKind, _, _ string) (string, error) {
 	return "resolved-mbid", nil
 }
 
-func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ search.ResultKind, _ string) (domain.MusicBrainzEnrichment, error) {
+func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ domain.ResultKind, _ string) (domain.MusicBrainzEnrichment, error) {
 	return f.enrichment, nil
 }
 
@@ -731,11 +730,11 @@ func TestHandleEnrichment(t *testing.T) {
 }
 
 type fakeRelatedTracksProvider struct {
-	results []search.SearchResult
+	results []domain.SearchResult
 	err     error
 }
 
-func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
+func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 	if p.err != nil {
 		return nil, p.err
 	}
@@ -756,14 +755,14 @@ func buildRelatedRouter(t testing.TB, provider *fakeRelatedTracksProvider) chi.R
 
 func TestHandleRelatedTracks(t *testing.T) {
 	t.Run("soundcloud source returns mapped items", func(t *testing.T) {
-		provider := &fakeRelatedTracksProvider{results: []search.SearchResult{
+		provider := &fakeRelatedTracksProvider{results: []domain.SearchResult{
 			memory.NewResult(
-				search.ResultKindTrack,
+				domain.ResultKindTrack,
 				"Fell In Love",
 				memory.WithSubtitle("Lil Tecca"),
 				memory.WithConfidence(domain.ConfidenceLow),
-				memory.WithSources([]search.ProviderLink{
-					{Provider: search.ProviderSoundCloud, ExternalID: "555", URL: "https://soundcloud.com/x/fil"},
+				memory.WithSources([]domain.ProviderLink{
+					{Provider: domain.ProviderSoundCloud, ExternalID: "555", URL: "https://soundcloud.com/x/fil"},
 				}),
 			),
 		}}

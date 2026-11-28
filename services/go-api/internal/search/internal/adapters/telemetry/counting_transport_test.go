@@ -1,7 +1,6 @@
 package telemetry_test
 
 import (
-	"altune/go-api/internal/search"
 	searchtelemetry "altune/go-api/internal/search/internal/adapters/telemetry"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/telemetry"
@@ -44,7 +43,7 @@ func roundTrip(t *testing.T, reg *telemetry.Registry, base http.RoundTripper, ra
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	return search.NewCountingTransport(base, reg).RoundTrip(req)
+	return searchtelemetry.NewCountingTransport(base, reg).RoundTrip(req)
 }
 
 func delta(before, after searchtelemetry.Outcomes) searchtelemetry.Outcomes {
@@ -84,7 +83,7 @@ func TestCountsPerProviderAndOutcome(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			before := search.ReadProviderMetricsSnapshot(reg)
+			before := searchtelemetry.ReadSnapshot(reg)
 			resp, err := roundTrip(t, reg, &stubTransport{status: c.status, err: c.err}, c.url)
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
@@ -92,7 +91,7 @@ func TestCountsPerProviderAndOutcome(t *testing.T) {
 			if c.err != nil && !errors.Is(err, c.err) {
 				t.Fatalf("err = %v, want %v", err, c.err)
 			}
-			got := delta(before[c.wantProvider], search.ReadProviderMetricsSnapshot(reg)[c.wantProvider])
+			got := delta(before[c.wantProvider], searchtelemetry.ReadSnapshot(reg)[c.wantProvider])
 			if got != c.want {
 				t.Fatalf("provider %q delta = %+v, want %+v", c.wantProvider, got, c.want)
 			}
@@ -105,7 +104,7 @@ func TestTransparentDelegate(t *testing.T) {
 	t.Run("response and request pass through unchanged", func(t *testing.T) {
 		stub := &stubTransport{status: http.StatusCreated}
 		req, _ := http.NewRequest(http.MethodGet, "https://api.deezer.com/x?q=y", nil)
-		resp, err := search.NewCountingTransport(stub, reg).RoundTrip(req)
+		resp, err := searchtelemetry.NewCountingTransport(stub, reg).RoundTrip(req)
 		if err != nil {
 			t.Fatalf("err = %v, want nil", err)
 		}
@@ -123,7 +122,7 @@ func TestTransparentDelegate(t *testing.T) {
 
 	t.Run("error passes through verbatim", func(t *testing.T) {
 		sentinel := errors.New("boom")
-		resp, err := search.NewCountingTransport(&stubTransport{err: sentinel}, reg).RoundTrip(
+		resp, err := searchtelemetry.NewCountingTransport(&stubTransport{err: sentinel}, reg).RoundTrip(
 			httptest.NewRequest(http.MethodGet, "https://api.deezer.com/x", nil))
 		if resp != nil {
 			_ = resp.Body.Close()
@@ -150,7 +149,7 @@ func TestSnapshotHasNoPII(t *testing.T) {
 	for _, p := range providerLabels {
 		allowed[p] = true
 	}
-	for key := range search.ReadProviderMetricsSnapshot(reg) {
+	for key := range searchtelemetry.ReadSnapshot(reg) {
 		if !allowed[key] {
 			t.Errorf("snapshot key %q is not a fixed provider label", key)
 		}
@@ -169,7 +168,7 @@ func TestKeySetIsBounded(t *testing.T) {
 			_ = resp.Body.Close()
 		}
 	}
-	if got := len(search.ReadProviderMetricsSnapshot(reg)); got != len(providerLabels) {
+	if got := len(searchtelemetry.ReadSnapshot(reg)); got != len(providerLabels) {
 		t.Fatalf("snapshot has %d keys, want fixed %d", got, len(providerLabels))
 	}
 }
@@ -177,14 +176,14 @@ func TestKeySetIsBounded(t *testing.T) {
 func TestConcurrentRoundTripsCountExactly(t *testing.T) {
 	reg := telemetry.NewRegistry()
 	const goroutines, perGoroutine = 16, 64
-	before := search.ReadProviderMetricsSnapshot(reg)["deezer"]
+	before := searchtelemetry.ReadSnapshot(reg)["deezer"]
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 	for g := 0; g < goroutines; g++ {
 		go func() {
 			defer wg.Done()
-			ct := search.NewCountingTransport(&stubTransport{status: 200}, reg)
+			ct := searchtelemetry.NewCountingTransport(&stubTransport{status: 200}, reg)
 			for i := 0; i < perGoroutine; i++ {
 				req := httptest.NewRequest(http.MethodGet, "https://api.deezer.com/x", nil)
 				resp, err := ct.RoundTrip(req)
@@ -198,7 +197,7 @@ func TestConcurrentRoundTripsCountExactly(t *testing.T) {
 	}
 	wg.Wait()
 
-	got := delta(before, search.ReadProviderMetricsSnapshot(reg)["deezer"])
+	got := delta(before, searchtelemetry.ReadSnapshot(reg)["deezer"])
 	if want := (searchtelemetry.Outcomes{OK: goroutines * perGoroutine}); got != want {
 		t.Fatalf("concurrent deezer delta = %+v, want %+v", got, want)
 	}
@@ -206,7 +205,7 @@ func TestConcurrentRoundTripsCountExactly(t *testing.T) {
 
 func TestNilBaseDoesNotPanic(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:0/x", nil)
-	resp, err := search.NewCountingTransport(nil, telemetry.NewRegistry()).RoundTrip(req)
+	resp, err := searchtelemetry.NewCountingTransport(nil, telemetry.NewRegistry()).RoundTrip(req)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
@@ -231,7 +230,7 @@ func TestMetadataProvidersGetTheirOwnBucket(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.url, func(t *testing.T) {
 			reg := telemetry.NewRegistry()
-			before := search.ReadProviderMetricsSnapshot(reg)
+			before := searchtelemetry.ReadSnapshot(reg)
 			if _, ok := before[c.provider]; !ok {
 				t.Fatalf("snapshot has no %q key", c.provider)
 			}
@@ -239,7 +238,7 @@ func TestMetadataProvidersGetTheirOwnBucket(t *testing.T) {
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
 			}
-			after := search.ReadProviderMetricsSnapshot(reg)
+			after := searchtelemetry.ReadSnapshot(reg)
 			if got := delta(before[c.provider], after[c.provider]); got != (searchtelemetry.Outcomes{OK: 1}) {
 				t.Errorf("provider %q delta = %+v, want {OK:1}", c.provider, got)
 			}
@@ -252,14 +251,14 @@ func TestMetadataProvidersGetTheirOwnBucket(t *testing.T) {
 
 func TestRetryRecorder_CountsPerProviderHost(t *testing.T) {
 	reg := telemetry.NewRegistry()
-	before := search.ReadProviderMetricsSnapshot(reg)
+	before := searchtelemetry.ReadSnapshot(reg)
 
-	record := search.ProviderRetryRecorder(reg)
+	record := searchtelemetry.RetryRecorder(reg)
 	record("api.deezer.com")
 	record("api.deezer.com")
 	record("musicbrainz.org")
 
-	after := search.ReadProviderMetricsSnapshot(reg)
+	after := searchtelemetry.ReadSnapshot(reg)
 	if got := after["deezer"].Retries - before["deezer"].Retries; got != 2 {
 		t.Errorf("deezer retries moved by %d, want 2", got)
 	}

@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
@@ -14,8 +13,8 @@ import (
 	"testing"
 )
 
-func relatedTrack(title string) search.SearchResult {
-	return memory.NewResult(search.ResultKindTrack, title)
+func relatedTrack(title string) domain.SearchResult {
+	return memory.NewResult(domain.ResultKindTrack, title)
 }
 
 func TestNewGetRelatedTracksService_RefusesAMissingCollaborator(t *testing.T) {
@@ -25,7 +24,7 @@ func TestNewGetRelatedTracksService_RefusesAMissingCollaborator(t *testing.T) {
 		breaker   *service.CircuitBreaker
 		missing   string
 	}{
-		{"no providers", nil, search.NewCircuitBreaker(clock.Now), "providers"},
+		{"no providers", nil, service.NewCircuitBreaker(clock.Now), "providers"},
 		{"no breaker", map[string]ports.RelatedTracksProvider{}, nil, "breaker"},
 	}
 	for _, tc := range cases {
@@ -41,7 +40,7 @@ func TestNewGetRelatedTracksService_RefusesAMissingCollaborator(t *testing.T) {
 func TestGetRelatedTracksService_Execute(t *testing.T) {
 	tests := []struct {
 		name       string
-		provider   search.ProviderName
+		provider   domain.ProviderName
 		fake       *memory.FakeRelatedProvider
 		limit      int
 		wantStatus domain.ProviderStatus
@@ -49,15 +48,15 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 	}{
 		{
 			name:       "unknown provider",
-			provider:   search.ProviderDeezer,
-			fake:       &memory.FakeRelatedProvider{Results: []search.SearchResult{relatedTrack("a")}},
+			provider:   domain.ProviderDeezer,
+			fake:       &memory.FakeRelatedProvider{Results: []domain.SearchResult{relatedTrack("a")}},
 			limit:      20,
 			wantStatus: domain.ProviderStatusError,
 			wantCount:  0,
 		},
 		{
 			name:       "provider returns error",
-			provider:   search.ProviderSoundCloud,
+			provider:   domain.ProviderSoundCloud,
 			fake:       &memory.FakeRelatedProvider{Err: errors.New("boom")},
 			limit:      20,
 			wantStatus: domain.ProviderStatusError,
@@ -65,8 +64,8 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:     "ok slices to limit",
-			provider: search.ProviderSoundCloud,
-			fake: &memory.FakeRelatedProvider{Results: []search.SearchResult{
+			provider: domain.ProviderSoundCloud,
+			fake: &memory.FakeRelatedProvider{Results: []domain.SearchResult{
 				relatedTrack("a"), relatedTrack("b"), relatedTrack("c"),
 			}},
 			limit:      2,
@@ -75,8 +74,8 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:     "ok no truncation when under limit",
-			provider: search.ProviderSoundCloud,
-			fake: &memory.FakeRelatedProvider{Results: []search.SearchResult{
+			provider: domain.ProviderSoundCloud,
+			fake: &memory.FakeRelatedProvider{Results: []domain.SearchResult{
 				relatedTrack("a"),
 			}},
 			limit:      20,

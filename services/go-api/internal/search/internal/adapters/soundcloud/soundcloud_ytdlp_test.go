@@ -1,7 +1,6 @@
 package soundcloud_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/soundcloud"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -14,8 +13,8 @@ import (
 
 func TestSoundCloudAdapter_Name(t *testing.T) {
 	adapter := soundcloud.NewSoundCloudAdapter()
-	if got := adapter.Name(); got != search.ProviderSoundCloud {
-		t.Errorf("Name() = %v, want %v", got, search.ProviderSoundCloud)
+	if got := adapter.Name(); got != domain.ProviderSoundCloud {
+		t.Errorf("Name() = %v, want %v", got, domain.ProviderSoundCloud)
 	}
 }
 
@@ -23,13 +22,13 @@ func TestSoundCloudAdapter_SupportedKinds(t *testing.T) {
 	adapter := soundcloud.NewSoundCloudAdapter()
 	kinds := adapter.SupportedKinds()
 
-	if !kinds[search.ResultKindTrack] {
+	if !kinds[domain.ResultKindTrack] {
 		t.Error("expected track to be supported")
 	}
-	if kinds[search.ResultKindAlbum] {
+	if kinds[domain.ResultKindAlbum] {
 		t.Error("expected album to NOT be supported")
 	}
-	if kinds[search.ResultKindArtist] {
+	if kinds[domain.ResultKindArtist] {
 		t.Error("expected artist to NOT be supported")
 	}
 }
@@ -43,8 +42,8 @@ func TestSoundCloudAdapter_SearchTimeout(t *testing.T) {
 
 func TestSoundCloudAdapter_Search_UnsupportedKinds(t *testing.T) {
 	adapter := soundcloud.NewSoundCloudAdapter()
-	results, err := adapter.Search(context.Background(), "test query", map[search.ResultKind]bool{
-		search.ResultKindAlbum: true,
+	results, err := adapter.Search(context.Background(), "test query", map[domain.ResultKind]bool{
+		domain.ResultKindAlbum: true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -63,8 +62,8 @@ func TestSoundCloudAdapter_Search_ContextCancelled(t *testing.T) {
 	cancel()
 
 	adapter := soundcloud.NewSoundCloudAdapter()
-	_, err := adapter.Search(ctx, "test", map[search.ResultKind]bool{
-		search.ResultKindTrack: true,
+	_, err := adapter.Search(ctx, "test", map[domain.ResultKind]bool{
+		domain.ResultKindTrack: true,
 	})
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
@@ -86,7 +85,7 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 		running.Add(-1)
 		return nil, "", nil
 	})
-	kinds := map[search.ResultKind]bool{search.ResultKindTrack: true}
+	kinds := map[domain.ResultKind]bool{domain.ResultKindTrack: true}
 
 	const calls = 10
 	const slots = 3
@@ -132,7 +131,7 @@ func TestSoundCloudAdapter_Search_YtdlpEntryFillsTheTypedDuration(t *testing.T) 
 		return [][]byte{[]byte(`{"title":"Song","uploader":"Artist","duration":226.5,"webpage_url":"https://soundcloud.com/a/s","id":"1","playback_count":9}`)}, "", nil
 	})
 
-	results, err := adapter.Search(context.Background(), "q", map[search.ResultKind]bool{search.ResultKindTrack: true})
+	results, err := adapter.Search(context.Background(), "q", map[domain.ResultKind]bool{domain.ResultKindTrack: true})
 	if err != nil || len(results) != 1 {
 		t.Fatalf("Search = %d results, err %v, want one", len(results), err)
 	}

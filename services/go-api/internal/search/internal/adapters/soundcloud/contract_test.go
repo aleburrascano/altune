@@ -1,7 +1,6 @@
 package soundcloud_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/soundcloud"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
@@ -26,11 +25,11 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "soundcloud track",
 			Golden: "contract_soundcloud_track.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
+			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
 				a := newTestSoundCloudAPI(t, proxyTo(t, srv), nil)
 				return a.Search(t.Context(), "goosebumps", contracttest.TrackKinds())
 			},
-			Required: func(t *testing.T, r search.SearchResult) {
+			Required: func(t *testing.T, r domain.SearchResult) {
 				if r.ISRC == "" {
 					t.Error("ISRC empty (publisher_metadata) — merge's identifier tier consumes it")
 				}

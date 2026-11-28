@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
@@ -25,15 +24,15 @@ const radioheadMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 func paramValidationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
-	albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
-		search.ProviderDeezer: &memory.AlbumContentProvider{Results: seedTracks(3)},
+	albumProviders := map[domain.ProviderName]ports.AlbumContentProvider{
+		domain.ProviderDeezer: &memory.AlbumContentProvider{Results: seedTracks(3)},
 	}
-	artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: &memory.ArtistContentProvider{Albums: seedTracks(3)},
+	artistProviders := map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: &memory.ArtistContentProvider{Albums: seedTracks(3)},
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search:       searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.History = historyRepo }),
+		Search:       searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{&fakeSearchProvider{name: domain.ProviderDeezer}}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.History = historyRepo }),
 		History:      searchtest.NewListHistory(t, historyRepo),
 		ClearHistory: searchtest.NewClearHistory(t, historyRepo),
 		Album:        searchtest.NewAlbumTracks(t, albumProviders),
@@ -121,30 +120,30 @@ func TestEnrichment_CanonicalMBIDAndBoundedNamesStillServe(t *testing.T) {
 
 var realProviderIDs = []struct {
 	name       string
-	provider   search.ProviderName
+	provider   domain.ProviderName
 	externalID string
 }{
-	{"deezer artist id", search.ProviderDeezer, "27"},
+	{"deezer artist id", domain.ProviderDeezer, "27"},
 	{"itunes artist id", domain.ProviderITunes, "159260351"},
 	{"apple music artist id", domain.ProviderAppleMusic, "1258279972"},
-	{"soundcloud user id", search.ProviderSoundCloud, "3207"},
-	{"spotify base62 id", search.ProviderSpotify, "4Z8W4fKeB5YxbusRsdQVPb"},
-	{"spotify uri", search.ProviderSpotify, "spotify:artist:4Z8W4fKeB5YxbusRsdQVPb"},
+	{"soundcloud user id", domain.ProviderSoundCloud, "3207"},
+	{"spotify base62 id", domain.ProviderSpotify, "4Z8W4fKeB5YxbusRsdQVPb"},
+	{"spotify uri", domain.ProviderSpotify, "spotify:artist:4Z8W4fKeB5YxbusRsdQVPb"},
 	{"musicbrainz uuid", domain.ProviderMusicBrainz, radioheadMBID},
-	{"youtube channel id", search.ProviderYouTube, "UCmMUZbaYdNH0bEd1PAlAqsA"},
-	{"youtube browse id", search.ProviderYouTube, "MPREb_4pL8gzRtw1p"},
+	{"youtube channel id", domain.ProviderYouTube, "UCmMUZbaYdNH0bEd1PAlAqsA"},
+	{"youtube browse id", domain.ProviderYouTube, "MPREb_4pL8gzRtw1p"},
 	{"theaudiodb artist id", domain.ProviderTheAudioDB, "111239"},
 	{"discogs artist id", domain.ProviderDiscogs, "3840"},
 }
 
 func allProvidersArtistRouter(t *testing.T) chi.Router {
 	t.Helper()
-	artistProviders := make(map[search.ProviderName]ports.ArtistContentProvider, len(realProviderIDs))
+	artistProviders := make(map[domain.ProviderName]ports.ArtistContentProvider, len(realProviderIDs))
 	for _, c := range realProviderIDs {
 		artistProviders[c.provider] = &memory.ArtistContentProvider{Albums: seedTracks(1)}
 	}
 	return buildDiscoveryRouter(t,
-		&fakeSearchProvider{name: search.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, artistProviders)
+		&fakeSearchProvider{name: domain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, artistProviders)
 }
 
 func TestContentIDs_RealProviderIDsStillServe(t *testing.T) {

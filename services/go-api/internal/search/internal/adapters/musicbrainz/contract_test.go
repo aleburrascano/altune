@@ -1,7 +1,6 @@
 package musicbrainz_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/musicbrainz"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
@@ -15,10 +14,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "musicbrainz recording",
 			Golden: "contract_musicbrainz_recording.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
+			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
 				return musicbrainz.NewMusicBrainzAdapter(contracttest.NewClient(srv.URL), "altune-test/1.0", clock.Now).SearchStructured(t.Context(), "radiohead", "paranoid android", contracttest.TrackKinds())
 			},
-			Required: func(t *testing.T, r search.SearchResult) {
+			Required: func(t *testing.T, r domain.SearchResult) {
 				if r.ISRC == "" {
 					t.Error("ISRC empty — merge's identifier tier consumes it")
 				}
@@ -30,10 +29,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "musicbrainz artist",
 			Golden: "contract_musicbrainz_artist.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
+			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
 				return musicbrainz.NewMusicBrainzAdapter(contracttest.NewClient(srv.URL), "altune-test/1.0", clock.Now).SearchStructured(t.Context(), "radiohead", "", contracttest.ArtistKinds())
 			},
-			Required: func(t *testing.T, r search.SearchResult) {
+			Required: func(t *testing.T, r domain.SearchResult) {
 				if r.ArtistMBID == "" {
 					t.Error("ArtistMBID empty — artist identity resolution consumes it")
 				}
@@ -44,7 +43,7 @@ func TestProviderContracts(t *testing.T) {
 
 func TestAdapterNames(t *testing.T) {
 	tests := []struct {
-		got, want search.ProviderName
+		got, want domain.ProviderName
 	}{
 		{(&musicbrainz.MusicBrainzAdapter{}).Name(), domain.ProviderMusicBrainz},
 	}

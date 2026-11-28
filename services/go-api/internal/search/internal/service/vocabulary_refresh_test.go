@@ -1,9 +1,10 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -14,12 +15,12 @@ import (
 )
 
 type fakeChartProvider struct {
-	name    search.ProviderName
+	name    domain.ProviderName
 	entries []domain.SpellingHintsEntry
 	err     error
 }
 
-func (f *fakeChartProvider) Name() search.ProviderName { return f.name }
+func (f *fakeChartProvider) Name() domain.ProviderName { return f.name }
 
 func (f *fakeChartProvider) FetchCharts(_ context.Context, _ int) ([]domain.SpellingHintsEntry, error) {
 	return f.entries, f.err
@@ -76,7 +77,7 @@ func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{name: domain.ProviderTheAudioDB, err: errors.New("network timeout")},
-		{name: search.ProviderDeezer, entries: []domain.SpellingHintsEntry{
+		{name: domain.ProviderDeezer, entries: []domain.SpellingHintsEntry{
 			{Term: "Bad Bunny", Kind: "artist", Popularity: 800},
 		}},
 	}
@@ -95,7 +96,7 @@ func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
 	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{name: search.ProviderDeezer, err: errors.New("error 1")},
+		{name: domain.ProviderDeezer, err: errors.New("error 1")},
 		{name: domain.ProviderTheAudioDB, err: errors.New("error 2")},
 	}
 	svc := newTestRefreshService(charts, store)
@@ -104,7 +105,7 @@ func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
 	if err == nil {
 		t.Fatal("RunOnce = nil, want a failure naming the providers that broke")
 	}
-	for _, provider := range []search.ProviderName{search.ProviderDeezer, domain.ProviderTheAudioDB} {
+	for _, provider := range []domain.ProviderName{domain.ProviderDeezer, domain.ProviderTheAudioDB} {
 		if !strings.Contains(err.Error(), provider.String()) {
 			t.Errorf("error %q does not name provider %q", err, provider)
 		}
@@ -122,7 +123,7 @@ func TestVocabularyRefresh_ChartFailureWarnsWithTheProviderThatFailed(t *testing
 		Err: errors.New("connection refused"),
 	}
 	charts := []fakeChartProvider{
-		{name: search.ProviderDeezer, entries: []domain.SpellingHintsEntry{{Term: "Drake", Kind: "artist"}}},
+		{name: domain.ProviderDeezer, entries: []domain.SpellingHintsEntry{{Term: "Drake", Kind: "artist"}}},
 		{name: domain.ProviderTheAudioDB, err: leaky},
 	}
 	svc := newTestRefreshService(charts, &memory.FakeVocabularyStore{})
@@ -220,12 +221,12 @@ func TestVocabularyRefresh_DuplicateTerms(t *testing.T) {
 func newTestRefreshService(
 	charts []fakeChartProvider,
 	store *memory.FakeVocabularyStore,
-) *search.SpellingHintsRefreshService {
-	providers := make([]search.ChartProvider, len(charts))
+) *service.SpellingHintsRefreshService {
+	providers := make([]ports.ChartProvider, len(charts))
 	for i := range charts {
 		providers[i] = &charts[i]
 	}
-	return search.NewVocabularyRefreshService(
+	return service.NewVocabularyRefreshService(
 		providers, store, 50,
 	)
 }

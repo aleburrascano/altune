@@ -1,7 +1,6 @@
 package musicbrainz_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/musicbrainz"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
@@ -71,7 +70,7 @@ func TestMusicBrainzAdapter_Lookup_Artist(t *testing.T) {
 		_, _ = w.Write([]byte(kendrickArtistLookup))
 	})
 
-	e, err := a.Lookup(context.Background(), search.ResultKindArtist, "381086ea-mbid")
+	e, err := a.Lookup(context.Background(), domain.ResultKindArtist, "381086ea-mbid")
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
@@ -121,7 +120,7 @@ func TestMusicBrainzAdapter_Lookup_ReleaseGroup(t *testing.T) {
 		_, _ = w.Write([]byte(damnReleaseGroupLookup))
 	})
 
-	e, err := a.Lookup(context.Background(), search.ResultKindAlbum, "b88655ba-mbid")
+	e, err := a.Lookup(context.Background(), domain.ResultKindAlbum, "b88655ba-mbid")
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
@@ -143,7 +142,7 @@ func TestMusicBrainzAdapter_Lookup_404IsError(t *testing.T) {
 	a := mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	})
-	if _, err := a.Lookup(context.Background(), search.ResultKindAlbum, "stale-mbid"); err == nil {
+	if _, err := a.Lookup(context.Background(), domain.ResultKindAlbum, "stale-mbid"); err == nil {
 		t.Error("a 404 on the lookup must return an error (service degrades it to empty)")
 	}
 }
@@ -152,7 +151,7 @@ func TestMusicBrainzAdapter_Lookup_UnsupportedKindEmpty(t *testing.T) {
 	a := mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Error("track lookup must not hit the network in v1")
 	})
-	e, err := a.Lookup(context.Background(), search.ResultKindTrack, "rec-mbid")
+	e, err := a.Lookup(context.Background(), domain.ResultKindTrack, "rec-mbid")
 	if err != nil {
 		t.Fatalf("Lookup(track): %v", err)
 	}
@@ -174,17 +173,17 @@ const rgSearchArtistMatch = `{"release-groups": [
 func TestMusicBrainzAdapter_ResolveMBID(t *testing.T) {
 	tests := []struct {
 		name     string
-		kind     search.ResultKind
+		kind     domain.ResultKind
 		title    string
 		subtitle string
 		body     string
 		want     string
 	}{
-		{"artist exact, skips near-miss first candidate", search.ResultKindArtist, "Kendrick Lamar", "", artistSearchTwoCandidates, "right-2"},
-		{"artist no match", search.ResultKindArtist, "Nonexistent Artist", "", `{"artists":[{"id":"x","name":"Other"}]}`, ""},
-		{"album title+artist match, filters wrong artist", search.ResultKindAlbum, "DAMN.", "Kendrick Lamar", rgSearchArtistMatch, "rg-right"},
-		{"album title match but artist mismatch", search.ResultKindAlbum, "DAMN.", "Drake", rgSearchArtistMatch, ""},
-		{"blank title", search.ResultKindArtist, "", "", `{}`, ""},
+		{"artist exact, skips near-miss first candidate", domain.ResultKindArtist, "Kendrick Lamar", "", artistSearchTwoCandidates, "right-2"},
+		{"artist no match", domain.ResultKindArtist, "Nonexistent Artist", "", `{"artists":[{"id":"x","name":"Other"}]}`, ""},
+		{"album title+artist match, filters wrong artist", domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", rgSearchArtistMatch, "rg-right"},
+		{"album title match but artist mismatch", domain.ResultKindAlbum, "DAMN.", "Drake", rgSearchArtistMatch, ""},
+		{"blank title", domain.ResultKindArtist, "", "", `{}`, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -217,7 +216,7 @@ func TestMusicBrainzAdapter_ResolveMBID_track(t *testing.T) {
 	defer server.Close()
 
 	adapter := musicbrainz.NewMusicBrainzAdapter(contracttest.NewClient(server.URL), "altune-test/1.0", clock.Now)
-	mbid, err := adapter.ResolveMBID(context.Background(), search.ResultKindTrack, "Paranoid Android", "Radiohead")
+	mbid, err := adapter.ResolveMBID(context.Background(), domain.ResultKindTrack, "Paranoid Android", "Radiohead")
 	if err != nil {
 		t.Fatalf("ResolveMBID: %v", err)
 	}

@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
@@ -20,89 +19,89 @@ const (
 	probeLeaseFor          = 30 * time.Second
 )
 
-func tripProvider(ctx context.Context, cb *service.CircuitBreaker, provider search.ProviderName) {
+func tripProvider(ctx context.Context, cb *service.CircuitBreaker, provider domain.ProviderName) {
 	for range guardBreakerTripsAfter {
 		cb.RecordFailure(ctx, provider, service.Admission{})
 	}
 }
 
 func TestCircuitBreaker_AProviderWithNoFailuresIsClosedAndOK(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
+	cb := service.NewCircuitBreaker(clock.Now)
 
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); !ok {
 		t.Error("expected closed circuit to allow requests")
 	}
-	if cb.GetStatus(search.ProviderDeezer) != domain.ProviderStatusOK {
-		t.Errorf("expected status OK, got %v", cb.GetStatus(search.ProviderDeezer))
+	if cb.GetStatus(domain.ProviderDeezer) != domain.ProviderStatusOK {
+		t.Errorf("expected status OK, got %v", cb.GetStatus(domain.ProviderDeezer))
 	}
 }
 
 func TestCircuitBreaker_OpensAtTheThresholdAndReportsCircuitOpen(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
+	cb := service.NewCircuitBreaker(clock.Now)
 	for range guardBreakerTripsAfter - 1 {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer, service.Admission{})
+		cb.RecordFailure(context.Background(), domain.ProviderDeezer, service.Admission{})
 	}
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); !ok {
 		t.Fatal("expected the circuit to stay closed one failure below the threshold")
 	}
 
-	cb.RecordFailure(context.Background(), search.ProviderDeezer, service.Admission{})
+	cb.RecordFailure(context.Background(), domain.ProviderDeezer, service.Admission{})
 
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); ok {
 		t.Error("expected open circuit to block requests at the threshold")
 	}
-	if cb.GetStatus(search.ProviderDeezer) != domain.ProviderStatusCircuitOpen {
-		t.Errorf("expected status CircuitOpen, got %v", cb.GetStatus(search.ProviderDeezer))
+	if cb.GetStatus(domain.ProviderDeezer) != domain.ProviderStatusCircuitOpen {
+		t.Errorf("expected status CircuitOpen, got %v", cb.GetStatus(domain.ProviderDeezer))
 	}
 }
 
 func TestCircuitBreaker_AHalfOpenProviderReportsOKWhileItsProbeRuns(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
-	tripProvider(context.Background(), cb, search.ProviderDeezer)
+	cb := service.NewCircuitBreaker(clock.Now)
+	tripProvider(context.Background(), cb, domain.ProviderDeezer)
 	cb.AdvanceClock(guardBreakerOpenFor + time.Second)
 
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); !ok {
 		t.Fatal("expected the probe to be admitted after the open window")
 	}
 
-	if got := cb.GetStatus(search.ProviderDeezer); got != domain.ProviderStatusOK {
+	if got := cb.GetStatus(domain.ProviderDeezer); got != domain.ProviderStatusOK {
 		t.Errorf("half-open status = %v, want ok", got)
 	}
-	if snap := cb.Snapshot(search.ProviderDeezer); snap.State != service.CircuitHalfOpen || !snap.Probing {
+	if snap := cb.Snapshot(domain.ProviderDeezer); snap.State != service.CircuitHalfOpen || !snap.Probing {
 		t.Errorf("snapshot = %+v, want half-open with the probe in flight", snap)
 	}
 }
 
 func TestCircuitBreaker_AProbeLeaseExpiresAfterItsConfiguredDuration(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
-	tripProvider(context.Background(), cb, search.ProviderDeezer)
+	cb := service.NewCircuitBreaker(clock.Now)
+	tripProvider(context.Background(), cb, domain.ProviderDeezer)
 	cb.AdvanceClock(guardBreakerOpenFor + time.Second)
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); !ok {
 		t.Fatal("expected the half-open probe to be admitted")
 	}
 
 	cb.AdvanceClock(probeLeaseFor + time.Second)
 
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); !ok {
 		t.Error("expected an abandoned probe to lose its lease and admit a new probe")
 	}
 }
 
 func TestCircuitBreaker_IndependentProviders(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
-	tripProvider(context.Background(), cb, search.ProviderDeezer)
+	cb := service.NewCircuitBreaker(clock.Now)
+	tripProvider(context.Background(), cb, domain.ProviderDeezer)
 
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); ok {
 		t.Error("expected Deezer circuit to be open")
 	}
 	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderMusicBrainz); !ok {
 		t.Error("expected MusicBrainz circuit to be independent and closed")
 	}
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderSoundCloud); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderSoundCloud); !ok {
 		t.Error("expected SoundCloud circuit to be independent and closed")
 	}
-	if cb.GetStatus(search.ProviderDeezer) != domain.ProviderStatusCircuitOpen {
-		t.Errorf("expected Deezer status CircuitOpen, got %v", cb.GetStatus(search.ProviderDeezer))
+	if cb.GetStatus(domain.ProviderDeezer) != domain.ProviderStatusCircuitOpen {
+		t.Errorf("expected Deezer status CircuitOpen, got %v", cb.GetStatus(domain.ProviderDeezer))
 	}
 	if cb.GetStatus(domain.ProviderMusicBrainz) != domain.ProviderStatusOK {
 		t.Errorf("expected MusicBrainz status OK, got %v", cb.GetStatus(domain.ProviderMusicBrainz))
@@ -110,20 +109,20 @@ func TestCircuitBreaker_IndependentProviders(t *testing.T) {
 }
 
 func TestCircuitBreaker_ReleaseProbeAdmitsNextProbe(t *testing.T) {
-	cb := search.NewCircuitBreaker(clock.Now)
-	tripProvider(context.Background(), cb, search.ProviderDeezer)
+	cb := service.NewCircuitBreaker(clock.Now)
+	tripProvider(context.Background(), cb, domain.ProviderDeezer)
 	cb.AdvanceClock(guardBreakerOpenFor + time.Second)
-	adm, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer)
+	adm, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer)
 	if !ok {
 		t.Fatal("expected the half-open probe to be admitted")
 	}
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); ok {
 		t.Fatal("expected a second request to be rejected while the probe is in flight")
 	}
 
-	cb.ReleaseProbe(search.ProviderDeezer, adm)
+	cb.ReleaseProbe(domain.ProviderDeezer, adm)
 
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderDeezer); !ok {
 		t.Error("expected a released probe slot to admit the next probe")
 	}
 }
@@ -176,11 +175,11 @@ func captureBreakerLogs(t *testing.T) *captureHandler {
 
 func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 	ctx := context.WithValue(context.Background(), breakerLogKey{}, "marker")
-	p := search.ProviderDeezer
+	p := domain.ProviderDeezer
 
 	t.Run("opening logs once with provider and failures from ctx", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker(clock.Now)
+		cb := service.NewCircuitBreaker(clock.Now)
 		tripProvider(ctx, cb, p)
 		if got := h.messages(); len(got) != 1 || got[0] != "circuit breaker opened (provider failing)" {
 			t.Fatalf("logs = %v, want exactly the opened message", got)
@@ -196,7 +195,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("no failures logs nothing", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker(clock.Now)
+		cb := service.NewCircuitBreaker(clock.Now)
 		cb.AllowRequest(ctx, p)
 		if got := h.messages(); len(got) != 0 {
 			t.Fatalf("logs = %v, want none", got)
@@ -205,7 +204,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("success on closed breaker logs nothing", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker(clock.Now)
+		cb := service.NewCircuitBreaker(clock.Now)
 		adm, _ := cb.AllowRequest(ctx, p)
 		cb.RecordSuccess(ctx, p, adm)
 		if got := h.messages(); len(got) != 0 {
@@ -215,7 +214,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("recovery logs half-open then closed", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker(clock.Now)
+		cb := service.NewCircuitBreaker(clock.Now)
 		tripProvider(ctx, cb, p)
 		cb.AdvanceClock(guardBreakerOpenFor + time.Second)
 		adm, ok := cb.AllowRequest(ctx, p)
@@ -246,7 +245,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("an expired probe lease logs the re-probe", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker(clock.Now)
+		cb := service.NewCircuitBreaker(clock.Now)
 		tripProvider(ctx, cb, p)
 		cb.AdvanceClock(guardBreakerOpenFor + time.Second)
 		cb.AllowRequest(ctx, p)
@@ -266,12 +265,12 @@ func TestNewCircuitBreaker_PanicsOnANilClock(t *testing.T) {
 		}
 	}()
 
-	search.NewCircuitBreaker(nil)
+	service.NewCircuitBreaker(nil)
 }
 
 func TestCircuitBreaker_ReopensForProbingOnTheInjectedClock(t *testing.T) {
 	manual := clocktest.NewManual(time.Date(2026, time.March, 4, 10, 0, 0, 0, time.UTC))
-	cb := search.NewCircuitBreaker(manual.Func())
+	cb := service.NewCircuitBreaker(manual.Func())
 	tripProvider(t.Context(), cb, domain.ProviderDeezer)
 	if _, ok := cb.AllowRequest(t.Context(), domain.ProviderDeezer); ok {
 		t.Fatal("an open circuit admitted a request")

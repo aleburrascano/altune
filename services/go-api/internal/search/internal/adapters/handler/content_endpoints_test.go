@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
@@ -20,14 +19,14 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func contentTrack(title string) search.SearchResult {
-	return memory.NewResult(search.ResultKindTrack, title,
+func contentTrack(title string) domain.SearchResult {
+	return memory.NewResult(domain.ResultKindTrack, title,
 		memory.WithConfidence(domain.ConfidenceLow),
-		memory.WithSource(search.ProviderDeezer, title, "https://deezer.com/"+title))
+		memory.WithSource(domain.ProviderDeezer, title, "https://deezer.com/"+title))
 }
 
-func seedTracks(n int) []search.SearchResult {
-	out := make([]search.SearchResult, n)
+func seedTracks(n int) []domain.SearchResult {
+	out := make([]domain.SearchResult, n)
 	for i := range out {
 		out[i] = contentTrack(string(rune('a' + i)))
 	}
@@ -46,8 +45,8 @@ func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
-				search.ProviderDeezer: &memory.AlbumContentProvider{Results: seedTracks(3)},
+			albumProviders := map[domain.ProviderName]ports.AlbumContentProvider{
+				domain.ProviderDeezer: &memory.AlbumContentProvider{Results: seedTracks(3)},
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -75,8 +74,8 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: seedTracks(7)},
+			artistProviders := map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{TopTracks: seedTracks(7)},
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -117,8 +116,8 @@ func TestContentEndpoints_AnOverRangeLimitIsA400NamingTheRange(t *testing.T) {
 }
 
 func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
-	albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
-		search.ProviderDeezer: &memory.AlbumContentProvider{},
+	albumProviders := map[domain.ProviderName]ports.AlbumContentProvider{
+		domain.ProviderDeezer: &memory.AlbumContentProvider{},
 	}
 	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -174,7 +173,7 @@ type stubIdentityStore struct {
 	xref map[domain.ProviderKey]string
 }
 
-func (s stubIdentityStore) LookupByProviderID(context.Context, search.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
+func (s stubIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
 	return "mbid-artist", s.xref, true
 }
 
@@ -187,39 +186,39 @@ func (s stubIdentityStore) LookupByProviderIDs(_ context.Context, refs []ports.I
 }
 
 type partialContentProvider struct {
-	provider search.ProviderName
+	provider domain.ProviderName
 	down     bool
 }
 
-func (p partialContentProvider) result(kind search.ResultKind, id string) ([]search.SearchResult, error) {
+func (p partialContentProvider) result(kind domain.ResultKind, id string) ([]domain.SearchResult, error) {
 	if p.down {
 		return nil, errors.New("upstream unavailable")
 	}
-	return []search.SearchResult{memory.NewResult(
+	return []domain.SearchResult{memory.NewResult(
 		kind,
 		"Real Song",
 		memory.WithSubtitle("Artist"),
-		memory.WithSources([]search.ProviderLink{{Provider: p.provider, ExternalID: id}}),
+		memory.WithSources([]domain.ProviderLink{{Provider: p.provider, ExternalID: id}}),
 		memory.WithExtras(map[string]any{}),
 	)}, nil
 }
 
-func (p partialContentProvider) GetArtistTopTracks(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
-	return p.result(search.ResultKindTrack, id)
+func (p partialContentProvider) GetArtistTopTracks(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	return p.result(domain.ResultKindTrack, id)
 }
 
-func (p partialContentProvider) GetArtistAlbums(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
-	return p.result(search.ResultKindAlbum, id)
+func (p partialContentProvider) GetArtistAlbums(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	return p.result(domain.ResultKindAlbum, id)
 }
 
-func identityContentRouter(t testing.TB, down map[search.ProviderName]bool) chi.Router {
-	all := []search.ProviderName{
-		search.ProviderDeezer, domain.ProviderMusicBrainz, search.ProviderSoundCloud,
+func identityContentRouter(t testing.TB, down map[domain.ProviderName]bool) chi.Router {
+	all := []domain.ProviderName{
+		domain.ProviderDeezer, domain.ProviderMusicBrainz, domain.ProviderSoundCloud,
 		domain.ProviderITunes, domain.ProviderTheAudioDB,
-		domain.ProviderDiscogs, search.ProviderYouTube,
-		domain.ProviderAppleMusic, search.ProviderSpotify,
+		domain.ProviderDiscogs, domain.ProviderYouTube,
+		domain.ProviderAppleMusic, domain.ProviderSpotify,
 	}
-	providers := make(map[search.ProviderName]ports.ArtistContentProvider, len(all))
+	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(all))
 	xref := make(map[domain.ProviderKey]string, len(all))
 	for _, pn := range all {
 		providers[pn] = partialContentProvider{provider: pn, down: down[pn]}
@@ -233,12 +232,12 @@ func identityContentRouter(t testing.TB, down map[search.ProviderName]bool) chi.
 	return router
 }
 
-func allButDeezerDown() map[search.ProviderName]bool {
-	return map[search.ProviderName]bool{
-		domain.ProviderMusicBrainz: true, search.ProviderSoundCloud: true,
+func allButDeezerDown() map[domain.ProviderName]bool {
+	return map[domain.ProviderName]bool{
+		domain.ProviderMusicBrainz: true, domain.ProviderSoundCloud: true,
 		domain.ProviderITunes: true, domain.ProviderTheAudioDB: true,
-		domain.ProviderDiscogs: true, search.ProviderYouTube: true,
-		domain.ProviderAppleMusic: true, search.ProviderSpotify: true,
+		domain.ProviderDiscogs: true, domain.ProviderYouTube: true,
+		domain.ProviderAppleMusic: true, domain.ProviderSpotify: true,
 	}
 }
 
@@ -258,7 +257,7 @@ func decodeContentWire(t *testing.T, raw json.RawMessage) (status string, items 
 func TestArtistContentEndpoints_IdentityFanOutReportsPartial(t *testing.T) {
 	cases := []struct {
 		name        string
-		down        map[search.ProviderName]bool
+		down        map[domain.ProviderName]bool
 		wantPartial bool
 	}{
 		{name: "10 of 11 providers failed", down: allButDeezerDown(), wantPartial: true},
@@ -297,17 +296,17 @@ func TestArtistContentEndpoints_IdentityFanOutReportsPartial(t *testing.T) {
 
 type panickingArtistContentProvider struct{}
 
-func (panickingArtistContentProvider) GetArtistTopTracks(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+func (panickingArtistContentProvider) GetArtistTopTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	panic("top tracks exploded")
 }
 
-func (panickingArtistContentProvider) GetArtistAlbums(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
+func (panickingArtistContentProvider) GetArtistAlbums(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	panic("albums exploded")
 }
 
 func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
-	artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: panickingArtistContentProvider{},
+	artistProviders := map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: panickingArtistContentProvider{},
 	}
 	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -317,8 +316,8 @@ func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
 
 func TestHandleArtistContent_EachPanickingPartIsLoggedUnderItsOwnEvent(t *testing.T) {
 	ring := captureLogs(t)
-	artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: panickingArtistContentProvider{},
+	artistProviders := map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: panickingArtistContentProvider{},
 	}
 	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -334,8 +333,8 @@ func TestHandleArtistContent_EachPanickingPartIsLoggedUnderItsOwnEvent(t *testin
 func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) {
 	var mu sync.Mutex
 	asked := map[string]bool{}
-	recording := func(pn search.ProviderName) *memory.ArtistContentProvider {
-		record := func(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
+	recording := func(pn domain.ProviderName) *memory.ArtistContentProvider {
+		record := func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			mu.Lock()
 			asked[pn.String()+":"+id] = true
 			mu.Unlock()
@@ -343,9 +342,9 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 		}
 		return &memory.ArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
 	}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer:  recording(search.ProviderDeezer),
-		search.ProviderSpotify: recording(search.ProviderSpotify),
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer:  recording(domain.ProviderDeezer),
+		domain.ProviderSpotify: recording(domain.ProviderSpotify),
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -363,8 +362,8 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 }
 
 func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-		search.ProviderDeezer: &memory.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
+	svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: &memory.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -380,13 +379,13 @@ func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
 func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 	var gotSpotifyID string
 	deezer := &memory.AlbumContentProvider{Results: seedTracks(120)}
-	spotify := &memory.AlbumContentProvider{GetAlbumTracksFn: func(_ context.Context, _ search.ProviderName, id string) ([]search.SearchResult, error) {
+	spotify := &memory.AlbumContentProvider{GetAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		gotSpotifyID = id
 		return nil, nil
 	}}
-	svc := searchtest.NewAlbumTracks(t, map[search.ProviderName]ports.AlbumContentProvider{
-		search.ProviderDeezer:  deezer,
-		search.ProviderSpotify: spotify,
+	svc := searchtest.NewAlbumTracks(t, map[domain.ProviderName]ports.AlbumContentProvider{
+		domain.ProviderDeezer:  deezer,
+		domain.ProviderSpotify: spotify,
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -403,12 +402,12 @@ func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 	}
 }
 
-func numberedAlbums(n int) []search.SearchResult {
-	out := make([]search.SearchResult, n)
+func numberedAlbums(n int) []domain.SearchResult {
+	out := make([]domain.SearchResult, n)
 	for i := range out {
 		id := strconv.Itoa(i)
-		out[i] = domain.NewProviderResult(search.ResultKindAlbum, "Album "+id, "Artist", "",
-			search.ProviderLink{Provider: search.ProviderDeezer, ExternalID: id}, nil)
+		out[i] = domain.NewProviderResult(domain.ResultKindAlbum, "Album "+id, "Artist", "",
+			domain.ProviderLink{Provider: domain.ProviderDeezer, ExternalID: id}, nil)
 	}
 	return out
 }
@@ -424,8 +423,8 @@ func TestHandleArtistAlbums_LimitDefaultsAndCap(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
-				search.ProviderDeezer: &memory.ArtistContentProvider{Albums: numberedAlbums(120)},
+			svc := searchtest.NewArtistContent(t, map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &memory.ArtistContentProvider{Albums: numberedAlbums(120)},
 			})
 			router := chi.NewRouter()
 			router.Use(discAsTestUser)

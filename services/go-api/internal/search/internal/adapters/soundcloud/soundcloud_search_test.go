@@ -1,7 +1,6 @@
 package soundcloud_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -14,7 +13,7 @@ import (
 
 type failingFallback struct{ called bool }
 
-func (f *failingFallback) Search(context.Context, string, map[search.ResultKind]bool) ([]search.SearchResult, error) {
+func (f *failingFallback) Search(context.Context, string, map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	f.called = true
 	return nil, errors.New("fallback down")
 }
@@ -53,7 +52,7 @@ func TestSoundCloudAPIAdapter_authRetryReResolveFailureSurfaces(t *testing.T) {
 		site(w, r)
 	}, nil)
 
-	_, err := a.Search(context.Background(), "che", map[search.ResultKind]bool{search.ResultKindArtist: true})
+	_, err := a.Search(context.Background(), "che", map[domain.ResultKind]bool{domain.ResultKindArtist: true})
 	if err == nil || !strings.Contains(err.Error(), "soundcloud home") {
 		t.Fatalf("err = %v, want the re-resolve failure surfaced", err)
 	}
@@ -78,7 +77,7 @@ func TestSoundCloudSearch_FailedAlbumsMakeThePartialVisible(t *testing.T) {
 	if !errors.As(err, &partial) {
 		t.Fatalf("err = %v, want a PartialKindsError for the failed album search", err)
 	}
-	if len(partial.Failed) != 1 || partial.Failed[0] != search.ResultKindAlbum {
+	if len(partial.Failed) != 1 || partial.Failed[0] != domain.ResultKindAlbum {
 		t.Errorf("failed kinds = %v, want [album]", partial.Failed)
 	}
 }

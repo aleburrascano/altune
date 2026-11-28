@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
@@ -27,7 +26,7 @@ func (r erroringFavoritesRepo) Add(context.Context, ids.UserId, domain.Favorite)
 	return r.err
 }
 
-func (r erroringFavoritesRepo) Remove(context.Context, ids.UserId, search.ResultKind, string) error {
+func (r erroringFavoritesRepo) Remove(context.Context, ids.UserId, domain.ResultKind, string) error {
 	return r.err
 }
 

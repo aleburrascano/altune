@@ -1,9 +1,10 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -25,12 +26,12 @@ func humbleVocab() *memory.FakeVocabularyStore {
 func TestService_Execute_ZeroResultsTriggersCorrection(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.QueryFakeProvider{
-		Provider: search.ProviderDeezer,
-		ResultsByQuery: map[string][]search.SearchResult{
+		Provider: domain.ProviderDeezer,
+		ResultsByQuery: map[string][]domain.SearchResult{
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = humbleVocab() })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -49,13 +50,13 @@ func TestService_Execute_ZeroResultsTriggersCorrection(t *testing.T) {
 func TestService_Execute_CorrectedResultsNeverCached(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.QueryFakeProvider{
-		Provider: search.ProviderDeezer,
-		ResultsByQuery: map[string][]search.SearchResult{
+		Provider: domain.ProviderDeezer,
+		ResultsByQuery: map[string][]domain.SearchResult{
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
 	cache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab(); c.ResultCache = cache })
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = humbleVocab(); c.ResultCache = cache })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -69,29 +70,29 @@ func TestService_Execute_CorrectedResultsNeverCached(t *testing.T) {
 }
 
 type erroringThenFakeProvider struct {
-	name    search.ProviderName
+	name    domain.ProviderName
 	failFor string
-	results map[string][]search.SearchResult
+	results map[string][]domain.SearchResult
 }
 
-func (p *erroringThenFakeProvider) Name() search.ProviderName { return p.name }
+func (p *erroringThenFakeProvider) Name() domain.ProviderName { return p.name }
 
-func (p *erroringThenFakeProvider) Search(_ context.Context, query string, _ map[search.ResultKind]bool) ([]search.SearchResult, error) {
+func (p *erroringThenFakeProvider) Search(_ context.Context, query string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	if query == p.failFor {
 		return nil, errors.New("boom")
 	}
 	return p.results[query], nil
 }
 
-func (p *erroringThenFakeProvider) SupportedKinds() map[search.ResultKind]bool {
-	return map[search.ResultKind]bool{
-		search.ResultKindTrack:  true,
-		search.ResultKindAlbum:  true,
-		search.ResultKindArtist: true,
+func (p *erroringThenFakeProvider) SupportedKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
+		domain.ResultKindArtist: true,
 	}
 }
 
-func statusFor(t *testing.T, out *search.SearchOutput, provider search.ProviderName) domain.ProviderSearchResponse {
+func statusFor(t *testing.T, out *service.SearchOutput, provider domain.ProviderName) domain.ProviderSearchResponse {
 	t.Helper()
 	for _, st := range out.ProviderStatuses {
 		if st.Provider == provider {
@@ -105,19 +106,19 @@ func statusFor(t *testing.T, out *search.SearchOutput, provider search.ProviderN
 func TestService_Execute_CorrectionKeepsFirstPassProviderFailure(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	failsOriginal := &erroringThenFakeProvider{
-		name:    search.ProviderDeezer,
+		name:    domain.ProviderDeezer,
 		failFor: "humbel",
-		results: map[string][]search.SearchResult{
+		results: map[string][]domain.SearchResult{
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
 	healthy := &memory.QueryFakeProvider{
 		Provider: domain.ProviderITunes,
-		ResultsByQuery: map[string][]search.SearchResult{
+		ResultsByQuery: map[string][]domain.SearchResult{
 			"humble": {memory.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderITunes, nil)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{failsOriginal, healthy}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{failsOriginal, healthy}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = humbleVocab() })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -128,7 +129,7 @@ func TestService_Execute_CorrectionKeepsFirstPassProviderFailure(t *testing.T) {
 	if !out.Partial {
 		t.Error("want partial=true: a provider was down for the query as asked")
 	}
-	if got := statusFor(t, out, search.ProviderDeezer); got.Status != domain.ProviderStatusError {
+	if got := statusFor(t, out, domain.ProviderDeezer); got.Status != domain.ProviderStatusError {
 		t.Errorf("failed provider reported as %+v, want the first pass's error", got)
 	}
 	healthyStatus := statusFor(t, out, domain.ProviderITunes)
@@ -140,10 +141,10 @@ func TestService_Execute_CorrectionKeepsFirstPassProviderFailure(t *testing.T) {
 func TestService_Execute_TotalOutageSkipsCorrection(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	outage := errors.New("provider down")
-	deezer := &memory.CountingProvider{Provider: search.ProviderDeezer, Err: outage}
+	deezer := &memory.CountingProvider{Provider: domain.ProviderDeezer, Err: outage}
 	itunes := &memory.CountingProvider{Provider: domain.ProviderITunes, Err: outage}
 	vocab := humbleVocab()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{deezer, itunes}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = vocab })
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{deezer, itunes}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = vocab })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -165,9 +166,9 @@ func TestService_Execute_TotalOutageSkipsCorrection(t *testing.T) {
 
 func TestService_Execute_NoCorrectionKeepsFanOutStatuses(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	failing := &memory.FakeProvider{Provider: search.ProviderDeezer, Err: errors.New("boom")}
+	failing := &memory.FakeProvider{Provider: domain.ProviderDeezer, Err: errors.New("boom")}
 	empty := &memory.QueryFakeProvider{Provider: domain.ProviderITunes}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{failing, empty}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = &memory.FakeVocabularyStore{} })
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{failing, empty}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = &memory.FakeVocabularyStore{} })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -178,7 +179,7 @@ func TestService_Execute_NoCorrectionKeepsFanOutStatuses(t *testing.T) {
 	if !out.Partial {
 		t.Error("want partial=true: a zero-result search must still report the failed provider")
 	}
-	if got := statusFor(t, out, search.ProviderDeezer); got.Status != domain.ProviderStatusError {
+	if got := statusFor(t, out, domain.ProviderDeezer); got.Status != domain.ProviderStatusError {
 		t.Errorf("failed provider reported as %+v, want the fan-out's error", got)
 	}
 }
@@ -187,12 +188,12 @@ func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := humbleVocab()
 	p := &memory.QueryFakeProvider{
-		Provider: search.ProviderDeezer,
-		ResultsByQuery: map[string][]search.SearchResult{
+		Provider: domain.ProviderDeezer,
+		ResultsByQuery: map[string][]domain.SearchResult{
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
 
 	out := runSearch(t, svc, "humble")
 	bg.Wait()
@@ -211,8 +212,8 @@ func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
 func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.FakeVocabularyStore{}
-	p := &memory.QueryFakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
+	p := &memory.QueryFakeProvider{Provider: domain.ProviderDeezer}
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -227,8 +228,8 @@ func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
 
 func TestService_Execute_CorrectedSearchAlsoEmptyReturnsEmpty(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	p := &memory.QueryFakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	p := &memory.QueryFakeProvider{Provider: domain.ProviderDeezer}
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = humbleVocab() })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -251,8 +252,8 @@ func TestService_Execute_ExactVocabMatchNotCorrected(t *testing.T) {
 			}, nil
 		},
 	}
-	p := &memory.QueryFakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
+	p := &memory.QueryFakeProvider{Provider: domain.ProviderDeezer}
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = store })
 
 	out := runSearch(t, svc, "humble")
 	bg.Wait()
@@ -271,12 +272,12 @@ func TestService_Correcting_DoesNotLogRawQueryText(t *testing.T) {
 
 	const raw = "humbel"
 	p := &memory.QueryFakeProvider{
-		Provider: search.ProviderDeezer,
-		ResultsByQuery: map[string][]search.SearchResult{
+		Provider: domain.ProviderDeezer,
+		ResultsByQuery: map[string][]domain.SearchResult{
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{p}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = humbleVocab() })
 	runSearch(t, svc, raw)
 	bg.Wait()
 
@@ -334,9 +335,9 @@ func (v *deadlineRecordingVocab) FindClosest(ctx context.Context, query string, 
 func TestService_Execute_CorrectionRunsUnderADeadline(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	vocab := &memory.CtxRecordingVocab{}
-	empty := &memory.FakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{empty}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = &deadlineRecordingVocab{rec: vocab} })
-	query, err := search.NewSearchQuery("kendrik lamar", map[search.ResultKind]bool{search.ResultKindArtist: true}, 10)
+	empty := &memory.FakeProvider{Provider: domain.ProviderDeezer}
+	svc := searchtest.NewSearchServiceWith(t, bg, []ports.SearchProvider{empty}, service.NewCircuitBreaker(clock.Now), func(c *service.Collaborators) { c.Vocabulary = &deadlineRecordingVocab{rec: vocab} })
+	query, err := domain.NewSearchQuery("kendrik lamar", map[domain.ResultKind]bool{domain.ResultKindArtist: true}, 10)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}

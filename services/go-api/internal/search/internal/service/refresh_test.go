@@ -1,9 +1,10 @@
 package service_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -15,13 +16,13 @@ import (
 
 type dueStore struct {
 	searchtest.UnreleasedStore
-	due      []search.UnreleasedDueArtist
+	due      []ports.UnreleasedDueArtist
 	err      error
 	gotLimit int
 	gotNow   time.Time
 }
 
-func (d *dueStore) Due(_ context.Context, now time.Time, limit int) ([]search.UnreleasedDueArtist, error) {
+func (d *dueStore) Due(_ context.Context, now time.Time, limit int) ([]ports.UnreleasedDueArtist, error) {
 	d.gotNow, d.gotLimit = now, limit
 	return d.due, d.err
 }
@@ -39,11 +40,11 @@ func (f *failingForName) FindArtistID(ctx context.Context, name string, known []
 	return id, found, err
 }
 
-func dueArtist(id, name string) search.UnreleasedDueArtist {
-	return search.UnreleasedDueArtist{Key: ports.UnreleasedArtistKey{Provider: search.ProviderDeezer, ExternalID: id}, Name: name}
+func dueArtist(id, name string) ports.UnreleasedDueArtist {
+	return ports.UnreleasedDueArtist{Key: ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: id}, Name: name}
 }
 
-func recordedDueStore(due ...search.UnreleasedDueArtist) *dueStore {
+func recordedDueStore(due ...ports.UnreleasedDueArtist) *dueStore {
 	store := &dueStore{due: due}
 	store.Artists = map[ports.UnreleasedArtistKey]memory.StoredArtist{}
 	for _, d := range due {
@@ -52,9 +53,9 @@ func recordedDueStore(due ...search.UnreleasedDueArtist) *dueStore {
 	return store
 }
 
-func refreshService(t *testing.T, genius ports.GeniusSongCatalog, store *dueStore) *search.UnreleasedService {
-	cfg := search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	return searchtest.MustUnreleased(search.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, cfg, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
+func refreshService(t *testing.T, genius ports.GeniusSongCatalog, store *dueStore) *service.UnreleasedService {
+	cfg := service.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
+	return searchtest.MustUnreleased(service.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, cfg, searchtest.UnreleasedWiring(t, service.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 }
 
 func TestService_RefreshDue_RebuildsExactlyTheArtistsDueReturns(t *testing.T) {
@@ -92,7 +93,7 @@ func TestService_RefreshDue_AFailedRebuildDoesNotStopTheNextArtist(t *testing.T)
 }
 
 func TestService_RefreshDue_ADueQueryFailureIsReturnedAndBuildsNothing(t *testing.T) {
-	store := &dueStore{err: errors.New("db down"), due: []search.UnreleasedDueArtist{dueArtist("1", "Drake")}}
+	store := &dueStore{err: errors.New("db down"), due: []ports.UnreleasedDueArtist{dueArtist("1", "Drake")}}
 	genius := &memory.GeniusSongCatalog{ArtistFound: true}
 	if err := refreshService(t, genius, store).RefreshDue(context.Background(), time.Now(), 2); err == nil {
 		t.Fatal("RefreshDue returned nil, want the Due error")
@@ -103,7 +104,7 @@ func TestService_RefreshDue_ADueQueryFailureIsReturnedAndBuildsNothing(t *testin
 }
 
 func TestService_RefreshDue_NeverRebuildsMoreThanTheLimitEvenIfTheStoreReturnsMore(t *testing.T) {
-	store := &dueStore{due: []search.UnreleasedDueArtist{dueArtist("1", "Drake"), dueArtist("2", "Future"), dueArtist("3", "Kanye")}}
+	store := &dueStore{due: []ports.UnreleasedDueArtist{dueArtist("1", "Drake"), dueArtist("2", "Future"), dueArtist("3", "Kanye")}}
 	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	if err := refreshService(t, genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
 		t.Fatalf("RefreshDue: %v", err)

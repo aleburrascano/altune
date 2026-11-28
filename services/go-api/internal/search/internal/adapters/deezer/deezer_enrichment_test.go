@@ -1,9 +1,9 @@
 package deezer_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/deezer"
 	"altune/go-api/internal/search/internal/contracttest"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -34,7 +34,7 @@ func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 	defer server.Close()
 	adapter := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL))
 
-	id, err := adapter.ResolveID(context.Background(), search.ResultKindTrack, "Eminem", "Lose Yourself")
+	id, err := adapter.ResolveID(context.Background(), domain.ResultKindTrack, "Eminem", "Lose Yourself")
 	if err != nil {
 		t.Fatalf("ResolveID: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 		t.Fatalf("ResolveID: got %q, want 1109731", id)
 	}
 
-	e, err := adapter.Lookup(context.Background(), search.ResultKindTrack, id)
+	e, err := adapter.Lookup(context.Background(), domain.ResultKindTrack, id)
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 	defer server.Close()
 	adapter := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL))
 
-	id, err := adapter.ResolveID(context.Background(), search.ResultKindAlbum, "Daft Punk", "Discovery")
+	id, err := adapter.ResolveID(context.Background(), domain.ResultKindAlbum, "Daft Punk", "Discovery")
 	if err != nil {
 		t.Fatalf("ResolveID: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 		t.Fatalf("ResolveID: got %q, want 302127", id)
 	}
 
-	e, err := adapter.Lookup(context.Background(), search.ResultKindAlbum, id)
+	e, err := adapter.Lookup(context.Background(), domain.ResultKindAlbum, id)
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestDeezerAdapter_ArtistKindResolvesToEmpty(t *testing.T) {
 	defer server.Close()
 	adapter := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL))
 
-	id, err := adapter.ResolveID(context.Background(), search.ResultKindArtist, "Daft Punk", "Daft Punk")
+	id, err := adapter.ResolveID(context.Background(), domain.ResultKindArtist, "Daft Punk", "Daft Punk")
 	if err != nil {
 		t.Fatalf("ResolveID: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestDeezerAdapter_Resolve_PrefersXLArtwork(t *testing.T) {
 	defer server.Close()
 	adapter := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL))
 
-	img, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	img, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

@@ -1,7 +1,6 @@
 package genius_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/genius"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
@@ -40,7 +39,7 @@ func TestGeniusArtworkResolver_Resolve_Song(t *testing.T) {
 	defer server.Close()
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "test-token-123")
-	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -70,7 +69,7 @@ func TestGeniusArtworkResolver_Resolve_Song_FallbackToHeader(t *testing.T) {
 	defer server.Close()
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -98,7 +97,7 @@ func TestGeniusArtworkResolver_Resolve_Artist(t *testing.T) {
 	defer server.Close()
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -128,7 +127,7 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 	defer server.Close()
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Something", "Test", "")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Something", "Test", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -139,7 +138,7 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 
 func TestGeniusArtworkResolver_Resolve_NoSubtitle(t *testing.T) {
 	resolver := genius.NewGeniusArtworkLookup(http.DefaultClient, "token")
-	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Song", "", "")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -155,7 +154,7 @@ func TestGeniusArtworkResolver_Resolve_HTTPErrorIsUnavailable(t *testing.T) {
 	defer server.Close()
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Song", "Artist", "")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "")
 	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
@@ -171,7 +170,7 @@ func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
 	defer server.Close()
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "")
 	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
@@ -182,7 +181,7 @@ func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
 
 func TestGeniusArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
 	for name, handler := range contracttest.ArtworkFailureHandlers() {
-		for _, kind := range []search.ResultKind{search.ResultKindTrack, search.ResultKindArtist} {
+		for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindArtist} {
 			t.Run(name+" "+kind.String(), func(t *testing.T) {
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
@@ -207,7 +206,7 @@ func TestGeniusArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testin
 		_, _ = w.Write([]byte(`{"response":{"hits":[]}}`))
 	}
 	for name, handler := range handlers {
-		for _, kind := range []search.ResultKind{search.ResultKindTrack, search.ResultKindArtist} {
+		for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindArtist} {
 			t.Run(name+" "+kind.String(), func(t *testing.T) {
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
@@ -226,7 +225,7 @@ func TestGeniusArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testi
 	srv, ctx := contracttest.CancelMidRequestServer(t)
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(srv.URL), "token")
-	url, err := resolver.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
+	url, err := resolver.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
 	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
@@ -377,7 +376,7 @@ func TestGeniusArtworkResolver_Resolve_MalformedHitFailsTheResponse(t *testing.T
 			defer server.Close()
 
 			resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "t")
-			got, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
+			got, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
 			if err == nil {
 				t.Fatalf("Resolve: got %q and no error, want an error", got)
 			}

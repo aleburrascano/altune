@@ -1,7 +1,6 @@
 package applemusic_test
 
 import (
-	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/applemusic"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
@@ -136,12 +135,12 @@ func TestAppleMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 		t.Fatalf("results = %d, want 3 (song+album+artist)", len(results))
 	}
 
-	byKind := map[search.ResultKind]search.SearchResult{}
+	byKind := map[domain.ResultKind]domain.SearchResult{}
 	for _, r := range results {
 		byKind[r.Kind] = r
 	}
 
-	track := byKind[search.ResultKindTrack]
+	track := byKind[domain.ResultKindTrack]
 	if track.Title != "Blinding Lights" || track.Subtitle != "The Weeknd" {
 		t.Errorf("track = %+v", track)
 	}
@@ -170,7 +169,7 @@ func TestAppleMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 		t.Errorf("track source = %+v", track.Sources)
 	}
 
-	album := byKind[search.ResultKindAlbum]
+	album := byKind[domain.ResultKindAlbum]
 	if album.TrackCount != 14 {
 		t.Errorf("album.TrackCount = %d, want 14", album.TrackCount)
 	}
@@ -184,7 +183,7 @@ func TestAppleMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 		t.Errorf("album Explicit = %v, want true", album.Explicit)
 	}
 
-	artist := byKind[search.ResultKindArtist]
+	artist := byKind[domain.ResultKindArtist]
 	if artist.Title != "The Weeknd" {
 		t.Errorf("artist.Title = %q", artist.Title)
 	}
@@ -202,7 +201,7 @@ func TestAppleMusicAdapter_Search_onlyRequestsAskedKinds(t *testing.T) {
 	}
 
 	a := newTestAppleMusicAdapter(t, api)
-	_, err := a.Search(t.Context(), "x", map[search.ResultKind]bool{search.ResultKindArtist: true})
+	_, err := a.Search(t.Context(), "x", map[domain.ResultKind]bool{domain.ResultKindArtist: true})
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
@@ -349,7 +348,7 @@ func appleMusicCallSites() []struct {
 	call       func(ctx context.Context, a *applemusic.AppleMusicAdapter) error
 	decodeText string
 } {
-	all := map[search.ResultKind]bool{search.ResultKindTrack: true, search.ResultKindAlbum: true, search.ResultKindArtist: true}
+	all := map[domain.ResultKind]bool{domain.ResultKindTrack: true, domain.ResultKindAlbum: true, domain.ResultKindArtist: true}
 	return []struct {
 		name       string
 		call       func(ctx context.Context, a *applemusic.AppleMusicAdapter) error
