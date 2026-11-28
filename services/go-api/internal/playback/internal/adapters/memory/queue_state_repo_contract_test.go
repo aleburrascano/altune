@@ -1,10 +1,10 @@
 package memory_test
 
 import (
-	ports "altune/go-api/internal/playback/internal"
 	"altune/go-api/internal/playback/internal/adapters/memory"
 	"altune/go-api/internal/playback/internal/adapters/persistence"
 	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"

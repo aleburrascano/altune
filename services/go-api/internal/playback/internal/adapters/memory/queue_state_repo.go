@@ -1,8 +1,8 @@
 package memory
 
 import (
-	ports "altune/go-api/internal/playback/internal"
 	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"

@@ -252,7 +252,7 @@ func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 			handler.CreateTrackRequest{
 				Title:           "Title",
 				Artist:          "Artist",
-				FeaturedArtists: []service.FeaturedArtistDTO{{Name: withNul}},
+				FeaturedArtists: []handler.FeaturedArtistDTO{{Name: withNul}},
 			},
 		},
 		{
@@ -421,10 +421,10 @@ func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 	}
 }
 
-func featuredDTOs(n int) []service.FeaturedArtistDTO {
-	out := make([]service.FeaturedArtistDTO, n)
+func featuredDTOs(n int) []handler.FeaturedArtistDTO {
+	out := make([]handler.FeaturedArtistDTO, n)
 	for i := range out {
-		out[i] = service.FeaturedArtistDTO{Name: fmt.Sprintf("Guest %d", i)}
+		out[i] = handler.FeaturedArtistDTO{Name: fmt.Sprintf("Guest %d", i)}
 	}
 	return out
 }
@@ -463,7 +463,7 @@ func TestHandleCreateTrack_AcceptsFeaturedArtistsAtCap(t *testing.T) {
 
 func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 	longMBID := strings.Repeat("a", 37)
-	cases := map[string]service.FeaturedArtistDTO{
+	cases := map[string]handler.FeaturedArtistDTO{
 		"name": {Name: strings.Repeat("n", 301)},
 		"mbid": {Name: "Guest", MBID: &longMBID},
 	}
@@ -472,7 +472,7 @@ func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 			repo := memory.NewTrackRepo()
 			sched := &memory.Scheduler{}
 			router := trackRoutesWith(repo, trackDeps{scheduler: sched})
-			body := handler.CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []service.FeaturedArtistDTO{dto}}
+			body := handler.CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []handler.FeaturedArtistDTO{dto}}
 
 			rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
@@ -515,7 +515,7 @@ func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
 	router := trackRoutesWith(repo, trackDeps{scheduler: &memory.Scheduler{}})
 	mbid := "f27ec8db-af05-4f36-916e-3d57f91ecf5e"
 	name := strings.Repeat("n", 300)
-	body := handler.CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []service.FeaturedArtistDTO{{Name: name, MBID: &mbid}}}
+	body := handler.CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []handler.FeaturedArtistDTO{{Name: name, MBID: &mbid}}}
 
 	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 

@@ -48,22 +48,6 @@ func WithPrefetchEnabled(enabled bool) func(*AudioURLHandler) {
 	}
 }
 
-type resolveAudioURLsRequest struct {
-	TrackIDs []string `json:"track_ids"`
-}
-
-type audioURLDTO struct {
-	TrackID   string `json:"track_id"`
-	URL       string `json:"url"`
-	Version   string `json:"version"`
-	ExpiresAt string `json:"expires_at"`
-}
-
-type resolveAudioURLsResponse struct {
-	URLs            []audioURLDTO `json:"urls"`
-	PrefetchEnabled bool          `json:"prefetch_enabled"`
-}
-
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 	start := h.now()
 	userId := requestuser.UserID(r)

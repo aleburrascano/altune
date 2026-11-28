@@ -123,8 +123,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	slog.InfoContext(ctx, "track added to library",
 		logging.KeyTrackID, track.ID().String(),
 	)
-	dto := TrackToDTO(track)
-	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
+	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: track.ID().String(), Track: track})
 	sourceURL := ""
 	if input.SourceURL != nil {
 		sourceURL = *input.SourceURL

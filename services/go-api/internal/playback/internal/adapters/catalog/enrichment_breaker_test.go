@@ -1,9 +1,8 @@
-package service_test
+package catalog_test
 
 import (
-	ports "altune/go-api/internal/playback/internal"
 	"altune/go-api/internal/playback/internal/domain"
-	"altune/go-api/internal/playback/internal/service"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -77,7 +76,7 @@ type scriptedReader struct {
 func newScriptedReader(clock func() time.Time) *scriptedReader {
 	gauge := &breakerGauge{}
 	return &scriptedReader{
-		reader: service.MustNewNowPlayingReader(trackScript{}, gauge, clock, defaultLookupTimeout),
+		reader: newReader(trackScript{}, gauge, clock, defaultLookupTimeout),
 		gauge:  gauge,
 		user:   testUser(),
 	}
@@ -253,7 +252,7 @@ func TestEnrichmentBreaker_AFailureRecordedWhileOpenLogsNothing(t *testing.T) {
 	buf := captureBreakerLogs(t)
 	held, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	reader := service.MustNewNowPlayingReader(sourceFunc(func(context.Context) (*ports.NowPlayingTrack, error) {
+	reader := newReader(sourceFunc(func(context.Context) (*ports.NowPlayingTrack, error) {
 		if calls.Add(1) == 1 {
 			close(held)
 			<-release

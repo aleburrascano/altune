@@ -1,9 +1,9 @@
 package persistence_test
 
 import (
-	ports "altune/go-api/internal/playback/internal"
 	"altune/go-api/internal/playback/internal/adapters/persistence"
 	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/httpserver"

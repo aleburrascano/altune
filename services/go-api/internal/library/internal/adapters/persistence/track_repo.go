@@ -805,20 +805,34 @@ func catalogSourcesJSON(sources []domain.CatalogSource) ([]byte, error) {
 	if len(sources) == 0 {
 		return []byte("[]"), nil
 	}
-	encoded, err := json.Marshal(sources)
+	records := make([]catalogSourceRecord, len(sources))
+	for i, s := range sources {
+		records[i] = catalogSourceRecord{Provider: s.Provider, ExternalID: s.ExternalID, URL: s.URL}
+	}
+	encoded, err := json.Marshal(records)
 	if err != nil {
 		return nil, fmt.Errorf("encode catalog_sources: %w", err)
 	}
 	return encoded, nil
 }
 
+type catalogSourceRecord struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
+	URL        string `json:"url,omitempty"`
+}
+
 func decodeCatalogSources(raw []byte) ([]domain.CatalogSource, error) {
-	var sources []domain.CatalogSource
-	if err := json.Unmarshal(raw, &sources); err != nil {
+	var records []catalogSourceRecord
+	if err := json.Unmarshal(raw, &records); err != nil {
 		return nil, fmt.Errorf("decode catalog_sources: %w", err)
 	}
-	if len(sources) == 0 {
+	if len(records) == 0 {
 		return nil, nil
+	}
+	sources := make([]domain.CatalogSource, len(records))
+	for i, rec := range records {
+		sources[i] = domain.CatalogSource{Provider: rec.Provider, ExternalID: rec.ExternalID, URL: rec.URL}
 	}
 	return sources, nil
 }

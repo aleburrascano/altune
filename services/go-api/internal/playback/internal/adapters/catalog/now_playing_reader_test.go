@@ -1,9 +1,9 @@
-package service_test
+package catalog_test
 
 import (
-	ports "altune/go-api/internal/playback/internal"
+	"altune/go-api/internal/playback/internal/adapters/catalog"
 	"altune/go-api/internal/playback/internal/domain"
-	"altune/go-api/internal/playback/internal/service"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -145,7 +145,7 @@ func rejected(reader nowPlayingLookup, m *recordingMetrics, user ids.UserId) boo
 func TestLookup_MalformedTrackId_EmitsDistinguishableSignal(t *testing.T) {
 	logs := captureLogs(t)
 	called := false
-	reader := service.MustNewNowPlayingReader(sourceFunc(func(context.Context) (*ports.NowPlayingTrack, error) {
+	reader := newReader(sourceFunc(func(context.Context) (*ports.NowPlayingTrack, error) {
 		called = true
 		return &ports.NowPlayingTrack{}, nil
 	}), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
@@ -184,21 +184,21 @@ func TestNewNowPlayingReader_RequiresItsMetricsClockAndTimeout(t *testing.T) {
 		want  error
 	}{
 		"track source": {func() error {
-			_, err := service.NewNowPlayingReader(nil, noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
+			_, err := catalog.NewGuardedSource(nil, noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 			return err
-		}, service.ErrNowPlayingCollaboratorRequired},
+		}, domain.ErrEnrichmentCollaboratorRequired},
 		"metrics": {func() error {
-			_, err := service.NewNowPlayingReader(absentSource(), nil, time.Now, defaultLookupTimeout)
+			_, err := catalog.NewGuardedSource(absentSource(), nil, time.Now, defaultLookupTimeout)
 			return err
-		}, service.ErrNowPlayingCollaboratorRequired},
+		}, domain.ErrEnrichmentCollaboratorRequired},
 		"clock": {func() error {
-			_, err := service.NewNowPlayingReader(absentSource(), noopEnrichmentMetrics{}, nil, defaultLookupTimeout)
+			_, err := catalog.NewGuardedSource(absentSource(), noopEnrichmentMetrics{}, nil, defaultLookupTimeout)
 			return err
-		}, service.ErrNowPlayingClockRequired},
+		}, domain.ErrEnrichmentClockRequired},
 		"timeout": {func() error {
-			_, err := service.NewNowPlayingReader(absentSource(), noopEnrichmentMetrics{}, time.Now, 0)
+			_, err := catalog.NewGuardedSource(absentSource(), noopEnrichmentMetrics{}, time.Now, 0)
 			return err
-		}, service.ErrNowPlayingInvalidTimeout},
+		}, domain.ErrEnrichmentInvalidTimeout},
 	}
 	for name, tt := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestNewNowPlayingReader_RequiresItsMetricsClockAndTimeout(t *testing.T) {
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("a missing %s = %v, want %v", name, err, tt.want)
 			}
-			if !strings.Contains(err.Error(), "NewNowPlayingReader") {
+			if !strings.Contains(err.Error(), "NewGuardedSource") {
 				t.Fatalf("error %q does not name the constructor", err)
 			}
 		})
@@ -221,12 +221,12 @@ func TestMustNewNowPlayingReader_PanicsOnANilClock(t *testing.T) {
 		}
 	}()
 
-	service.MustNewNowPlayingReader(absentSource(), noopEnrichmentMetrics{}, nil, defaultLookupTimeout)
+	newReader(absentSource(), noopEnrichmentMetrics{}, nil, defaultLookupTimeout)
 }
 
 func TestLookup_ValidButAbsentTrack_StaysSilent(t *testing.T) {
 	logs := captureLogs(t)
-	reader := service.MustNewNowPlayingReader(absentSource(), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
+	reader := newReader(absentSource(), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 
 	track, err := lookup(context.Background(), reader, testUser())
 	if !errors.Is(err, domain.ErrNowPlayingTrackNotFound) || track != nil {
@@ -239,7 +239,7 @@ func TestLookup_ValidButAbsentTrack_StaysSilent(t *testing.T) {
 
 func TestLookup_AbsentTrackIsNotAnEnrichmentFailureAndNeverTripsTheBreaker(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(absentSource(), m, time.Now, defaultLookupTimeout)
+	reader := newReader(absentSource(), m, time.Now, defaultLookupTimeout)
 
 	for range 20 {
 		if _, err := lookup(context.Background(), reader, testUser()); !errors.Is(err, domain.ErrNowPlayingTrackNotFound) {
@@ -253,7 +253,7 @@ func TestLookup_AbsentTrackIsNotAnEnrichmentFailureAndNeverTripsTheBreaker(t *te
 
 func TestLookup_ReturnsTheSourcesTrack(t *testing.T) {
 	want := &ports.NowPlayingTrack{Id: uuid.NewString(), Title: "Track Y", Artist: "Artist", AcquisitionStatus: "ready"}
-	reader := service.MustNewNowPlayingReader(sourceFunc(func(context.Context) (*ports.NowPlayingTrack, error) { return want, nil }), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
+	reader := newReader(sourceFunc(func(context.Context) (*ports.NowPlayingTrack, error) { return want, nil }), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 
 	got, err := lookup(context.Background(), reader, testUser())
 	if err != nil || got != want {
@@ -266,7 +266,7 @@ func TestLookup_PassesTheParsedIdAndUserToTheSource(t *testing.T) {
 	id := uuid.New()
 	var gotUser ids.UserId
 	var gotId ids.TrackId
-	reader := service.MustNewNowPlayingReader(trackSourceFunc(func(userId ids.UserId, trackId ids.TrackId) {
+	reader := newReader(trackSourceFunc(func(userId ids.UserId, trackId ids.TrackId) {
 		gotUser, gotId = userId, trackId
 	}), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 
@@ -287,7 +287,7 @@ func (f trackSourceFunc) NowPlayingTrack(_ context.Context, userId ids.UserId, i
 
 func TestLookup_EnrichmentFailure_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(failingSource(), m, time.Now, defaultLookupTimeout)
+	reader := newReader(failingSource(), m, time.Now, defaultLookupTimeout)
 
 	if _, err := lookup(context.Background(), reader, testUser()); !errors.Is(err, domain.ErrTrackSourceUnavailable) {
 		t.Fatalf("precondition: a failing catalog lookup must surface its error, got %v", err)
@@ -302,7 +302,7 @@ func TestLookup_EnrichmentFailure_IncrementsMetric(t *testing.T) {
 
 func TestLookup_Timeout_IncrementsBothMetrics(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(blockingSource(nil), m, time.Now, testLookupTimeout)
+	reader := newReader(blockingSource(nil), m, time.Now, testLookupTimeout)
 
 	if _, err := lookup(context.Background(), reader, testUser()); err == nil {
 		t.Fatal("precondition: a stalled catalog lookup must time out with an error")
@@ -317,7 +317,7 @@ func TestLookup_Timeout_IncrementsBothMetrics(t *testing.T) {
 
 func TestLookup_ClientCancellation_RecordsNoMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(blockingSource(nil), m, time.Now, testLookupTimeout)
+	reader := newReader(blockingSource(nil), m, time.Now, testLookupTimeout)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -332,7 +332,7 @@ func TestLookup_ClientCancellation_RecordsNoMetric(t *testing.T) {
 }
 
 func TestLookup_DerivesDeadlineWhenDependencyBlocks(t *testing.T) {
-	reader := service.MustNewNowPlayingReader(blockingSource(make(chan struct{})), noopEnrichmentMetrics{}, time.Now, testLookupTimeout)
+	reader := newReader(blockingSource(make(chan struct{})), noopEnrichmentMetrics{}, time.Now, testLookupTimeout)
 
 	done := make(chan error, 1)
 	go func() {
@@ -354,7 +354,7 @@ func TestLookup_DefaultDeadlineIsThreeSeconds(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits out the 3s production now-playing lookup deadline")
 	}
-	reader := service.MustNewNowPlayingReader(blockingSource(nil), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
+	reader := newReader(blockingSource(nil), noopEnrichmentMetrics{}, time.Now, defaultLookupTimeout)
 
 	start := time.Now()
 	_, err := lookup(context.Background(), reader, testUser())
@@ -370,7 +370,7 @@ func TestLookup_DefaultDeadlineIsThreeSeconds(t *testing.T) {
 
 func TestLookup_FastFailsAfterSustainedCatalogOutage(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(blockingSource(nil), m, time.Now, testLookupTimeout)
+	reader := newReader(blockingSource(nil), m, time.Now, testLookupTimeout)
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold; i++ {
@@ -395,7 +395,7 @@ func TestLookup_BreakerRecoversAfterCatalogHeals(t *testing.T) {
 	m := &recordingMetrics{}
 	clock := newTestClock()
 	catalog := &switchableSource{current: blockingSource(nil)}
-	reader := service.MustNewNowPlayingReader(catalog, m, clock.read, testLookupTimeout)
+	reader := newReader(catalog, m, clock.read, testLookupTimeout)
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold; i++ {
@@ -420,7 +420,7 @@ func TestLookup_AnAbsentTrackAsTheRecoveryProbeClosesTheBreaker(t *testing.T) {
 	m := &recordingMetrics{}
 	clock := newTestClock()
 	catalog := &switchableSource{current: blockingSource(nil)}
-	reader := service.MustNewNowPlayingReader(catalog, m, clock.read, testLookupTimeout)
+	reader := newReader(catalog, m, clock.read, testLookupTimeout)
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold; i++ {
@@ -447,7 +447,7 @@ func TestLookup_AnAbsentTrackAsTheRecoveryProbeClosesTheBreaker(t *testing.T) {
 func TestLookup_AnAbsentTrackResetsTheConsecutiveFailureCount(t *testing.T) {
 	m := &recordingMetrics{}
 	catalog := &switchableSource{current: failingSource()}
-	reader := service.MustNewNowPlayingReader(catalog, m, time.Now, defaultLookupTimeout)
+	reader := newReader(catalog, m, time.Now, defaultLookupTimeout)
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold-1; i++ {
@@ -466,7 +466,7 @@ func TestLookup_AnAbsentTrackResetsTheConsecutiveFailureCount(t *testing.T) {
 func TestLookup_BreakerStaysOpenForItsWholeWindow(t *testing.T) {
 	m := &recordingMetrics{}
 	clock := newTestClock()
-	reader := service.MustNewNowPlayingReader(failingSource(), m, clock.read, defaultLookupTimeout)
+	reader := newReader(failingSource(), m, clock.read, defaultLookupTimeout)
 	user := testUser()
 	tripBreakerOpen(t, reader, user)
 
@@ -487,7 +487,7 @@ func tripBreakerOpen(t *testing.T, reader nowPlayingLookup, user ids.UserId) {
 
 func TestLookup_BreakerRejection_CountsApartFromFailures(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(failingSource(), m, time.Now, defaultLookupTimeout)
+	reader := newReader(failingSource(), m, time.Now, defaultLookupTimeout)
 	user := testUser()
 	tripBreakerOpen(t, reader, user)
 
@@ -510,7 +510,7 @@ func TestLookup_BreakerStateChangesAreReported(t *testing.T) {
 	m := &recordingMetrics{}
 	clock := newTestClock()
 	catalog := &switchableSource{current: failingSource()}
-	reader := service.MustNewNowPlayingReader(catalog, m, clock.read, defaultLookupTimeout)
+	reader := newReader(catalog, m, clock.read, defaultLookupTimeout)
 	user := testUser()
 	tripBreakerOpen(t, reader, user)
 
@@ -544,7 +544,7 @@ func TestLookup_ProbeAbandonedByItsClientDoesNotWedgeBreaker(t *testing.T) {
 	m := &recordingMetrics{}
 	clock := newTestClock()
 	catalog := &switchableSource{current: blockingSource(nil)}
-	reader := service.MustNewNowPlayingReader(catalog, m, clock.read, testLookupTimeout)
+	reader := newReader(catalog, m, clock.read, testLookupTimeout)
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold; i++ {
@@ -577,7 +577,7 @@ func TestLookup_AProbeThatNeverSettlesLosesItsLeaseAfterThirtySeconds(t *testing
 	m := &recordingMetrics{}
 	clock := newTestClock()
 	catalog := &switchableSource{current: failingSource()}
-	reader := service.MustNewNowPlayingReader(catalog, m, clock.read, time.Minute)
+	reader := newReader(catalog, m, clock.read, time.Minute)
 	user := testUser()
 	for i := 0; i < enrichmentFailureThreshold; i++ {
 		_, _ = lookup(context.Background(), reader, user)
@@ -615,7 +615,7 @@ func TestLookup_AProbeThatNeverSettlesLosesItsLeaseAfterThirtySeconds(t *testing
 
 func TestLookup_ClientCancellationDoesNotTripBreaker(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(blockingSource(nil), m, time.Now, testLookupTimeout)
+	reader := newReader(blockingSource(nil), m, time.Now, testLookupTimeout)
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold+2; i++ {
@@ -633,7 +633,7 @@ func TestLookup_ClientCancellationDoesNotTripBreaker(t *testing.T) {
 
 func TestLookup_PermanentRowErrorsLeaveBreakerClosed(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := service.MustNewNowPlayingReader(permanentRowErrorSource(), m, time.Now, defaultLookupTimeout)
+	reader := newReader(permanentRowErrorSource(), m, time.Now, defaultLookupTimeout)
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold; i++ {
@@ -674,7 +674,7 @@ func (s *staleSuccessSource) NowPlayingTrack(context.Context, ids.UserId, ids.Tr
 func TestLookup_StaleSuccessDoesNotCloseAnOpenBreaker(t *testing.T) {
 	m := &recordingMetrics{}
 	catalog := &staleSuccessSource{firstCallAdmitted: make(chan struct{}), releaseFirstCall: make(chan struct{})}
-	reader := service.MustNewNowPlayingReader(catalog, m, time.Now, testLookupTimeout)
+	reader := newReader(catalog, m, time.Now, testLookupTimeout)
 	user := testUser()
 
 	firstDone := make(chan error)

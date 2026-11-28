@@ -11,8 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type TrackHandler struct {
@@ -98,55 +96,10 @@ func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type SetTrackNumberRequest struct {
-	TrackNumber int `json:"track_number"`
-}
-
-type CreateTrackRequest struct {
-	Title           string                      `json:"title"`
-	Artist          string                      `json:"artist"`
-	Album           *string                     `json:"album,omitempty"`
-	DurationSeconds *float64                    `json:"duration_seconds,omitempty"`
-	ArtworkURL      *string                     `json:"artwork_url,omitempty"`
-	ISRC            *string                     `json:"isrc,omitempty"`
-	Year            *int                        `json:"year,omitempty"`
-	Genre           *string                     `json:"genre,omitempty"`
-	AlbumArtist     *string                     `json:"album_artist,omitempty"`
-	TrackNumber     *int                        `json:"track_number,omitempty"`
-	FeaturedArtists []service.FeaturedArtistDTO `json:"featured_artists,omitempty"`
-	SourceURL       *string                     `json:"source_url,omitempty"`
-	MBID            *string                     `json:"mbid,omitempty"`
-	Explicit        *bool                       `json:"explicit,omitempty"`
-	Sources         []CatalogSourceRequest      `json:"sources,omitempty"`
-}
-
-type CatalogSourceRequest struct {
-	Provider   string `json:"provider"`
-	ExternalID string `json:"external_id"`
-}
-
 func catalogSourcesFromRequest(sources []CatalogSourceRequest) []domain.CatalogSource {
 	out := make([]domain.CatalogSource, len(sources))
 	for i, s := range sources {
 		out[i] = domain.CatalogSource{Provider: s.Provider, ExternalID: s.ExternalID}
-	}
-	return out
-}
-
-type TrackResponse = service.TrackDTO
-
-type ListTracksResponse struct {
-	Items   []TrackResponse `json:"items"`
-	Total   int             `json:"total"`
-	Limit   int             `json:"limit"`
-	Offset  int             `json:"offset"`
-	HasMore bool            `json:"has_more"`
-}
-
-func tracksToDTO(tracks []*domain.Track) []TrackResponse {
-	out := make([]TrackResponse, len(tracks))
-	for i, t := range tracks {
-		out[i] = service.TrackToDTO(t)
 	}
 	return out
 }
@@ -231,13 +184,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		)
 	}
 
-	httpserver.WriteJSON(w, status, service.TrackToDTO(result.Track))
-}
-
-type TrackStatusResponse struct {
-	ID             uuid.UUID `json:"id"`
-	DownloadStatus string    `json:"acquisition_status"`
-	FailureReason  *string   `json:"failure_reason,omitempty"`
+	httpserver.WriteJSON(w, status, TrackToDTO(result.Track))
 }
 
 func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Request) {
@@ -276,25 +223,4 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func domainFeaturedFromDTOs(dtos []service.FeaturedArtistDTO) []domain.FeaturedArtist {
-	if len(dtos) == 0 {
-		return nil
-	}
-	out := make([]domain.FeaturedArtist, 0, len(dtos))
-	for _, d := range dtos {
-		mbid := ""
-		if d.MBID != nil {
-			mbid = *d.MBID
-		}
-		deezerID := int64(0)
-		if d.DeezerID != nil {
-			deezerID = *d.DeezerID
-		}
-		if fa, ok := domain.NewFeaturedArtist(d.Name, mbid, deezerID); ok {
-			out = append(out, fa)
-		}
-	}
-	return out
 }

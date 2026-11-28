@@ -42,8 +42,6 @@ type (
 	FeaturedArtistResolver          = ports.FeaturedArtistResolver
 	SetTrackNumberService           = service.SetTrackNumberService
 	PostgresTrackRepository         = persistence.PostgresTrackRepository
-	PostgresCatalogTrackRepository  = persistence.PostgresCatalogTrackRepository
-	PostgresPlaylistRepository      = persistence.PostgresPlaylistRepository
 	PostgresOrphanedAudioRepository = persistence.PostgresOrphanedAudioRepository
 	MetricsSnapshot                 = telemetry.Snapshot
 	Routes                          = handler.Routes
@@ -130,7 +128,7 @@ func New(d Deps) (*Module, error) {
 	}
 	catalogTracks, playlists, orphanedAudio := d.CatalogTracks, d.Playlists, d.OrphanedAudio
 
-	addTrack, err := service.NewAddTrackService(catalogTracks, d.Events, d.Scheduler, clock.Now, ids.Real)
+	addTrack, err := service.NewAddTrackService(catalogTracks, handler.NewWireEvents(d.Events), d.Scheduler, clock.Now, ids.Real)
 	if err != nil {
 		return nil, fmt.Errorf("build the add-track service: %w", err)
 	}

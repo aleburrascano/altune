@@ -44,74 +44,12 @@ func MustNewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, members
 	return h
 }
 
-type CreatePlaylistRequest struct {
-	Name string `json:"name"`
-}
-
-type RenamePlaylistRequest struct {
-	Name string `json:"name"`
-}
-
-type AddTrackToPlaylistRequest struct {
-	TrackID uuid.UUID `json:"track_id"`
-}
-
-type AddTracksToPlaylistRequest struct {
-	TrackIDs []uuid.UUID `json:"track_ids"`
-}
-
-type AddTracksToPlaylistResponse struct {
-	Added   int `json:"added"`
-	Skipped int `json:"skipped"`
-}
-
-type RemoveTracksFromPlaylistRequest struct {
-	TrackIDs []uuid.UUID `json:"track_ids"`
-}
-
-type RemoveTracksFromPlaylistResponse struct {
-	Removed int `json:"removed"`
-}
-
-type ReorderTracksRequest struct {
-	TrackIDs []uuid.UUID `json:"track_ids"`
-}
-
-type PlaylistResponse struct {
-	ID                 uuid.UUID `json:"id"`
-	Name               string    `json:"name"`
-	TrackCount         int       `json:"track_count"`
-	PreviewArtworkURLs []string  `json:"preview_artwork_urls"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-}
-
-type PlaylistDetailResponse struct {
-	PlaylistResponse
-	TotalDurationSeconds float64         `json:"total_duration_seconds"`
-	Tracks               []TrackResponse `json:"tracks"`
-}
-
 func trackIdsFromUUIDs(ids []uuid.UUID) []domain.TrackId {
 	trackIds := make([]domain.TrackId, len(ids))
 	for i, id := range ids {
 		trackIds[i] = domain.TrackIdFromUUID(id)
 	}
 	return trackIds
-}
-
-func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string) PlaylistResponse {
-	if artworkURLs == nil {
-		artworkURLs = []string{}
-	}
-	return PlaylistResponse{
-		ID:                 p.ID.UUID(),
-		Name:               p.Name,
-		TrackCount:         trackCount,
-		PreviewArtworkURLs: artworkURLs,
-		CreatedAt:          p.CreatedAt,
-		UpdatedAt:          p.UpdatedAt,
-	}
 }
 
 func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {

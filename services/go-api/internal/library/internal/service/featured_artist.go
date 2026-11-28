@@ -81,11 +81,11 @@ func MustNewBackfillFeaturedService(
 }
 
 type BackfillFeaturedResult struct {
-	Scanned    int  `json:"scanned"`
-	Updated    int  `json:"updated"`
-	Failed     int  `json:"failed"`
-	Truncated  bool `json:"truncated"`
-	NextOffset int  `json:"next_offset"`
+	Scanned    int
+	Updated    int
+	Failed     int
+	Truncated  bool
+	NextOffset int
 }
 
 const (

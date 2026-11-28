@@ -1,9 +1,9 @@
 package handler_test
 
 import (
-	ports "altune/go-api/internal/playback/internal"
 	"altune/go-api/internal/playback/internal/adapters/handler"
 	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/playback/internal/service"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"

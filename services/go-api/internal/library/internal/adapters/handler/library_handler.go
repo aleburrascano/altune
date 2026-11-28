@@ -22,24 +22,6 @@ func NewLibraryHandler(lenses *service.LibraryViewService) *LibraryHandler {
 	return &LibraryHandler{lenses: lenses}
 }
 
-type AlbumGroupDTO struct {
-	Key               string  `json:"key"`
-	Album             string  `json:"album"`
-	Artist            string  `json:"artist"`
-	ArtworkURL        *string `json:"artwork_url"`
-	Year              *int    `json:"year"`
-	TrackCount        int     `json:"track_count"`
-	MostRecentAddedAt string  `json:"most_recent_added_at"`
-}
-
-type ArtistGroupDTO struct {
-	Key               string  `json:"key"`
-	Artist            string  `json:"artist"`
-	ArtworkURL        *string `json:"artwork_url"`
-	TrackCount        int     `json:"track_count"`
-	MostRecentAddedAt string  `json:"most_recent_added_at"`
-}
-
 func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	sort, err := domain.ParseLibrarySort(r.URL.Query().Get("sort"))
 	if err != nil {

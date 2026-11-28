@@ -21,7 +21,7 @@ func TestWire_TrackAddedToLibraryEventCarriesTheTrackResponseShape(t *testing.T)
 	repo := memory.NewTrackRepo()
 	published := &memory.RecordingPlaylistPublisher{}
 	tracks := handler.MustNewTrackHandler(
-		service.MustNewAddTrackService(repo, published, &memory.Scheduler{}, time.Now, ids.Real),
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(published), &memory.Scheduler{}, time.Now, ids.Real),
 		service.NewListTracksService(repo),
 		service.NewGetTrackStatusService(repo),
 		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),

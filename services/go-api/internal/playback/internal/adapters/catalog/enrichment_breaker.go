@@ -1,7 +1,7 @@
-package service
+package catalog
 
 import (
-	ports "altune/go-api/internal/playback/internal"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/breaker"
 	"altune/go-api/internal/shared/clock"
 	"context"

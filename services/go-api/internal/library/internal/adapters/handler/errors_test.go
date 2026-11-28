@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library/internal/adapters/handler"
 	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/dbtest"
 	"errors"
 	"fmt"
 	"testing"
@@ -58,6 +59,11 @@ func TestCatalogDomainErrorCodes(t *testing.T) {
 	}
 }
 
+func TestMapError_ValidationErrorsAreInvalidRequests(t *testing.T) {
+	dbtest.AssertValidationError(t, handler.MapError(domain.NewValidationError("name required")))
+	dbtest.AssertValidationError(t, handler.MapError(fmt.Errorf("reorder: %w", domain.ErrPlaylistChangedDuringReorder)))
+}
+
 func TestMapError_ThrottleErrorsKeepTheirKind(t *testing.T) {
 	if got := codeFor(t, domain.ErrBackfillCoolingDown).Code().Kind(); got != apierror.KindRateLimited {
 		t.Errorf("cooling down kind = %v, want rate limited", got)
@@ -73,7 +79,7 @@ func TestMapError_KeepsTheCauseReachableAndPassesUnknownErrorsThrough(t *testing
 		t.Errorf("mapped error lost its cause: %v", mapped)
 	}
 	plain := errors.New("boom")
-	if handler.MapError(plain) != plain {
+	if !errors.Is(handler.MapError(plain), plain) || errors.As(handler.MapError(plain), new(*apierror.CodedError)) {
 		t.Error("an unknown error was rewritten, want it passed through for the 500 path")
 	}
 	reorder := fmt.Errorf("reorder: %w", domain.ErrPlaylistChangedDuringReorder)

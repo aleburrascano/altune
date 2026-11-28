@@ -1,7 +1,7 @@
-package handler
+package telemetry
 
 import (
-	ports "altune/go-api/internal/playback/internal"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/telemetry"
 )
 
@@ -111,4 +111,21 @@ func ReadSnapshot(reg *telemetry.Registry) Snapshot {
 		EnrichmentBreakerRejections: reg.Counter(EnrichmentBreakerRejectionsVar).Value(),
 		EnrichmentBreakerOpen:       reg.Gauge(EnrichmentBreakerOpenVar).Value() == breakerDegraded,
 	}
+}
+
+type Snapshot struct {
+	EnrichmentFailures          int64 `json:"now_playing_enrichment_failures_total"`
+	CorruptStoredState          int64 `json:"corrupt_stored_state_total"`
+	QueueStateOpTimeouts        int64 `json:"queue_state_op_timeouts_total"`
+	QueueStateTransientFailures int64 `json:"queue_state_op_transient_failures_total"`
+	QueueStateStaleWrites       int64 `json:"queue_state_stale_writes_total"`
+	NowPlayingLookupTimeouts    int64 `json:"now_playing_lookup_timeouts_total"`
+	QueueStateRateLimited       int64 `json:"queue_state_rate_limited_total"`
+	ErasureSweepIdle            int64 `json:"erasure_sweep_idle_total"`
+	QueueStateErased            int64 `json:"queue_state_erased_total"`
+	ErasureOwnerScanTimeouts    int64 `json:"erasure_owner_scan_timeouts_total"`
+	ErasureRetryOwnersDropped   int64 `json:"erasure_retry_owners_dropped_total"`
+
+	EnrichmentBreakerRejections int64 `json:"now_playing_enrichment_breaker_rejections_total"`
+	EnrichmentBreakerOpen       bool  `json:"now_playing_enrichment_breaker_open"`
 }

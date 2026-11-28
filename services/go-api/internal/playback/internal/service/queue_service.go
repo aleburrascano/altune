@@ -1,7 +1,7 @@
 package service
 
 import (
-	ports "altune/go-api/internal/playback/internal"
+	"altune/go-api/internal/playback/internal/ports"
 	"errors"
 	"fmt"
 	"time"

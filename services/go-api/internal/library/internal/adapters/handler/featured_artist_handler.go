@@ -38,7 +38,7 @@ func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r 
 		HandleError(w, r, withBackfillProgress(err, result))
 		return
 	}
-	httpserver.WriteJSON(w, http.StatusOK, result)
+	httpserver.WriteJSON(w, http.StatusOK, backfillResponse(result))
 }
 
 func withBackfillProgress(err error, result *service.BackfillFeaturedResult) error {
