@@ -1,11 +1,11 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
-import { SignInScreen } from '@features/signIn';
+import { SignInScreen } from '@features/signIn/view/SignInScreen';
 import {
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+} from '@features/signIn/__tests__/authTestUtils';
 const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 
 const authPort = createAuthPortMock();

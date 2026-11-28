@@ -4,15 +4,9 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { useSession, useSignOut } from '@shared/auth';
-import {
-  clearRecoveryUnlock,
-  isRecoveryUnlocked,
-  markRecoveryUnlocked,
-  recoveryUnlock,
-  subscribeRecoveryUnlock,
-  useRecoveryUnlocked,
-} from '@features/signIn';
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
+import { createSupabaseAuthMock, recovery } from '@features/signIn/__tests__/authTestUtils';
+
 const { getSession, onAuthStateChange, signOut } = createSupabaseAuthMock(
   'getSession',
   'onAuthStateChange',
@@ -25,100 +19,100 @@ const OTHER_USER = 'user-b';
 type WatchedUser = { userId: string };
 
 beforeEach(() => {
-  clearRecoveryUnlock();
+  recovery.clear();
 });
 
 afterEach(() => {
-  clearRecoveryUnlock();
+  recovery.clear();
 });
 
 const RECOVERY_UNLOCK_WINDOW_MS = 300_000;
 
 describe('recoveryUnlock marker', () => {
   it('is locked by default', () => {
-    expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+    expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
   });
 
   it('unlocks for the window after markRecoveryUnlocked', () => {
     const now = 1_000_000;
-    markRecoveryUnlocked(VERIFIED_USER, now);
+    recovery.mark(VERIFIED_USER, now);
 
-    expect(isRecoveryUnlocked(VERIFIED_USER, now)).toBe(true);
-    expect(isRecoveryUnlocked(VERIFIED_USER, now + RECOVERY_UNLOCK_WINDOW_MS - 1)).toBe(true);
+    expect(recovery.isUnlocked(VERIFIED_USER, now)).toBe(true);
+    expect(recovery.isUnlocked(VERIFIED_USER, now + RECOVERY_UNLOCK_WINDOW_MS - 1)).toBe(true);
   });
 
   it('re-locks once the window has elapsed', () => {
     const now = 1_000_000;
-    markRecoveryUnlocked(VERIFIED_USER, now);
+    recovery.mark(VERIFIED_USER, now);
 
-    expect(isRecoveryUnlocked(VERIFIED_USER, now + RECOVERY_UNLOCK_WINDOW_MS)).toBe(false);
-    expect(isRecoveryUnlocked(VERIFIED_USER, now + RECOVERY_UNLOCK_WINDOW_MS + 1)).toBe(false);
+    expect(recovery.isUnlocked(VERIFIED_USER, now + RECOVERY_UNLOCK_WINDOW_MS)).toBe(false);
+    expect(recovery.isUnlocked(VERIFIED_USER, now + RECOVERY_UNLOCK_WINDOW_MS + 1)).toBe(false);
   });
 
   it('clearRecoveryUnlock re-locks immediately', () => {
     const now = 1_000_000;
-    markRecoveryUnlocked(VERIFIED_USER, now);
-    clearRecoveryUnlock();
+    recovery.mark(VERIFIED_USER, now);
+    recovery.clear();
 
-    expect(isRecoveryUnlocked(VERIFIED_USER, now)).toBe(false);
+    expect(recovery.isUnlocked(VERIFIED_USER, now)).toBe(false);
   });
 
   it('notifies subscribers on mark and clear, and detaches on unmount', () => {
     let renders = 0;
     const { result, unmount } = renderHook(() => {
       renders += 1;
-      return useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER);
+      return useRecoveryUnlocked(recovery, VERIFIED_USER);
     });
 
     expect(result.current).toBe(false);
     const before = renders;
 
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
     expect(result.current).toBe(true);
     expect(renders).toBeGreaterThan(before);
 
-    act(() => clearRecoveryUnlock());
+    act(() => recovery.clear());
     expect(result.current).toBe(false);
 
     unmount();
     const afterUnmount = renders;
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
     expect(renders).toBe(afterUnmount);
   });
 
   it('stops notifying a listener once it unsubscribes, while others keep hearing', () => {
     const gone = jest.fn();
     const kept = jest.fn();
-    const unsubscribeGone = subscribeRecoveryUnlock(gone);
-    const unsubscribeKept = subscribeRecoveryUnlock(kept);
+    const unsubscribeGone = recovery.subscribe(gone);
+    const unsubscribeKept = recovery.subscribe(kept);
 
-    markRecoveryUnlocked(VERIFIED_USER);
+    recovery.mark(VERIFIED_USER);
     expect(gone).toHaveBeenCalledTimes(1);
     expect(kept).toHaveBeenCalledTimes(1);
 
     unsubscribeGone();
     gone.mockClear();
     kept.mockClear();
-    clearRecoveryUnlock();
+    recovery.clear();
     expect(gone).not.toHaveBeenCalled();
     expect(kept).toHaveBeenCalledTimes(1);
 
     unsubscribeKept();
     kept.mockClear();
-    markRecoveryUnlocked(VERIFIED_USER);
+    recovery.mark(VERIFIED_USER);
     expect(gone).not.toHaveBeenCalled();
     expect(kept).not.toHaveBeenCalled();
   });
 
   it('reports locked when nothing was marked', () => {
-    const { result } = renderHook(() => useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER));
+    const { result } = renderHook(() => useRecoveryUnlocked(recovery, VERIFIED_USER));
 
     expect(result.current).toBe(false);
   });
 
   it('reports locked for a different user than the one marked', () => {
-    markRecoveryUnlocked(VERIFIED_USER);
-    const { result } = renderHook(() => useRecoveryUnlocked(recoveryUnlock, OTHER_USER));
+    recovery.mark(VERIFIED_USER);
+    const { result } = renderHook(() => useRecoveryUnlocked(recovery, OTHER_USER));
 
     expect(result.current).toBe(false);
   });
@@ -127,11 +121,11 @@ describe('recoveryUnlock marker', () => {
     let renders = 0;
     const { unmount } = renderHook(() => {
       renders += 1;
-      return useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER);
+      return useRecoveryUnlocked(recovery, VERIFIED_USER);
     });
     const before = renders;
 
-    act(() => clearRecoveryUnlock());
+    act(() => recovery.clear());
 
     expect(renders).toBe(before);
     unmount();
@@ -141,35 +135,35 @@ describe('recoveryUnlock marker', () => {
 describe('recoveryUnlock is bound to the identity the recovery was verified for', () => {
   it('stays locked for another account well inside the window', () => {
     const now = 1_000_000;
-    markRecoveryUnlocked(VERIFIED_USER, now);
+    recovery.mark(VERIFIED_USER, now);
 
-    expect(isRecoveryUnlocked(OTHER_USER, now)).toBe(false);
-    expect(isRecoveryUnlocked(OTHER_USER, now + RECOVERY_UNLOCK_WINDOW_MS - 1)).toBe(false);
+    expect(recovery.isUnlocked(OTHER_USER, now)).toBe(false);
+    expect(recovery.isUnlocked(OTHER_USER, now + RECOVERY_UNLOCK_WINDOW_MS - 1)).toBe(false);
   });
 
   it('stays locked when nobody is signed in to compare against', () => {
     const now = 1_000_000;
-    markRecoveryUnlocked(VERIFIED_USER, now);
+    recovery.mark(VERIFIED_USER, now);
 
-    expect(isRecoveryUnlocked(null, now)).toBe(false);
+    expect(recovery.isUnlocked(null, now)).toBe(false);
   });
 
   it('hands the window to the second account when a second recovery is verified, and takes it from the first', () => {
     const now = 1_000_000;
-    markRecoveryUnlocked(VERIFIED_USER, now);
+    recovery.mark(VERIFIED_USER, now);
 
-    markRecoveryUnlocked(OTHER_USER, now);
+    recovery.mark(OTHER_USER, now);
 
-    expect(isRecoveryUnlocked(OTHER_USER, now)).toBe(true);
-    expect(isRecoveryUnlocked(VERIFIED_USER, now)).toBe(false);
+    expect(recovery.isUnlocked(OTHER_USER, now)).toBe(true);
+    expect(recovery.isUnlocked(VERIFIED_USER, now)).toBe(false);
   });
 
   it('re-renders a subscriber locked once the window it is watching belongs to someone else', () => {
     const { result, rerender } = renderHook(
-      ({ userId }: WatchedUser) => useRecoveryUnlocked(recoveryUnlock, userId),
+      ({ userId }: WatchedUser) => useRecoveryUnlocked(recovery, userId),
       { initialProps: { userId: VERIFIED_USER } },
     );
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
     expect(result.current).toBe(true);
 
     rerender({ userId: OTHER_USER });
@@ -184,30 +178,30 @@ describe('recoveryUnlock is bounded by elapsed time no device clock can fake', (
   const A_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
   afterEach(() => {
-    act(() => clearRecoveryUnlock());
+    act(() => recovery.clear());
     jest.useRealTimers();
   });
 
   it('stays locked when the wall clock is rolled back behind the moment it was marked', () => {
-    markRecoveryUnlocked(VERIFIED_USER, MARKED_AT, MARKED_TICK);
+    recovery.mark(VERIFIED_USER, MARKED_AT, MARKED_TICK);
 
-    expect(isRecoveryUnlocked(VERIFIED_USER, MARKED_AT - 1, MARKED_TICK)).toBe(false);
-    expect(isRecoveryUnlocked(VERIFIED_USER, MARKED_AT - A_MONTH_MS, MARKED_TICK)).toBe(false);
+    expect(recovery.isUnlocked(VERIFIED_USER, MARKED_AT - 1, MARKED_TICK)).toBe(false);
+    expect(recovery.isUnlocked(VERIFIED_USER, MARKED_AT - A_MONTH_MS, MARKED_TICK)).toBe(false);
   });
 
   it('stays locked once the window of real elapsed time is spent, with the wall clock held still', () => {
-    markRecoveryUnlocked(VERIFIED_USER, MARKED_AT, MARKED_TICK);
+    recovery.mark(VERIFIED_USER, MARKED_AT, MARKED_TICK);
 
     expect(
-      isRecoveryUnlocked(VERIFIED_USER, MARKED_AT, MARKED_TICK + RECOVERY_UNLOCK_WINDOW_MS),
+      recovery.isUnlocked(VERIFIED_USER, MARKED_AT, MARKED_TICK + RECOVERY_UNLOCK_WINDOW_MS),
     ).toBe(false);
   });
 
   it('stays unlocked while both clocks agree the window is still open', () => {
-    markRecoveryUnlocked(VERIFIED_USER, MARKED_AT, MARKED_TICK);
+    recovery.mark(VERIFIED_USER, MARKED_AT, MARKED_TICK);
 
     expect(
-      isRecoveryUnlocked(
+      recovery.isUnlocked(
         VERIFIED_USER,
         MARKED_AT + RECOVERY_UNLOCK_WINDOW_MS - 1,
         MARKED_TICK + RECOVERY_UNLOCK_WINDOW_MS - 1,
@@ -218,11 +212,11 @@ describe('recoveryUnlock is bounded by elapsed time no device clock can fake', (
   it('stays locked after a rollback against the clocks it reads by default', () => {
     jest.useFakeTimers();
     jest.setSystemTime(MARKED_AT + A_MONTH_MS);
-    markRecoveryUnlocked(VERIFIED_USER);
+    recovery.mark(VERIFIED_USER);
 
     jest.setSystemTime(MARKED_AT);
 
-    expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+    expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
   });
 });
 
@@ -232,13 +226,13 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
   });
 
   afterEach(() => {
-    act(() => clearRecoveryUnlock());
+    act(() => recovery.clear());
     jest.useRealTimers();
   });
 
   it('flips from unlocked to locked once fake time passes the window', () => {
-    const { result } = renderHook(() => useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER));
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    const { result } = renderHook(() => useRecoveryUnlocked(recovery, VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
     expect(result.current).toBe(true);
 
     act(() => {
@@ -249,8 +243,8 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
   });
 
   it('holds a subscriber unlocked right up to the cutoff', () => {
-    const { result } = renderHook(() => useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER));
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    const { result } = renderHook(() => useRecoveryUnlocked(recovery, VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
 
     act(() => {
       jest.advanceTimersByTime(RECOVERY_UNLOCK_WINDOW_MS - 1);
@@ -260,8 +254,8 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
   });
 
   it('locks a subscriber that never re-rendered once the cutoff passes', () => {
-    const { result } = renderHook(() => useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER));
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    const { result } = renderHook(() => useRecoveryUnlocked(recovery, VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
     expect(result.current).toBe(true);
 
     act(() => {
@@ -272,12 +266,12 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
   });
 
   it('demotes a subscriber that mounted onto a window already open', () => {
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
     act(() => {
       jest.advanceTimersByTime(RECOVERY_UNLOCK_WINDOW_MS / 2);
     });
 
-    const { result } = renderHook(() => useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER));
+    const { result } = renderHook(() => useRecoveryUnlocked(recovery, VERIFIED_USER));
     expect(result.current).toBe(true);
     act(() => {
       jest.advanceTimersByTime(RECOVERY_UNLOCK_WINDOW_MS / 2);
@@ -287,13 +281,13 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
   });
 
   it('gives a second verified recovery a full window of its own', () => {
-    const { result } = renderHook(() => useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER));
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    const { result } = renderHook(() => useRecoveryUnlocked(recovery, VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
     act(() => {
       jest.advanceTimersByTime(RECOVERY_UNLOCK_WINDOW_MS);
     });
 
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    act(() => recovery.mark(VERIFIED_USER));
 
     expect(result.current).toBe(true);
     act(() => {
@@ -306,10 +300,10 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
     let renders = 0;
     renderHook(() => {
       renders += 1;
-      return useRecoveryUnlocked(recoveryUnlock, VERIFIED_USER);
+      return useRecoveryUnlocked(recovery, VERIFIED_USER);
     });
-    act(() => markRecoveryUnlocked(VERIFIED_USER));
-    act(() => clearRecoveryUnlock());
+    act(() => recovery.mark(VERIFIED_USER));
+    act(() => recovery.clear());
     const before = renders;
 
     act(() => {
@@ -368,59 +362,59 @@ describe('closing the window on sign-out', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    clearRecoveryUnlock();
+    recovery.clear();
   });
 
   afterEach(() => {
     while (pendingUnmounts.length > 0) pendingUnmounts.pop()?.();
-    clearRecoveryUnlock();
+    recovery.clear();
   });
 
   describe('a recovery window dies with the session it was verified for (#1638)', () => {
     it('an explicit sign-out closes a window an abandoned recovery left open', async () => {
       installAuth();
-      markRecoveryUnlocked(RECOVERING_USER);
+      recovery.mark(RECOVERING_USER);
       const { result } = renderHook(() => useSignOut(), { wrapper: Wrapper });
 
       await act(async () => {
         await result.current.signOut();
       });
 
-      expect(isRecoveryUnlocked(RECOVERING_USER)).toBe(false);
+      expect(recovery.isUnlocked(RECOVERING_USER)).toBe(false);
     });
 
     it('a sign-out that fails server-side still closes the window, because the local session is gone either way', async () => {
       installAuth();
       signOut.mockRejectedValue(new Error('network down'));
-      markRecoveryUnlocked(RECOVERING_USER);
+      recovery.mark(RECOVERING_USER);
       const { result } = renderHook(() => useSignOut(), { wrapper: Wrapper });
 
       await act(async () => {
         await result.current.signOut();
       });
 
-      expect(isRecoveryUnlocked(RECOVERING_USER)).toBe(false);
+      expect(recovery.isUnlocked(RECOVERING_USER)).toBe(false);
     });
 
     it('a revoked session observed by useSession closes the window', () => {
       const auth = renderSession();
       act(() => auth.emit('PASSWORD_RECOVERY', sessionFor(RECOVERING_USER)));
-      markRecoveryUnlocked(RECOVERING_USER);
+      recovery.mark(RECOVERING_USER);
 
       act(() => auth.emit('SIGNED_OUT', null));
 
-      expect(isRecoveryUnlocked(RECOVERING_USER)).toBe(false);
+      expect(recovery.isUnlocked(RECOVERING_USER)).toBe(false);
     });
 
     it('a switch straight into another account closes the window, leaving it open for neither', () => {
       const auth = renderSession();
       act(() => auth.emit('PASSWORD_RECOVERY', sessionFor(RECOVERING_USER)));
-      markRecoveryUnlocked(RECOVERING_USER);
+      recovery.mark(RECOVERING_USER);
 
       act(() => auth.emit('SIGNED_IN', sessionFor(OTHER_USER)));
 
-      expect(isRecoveryUnlocked(RECOVERING_USER)).toBe(false);
-      expect(isRecoveryUnlocked(OTHER_USER)).toBe(false);
+      expect(recovery.isUnlocked(RECOVERING_USER)).toBe(false);
+      expect(recovery.isUnlocked(OTHER_USER)).toBe(false);
     });
   });
 
@@ -430,19 +424,19 @@ describe('closing the window on sign-out', () => {
       act(() => auth.emit('INITIAL_SESSION', null));
 
       act(() => auth.emit('PASSWORD_RECOVERY', sessionFor(RECOVERING_USER)));
-      markRecoveryUnlocked(RECOVERING_USER);
+      recovery.mark(RECOVERING_USER);
 
-      expect(isRecoveryUnlocked(RECOVERING_USER)).toBe(true);
+      expect(recovery.isUnlocked(RECOVERING_USER)).toBe(true);
     });
 
     it('leaves the window open when the token is refreshed for the same user mid-flow', () => {
       const auth = renderSession();
       act(() => auth.emit('PASSWORD_RECOVERY', sessionFor(RECOVERING_USER)));
-      markRecoveryUnlocked(RECOVERING_USER);
+      recovery.mark(RECOVERING_USER);
 
       act(() => auth.emit('TOKEN_REFRESHED', sessionFor(RECOVERING_USER)));
 
-      expect(isRecoveryUnlocked(RECOVERING_USER)).toBe(true);
+      expect(recovery.isUnlocked(RECOVERING_USER)).toBe(true);
     });
   });
 });

@@ -1,11 +1,34 @@
 import {
-  clearFailedAttempts,
-  isLockedOut,
-  lockoutOnRepeatedFailure,
-  recordFailedAttempt,
-  _resetLockoutsForTest,
-  type LockoutAction,
-} from '@features/signIn';
+  createAttemptLockoutStore,
+  type AttemptLockoutStore,
+} from '@features/signIn/core/attemptLockoutStore';
+import type { LockoutAction } from '@features/signIn/ports/ports';
+
+let store: AttemptLockoutStore = createAttemptLockoutStore();
+
+function isLockedOut(...args: Parameters<AttemptLockoutStore['isLockedOut']>): boolean {
+  return store.isLockedOut(...args);
+}
+
+function recordFailedAttempt(
+  ...args: Parameters<AttemptLockoutStore['recordFailedAttempt']>
+): void {
+  store.recordFailedAttempt(...args);
+}
+
+function clearFailedAttempts(
+  ...args: Parameters<AttemptLockoutStore['clearFailedAttempts']>
+): void {
+  store.clearFailedAttempts(...args);
+}
+
+function lockoutOnRepeatedFailure<A extends [string, ...unknown[]], R extends { kind: string }>(
+  action: LockoutAction,
+  attempt: (...args: A) => Promise<R>,
+  countsAsFailure: (outcome: R) => boolean,
+) {
+  return store.guard(action, attempt, countsAsFailure);
+}
 
 const START = 1_000_000;
 const LOCKOUT_AFTER_FAILURES = 5;
@@ -18,7 +41,7 @@ function failTimes(email: string, times: number, at: number = START): void {
 }
 
 beforeEach(() => {
-  _resetLockoutsForTest();
+  store = createAttemptLockoutStore();
 });
 
 describe('attemptLockout: the cooldown a run of failures earns', () => {

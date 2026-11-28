@@ -4,11 +4,9 @@ import { renderRouter } from 'expo-router/testing-library';
 import { StyleSheet } from 'react-native';
 
 import { darkTheme, spacing } from '@shared/ui';
-import { AuthGate, InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn';
-import {
-  authPortWrapper,
-  createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { AuthGate } from '@features/signIn/view/AuthGate';
+import { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn/view/AuthNotices';
+import { authPortWrapper, createSupabaseAuthMock } from '@features/signIn/__tests__/authTestUtils';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const { getSession, onAuthStateChange, signOut } = createSupabaseAuthMock(

@@ -6,9 +6,9 @@ import { useNavigator } from '@shared/navigation';
 import { Text } from '@shared/ui';
 
 import type { AuthIntentResult } from '@features/signIn/core/authIntent';
-import type { AuthIntents, AuthRouter } from '@features/signIn/ports/authIntents';
-import { useAuthIntents } from '@features/signIn/view/AuthPortProvider';
-import { thrownErrorDetail } from '@features/signIn/core/authError';
+import type { AuthIntents, AuthRouter } from '@features/signIn/ports/ports';
+import { useAuthIntents } from '@features/signIn/view/SignInProvider';
+import { thrownErrorDetail } from '@features/signIn/core/errors';
 import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseAuthLink';
 
 import { AuthFullScreenNotice } from '@features/signIn/view/AuthNotices';

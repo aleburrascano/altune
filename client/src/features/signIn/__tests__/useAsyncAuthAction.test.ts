@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 
-import { useAsyncAuthAction } from '@features/signIn';
+import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;

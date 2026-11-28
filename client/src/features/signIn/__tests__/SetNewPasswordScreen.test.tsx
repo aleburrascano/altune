@@ -2,11 +2,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 
-import { SetNewPasswordScreen } from '@features/signIn';
-import {
-  authPortWrapper,
-  createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { SetNewPasswordScreen } from '@features/signIn/view/SetNewPasswordScreen';
+import { authPortWrapper, createSupabaseAuthMock } from '@features/signIn/__tests__/authTestUtils';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 

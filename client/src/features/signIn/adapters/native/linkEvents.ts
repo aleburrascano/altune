@@ -1,17 +1,15 @@
-import * as Linking from 'expo-linking';
-
 import { isWebPlatform } from '@shared/device';
-import type { LinkEvents } from '@features/signIn/ports/linkEvents';
+import type { LinkEvents } from '@features/signIn/ports/ports';
 
-export interface UrlEvent {
+interface UrlEvent {
   url: string;
 }
 
-export interface LinkSubscription {
+interface LinkSubscription {
   remove(): void;
 }
 
-export interface LinkingSource {
+interface LinkingSource {
   getInitialURL(): Promise<string | null>;
   addEventListener(type: 'url', onUrl: (event: UrlEvent) => void): LinkSubscription;
 }
@@ -26,5 +24,3 @@ export function createLinkEvents(linking: LinkingSource): LinkEvents {
     },
   };
 }
-
-export const nativeLinkEvents: LinkEvents = createLinkEvents(Linking);

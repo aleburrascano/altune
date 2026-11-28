@@ -1,4 +1,4 @@
-import { isPresent } from '@features/signIn';
+import { isPresent } from '@features/signIn/core/isPresent';
 
 describe('isPresent', () => {
   it.each([[null], [undefined], ['']])('treats %p as absent', (value) => {

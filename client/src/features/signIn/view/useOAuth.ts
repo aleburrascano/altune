@@ -2,7 +2,7 @@ import { NetworkError } from '@shared/failure';
 import { startOAuth, withAuthDeadline } from '@shared/auth';
 import { useNavigator } from '@shared/navigation';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
-import type { AuthIntents, AuthRouter } from '@features/signIn/ports/authIntents';
+import type { AuthBrowser, AuthIntents, AuthPort, AuthRouter } from '@features/signIn/ports/ports';
 import {
   failureReason,
   OAUTH_BROWSER_TIMEOUT_MS,
@@ -12,13 +12,7 @@ import {
   type OAuthProvider,
 } from '@features/signIn/core/oauthResult';
 import { parseAuthLink } from '@features/signIn/core/parseAuthLink';
-import {
-  useAuthBrowser,
-  useAuthIntents,
-  useAuthPort,
-} from '@features/signIn/view/AuthPortProvider';
-import type { AuthBrowser } from '@features/signIn/ports/authBrowser';
-import type { AuthPort } from '@features/signIn/ports/authPort';
+import { useAuthBrowser, useAuthIntents, useAuthPort } from '@features/signIn/view/SignInProvider';
 
 import { useOAuthFlow } from '@features/signIn/view/useOAuthFlow';
 import { isPresent } from '@features/signIn/core/isPresent';

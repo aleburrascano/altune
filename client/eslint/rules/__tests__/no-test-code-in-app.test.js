@@ -22,8 +22,8 @@ ruleTester.run('no-test-code-in-app', rule, {
   ],
   invalid: [
     {
-      code: "export { authPortWrapper } from '@features/signIn/__tests__/testUtils/authTestUtils';",
-      errors: flagged('@features/signIn/__tests__/testUtils/authTestUtils'),
+      code: "export { authPortWrapper } from '@features/signIn/__tests__/authTestUtils';",
+      errors: flagged('@features/signIn/__tests__/authTestUtils'),
     },
     {
       code: "export * from '@shared/log/__tests__/recordLogs';",

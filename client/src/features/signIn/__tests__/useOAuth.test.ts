@@ -2,20 +2,18 @@ import { renderHook, act } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth';
 
-import {
-  _resetConsumedCredentialForTest,
-  completeAuthIntent,
-  parseAuthLink,
-  OAUTH_BROWSER_TIMEOUT_MS,
-  useOAuth,
-} from '@features/signIn';
+import { parseAuthLink } from '@features/signIn/core/parseAuthLink';
+import { OAUTH_BROWSER_TIMEOUT_MS } from '@features/signIn/core/oauthResult';
+import { useOAuth } from '@features/signIn/view/useOAuth';
 import {
   authPortWrapper,
+  completeAuthIntent,
+  resetConsumedCredential,
   createAuthBrowserMock,
   createAuthPortMock,
   type AuthBrowserMock,
   createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+} from '@features/signIn/__tests__/authTestUtils';
 import { flushPromises } from '@testing/flushPromises';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
@@ -46,7 +44,7 @@ function listenerSpendsTheRedirect(): Promise<unknown> {
 beforeEach(() => {
   browser = createAuthBrowserMock();
   authPort.reportSignInFailure.mockClear();
-  _resetConsumedCredentialForTest();
+  resetConsumedCredential();
   exchangeSucceeds();
 });
 

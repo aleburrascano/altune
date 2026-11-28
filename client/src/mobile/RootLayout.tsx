@@ -16,7 +16,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { installApiBase } from '@shared/apiConfig';
-import { installAuthClient } from '@shared/auth';
+import { authIntentClient, installAuthClient } from '@shared/auth';
+import { onSignOut } from '@shared/session';
 import { installBuild } from '@shared/device';
 import { warn } from '@shared/log';
 import { createQueryClient } from '@shared/query';
@@ -25,10 +26,11 @@ import { StagingBanner } from '@/mobile/frame/StagingBanner';
 import { useNavigator } from '@shared/navigation';
 import {
   AuthGate,
-  attemptLockout,
-  authIntents,
-  AuthPortProvider,
-  recoveryUnlock,
+  createAttemptLockoutStore,
+  createAuthIntents,
+  createRecoveryUnlockStore,
+  createSignInHealth,
+  SignInProvider,
   httpAuthPort,
   nativeAuthBrowser,
   nativeLinkEvents,
@@ -86,6 +88,15 @@ installAuthClient(
 );
 provideOfflinePort(httpOfflinePort);
 
+const attemptLockout = createAttemptLockoutStore();
+const recoveryUnlock = createRecoveryUnlockStore(onSignOut);
+const signInHealth = createSignInHealth();
+const authIntents = createAuthIntents({
+  recovery: recoveryUnlock,
+  health: signInHealth,
+  authClient: authIntentClient,
+});
+
 function artworkPlaceholderUri(): string {
   const asset = Asset.fromModule(require('@assets/artwork-placeholder.png'));
   return asset.localUri ?? asset.uri;
@@ -119,7 +130,7 @@ function ConnectedOfflineReconcile() {
 function AuthDeepLinkBridge() {
   const router = useNavigator();
 
-  useEffect(() => startAppAuthDeepLinks(nativeLinkEvents, router), [router]);
+  useEffect(() => startAppAuthDeepLinks(nativeLinkEvents, router, authIntents), [router]);
   return null;
 }
 
@@ -175,12 +186,13 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <AuthPortProvider
+        <SignInProvider
           port={httpAuthPort}
           browser={nativeAuthBrowser}
           lockout={attemptLockout}
           recovery={recoveryUnlock}
           intents={authIntents}
+          health={signInHealth}
         >
           <FeaturePorts ports={httpFeaturePorts}>
             <TapFeedbackProvider feedback={tapFeedback}>
@@ -218,7 +230,7 @@ export default function RootLayout() {
               </ThemeProvider>
             </TapFeedbackProvider>
           </FeaturePorts>
-        </AuthPortProvider>
+        </SignInProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

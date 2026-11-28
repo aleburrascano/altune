@@ -1,10 +1,14 @@
-import { startAuthDeepLinks, type LinkEvents } from '@features/signIn';
+import { startAppAuthDeepLinks } from '@features/signIn/shell/authDeepLinks';
+import { createSignInHealth } from '@features/signIn/core/signInHealth';
+import { createAuthIntents } from '@features/signIn/shell/completeAuthIntent';
+import { type LinkEvents } from '@features/signIn/ports/ports';
+import { recovery } from '@features/signIn/__tests__/authTestUtils';
 import { createMemoryNavigator } from '@testing/fakes/navigation/inMemoryNavigator';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { flushPromises } from '@testing/flushPromises';
 
-type AuthStub = Parameters<typeof startAuthDeepLinks>[0]['auth'];
+type AuthStub = ReturnType<Parameters<typeof createAuthIntents>[0]['authClient']>;
 type UrlListener = (url: string) => void;
 type AuthSetup = { exchangeCodeForSession: jest.Mock; verifyOtp: jest.Mock; getSession: jest.Mock };
 
@@ -20,6 +24,12 @@ let logs: RecordedLogs;
 let dialogs: RecordedDialogs;
 let auth: AuthSetup;
 let linkCounter = 0;
+
+const intents = createAuthIntents({
+  recovery,
+  health: createSignInHealth(),
+  authClient: () => auth as AuthStub,
+});
 
 beforeEach(() => {
   logs = recordLogs();
@@ -77,19 +87,10 @@ type Started = { source: LinkSource; navigator: ReturnType<typeof createMemoryNa
 async function startWith(initial: string | Error | null): Promise<Started> {
   const source = linksStarting(initial);
   const navigator = createMemoryNavigator();
-  startAuthDeepLinks({
-    links: source.links,
-    router: navigator,
-    auth: auth as AuthStub,
-    log: { warn },
-  });
+  startAppAuthDeepLinks(source.links, navigator, intents);
   await flushMacrotask();
   await flushMacrotask();
   return { source, navigator };
-}
-
-function warn(message: string, ...details: unknown[]): void {
-  logs.warnings.push([message, ...details]);
 }
 
 describe('a rejected completeAuthIntent (#657)', () => {
@@ -177,12 +178,7 @@ describe('native completes a delivered url event (#2924 probe)', () => {
 
   it('stops listening once the hook is torn down', async () => {
     const source = linksStarting(null);
-    const stop = startAuthDeepLinks({
-      links: source.links,
-      router: createMemoryNavigator(),
-      auth: auth as AuthStub,
-      log: { warn },
-    });
+    const stop = startAppAuthDeepLinks(source.links, createMemoryNavigator(), intents);
 
     stop();
     source.emit('altune://auth/callback?code=late');

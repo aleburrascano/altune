@@ -4,15 +4,18 @@ import { Text } from 'react-native';
 import { type ReactNode, useEffect } from 'react';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 
-import { installAuthClient } from '@shared/auth';
+import { authIntentClient, installAuthClient } from '@shared/auth';
 import { authClientOver } from '@testing/fakeAuthClient';
-import { authPortWrapper } from '@features/signIn/__tests__/testUtils/authTestUtils';
 
 import { useNavigator } from '@shared/navigation';
+import { onSignOut } from '@shared/session';
 import {
   AuthGate,
-  clearRecoveryUnlock,
-  type LinkEvents,
+  createAttemptLockoutStore,
+  createAuthIntents,
+  createRecoveryUnlockStore,
+  createSignInHealth,
+  SignInProvider,
   startAppAuthDeepLinks,
 } from '@features/signIn';
 import IndexScreen from '@/app/index';
@@ -39,7 +42,12 @@ let warmListeners: ((url: string) => void)[];
 let verifyOtp: jest.Mock;
 let exchangeCodeForSession: jest.Mock;
 
-const links: LinkEvents = {
+const recovery = createRecoveryUnlockStore(onSignOut);
+const health = createSignInHealth();
+const intents = createAuthIntents({ recovery, health, authClient: authIntentClient });
+const lockout = createAttemptLockoutStore();
+
+const links: Parameters<typeof startAppAuthDeepLinks>[0] = {
   initialUrl: async () => initialLink,
   subscribeUrl: (listener) => {
     warmListeners.push(listener);
@@ -71,15 +79,31 @@ beforeEach(() => {
   verifyOtp = jest.fn().mockResolvedValue(VERIFIED);
   exchangeCodeForSession = jest.fn().mockResolvedValue({ error: null });
   installFakeAuth();
-  act(() => clearRecoveryUnlock());
+  act(() => recovery.clear());
 });
 
 afterEach(() => {
   client.clear();
-  act(() => clearRecoveryUnlock());
+  act(() => recovery.clear());
 });
 
-const Ports = authPortWrapper();
+const port = { reportSignInFailure: jest.fn() };
+const browser = { openAuthSession: jest.fn(), dismissAuthSession: jest.fn() };
+
+function Ports({ children }: { children: ReactNode }) {
+  return (
+    <SignInProvider
+      port={port}
+      browser={browser}
+      lockout={lockout}
+      recovery={recovery}
+      intents={intents}
+      health={health}
+    >
+      {children}
+    </SignInProvider>
+  );
+}
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -92,7 +116,7 @@ function wrapper({ children }: { children: ReactNode }) {
 function AuthDeepLinkBridge() {
   const router = useNavigator();
 
-  useEffect(() => startAppAuthDeepLinks(links, router), [router]);
+  useEffect(() => startAppAuthDeepLinks(links, router, intents), [router]);
   return null;
 }
 

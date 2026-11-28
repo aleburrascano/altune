@@ -1,13 +1,13 @@
 import { warn } from '@shared/log';
 import { requestPasswordReset } from '@shared/auth';
 
-import { useAttemptLockout } from '@features/signIn/view/AuthPortProvider';
+import { useAttemptLockout } from '@features/signIn/view/SignInProvider';
 import {
   classifyAuthError,
   type SupabaseAuthErrorLike,
   supabaseErrorDetail,
   type TransientAuthReason,
-} from '@features/signIn/core/authError';
+} from '@features/signIn/core/errors';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
 
 import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';

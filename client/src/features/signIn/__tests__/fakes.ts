@@ -1,4 +1,4 @@
-import type { AuthPort } from '@features/signIn';
+import type { AuthPort } from '@features/signIn/ports/ports';
 
 type FailureReason = Parameters<AuthPort['reportSignInFailure']>[0];
 

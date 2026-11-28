@@ -1,14 +1,11 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import {
-  attemptLockout,
-  authIntents,
-  AuthPortProvider,
-  recoveryUnlock,
-  useAuthPort,
-} from '@features/signIn';
-import type { AuthBrowser, AuthPort } from '@features/signIn';
+import { SignInProvider, useAuthPort } from '@features/signIn/view/SignInProvider';
+import type { AuthBrowser, AuthPort } from '@features/signIn/ports/ports';
+import { intents, recovery } from '@features/signIn/__tests__/authTestUtils';
+import { createSignInHealth } from '@features/signIn/core/signInHealth';
+import { createAttemptLockoutStore } from '@features/signIn/core/attemptLockoutStore';
 
 const port: AuthPort = {
   reportSignInFailure: () => undefined,
@@ -23,19 +20,20 @@ interface WrapperProps {
   children: ReactNode;
 }
 
-describe('AuthPortProvider', () => {
+describe('SignInProvider', () => {
   it('provides the port to useAuthPort', () => {
     function wrapper({ children }: WrapperProps) {
       return (
-        <AuthPortProvider
+        <SignInProvider
           port={port}
           browser={browser}
-          lockout={attemptLockout}
-          recovery={recoveryUnlock}
-          intents={authIntents}
+          lockout={createAttemptLockoutStore()}
+          recovery={recovery}
+          intents={intents}
+          health={createSignInHealth()}
         >
           {children}
-        </AuthPortProvider>
+        </SignInProvider>
       );
     }
     const { result } = renderHook(() => useAuthPort(), { wrapper });
@@ -44,7 +42,7 @@ describe('AuthPortProvider', () => {
 
   it('throws when no provider is mounted', () => {
     expect(() => renderHook(() => useAuthPort())).toThrow(
-      'no auth port provided: mount AuthPortProvider',
+      'no auth port provided: mount SignInProvider',
     );
   });
 });

@@ -5,7 +5,7 @@ import {
   isSignupDisabledError,
   isUnconfirmedEmailError,
   type AuthErrorReason,
-} from '@features/signIn';
+} from '@features/signIn/core/errors';
 
 const GENERIC = "Couldn't sign you in. Please try again.";
 const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";

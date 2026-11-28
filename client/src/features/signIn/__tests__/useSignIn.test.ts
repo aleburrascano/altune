@@ -1,9 +1,9 @@
-import { useSignIn } from '@features/signIn';
+import { useSignIn } from '@features/signIn/view/useSignIn';
 import {
   createAuthPortMock,
   createSupabaseAuthMock,
   runAsyncAuthHook,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+} from '@features/signIn/__tests__/authTestUtils';
 const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 
 const authPort = createAuthPortMock();

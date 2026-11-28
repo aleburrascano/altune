@@ -5,11 +5,12 @@ import { renderRouter } from 'expo-router/testing-library';
 import type { ReactNode } from 'react';
 import { Text } from 'react-native';
 
-import { AuthGate, clearRecoveryUnlock, markRecoveryUnlocked } from '@features/signIn';
+import { AuthGate } from '@features/signIn/view/AuthGate';
 import {
   authPortWrapper,
   createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+  recovery,
+} from '@features/signIn/__tests__/authTestUtils';
 import { freezeDate } from '@testing/freezeDate';
 
 let sessionStatus: 'loading' | 'signed-in' | 'signed-out' = 'signed-in';
@@ -81,12 +82,12 @@ async function renderGate(url: string): Promise<ReturnType<typeof renderRouter>>
 beforeEach(() => {
   sessionStatus = 'signed-in';
   signedInUserId = 'user-a';
-  act(() => clearRecoveryUnlock());
+  act(() => recovery.clear());
 });
 
 afterEach(() => {
   jest.useRealTimers();
-  act(() => clearRecoveryUnlock());
+  act(() => recovery.clear());
 });
 
 const RECOVERY_UNLOCK_WINDOW_MS = 300_000;
@@ -100,7 +101,7 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
   });
 
   it('renders the password form once a recovery exchange has unlocked it', async () => {
-    act(() => markRecoveryUnlocked('user-a'));
+    act(() => recovery.mark('user-a'));
 
     await renderGate('/reset-password');
 
@@ -110,7 +111,7 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
 
   it('shows the invalid-link notice again once the unlock window has expired', async () => {
     const start = 1_000_000;
-    act(() => markRecoveryUnlocked('user-a', start));
+    act(() => recovery.mark('user-a', start));
     freezeDate(start + RECOVERY_UNLOCK_WINDOW_MS + 1);
 
     await renderGate('/reset-password');
@@ -122,7 +123,7 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
 
 describe('AuthGate: the unlock belongs to the account it was verified for (#1638)', () => {
   it('shows the invalid-link notice when the active session is a different account from the one the recovery unlocked', async () => {
-    act(() => markRecoveryUnlocked('user-a'));
+    act(() => recovery.mark('user-a'));
     signedInUserId = 'user-b';
 
     await renderGate('/reset-password');
@@ -132,7 +133,7 @@ describe('AuthGate: the unlock belongs to the account it was verified for (#1638
   });
 
   it('shows the invalid-link notice when the recovery was abandoned and nobody is signed in', async () => {
-    act(() => markRecoveryUnlocked('user-a'));
+    act(() => recovery.mark('user-a'));
     sessionStatus = 'signed-out';
 
     await renderGate('/reset-password');
@@ -142,7 +143,7 @@ describe('AuthGate: the unlock belongs to the account it was verified for (#1638
   });
 
   it('still renders the password form for the account the recovery was verified for', async () => {
-    act(() => markRecoveryUnlocked('user-b'));
+    act(() => recovery.mark('user-b'));
     signedInUserId = 'user-b';
 
     await renderGate('/reset-password');

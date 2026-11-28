@@ -2,8 +2,8 @@ import { screen, waitFor } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
 import { Platform, Text } from 'react-native';
 
-import { AuthCallbackScreen } from '@features/signIn';
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { AuthCallbackScreen } from '@features/signIn/view/AuthCallbackScreen';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/authTestUtils';
 const ROUTES = {
   index: () => <Text>home-screen</Text>,
   'auth/callback': AuthCallbackScreen,

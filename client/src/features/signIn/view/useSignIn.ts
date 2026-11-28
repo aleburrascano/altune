@@ -6,9 +6,12 @@ import {
   isUnconfirmedEmailError,
   type SignInFailureReason,
   type SupabaseAuthErrorLike,
-} from '@features/signIn/core/authError';
-import { recordSignInOk } from '@features/signIn/core/signInHealth';
-import { useAttemptLockout, useAuthPort } from '@features/signIn/view/AuthPortProvider';
+} from '@features/signIn/core/errors';
+import {
+  useAttemptLockout,
+  useAuthPort,
+  useSignInHealth,
+} from '@features/signIn/view/SignInProvider';
 
 import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';
 
@@ -28,13 +31,14 @@ function signInErrorReason(error: SupabaseAuthErrorLike): SignInFailureReason {
 export function useSignIn() {
   const authPort = useAuthPort();
   const lockout = useAttemptLockout();
+  const health = useSignInHealth();
   const { state, run } = useAsyncAuthAction<SignInResult, [string, string]>(
     lockout.guard(
       'sign-in',
       async (email: string, password: string) => {
         const { error } = await signInWithPassword({ email, password });
         if (!error) {
-          recordSignInOk();
+          health.recordSignInOk();
           return { kind: 'ok' } as const;
         }
         const reason = signInErrorReason(error);

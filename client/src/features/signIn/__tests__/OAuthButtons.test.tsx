@@ -1,13 +1,13 @@
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderRouter, screen } from 'expo-router/testing-library';
 
-import { OAuthButtons } from '@features/signIn';
+import { OAuthButtons } from '@features/signIn/view/OAuthButtons';
 import {
   authPortWrapper,
   createAuthBrowserMock,
   createAuthPortMock,
   createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+} from '@features/signIn/__tests__/authTestUtils';
 
 const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');

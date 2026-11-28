@@ -1,7 +1,8 @@
 import { fireEvent, screen } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
-import { SetNewPasswordScreen, SignUpScreen } from '@features/signIn';
-import { authPortWrapper } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { SetNewPasswordScreen } from '@features/signIn/view/SetNewPasswordScreen';
+import { SignUpScreen } from '@features/signIn/view/SignUpScreen';
+import { authPortWrapper } from '@features/signIn/__tests__/authTestUtils';
 const offersAGeneratedPassword = {
   secureTextEntry: true,
   autoCapitalize: 'none',

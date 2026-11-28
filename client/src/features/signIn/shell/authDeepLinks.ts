@@ -1,31 +1,18 @@
-import { authIntentClient } from '@shared/auth';
 import { warn } from '@shared/log';
 import { showFailureAlert } from '@shared/ui';
 import type { AuthIntentResult } from '@features/signIn/core/authIntent';
-import type { AuthRouter } from '@features/signIn/ports/authIntents';
-import { completeAuthIntent } from '@features/signIn/shell/completeAuthIntent';
-import { thrownErrorDetail } from '@features/signIn/core/authError';
+import { thrownErrorDetail } from '@features/signIn/core/errors';
 import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseAuthLink';
-import type { LinkEvents } from '@features/signIn/ports/linkEvents';
+import type { AuthIntents, AuthRouter, LinkEvents } from '@features/signIn/ports/ports';
 import { isPresent } from '@features/signIn/core/isPresent';
 
 type LinkKind = AuthLinkIntent['kind'];
-type AuthClient = Parameters<typeof completeAuthIntent>[2];
 
-type DeepLinkLog = { warn(message: string, ...details: unknown[]): void };
-
-type AuthDeepLinkDeps = {
-  links: LinkEvents;
-  router: AuthRouter;
-  auth: AuthClient;
-  log: DeepLinkLog;
-};
-
-function reportRefusedLink(kind: LinkKind, outcome: AuthIntentResult, log: DeepLinkLog): void {
+function reportRefusedLink(kind: LinkKind, outcome: AuthIntentResult): void {
   if (outcome.kind !== 'failure') {
     return;
   }
-  log.warn('[auth] deep link exchange failed', {
+  warn('[auth] deep link exchange failed', {
     intent: kind,
     cause: outcome.cause,
     error: outcome.error,
@@ -40,12 +27,11 @@ function reportRefusedLink(kind: LinkKind, outcome: AuthIntentResult, log: DeepL
 async function reportFailedExchange(
   kind: LinkKind,
   exchange: Promise<AuthIntentResult>,
-  log: DeepLinkLog,
 ): Promise<void> {
   try {
-    reportRefusedLink(kind, await exchange, log);
+    reportRefusedLink(kind, await exchange);
   } catch (err) {
-    log.warn('[auth] deep link exchange threw', { intent: kind, ...thrownErrorDetail(err) });
+    warn('[auth] deep link exchange threw', { intent: kind, ...thrownErrorDetail(err) });
     showFailureAlert({
       surface: 'auth.deep_link.threw',
       title: "Couldn't open that link",
@@ -54,7 +40,11 @@ async function reportFailedExchange(
   }
 }
 
-export function startAuthDeepLinks({ links, router, auth, log }: AuthDeepLinkDeps): () => void {
+export function startAppAuthDeepLinks(
+  links: LinkEvents,
+  router: AuthRouter,
+  intents: AuthIntents,
+): () => void {
   let active = true;
 
   const handle = (url: string | null): void => {
@@ -62,14 +52,14 @@ export function startAuthDeepLinks({ links, router, auth, log }: AuthDeepLinkDep
       return;
     }
     const intent = parseAuthLink(url);
-    void reportFailedExchange(intent.kind, completeAuthIntent(intent, router, auth), log);
+    void reportFailedExchange(intent.kind, intents.complete(intent, router));
   };
 
   links
     .initialUrl()
     .then(handle)
     .catch((err: unknown) => {
-      log.warn('[auth] initial url read failed', thrownErrorDetail(err));
+      warn('[auth] initial url read failed', thrownErrorDetail(err));
     });
   const unsubscribe = links.subscribeUrl(handle);
 
@@ -77,8 +67,4 @@ export function startAuthDeepLinks({ links, router, auth, log }: AuthDeepLinkDep
     active = false;
     unsubscribe();
   };
-}
-
-export function startAppAuthDeepLinks(links: LinkEvents, router: AuthRouter): () => void {
-  return startAuthDeepLinks({ links, router, auth: authIntentClient(), log: { warn } });
 }

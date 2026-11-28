@@ -3,7 +3,7 @@ import { AppRedirect, useRouteSegments } from '@shared/navigation';
 import { Text, Wordmark } from '@shared/ui';
 import { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
 import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/signIn/core/authIntent';
-import { useRecoveryUnlock } from '@features/signIn/view/AuthPortProvider';
+import { useRecoveryUnlock } from '@features/signIn/view/SignInProvider';
 
 import {
   AuthFullScreenNotice,

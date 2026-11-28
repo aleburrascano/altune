@@ -3,10 +3,13 @@ import { appVersion } from '@shared/device';
 import { setLogger } from '@shared/log';
 import { flushOutbox } from '@shared/telemetry';
 
-import { reportSignInFailure, thrownErrorDetail } from '@features/signIn';
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { httpAuthPort } from '@features/signIn/adapters/http/signInHttp';
+import { thrownErrorDetail } from '@features/signIn/core/errors';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/authTestUtils';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { flushPromises } from '@testing/flushPromises';
+
+const { reportSignInFailure } = httpAuthPort;
 const { getSession } = createSupabaseAuthMock('getSession');
 
 const realFetch = global.fetch;

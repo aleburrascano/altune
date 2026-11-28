@@ -1,10 +1,9 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
-import { CheckEmailNotice, SignUpScreen, PASSWORD_REQUIREMENTS_HINT } from '@features/signIn';
-import {
-  authPortWrapper,
-  createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { CheckEmailNotice } from '@features/signIn/view/CheckEmailNotice';
+import { SignUpScreen } from '@features/signIn/view/SignUpScreen';
+import { PASSWORD_REQUIREMENTS_HINT } from '@features/signIn/core/validation';
+import { authPortWrapper, createSupabaseAuthMock } from '@features/signIn/__tests__/authTestUtils';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 

@@ -8,7 +8,7 @@ import {
   isWeakPasswordError,
   supabaseErrorDetail,
   type TransientAuthReason,
-} from '@features/signIn/core/authError';
+} from '@features/signIn/core/errors';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
 
 import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';

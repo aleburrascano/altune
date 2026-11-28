@@ -1,4 +1,4 @@
-import type { SupabaseErrorDetail } from '@features/signIn/core/authError';
+import type { SupabaseErrorDetail } from '@features/signIn/core/errors';
 
 export type AuthFailureCause =
   | 'gotrue_rejected'

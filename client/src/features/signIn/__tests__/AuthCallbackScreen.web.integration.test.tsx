@@ -4,11 +4,12 @@ import { renderRouter } from 'expo-router/testing-library';
 import { StrictMode, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { Text } from 'react-native';
 
-import { _resetConsumedCredentialForTest, AuthCallbackScreen } from '@features/signIn';
+import { AuthCallbackScreen } from '@features/signIn/view/AuthCallbackScreen';
 import {
   authPortWrapper,
   createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+  resetConsumedCredential,
+} from '@features/signIn/__tests__/authTestUtils';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
@@ -94,7 +95,7 @@ function openPage(path: string): ReturnType<typeof renderRouter> {
 beforeEach(() => {
   logs = recordLogs();
   addressBar = { writes: [], restore: () => undefined };
-  _resetConsumedCredentialForTest();
+  resetConsumedCredential();
   exchangeCodeForSession.mockResolvedValue(SIGNED_IN);
   verifyOtp.mockResolvedValue(SIGNED_IN);
   getSession.mockResolvedValue({ data: { session: null }, error: null });

@@ -1,16 +1,13 @@
+import { parseAuthLink } from '@features/signIn/core/parseAuthLink';
+import { useSignIn } from '@features/signIn/view/useSignIn';
 import {
-  _resetConsumedCredentialForTest,
-  _resetSignInHealthForTest,
   completeAuthIntent,
-  flushSignInHealth,
-  parseAuthLink,
-  useSignIn,
-} from '@features/signIn';
-import {
   createAuthPortMock,
+  flushSignInHealth,
+  resetConsumedCredential,
   createSupabaseAuthMock,
   runAsyncAuthHook,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+} from '@features/signIn/__tests__/authTestUtils';
 import { signInTestUser } from '@testing/signInTestUser';
 import { flushPromises } from '@testing/flushPromises';
 import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
@@ -35,8 +32,7 @@ function sentHealth(): Record<string, unknown>[] {
 beforeEach(async () => {
   await signInTestUser();
   __http.reply(EVENTS, { status: HTTP_ACCEPTED });
-  _resetSignInHealthForTest();
-  _resetConsumedCredentialForTest();
+  resetConsumedCredential();
 });
 
 function signIn() {

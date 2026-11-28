@@ -6,8 +6,8 @@ import {
   type OAuthProvider,
 } from '@features/signIn/core/oauthResult';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
-import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
-import type { AuthPort } from '@features/signIn/ports/authPort';
+import { useAuthPort } from '@features/signIn/view/SignInProvider';
+import type { AuthPort } from '@features/signIn/ports/ports';
 
 import { useOAuthFlow } from '@features/signIn/view/useOAuthFlow';
 

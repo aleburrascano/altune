@@ -1,6 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
 
-import type { AuthBrowser } from '@features/signIn/ports/authBrowser';
+import type { AuthBrowser } from '@features/signIn/ports/ports';
 
 WebBrowser.maybeCompleteAuthSession();
 

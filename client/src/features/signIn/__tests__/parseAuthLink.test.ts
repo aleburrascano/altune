@@ -1,6 +1,9 @@
 import appJson from '@/../app.json';
-import { completeAuthIntent, authRedirectUrl, parseAuthLink, schemePrefix } from '@features/signIn';
-import type { AuthLinkHost } from '@features/signIn';
+import { schemePrefix } from '@features/signIn/core/appScheme';
+import { authRedirectUrl } from '@features/signIn/core/authRedirect';
+import { parseAuthLink } from '@features/signIn/core/parseAuthLink';
+import { completeAuthIntent } from '@features/signIn/__tests__/authTestUtils';
+import type { AuthLinkHost } from '@features/signIn/core/authRedirect';
 
 const ORIGIN = 'https://app.altune.example';
 const WEB: AuthLinkHost = { scheme: 'altune://', origin: ORIGIN };

@@ -1,5 +1,8 @@
-import { createLinkEvents, type LinkingSource, type UrlEvent } from '@features/signIn';
+import { createLinkEvents } from '@features/signIn/adapters/native/linkEvents';
 import { setPlatformOS } from '@testing/setPlatformOS';
+
+type LinkingSource = Parameters<typeof createLinkEvents>[0];
+type UrlEvent = { url: string };
 
 type UrlHandler = (event: UrlEvent) => void;
 

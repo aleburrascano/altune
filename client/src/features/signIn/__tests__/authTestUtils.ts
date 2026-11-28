@@ -1,22 +1,65 @@
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { supabase } from '@shared/auth';
+import { authIntentClient, supabase } from '@shared/auth';
+import { onSignOut } from '@shared/session';
 
-import {
-  _resetLockoutsForTest,
-  attemptLockout,
-  authIntents,
-  AuthPortProvider,
-  recoveryUnlock,
-} from '@features/signIn';
-import type { AuthBrowser, AuthPort } from '@features/signIn';
+import { createAttemptLockoutStore } from '@features/signIn/core/attemptLockoutStore';
+import { createRecoveryUnlockStore } from '@features/signIn/core/recoveryUnlockStore';
+import { createSignInHealth } from '@features/signIn/core/signInHealth';
+import { createAuthIntents } from '@features/signIn/shell/completeAuthIntent';
+import { SignInProvider } from '@features/signIn/view/SignInProvider';
+import type { AuthBrowser, AuthIntents, AuthPort, AuthRouter } from '@features/signIn/ports/ports';
+import type { AuthLinkIntent } from '@features/signIn/core/parseAuthLink';
 
 const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
   ensureAppAuthClient: () => void;
 };
 
 type SupabaseAuthClient = typeof supabase.auth;
+type AuthClient = ReturnType<typeof authIntentClient>;
+
+export const recovery = createRecoveryUnlockStore(onSignOut);
+
+let lockout = createAttemptLockoutStore();
+
+function resetLockouts(): void {
+  lockout = createAttemptLockoutStore();
+}
+
+let authOverride: AuthClient | undefined;
+let health = createSignInHealth();
+let currentIntents = newIntents();
+
+function newIntents(): AuthIntents {
+  return createAuthIntents({
+    recovery,
+    health,
+    authClient: () => authOverride ?? authIntentClient(),
+  });
+}
+
+export function resetConsumedCredential(): void {
+  health = createSignInHealth();
+  currentIntents = newIntents();
+}
+
+export function flushSignInHealth(): void {
+  health.flush();
+}
+
+export const intents: AuthIntents = {
+  complete: (intent, router) => currentIntents.complete(intent, router),
+};
+
+export function completeAuthIntent(intent: AuthLinkIntent, router: AuthRouter, auth: AuthClient) {
+  authOverride = auth;
+  try {
+    return currentIntents.complete(intent, router);
+  } finally {
+    authOverride = undefined;
+  }
+}
 
 export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
   ...methods: M[]
@@ -27,7 +70,7 @@ export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
   Object.assign(supabase.auth, mockedByMethod);
   beforeEach(() => {
     for (const [, mock] of mocked) mock.mockReset();
-    _resetLockoutsForTest();
+    resetLockouts();
   });
   return mockedByMethod;
 }
@@ -65,12 +108,13 @@ export function authPortWrapper(
     const props = {
       port,
       browser,
-      lockout: attemptLockout,
-      recovery: recoveryUnlock,
-      intents: authIntents,
+      lockout,
+      recovery,
+      intents,
+      health,
       children,
     };
-    return createElement(AuthPortProvider, props);
+    return createElement(SignInProvider, props);
   };
 }
 

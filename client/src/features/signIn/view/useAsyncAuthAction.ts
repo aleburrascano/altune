@@ -4,7 +4,7 @@ import { warn } from '@shared/log';
 import { isNetworkError } from '@shared/failure';
 
 import { withAuthDeadline } from '@shared/auth';
-import { thrownErrorDetail } from '@features/signIn/core/authError';
+import { thrownErrorDetail } from '@features/signIn/core/errors';
 
 function reportUnrecognizedFailure(err: unknown): void {
   warn('[auth] an auth action failed for an unrecognized reason', thrownErrorDetail(err));

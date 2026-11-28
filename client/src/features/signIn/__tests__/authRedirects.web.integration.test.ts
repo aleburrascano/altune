@@ -1,8 +1,8 @@
-import { authRedirectUrl, parseAuthLink, useResetPassword, useSignUp } from '@features/signIn';
-import {
-  createSupabaseAuthMock,
-  runAsyncAuthHook,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { authRedirectUrl } from '@features/signIn/core/authRedirect';
+import { parseAuthLink } from '@features/signIn/core/parseAuthLink';
+import { useResetPassword } from '@features/signIn/view/useResetPassword';
+import { useSignUp } from '@features/signIn/view/useSignUp';
+import { createSupabaseAuthMock, runAsyncAuthHook } from '@features/signIn/__tests__/authTestUtils';
 
 const { signUp, resetPasswordForEmail } = createSupabaseAuthMock('signUp', 'resetPasswordForEmail');
 

@@ -1,11 +1,10 @@
+import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseAuthLink';
 import {
   completeAuthIntent,
-  _resetConsumedCredentialForTest,
-  type AuthLinkIntent,
-  parseAuthLink,
-  clearRecoveryUnlock,
-  isRecoveryUnlocked,
-} from '@features/signIn';
+  recovery,
+  resetConsumedCredential,
+} from '@features/signIn/__tests__/authTestUtils';
+
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 describe('the outcome it reports', () => {
@@ -27,7 +26,7 @@ describe('the outcome it reports', () => {
     });
     auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
-    _resetConsumedCredentialForTest();
+    resetConsumedCredential();
   });
 
   describe('completeAuthIntent: reporting whether the exchange actually succeeded (#657)', () => {
@@ -219,12 +218,12 @@ describe('PKCE-only credential exchange', () => {
     auth.verifyOtp.mockReset().mockResolvedValue(VERIFIED);
     auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
-    clearRecoveryUnlock();
-    _resetConsumedCredentialForTest();
+    recovery.clear();
+    resetConsumedCredential();
   });
 
   afterEach(() => {
-    clearRecoveryUnlock();
+    recovery.clear();
   });
 
   describe('completeAuthIntent: OAuth callbacks exchange a PKCE code, never trust inline tokens (#655)', () => {
@@ -269,7 +268,7 @@ describe('PKCE-only credential exchange', () => {
         expect(result).toEqual({ kind: 'failure', cause: 'no_spendable_credential' });
         expect(auth.setSession).not.toHaveBeenCalled();
         expect(auth.verifyOtp).not.toHaveBeenCalled();
-        expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+        expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
         expect(router.replace).not.toHaveBeenCalled();
       },
     );
@@ -315,12 +314,12 @@ describe('binding the OTP type to the link path', () => {
     auth.verifyOtp.mockReset().mockResolvedValue(VERIFIED);
     auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
-    clearRecoveryUnlock();
-    _resetConsumedCredentialForTest();
+    recovery.clear();
+    resetConsumedCredential();
   });
 
   afterEach(() => {
-    clearRecoveryUnlock();
+    recovery.clear();
   });
 
   describe('completeAuthIntent binds the OTP type it verifies to the link path (#1636)', () => {
@@ -332,7 +331,7 @@ describe('binding the OTP type to the link path', () => {
         const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
         expect(result).toEqual({ kind: 'failure', cause: 'otp_type_not_allowed_for_path' });
-        expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+        expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
         expect(router.replace).not.toHaveBeenCalled();
       },
     );
@@ -343,7 +342,7 @@ describe('binding the OTP type to the link path', () => {
       const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
       expect(result).toEqual({ kind: 'failure', cause: 'otp_type_not_allowed_for_path' });
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
     });
 
     it('refuses a recovery-path link with a mismatched type rather than falling back to its token pair', async () => {
@@ -353,7 +352,7 @@ describe('binding the OTP type to the link path', () => {
       const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
       expect(result).toEqual({ kind: 'failure', cause: 'otp_type_not_allowed_for_path' });
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
     });
 
     it('refuses a recovery token presented on the confirm path, leaving it unspent', async () => {
@@ -375,7 +374,7 @@ describe('binding the OTP type to the link path', () => {
         type: 'recovery',
         token_hash: 'genuine-hash',
       });
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(true);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(true);
     });
 
     it.each(['signup', 'email'])(
@@ -387,7 +386,7 @@ describe('binding the OTP type to the link path', () => {
 
         expect(result).toEqual({ kind: 'success' });
         expect(auth.verifyOtp).toHaveBeenCalledWith({ type, token_hash: 'genuine-hash' });
-        expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+        expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
       },
     );
   });
@@ -417,12 +416,12 @@ describe('unlocking the reset-password screen', () => {
     auth.verifyOtp.mockReset().mockResolvedValue(verified(VERIFIED_USER));
     auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
-    clearRecoveryUnlock();
-    _resetConsumedCredentialForTest();
+    recovery.clear();
+    resetConsumedCredential();
   });
 
   afterEach(() => {
-    clearRecoveryUnlock();
+    recovery.clear();
   });
 
   describe('completeAuthIntent unlocks the reset-password screen only on verified recovery', () => {
@@ -432,7 +431,7 @@ describe('unlocking the reset-password screen', () => {
       const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
       expect(result).toEqual({ kind: 'success' });
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(true);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(true);
     });
 
     it('does NOT unlock when the recovery verifyOtp fails', async () => {
@@ -446,7 +445,7 @@ describe('unlocking the reset-password screen', () => {
         cause: 'gotrue_rejected',
         error: { name: 'AuthApiError', status: 401 },
       });
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
     });
 
     it('does NOT unlock for a successful OAuth callback', async () => {
@@ -454,13 +453,13 @@ describe('unlocking the reset-password screen', () => {
 
       await completeAuthIntent(parseAuthLink(url), router, auth);
 
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
     });
 
     it('does NOT unlock for a non-auth link', async () => {
       await completeAuthIntent(parseAuthLink('altune://library'), router, auth);
 
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
     });
   });
 
@@ -470,8 +469,8 @@ describe('unlocking the reset-password screen', () => {
 
       await completeAuthIntent(parseAuthLink(url), router, auth);
 
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(true);
-      expect(isRecoveryUnlocked(OTHER_USER)).toBe(false);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(true);
+      expect(recovery.isUnlocked(OTHER_USER)).toBe(false);
     });
 
     it('takes the identity from the verification response, not from the link', async () => {
@@ -480,8 +479,8 @@ describe('unlocking the reset-password screen', () => {
 
       await completeAuthIntent(parseAuthLink(url), router, auth);
 
-      expect(isRecoveryUnlocked(OTHER_USER)).toBe(true);
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+      expect(recovery.isUnlocked(OTHER_USER)).toBe(true);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
     });
 
     it('fails closed, unlocking for nobody, when a verified recovery names no user', async () => {
@@ -491,7 +490,7 @@ describe('unlocking the reset-password screen', () => {
       const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
       expect(result).toEqual({ kind: 'failure', cause: 'verification_named_no_user' });
-      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
+      expect(recovery.isUnlocked(VERIFIED_USER)).toBe(false);
       expect(router.replace).not.toHaveBeenCalled();
     });
   });
@@ -513,7 +512,7 @@ describe('spending a one-time credential once', () => {
     auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockClear();
-    _resetConsumedCredentialForTest();
+    resetConsumedCredential();
   });
 
   describe('completeAuthIntent: the same OAuth callback delivered to two listeners', () => {
@@ -607,7 +606,7 @@ describe('spending a one-time credential once', () => {
       const url = 'altune://auth/callback?code=reused-across-tests';
       await completeAuthIntent(parseAuthLink(url), router, auth);
 
-      _resetConsumedCredentialForTest();
+      resetConsumedCredential();
       await completeAuthIntent(parseAuthLink(url), router, auth);
 
       expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(2);
@@ -641,7 +640,7 @@ describe('a verification that outlives the auth deadline', () => {
     auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     auth.verifyOtp.mockReset();
     router.replace.mockReset();
-    _resetConsumedCredentialForTest();
+    resetConsumedCredential();
   });
 
   afterEach(() => {
@@ -712,7 +711,7 @@ describe('an exchange that never settles', () => {
     auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockClear();
-    _resetConsumedCredentialForTest();
+    resetConsumedCredential();
   });
 
   afterEach(() => {
@@ -790,8 +789,8 @@ describe('refusing to swap a signed-in session', () => {
       .mockResolvedValue({ data: { user: { id: 'attacker' }, session: {} }, error: null });
     auth.getSession.mockReset().mockResolvedValue(SIGNED_OUT);
     router.replace.mockReset();
-    clearRecoveryUnlock();
-    _resetConsumedCredentialForTest();
+    recovery.clear();
+    resetConsumedCredential();
   });
 
   it.each([
@@ -805,7 +804,7 @@ describe('refusing to swap a signed-in session', () => {
     expect(result).toEqual({ kind: 'failure', cause: 'session_already_active' });
     expect(auth.verifyOtp).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
-    expect(isRecoveryUnlocked('attacker')).toBe(false);
+    expect(recovery.isUnlocked('attacker')).toBe(false);
   });
 
   it('spends a recovery link as before when no session exists', async () => {
