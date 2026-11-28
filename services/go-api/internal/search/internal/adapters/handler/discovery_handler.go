@@ -85,6 +85,7 @@ type DiscoveryServices struct {
 	Enrichers     DetailEnrichers
 	Ownership     OwnershipStamper
 	ClientEvents  ClientEventSink
+	RateLimits    DiscoveryRateLimits
 }
 
 func (s DiscoveryServices) missing() []string {
@@ -108,6 +109,7 @@ func (s DiscoveryServices) missing() []string {
 		{"lyrics", s.Enrichers.Lyrics == nil},
 		{"ownership", s.Ownership == nil},
 		{"client events", s.ClientEvents == nil},
+		{"rate limits", !s.RateLimits.complete()},
 	}
 	var names []string
 	for _, c := range checks {
@@ -116,16 +118,6 @@ func (s DiscoveryServices) missing() []string {
 		}
 	}
 	return names
-}
-
-func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {
-	h.searchLimiter = newUserRateLimiter(limits.Search, h.now)
-	h.suggestLimiter = newUserRateLimiter(limits.Suggest, h.now)
-	h.eventLimiter = newUserRateLimiter(limits.Events, h.now)
-	h.contentLimiter = newUserRateLimiter(limits.Content, h.now)
-	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, h.now)
-	h.historyLimiter = newUserRateLimiter(limits.History, h.now)
-	return h
 }
 
 func MustNewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) *DiscoveryHandler {
@@ -144,22 +136,28 @@ func NewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) (*DiscoveryHand
 		return nil, fmt.Errorf("%w: missing %s", domain.ErrHandlerServiceRequired, strings.Join(names, ", "))
 	}
 	h := &DiscoveryHandler{
-		now:             now,
-		searchSvc:       svcs.Search,
-		historySvc:      svcs.History,
-		recordHistory:   svcs.RecordHistory,
-		clearHistorySvc: svcs.ClearHistory,
-		albumSvc:        svcs.Album,
-		artistSvc:       svcs.Artist,
-		relatedSvc:      svcs.Related,
-		enrichSvc:       svcs.Enrich,
-		suggestSvc:      svcs.Suggest,
-		eventSvc:        svcs.Event,
-		favoritesSvc:    svcs.Favorites,
-		unreleasedSvc:   svcs.Unreleased,
-		enrichers:       svcs.Enrichers,
-		ownership:       svcs.Ownership,
-		clientEvents:    svcs.ClientEvents,
+		now:              now,
+		searchLimiter:    newUserRateLimiter(svcs.RateLimits.Search, now),
+		suggestLimiter:   newUserRateLimiter(svcs.RateLimits.Suggest, now),
+		eventLimiter:     newUserRateLimiter(svcs.RateLimits.Events, now),
+		contentLimiter:   newUserRateLimiter(svcs.RateLimits.Content, now),
+		favoritesLimiter: newUserRateLimiter(svcs.RateLimits.Favorites, now),
+		historyLimiter:   newUserRateLimiter(svcs.RateLimits.History, now),
+		searchSvc:        svcs.Search,
+		historySvc:       svcs.History,
+		recordHistory:    svcs.RecordHistory,
+		clearHistorySvc:  svcs.ClearHistory,
+		albumSvc:         svcs.Album,
+		artistSvc:        svcs.Artist,
+		relatedSvc:       svcs.Related,
+		enrichSvc:        svcs.Enrich,
+		suggestSvc:       svcs.Suggest,
+		eventSvc:         svcs.Event,
+		favoritesSvc:     svcs.Favorites,
+		unreleasedSvc:    svcs.Unreleased,
+		enrichers:        svcs.Enrichers,
+		ownership:        svcs.Ownership,
+		clientEvents:     svcs.ClientEvents,
 	}
-	return h.WithRateLimits(DefaultDiscoveryRateLimits), nil
+	return h, nil
 }

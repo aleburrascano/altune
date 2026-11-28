@@ -151,10 +151,10 @@ func TestChainedArtworkResolver_MissAfterAFailureIsDegraded(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_IdentityMissAfterAFailureIsDegraded(t *testing.T) {
-	chain := artworkfallback.NewChainedArtworkLookup().WithIdentityLookups(
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{
 		&fakeIdentityResolver{err: fmt.Errorf("discogs 503")},
 		&fakeIdentityResolver{url: ""},
-	)
+	})
 
 	url, _, err := chain.ResolveWithIdentityTagged(
 		context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", ports.ArtworkIdentity{MBID: "mbid"})
@@ -218,7 +218,7 @@ func TestChainedArtworkResolver_ResolveWithIdentityTagged(t *testing.T) {
 	failing := &fakeIdentityResolver{err: errors.New("boom"), source: "broken"}
 	identity := &fakeIdentityResolver{url: "https://img/identity.jpg", source: "discogs"}
 
-	chain := artworkfallback.NewChainedArtworkLookup(nameOnly).WithIdentityLookups(failing, identity)
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{failing, identity}, nameOnly)
 	url, source, err := chain.ResolveWithIdentityTagged(
 		context.Background(), domain.ResultKindArtist, "Che", "",
 		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}},
@@ -244,7 +244,7 @@ func TestChainedArtworkResolver_ResolveWithIdentityTagged_MovesOnFromAResolverTh
 	empty := &fakeIdentityResolver{source: "spotify"}
 	real := &fakeIdentityResolver{url: "https://img/real.jpg", source: "discogs"}
 
-	chain := artworkfallback.NewChainedArtworkLookup().WithIdentityLookups(empty, real)
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{empty, real})
 	url, source, err := chain.ResolveWithIdentityTagged(
 		context.Background(), domain.ResultKindArtist, "Che", "", ports.ArtworkIdentity{})
 	if err != nil || url != "https://img/real.jpg" || source != "discogs" {
@@ -265,7 +265,7 @@ func TestChainedArtworkResolver_ResolveTagged_skipsIdentityResolvers(t *testing.
 	identity := &fakeIdentityResolver{url: "https://img/identity.jpg", source: "discogs"}
 	name := &memory.ArtworkLookup{URL: "https://img/name.jpg"}
 
-	chain := artworkfallback.NewChainedArtworkLookup(name).WithIdentityLookups(identity)
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{identity}, name)
 	url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "Che", "", "")
 	if err != nil {
 		t.Fatalf("ResolveTagged: %v", err)
@@ -327,7 +327,7 @@ func TestChainedArtworkResolver_CoverArtArchiveAnswersIdentityWalkOnMBIDAlone(t 
 	defer srv.Close()
 
 	caa := coverartarchive.NewCoverArtArchiveResolver(contracttest.NewNoFollowClient(srv.URL))
-	chain := artworkfallback.NewChainedArtworkLookup(caa).WithIdentityLookups(coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{coverartarchive.NewCoverArtArchiveIdentityResolver(caa)}, caa)
 	url, source, err := chain.ResolveWithIdentityTagged(context.Background(), domain.ResultKindAlbum,
 		"An unrelated title", "An unrelated subtitle", ports.ArtworkIdentity{MBID: "rg-1"})
 	if err != nil {
@@ -348,7 +348,7 @@ func TestChainedArtworkResolver_CoverArtArchiveStillAnswersResolveTaggedAlongsid
 	defer srv.Close()
 
 	caa := coverartarchive.NewCoverArtArchiveResolver(contracttest.NewNoFollowClient(srv.URL))
-	chain := artworkfallback.NewChainedArtworkLookup(caa).WithIdentityLookups(coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
+	chain := artworkfallback.NewChainedArtworkLookupWithIdentities([]ports.IdentityArtworkLookup{coverartarchive.NewCoverArtArchiveIdentityResolver(caa)}, caa)
 	url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindAlbum, "Album", "Artist", "rg-1")
 	if err != nil {
 		t.Fatalf("ResolveTagged: %v", err)

@@ -478,6 +478,7 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 		{"Exploration", func(h *harness) { h.deps.Search.Exploration, h.deps.Search.ExplorationRate = true, 0.1 }, "exploration"},
 		{"BehavioralRanking", func(h *harness) { h.deps.Search.BehavioralRanking = true }, "behavioral_ranking"},
 		{"Pool", func(h *harness) { h.deps.Pool = unreachablePool(h.t) }, "favorites"},
+		{"PoolBuildsTheIdentityStore", func(h *harness) { h.deps.Pool = unreachablePool(h.t) }, "identity_store"},
 		{"Redis", func(h *harness) {
 			h.deps.Redis = goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(h.t).Addr()})
 		}, "provider_result_cache"},
@@ -928,6 +929,7 @@ func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		Providers:       providers,
 		Search:          search.SearchSettings{Deadline: 1500 * time.Millisecond},
+		RateLimits:      search.DefaultDiscoveryRateLimits,
 		Unreleased:      search.UnreleasedSettings{Tuning: service.UnreleasedConfig{MaxPages: 1, MaxDetails: 1, DetailConcurrency: 1, Wait: time.Second, JobTimeout: 5 * time.Second}},
 	}}
 }
@@ -1017,14 +1019,14 @@ func TestRankingOnlySearch_AsksTheSameSearchersAsTheServingSearch(t *testing.T) 
 	assertLines(t, asked, searchOrder(t, h, disc))
 }
 
-func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {
+func TestNew_RefusesRateLimitsThatAreNotComplete(t *testing.T) {
 	h := newHarness(t, prodLikeProviders())
-	search.UseIdentityStore(&h.deps, &memory.FakeIdentityStore{})
-	h.start()
+	h.deps.RateLimits.Suggest.Max = 0
 
-	options := h.searchOptions()
-	if !slices.Contains(options, "identity_store") || slices.Contains(options, "favorites") {
-		t.Errorf("options = %v, want the given identity store and no favorites without a pool", options)
+	_, err := search.New(t.Context(), h.deps)
+
+	if err == nil || !strings.Contains(err.Error(), "rate limits") {
+		t.Fatalf("New = %v, want a refusal naming the rate limits", err)
 	}
 }
 
@@ -1123,6 +1125,7 @@ func depsWithProviderTimeout(timeout time.Duration) search.Deps {
 		CacheOps:        telemetry.NewRegistry().LabeledCounter("discovery_cache_ops"),
 		ProviderTimeout: timeout,
 		ChartTimeout:    time.Second,
+		RateLimits:      search.DefaultDiscoveryRateLimits,
 	}
 }
 

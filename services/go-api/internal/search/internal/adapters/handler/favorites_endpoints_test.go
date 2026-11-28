@@ -133,8 +133,9 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 
 func buildFavoritesLimitedRouter(t *testing.T, limits handler.DiscoveryRateLimits) chi.Router {
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Favorites: searchtest.NewFavorites(t, erroringFavoritesRepo{}),
-	}), time.Now).WithRateLimits(limits)
+		Favorites:  searchtest.NewFavorites(t, erroringFavoritesRepo{}),
+		RateLimits: limits,
+	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())

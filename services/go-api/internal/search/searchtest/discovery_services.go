@@ -61,5 +61,23 @@ func CompleteServices(t testing.TB, given handler.DiscoveryServices) handler.Dis
 	if s.ClientEvents == nil {
 		s.ClientEvents = handler.NoClientEvents{}
 	}
+	s.RateLimits = withDefaultLimits(s.RateLimits)
 	return s
+}
+
+func withDefaultLimits(given handler.DiscoveryRateLimits) handler.DiscoveryRateLimits {
+	defaults := handler.DefaultDiscoveryRateLimits
+	for _, pair := range []struct{ got, def *handler.RequestLimit }{
+		{&given.Search, &defaults.Search},
+		{&given.Suggest, &defaults.Suggest},
+		{&given.Events, &defaults.Events},
+		{&given.Content, &defaults.Content},
+		{&given.Favorites, &defaults.Favorites},
+		{&given.History, &defaults.History},
+	} {
+		if *pair.got == (handler.RequestLimit{}) {
+			*pair.got = *pair.def
+		}
+	}
+	return given
 }

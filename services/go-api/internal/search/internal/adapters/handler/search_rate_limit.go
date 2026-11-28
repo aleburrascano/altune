@@ -22,6 +22,13 @@ type DiscoveryRateLimits struct {
 	History   RequestLimit
 }
 
+func (l RequestLimit) complete() bool { return l.Max > 0 && l.Window > 0 }
+
+func (l DiscoveryRateLimits) complete() bool {
+	return l.Search.complete() && l.Suggest.complete() && l.Events.complete() &&
+		l.Content.complete() && l.Favorites.complete() && l.History.complete()
+}
+
 const (
 	searchPerMinute    = 60
 	suggestPerMinute   = 120

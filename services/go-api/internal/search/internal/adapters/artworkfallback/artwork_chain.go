@@ -17,10 +17,10 @@ type ChainedArtworkLookup struct {
 	timeout    time.Duration
 }
 
-func (c *ChainedArtworkLookup) WithIdentityLookups(identities ...ports.IdentityArtworkLookup) *ChainedArtworkLookup {
-	scoped := *c
-	scoped.identities = identities
-	return &scoped
+func NewChainedArtworkLookupWithIdentities(identities []ports.IdentityArtworkLookup, resolvers ...ports.ArtworkLookup) *ChainedArtworkLookup {
+	chain := NewChainedArtworkLookup(resolvers...)
+	chain.identities = identities
+	return chain
 }
 
 func NewChainedArtworkLookup(resolvers ...ports.ArtworkLookup) *ChainedArtworkLookup {
