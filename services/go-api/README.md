@@ -105,3 +105,9 @@ Enforced by `lintdoors --shape`. `lintnames` checks identifiers on changed lines
 Line 1 of a module's `README.md` is a sentence that ends in a full stop and says what the module owns.
 
 Enforced by `lintdoors --shape`.
+
+### Rule 23: app is the composition root and nothing else
+
+`internal/app` builds every module in order and runs the server. It holds `app.go` (builds everything), `config.go` (reads the settings once and hands each module its part), one `<module>_wiring.go` per module (`library`, `search`, `download`, `playback`, `platform`), `jobs.go` (schedules the jobs), `shutdown.go`, `server.go`, and `bridges/`. Anything that decides something lives in the module that owns the decision: alert rules and metric definitions in `platform/monitoring`, each table's erase and prune in the module that owns the table. App only calls them. Test files and `testdata/` may sit beside them.
+
+Enforced by `lintdoors --shape`: a file or folder in `internal/app` that is not listed fails.

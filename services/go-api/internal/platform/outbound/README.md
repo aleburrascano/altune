@@ -18,7 +18,7 @@ Production code builds no `http.Client` or `http.Transport` of its own and does 
 
 ## Must not
 
-- Name a feature. `app/providertransport` adds the per-provider counting that needs `search`, so it stays in `app`.
+- Name a feature. `app` adds the per-provider counting that needs `search` (`NewProviderTransport` in `search_wiring.go`).
 - Build behaviour for one provider: a call shaped for one provider belongs in that provider's adapter, and only what two modules share lives here.
 
 ## Shape

@@ -11,4 +11,4 @@ An election runs over a `LockStore` and ticks at the interval its caller gives. 
 
 ## Shape
 
-The door is `leader.go`. Under `internal/`: `domain/` (`errors.go` with `ErrLeadershipLost`, `counters.go` with the `Counters` snapshot, which has no json tags: `app/livemetrics` maps it to its own wire shape), `ports/ports.go` (`LockStore`, `LockSession`) and `service/` (the election loop, its term and its counters). `leadertest/` holds `ErrLeadershipLost` for the job runner's tests in `app`.
+The door is `leader.go`. Under `internal/`: `domain/` (`errors.go` with `ErrLeadershipLost`, `counters.go` with the `Counters` snapshot, which has no json tags: the `monitoringfromleader` bridge hands it to `monitoring`, which maps it to its own wire shape), `ports/ports.go` (`LockStore`, `LockSession`) and `service/` (the election loop, its term and its counters). `leadertest/` holds `ErrLeadershipLost` for the job runner's tests in `app`.

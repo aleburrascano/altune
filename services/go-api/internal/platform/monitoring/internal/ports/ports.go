@@ -60,6 +60,40 @@ type ClientEventStore interface {
 	Prune(ctx context.Context, now time.Time) (int64, error)
 }
 
+type ClientEventPruner interface {
+	Prune(ctx context.Context, now time.Time) (int64, error)
+}
+
+type ClientEventEraser interface {
+	EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error)
+}
+
+type CoverageEvents interface {
+	ZeroResultTotal(ctx context.Context, since time.Time) (int, error)
+	TopNoResultQueryHits(ctx context.Context, since time.Time) (hits int, found bool)
+}
+
+type SourceSessions interface {
+	YouTubeSignedOutSince(ctx context.Context) (time.Time, bool)
+}
+
+type RequestLatencyReader interface {
+	RequestLatency() domain.RequestLatency
+}
+
+type LeaderReader interface {
+	LeaderCounters() domain.LeaderCounters
+}
+
+type JobHealthReader interface {
+	Alertable() []string
+	State(name string) domain.JobState
+}
+
+type SnapshotReader interface {
+	Snapshot() any
+}
+
 type DiscographyGroupBy string
 
 const (

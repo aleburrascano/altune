@@ -1,1 +1,1 @@
-`monitoringfromdownload` implements observe's acquisition reader from the acquisition feature, translating types only.
+`monitoringfromdownload` implements monitoring's ports from the download feature, translating types only: the acquisition reader and the source sessions the alert conditions read.

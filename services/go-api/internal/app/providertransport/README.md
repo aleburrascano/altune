@@ -1,1 +1,0 @@
-`providertransport` owns the one live transport every outbound provider call shares: egress-guarded so it never reaches a non-public address, counted per provider, with retries recorded, and shared so per-host rate limits hold process-wide.

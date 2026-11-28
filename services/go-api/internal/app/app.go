@@ -1,10 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/app/health"
-	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/playback"
@@ -12,12 +10,20 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	sharedRedis "altune/go-api/internal/shared/redis"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -25,13 +31,16 @@ import (
 
 const eventIDFloorFile = "altune-event-id-floor"
 
+var buildCommit = "unknown"
+
+func BuildCommit() string { return buildCommit }
+
 type application struct {
 	cfg           *config.Config
 	pool          *pgxpool.Pool
-	probes        health.Probes
+	probes        monitoring.Probes
 	redisClient   *goredis.Client
 	download      *download.Module
-	vocabRefresh  *search.SpellingHintsRefreshService
 	evalSearch    *search.SearchService
 	eventBus      *events.InProcessBus
 	eventTap      *monitoring.EventTap
@@ -44,7 +53,7 @@ type application struct {
 	evalMeter     *monitoring.EvalMeter
 	lifecycleDone <-chan struct{}
 
-	jobs jobs.Runner
+	jobs jobRunner
 
 	background *background.Tracker
 }
@@ -55,26 +64,188 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *application {
 		logRing: logRing,
 		latency: requestmetrics.New(),
 		metrics: telemetry.NewRegistry(),
-		jobs:    jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker},
+		jobs:    jobRunner{Now: clock.Now, NewTicker: clock.NewTicker},
 	}
 }
 
-func (a *application) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
-	supaVerifier, err := newAuthVerifier(ctx, a.cfg, a.metrics)
+func (a *application) Run(ctx context.Context) error {
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	pool, err := database.NewPool(ctx, a.cfg.DatabaseURL, a.cfg.DBPoolMaxConns)
 	if err != nil {
-		return nil, fmt.Errorf("auth: %w", err)
+		return fmt.Errorf("database: %w", err)
 	}
-	a.probes.Auth = supaVerifier.CheckHealth
-	return supaVerifier, nil
+	redisClient := sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
+	tracker, err := NewTracker(a.cfg)
+	if err != nil {
+		return err
+	}
+	metrics := telemetry.NewRegistry()
+	transport, err := NewProviderTransport(metrics)
+	if err != nil {
+		return fmt.Errorf("new: %w", err)
+	}
+	assembly, err := assemble(ctx, a.cfg, handles{Pool: pool, Redis: redisClient, Transport: transport, Tracker: tracker, LogRing: a.logRing, Metrics: metrics})
+	if err != nil {
+		return err
+	}
+	serveErr := serve(ctx, newHTTPServer(fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port), assembly.Handler()))
+	cancel()
+	slog.InfoContext(ctx, "waiting for background tasks")
+	shutdownCtx, endShutdown := background.DetachCancelable(ctx)
+	defer endShutdown()
+	outcomes := assembly.Shutdown(shutdownCtx)
+	closeDatastores(ctx, outcomes, datastores{Pool: pool, Redis: redisClient})
+	slog.InfoContext(ctx, "shutdown complete")
+	return serveErr
 }
 
-func (a *application) startCatalogJobs(ctx context.Context, cat catalogWiring, playbackModule *playback.Module) {
-	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
-	a.startDeletedIdentityErasure(ctx, playbackModule)
-	a.startSourceCanary(ctx, cat.download)
-	outcomes, rejections := cat.download.Retention()
-	a.startAcquisitionPrune(ctx, outcomes, rejections)
-	a.startAcquisitionUpgrade(ctx, cat.download)
+type handles struct {
+	Pool      *pgxpool.Pool
+	Redis     *goredis.Client
+	Transport http.RoundTripper
+	Tracker   *background.Tracker
+	LogRing   *logging.RingBuffer
+	Metrics   *telemetry.Registry
+}
+
+func NewTracker(cfg *config.Config) (*background.Tracker, error) {
+	tracker, err := background.NewTracker(background.TrackerLimits{MaxInFlight: cfg.BackgroundMaxInFlight})
+	if err != nil {
+		return nil, fmt.Errorf("background tracker: %w", err)
+	}
+	return tracker, nil
+}
+
+type composed struct {
+	app     *application
+	handler http.Handler
+}
+
+func assemble(ctx context.Context, cfg *config.Config, h handles) (*composed, error) {
+	if h.Pool == nil {
+		return nil, errors.New("assemble: Handles.Pool is required: the leader election, the stores and /health all use it")
+	}
+	if h.Transport == nil {
+		return nil, errors.New("assemble: Handles.Transport is required, so provider calls never fall back to an unguarded transport")
+	}
+	if h.Tracker == nil {
+		return nil, errors.New("assemble: Handles.Tracker is required: it bounds, counts and drains every detached task, and shutdown drains it before the datastores close")
+	}
+	a := New(cfg, h.LogRing)
+	a.attach(ctx, h)
+	handler, err := a.compose(ctx, h.Transport)
+	if err != nil {
+		return nil, err
+	}
+	return &composed{app: a, handler: handler}, nil
+}
+
+func (s *composed) Handler() http.Handler { return s.handler }
+
+func (s *composed) Jobs() *jobRunner { return &s.app.jobs }
+
+func (s *composed) Shutdown(ctx context.Context) []stopOutcome {
+	return s.app.runShutdownSequence(ctx)
+}
+
+func (a *application) attach(ctx context.Context, h handles) {
+	a.pool = h.Pool
+	a.clientEvents = monitoring.NewPostgresClientEventStore(h.Pool)
+	a.probes.DB = h.Pool.Ping
+	a.redisClient = h.Redis
+	if h.Redis != nil {
+		a.probes.Redis = func(ctx context.Context) error { return h.Redis.Ping(ctx).Err() }
+	}
+	a.background = h.Tracker
+	if h.Metrics != nil {
+		a.metrics = h.Metrics
+	}
+	a.lifecycleDone = ctx.Done()
+}
+
+func (a *application) compose(ctx context.Context, transport http.RoundTripper) (http.Handler, error) {
+	verifier, err := a.connectAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.openEventBus(ctx); err != nil {
+		return nil, err
+	}
+	if err := a.applyDisabledJobs(ctx); err != nil {
+		return nil, fmt.Errorf("startup switches: %w", err)
+	}
+	f, err := a.wireFeatures(ctx, transport)
+	if err != nil {
+		return nil, err
+	}
+	clientEventRoutes, err := monitoring.NewClientEventRoutes(a.clientEvents, clientEventSink(a.cfg), clock.Now)
+	if err != nil {
+		return nil, fmt.Errorf("client events: %w", err)
+	}
+	r, err := a.mountRoutes(verifier, f.catalog, f.playback.Routes(), f.discovery, clientEventRoutes)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.startAlertMonitor(ctx); err != nil {
+		return nil, err
+	}
+	if err := a.wireObserve(ctx, r, verifier, a.eventTap); err != nil {
+		return nil, err
+	}
+	a.startCatalogJobs(ctx, f.catalog, f.playback, f.discovery)
+
+	election, err := newJobElection(leader.AdaptLocks(database.NewAdvisoryLocks(a.pool).Acquire))
+	if err != nil {
+		return nil, fmt.Errorf("background election: %w", err)
+	}
+	a.jobs.Lead(ctx, election)
+	return r, nil
+}
+
+func (a *application) openEventBus(ctx context.Context) error {
+	a.eventBus = events.NewInProcessBus(ctx, clock.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
+	tap, err := monitoring.NewEventTap(a.eventBus, clock.Now)
+	if err != nil {
+		return fmt.Errorf("event tap: %w", err)
+	}
+	a.eventTap = tap
+	return nil
+}
+
+type features struct {
+	discovery *search.Module
+	catalog   catalogWiring
+	playback  *playback.Module
+}
+
+func (a *application) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
+	disc, err := search.New(ctx, a.discoveryDeps(ctx, transport))
+	if err != nil {
+		return features{}, fmt.Errorf("discovery: %w", err)
+	}
+	a.keepSearches(disc)
+	a.startDiscoveryBackgroundJobs(ctx, disc)
+	cat, err := a.wireCatalog(ctx, transport, a.eventTap, disc)
+	if err != nil {
+		return features{}, fmt.Errorf("catalog: %w", err)
+	}
+	a.download = cat.download
+	if err := a.applyStartupSwitches(ctx); err != nil {
+		return features{}, fmt.Errorf("startup switches: %w", err)
+	}
+	playbackModule, err := a.wirePlayback(cat.trackRepo)
+	if err != nil {
+		return features{}, fmt.Errorf("playback: %w", err)
+	}
+	ownership, err := newOwnershipEnrichment(cat, a.background)
+	if err != nil {
+		return features{}, fmt.Errorf("ownership enrichment: %w", err)
+	}
+	if err := disc.AttachOwnership(ownership); err != nil {
+		return features{}, fmt.Errorf("ownership enrichment: %w", err)
+	}
+	return features{discovery: disc, catalog: cat, playback: playbackModule}, nil
 }
 
 func (a *application) applyDisabledJobs(ctx context.Context) error {

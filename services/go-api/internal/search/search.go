@@ -44,34 +44,31 @@ import (
 )
 
 type (
-	ClientEventSink             = handler.ClientEventSink
-	NoClientEvents              = handler.NoClientEvents
-	FeaturedArtist              = domain.FeaturedArtist
-	ResultKind                  = domain.ResultKind
-	ResultKindSet               = domain.ResultKindSet
-	SearchQuery                 = domain.SearchQuery
-	SearchResult                = domain.SearchResult
-	OwnedTrack                  = ports.OwnedTrack
-	OwnedTrackLister            = ports.OwnedTrackLister
-	TrackNumberFiller           = ports.TrackNumberFiller
-	DeletedUserDataEraser       = ports.DeletedUserDataEraser
-	DiscographyQualityReader    = ports.DiscographyQualityReader
-	SpellingHintsStore          = ports.SpellingHintsStore
-	QueryCount                  = ports.QueryCount
-	ChartProvider               = ports.ChartProvider
-	ISRCRecording               = ports.ISRCRecording
-	MusicBrainzRecording        = ports.MusicBrainzRecording
-	MusicBrainzRecordingDetail  = ports.MusicBrainzRecordingDetail
-	MusicBrainzRelease          = ports.MusicBrainzRelease
-	MusicBrainzWorkRecording    = ports.MusicBrainzWorkRecording
-	SearchOutput                = service.SearchOutput
-	SearchService               = service.SearchService
-	UnreleasedService           = service.UnreleasedService
-	UnreleasedConfig            = service.UnreleasedConfig
-	SpellingHintsRefreshService = service.SpellingHintsRefreshService
-	OwnershipEnrichmentService  = service.OwnershipEnrichmentService
-	NoActivityFeed              = service.NoopActivityFeed
-	SmokeResult                 = service.SmokeResult
+	ClientEventSink            = handler.ClientEventSink
+	NoClientEvents             = handler.NoClientEvents
+	FeaturedArtist             = domain.FeaturedArtist
+	ResultKind                 = domain.ResultKind
+	ResultKindSet              = domain.ResultKindSet
+	SearchQuery                = domain.SearchQuery
+	SearchResult               = domain.SearchResult
+	OwnedTrack                 = ports.OwnedTrack
+	OwnedTrackLister           = ports.OwnedTrackLister
+	TrackNumberFiller          = ports.TrackNumberFiller
+	DiscographyQualityReader   = ports.DiscographyQualityReader
+	SpellingHintsStore         = ports.SpellingHintsStore
+	QueryCount                 = ports.QueryCount
+	ChartProvider              = ports.ChartProvider
+	ISRCRecording              = ports.ISRCRecording
+	MusicBrainzRecording       = ports.MusicBrainzRecording
+	MusicBrainzRecordingDetail = ports.MusicBrainzRecordingDetail
+	MusicBrainzRelease         = ports.MusicBrainzRelease
+	MusicBrainzWorkRecording   = ports.MusicBrainzWorkRecording
+	SearchOutput               = service.SearchOutput
+	SearchService              = service.SearchService
+	UnreleasedConfig           = service.UnreleasedConfig
+	OwnershipEnrichmentService = service.OwnershipEnrichmentService
+	NoActivityFeed             = service.NoopActivityFeed
+	SmokeResult                = service.SmokeResult
 )
 
 const (
@@ -81,20 +78,17 @@ const (
 )
 
 var (
-	DefaultDiscoveryRateLimits         = handler.DefaultDiscoveryRateLimits
-	ErrIdentityStoreUnavailable        = domain.ErrIdentityStoreUnavailable
-	NewSearchQuery                     = domain.NewSearchQuery
-	ParseDiscographyGroupBy            = ports.ParseDiscographyGroupBy
-	NewVocabularyRefreshService        = service.NewVocabularyRefreshService
-	NewOwnershipEnrichmentService      = service.NewOwnershipEnrichmentService
-	NewOwnershipReader                 = service.NewOwnershipReader
-	RunSmokeEval                       = service.RunSmokeEval
-	NewPostgresEventStore              = persistence.NewPostgresEventStore
-	NewPostgresFavoritesRepository     = persistence.NewPostgresFavoritesRepository
-	NewPostgresSearchHistoryRepository = persistence.NewPostgresSearchHistoryRepository
-	NewCountingTransport               = searchtelemetry.NewCountingTransport
-	ReadProviderMetricsSnapshot        = searchtelemetry.ReadSnapshot
-	ProviderRetryRecorder              = searchtelemetry.RetryRecorder
+	DefaultDiscoveryRateLimits    = handler.DefaultDiscoveryRateLimits
+	NewSearchQuery                = domain.NewSearchQuery
+	ParseDiscographyGroupBy       = ports.ParseDiscographyGroupBy
+	NewVocabularyRefreshService   = service.NewVocabularyRefreshService
+	NewOwnershipEnrichmentService = service.NewOwnershipEnrichmentService
+	NewOwnershipReader            = service.NewOwnershipReader
+	RunSmokeEval                  = service.RunSmokeEval
+	NewPostgresEventStore         = persistence.NewPostgresEventStore
+	NewCountingTransport          = searchtelemetry.NewCountingTransport
+	ReadProviderMetricsSnapshot   = searchtelemetry.ReadSnapshot
+	ProviderRetryRecorder         = searchtelemetry.RetryRecorder
 )
 
 type Deps struct {
@@ -264,21 +258,34 @@ type recordingAuthority interface {
 	RecordingDetail(ctx context.Context, mbid string) (ports.MusicBrainzRecordingDetail, bool, error)
 }
 
-type eventRetention interface {
-	PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error)
-	PruneEvents(ctx context.Context, now time.Time) (int64, error)
+type Module struct {
+	handler         *handler.DiscoveryHandler
+	Search          *service.SearchService
+	FeaturedArtists *service.FeaturedArtistResolver
+	Recordings      recordingAuthority
+	Charts          []ports.ChartProvider
+	SpellingHints   ports.SpellingHintsStore
+	unreleased      *service.UnreleasedService
+	events          ports.EventRetention
+	erasers         []ports.DeletedUserDataEraser
+	rankingOnly     *service.SearchService
 }
 
-type Module struct {
-	handler           *handler.DiscoveryHandler
-	Search            *service.SearchService
-	FeaturedArtists   *service.FeaturedArtistResolver
-	Recordings        recordingAuthority
-	Charts            []ports.ChartProvider
-	SpellingHints     ports.SpellingHintsStore
-	UnreleasedRefresh *service.UnreleasedService
-	Events            eventRetention
-	rankingOnly       *service.SearchService
+func (m *Module) HasUnreleasedRefresh() bool { return m.unreleased != nil }
+
+func (m *Module) RefreshDueUnreleased(ctx context.Context) error {
+	return service.RefreshDueUnreleased(m.unreleased, clock.Now)(ctx)
+}
+
+func (m *Module) PruneEvents(ctx context.Context) error {
+	return service.PruneDiscoveryEvents(m.events, clock.Now)(ctx)
+}
+
+func (m *Module) EraseDeletedUserData(ctx context.Context) error {
+	if err := service.EraseDiscoveryRowsOfDeletedIdentities(ctx, m.erasers); err != nil {
+		return fmt.Errorf("erase discovery rows of deleted identities: %w", err)
+	}
+	return nil
 }
 
 type wiring struct {
@@ -318,15 +325,16 @@ func New(ctx context.Context, d Deps) (*Module, error) {
 		return nil, err
 	}
 	return &Module{
-		handler:           discoveryHandler,
-		Search:            services.Search,
-		FeaturedArtists:   featuredArtists,
-		Recordings:        t.named(rowMusicBrainz).recordings,
-		Charts:            t.chartProviders(),
-		SpellingHints:     s.SpellingHints,
-		UnreleasedRefresh: unreleasedServices.refresh,
-		Events:            s.Events,
-		rankingOnly:       rankingOnly,
+		handler:         discoveryHandler,
+		Search:          services.Search,
+		FeaturedArtists: featuredArtists,
+		Recordings:      t.named(rowMusicBrainz).recordings,
+		Charts:          t.chartProviders(),
+		SpellingHints:   s.SpellingHints,
+		unreleased:      unreleasedServices.refresh,
+		events:          s.Events,
+		erasers:         []ports.DeletedUserDataEraser{s.History, persistence.NewPostgresFavoritesRepository(s.Pool), s.Events},
+		rankingOnly:     rankingOnly,
 	}, nil
 }
 

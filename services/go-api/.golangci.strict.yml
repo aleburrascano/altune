@@ -137,7 +137,6 @@ linters:
             - "!**/internal/shared/dbtest/**"
             - "!**/cmd/**"
             - "!**/internal/app/*.go"
-            - "!**/internal/app/shutdown/**"
           deny:
             - pkg: github.com/jackc/pgx
               desc: the database driver is imported only in its home, an adapters package, shared/database, shared/dbtest or the composition root, so reach the database through one of them
@@ -146,7 +145,6 @@ linters:
           files:
             - "**/cmd/**"
             - "**/internal/app/*.go"
-            - "**/internal/app/shutdown/**"
             - "!$test"
           allow:
             - github.com/jackc/pgx/v5/pgxpool

@@ -251,6 +251,11 @@ type DeletedUserDataEraser interface {
 	EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error)
 }
 
+type EventRetention interface {
+	PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error)
+	PruneEvents(ctx context.Context, now time.Time) (int64, error)
+}
+
 type MBIDIndex interface {
 	LookupMBID(ctx context.Context, kind domain.ResultKind, nameKey string) (string, bool)
 	RememberMBID(ctx context.Context, kind domain.ResultKind, nameKey, mbid string) error

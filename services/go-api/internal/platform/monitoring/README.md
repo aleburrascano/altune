@@ -4,8 +4,8 @@ It owns the table `client_events`. Only `monitoring` writes it. Other modules ma
 
 ## Must not
 
-- Import a feature or another platform module (`outbound`, which its notifiers use, is the one exception). `search` and `download` data reaches it through `app/bridges` (`monitoringfromsearch`, `monitoringfromdownload`), and what decides when to page (the alert conditions) and what the live metrics map holds stay in `app/alerts` and `app/livemetrics` until they can be expressed through its ports.
-- Put a domain type on the wire. Wire shapes live in `internal/adapters/handler/dto.go` and its errors map in `errors.go`. The alert monitor status, the eval meter status and the tap events have no json tags: the handler maps the eval status and the tap events to the DTOs in `dto.go`, and `app/livemetrics` maps the alert monitor status to its own wire shape.
+- Import a feature or another platform module (`outbound`, which its notifiers use, is the one exception). Everything it reads from other modules comes through a port in `ports/ports.go` that `app/bridges/monitoringfrom<module>` serves: `search`, `download`, `library`, `playback`, `auth`, `leader`, `requestmetrics` and the job runner. It decides when to page (the alert conditions, `service/alert_conditions*.go`), which notifier to use (`adapters/notifier/select.go`), what the live metrics map holds and how a dependency probe is graded.
+- Put a domain type on the wire. Wire shapes live in `internal/adapters/handler/dto.go` and its errors map in `errors.go`. The alert monitor status, the eval meter status and the tap events have no json tags: the handler maps them to the DTOs in `dto.go` and `live_metrics.go`.
 - Read config: `app` passes the notifier and the intervals; the observe stream bounds default unless `Deps.Streams` sets them.
 
 ## Shape

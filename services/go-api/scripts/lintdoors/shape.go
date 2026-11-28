@@ -29,9 +29,19 @@ const (
 	sectionGlobals = "Rule 18: no package-level mutable state"
 	sectionNames   = "Rule 20: package names are one plain word"
 	sectionReadme  = "Rule 21: every module README opens with its one job"
+	sectionApp     = "Rule 23: app is the composition root and nothing else"
 )
 
-var allSections = []string{sectionRoot, sectionDoor, sectionCore, sectionLayers, sectionFileMap, sectionSetters, sectionGlobals, sectionNames, sectionReadme}
+var allSections = []string{sectionRoot, sectionDoor, sectionCore, sectionLayers, sectionFileMap, sectionSetters, sectionGlobals, sectionNames, sectionReadme, sectionApp}
+
+var appFiles = map[string]bool{
+	"app.go": true, "config.go": true, "jobs.go": true, "shutdown.go": true, "server.go": true,
+	"library_wiring.go": true, "search_wiring.go": true, "download_wiring.go": true,
+	"playback_wiring.go": true, "platform_wiring.go": true,
+	"README.md": true, "CLAUDE.md": true,
+}
+
+var appDirs = map[string]bool{"bridges": true, "testdata": true}
 
 var layerDirs = map[string]bool{"domain": true, "service": true, "ports": true, "contracttest": true, "adapters": true}
 
@@ -90,6 +100,9 @@ func checkShape(root string) ([]shapeViolation, error) {
 			return nil, err
 		}
 	}
+	if err := s.checkApp(); err != nil {
+		return nil, err
+	}
 	if err := s.checkPackageNames(); err != nil {
 		return nil, err
 	}
@@ -119,6 +132,25 @@ func isDir(path string) bool {
 func isFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
+}
+
+func (s *shapeScan) checkApp() error {
+	dir := filepath.Join(s.root, "internal", appModule)
+	entries, err := listDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		path := filepath.ToSlash(filepath.Join("internal", appModule, name))
+		switch {
+		case e.IsDir() && !appDirs[name]:
+			s.add(path, 0, sectionApp, "app holds only its wiring files and bridges/; move the folder %s to the module that owns the decision", name)
+		case !e.IsDir() && !appFiles[name] && !strings.HasSuffix(name, "_test.go"):
+			s.add(path, 0, sectionApp, "app holds only app.go, config.go, jobs.go, shutdown.go, server.go and one <module>_wiring.go per module; move %s to the module that owns what it decides", name)
+		}
+	}
+	return nil
 }
 
 func (s *shapeScan) checkModule(module string) error {

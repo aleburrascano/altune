@@ -259,7 +259,7 @@ func TestUnreleasedRefresh_OnlyAStoreBackedServiceNeedsRefreshing(t *testing.T) 
 			if tt.pool {
 				h.deps.Pool = unreachablePool(t)
 			}
-			if got := h.start().UnreleasedRefresh != nil; got != tt.want {
+			if got := h.start().HasUnreleasedRefresh(); got != tt.want {
 				t.Errorf("unreleased refresh present = %v, want %v", got, tt.want)
 			}
 		})
@@ -270,7 +270,7 @@ func TestUnreleasedRefresh_WithoutAnyUnreleasedSourceThereIsNothingToRefresh(t *
 	h := newHarness(t, everyProviderOff())
 	h.deps.Pool = unreachablePool(t)
 
-	if h.start().UnreleasedRefresh != nil {
+	if h.start().HasUnreleasedRefresh() {
 		t.Error("an unreleased refresh exists with neither a Genius token nor a Sheets key")
 	}
 }
