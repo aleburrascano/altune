@@ -3,7 +3,6 @@ package providers
 import (
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,5 +15,5 @@ func ArtworkFailure(source domain.ProviderKey, err error) (string, error) {
 			return "", nil
 		}
 	}
-	return "", fmt.Errorf("%w: %s: %w", ports.ErrArtworkUnavailable, source, err)
+	return "", fmt.Errorf("%w: %s: %w", domain.ErrArtworkUnavailable, source, err)
 }

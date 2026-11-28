@@ -2,7 +2,7 @@ package telemetry
 
 import (
 	"altune/go-api/internal/platform/outbound"
-	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/telemetry"
 	"errors"
 	"net/http"
@@ -126,7 +126,7 @@ func (t *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		base = outbound.DefaultTransport()
 	}
 	resp, err := base.RoundTrip(req)
-	if errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
+	if errors.Is(err, domain.ErrProviderRateLimitQueueTimeout) {
 		return resp, err
 	}
 	t.counters[providerForHost(hostOf(req))][outcomeFor(resp, err)].Add(1)

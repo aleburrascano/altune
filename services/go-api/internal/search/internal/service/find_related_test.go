@@ -745,7 +745,7 @@ func TestFindRelatedConstructors_RefuseAMissingCollaborator(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			source, err := tc.build()
-			if !errors.Is(err, service.ErrRelatedCollaboratorRequired) || source != nil || !strings.Contains(err.Error(), tc.missing) {
+			if !errors.Is(err, domain.ErrRelatedCollaboratorRequired) || source != nil || !strings.Contains(err.Error(), tc.missing) {
 				t.Errorf("source = %v, err = %v; want nil and ErrCollaboratorRequired naming %q", source, err, tc.missing)
 			}
 		})
@@ -757,7 +757,7 @@ func TestFindRelatedConstructors_RefuseAMissingCollaborator(t *testing.T) {
 			t.Fatalf("LibraryMatches: %v", err)
 		}
 		svc, err := service.NewFindRelatedService(clock.Now, library, nil)
-		if !errors.Is(err, service.ErrRelatedCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), "source 1") {
+		if !errors.Is(err, domain.ErrRelatedCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), "source 1") {
 			t.Errorf("svc = %v, err = %v; want nil and ErrCollaboratorRequired naming source 1", svc, err)
 		}
 	})
@@ -846,7 +846,7 @@ func TestFindRelatedSources_ASubsetDispatchesExactlyTheLookupsPresent(t *testing
 func TestNewFindRelatedService_RefusesANilClock(t *testing.T) {
 	svc, err := service.NewFindRelatedService(nil)
 
-	if svc != nil || !errors.Is(err, service.ErrRelatedCollaboratorRequired) {
+	if svc != nil || !errors.Is(err, domain.ErrRelatedCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrCollaboratorRequired", svc, err)
 	}
 }

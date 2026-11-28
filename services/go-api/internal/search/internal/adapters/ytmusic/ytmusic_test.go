@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/ytmusic"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/random/randomtest"
@@ -376,8 +375,8 @@ func TestYouTubeMusicConstructors_RefuseAMissingSleeperOrJitterSource(t *testing
 		jitter random.Unit
 		want   error
 	}{
-		"sleeper": {nil, random.Real, ytmusic.ErrSleeperRequired},
-		"jitter":  {clock.Sleep, nil, ytmusic.ErrJitterRequired},
+		"sleeper": {nil, random.Real, domain.ErrSleeperRequired},
+		"jitter":  {clock.Sleep, nil, domain.ErrJitterRequired},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -560,7 +559,7 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 
 		r := ytmusic.MustNewYouTubeMusicArtworkLookup(&contracttest.RedirectTransport{TargetURL: srv.URL}, clock.Sleep, random.Real)
 		url, err := r.Resolve(context.Background(), search.ResultKindArtist, "sombr", "", "")
-		if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		if !errors.Is(err, domain.ErrArtworkUnavailable) {
 			t.Fatalf("Resolve = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
 		}
 		if url != "" {
@@ -591,7 +590,7 @@ func TestYouTubeMusicArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *tes
 
 			r := ytmusic.MustNewYouTubeMusicArtworkLookup(&contracttest.RedirectTransport{TargetURL: srv.URL}, clock.Sleep, random.Real)
 			url, err := r.Resolve(context.Background(), search.ResultKindArtist, "sombr", "", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+			if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
 			}
 			if !strings.Contains(err.Error(), "ytmusic") {
@@ -626,7 +625,7 @@ func TestYouTubeMusicArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t 
 
 	r := ytmusic.MustNewYouTubeMusicArtworkLookup(&contracttest.RedirectTransport{TargetURL: srv.URL}, clock.Sleep, random.Real)
 	url, err := r.Resolve(ctx, search.ResultKindArtist, "sombr", "", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }

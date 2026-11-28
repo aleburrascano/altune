@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/musicbrainz"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
@@ -317,7 +316,7 @@ func TestMusicBrainzAdapter_PassesATransportQueueTimeoutThroughClassified(t *tes
 
 	err := lookupRecording(musicbrainz.NewMusicBrainzAdapter(client, "test", clock.Now))(context.Background())
 
-	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, domain.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
 	}
 }
@@ -435,7 +434,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_noExactMatchIsNotFound(t *test
 
 	adapter := musicbrainz.NewMusicBrainzAdapter(contracttest.NewClient(server.URL), "altune-test/1.0", clock.Now)
 	id, err := adapter.ResolveArtistIdentity(context.Background(), "Radiohead")
-	if !errors.Is(err, ports.ErrArtistIdentityNotFound) {
+	if !errors.Is(err, domain.ErrArtistIdentityNotFound) {
 		t.Fatalf("ResolveArtistIdentity error = %v, want ErrArtistIdentityNotFound when no result matches the name exactly", err)
 	}
 	if id != nil {
@@ -696,7 +695,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_escapesLuceneMetacharacters(t 
 	defer server.Close()
 
 	adapter := musicbrainz.NewMusicBrainzAdapter(contracttest.NewClient(server.URL), "altune-test/1.0", clock.Now)
-	if _, err := adapter.ResolveArtistIdentity(context.Background(), "Sunn O)))"); !errors.Is(err, ports.ErrArtistIdentityNotFound) {
+	if _, err := adapter.ResolveArtistIdentity(context.Background(), "Sunn O)))"); !errors.Is(err, domain.ErrArtistIdentityNotFound) {
 		t.Fatalf("ResolveArtistIdentity: %v", err)
 	}
 

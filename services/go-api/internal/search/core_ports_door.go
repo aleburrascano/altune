@@ -1,6 +1,9 @@
 package search
 
-import "altune/go-api/internal/search/internal/ports"
+import (
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
+)
 
 type (
 	ChartProvider              = ports.ChartProvider
@@ -22,4 +25,4 @@ type (
 
 var ParseDiscographyGroupBy = ports.ParseDiscographyGroupBy
 
-var ErrIdentityStoreUnavailable = ports.ErrIdentityStoreUnavailable
+var ErrIdentityStoreUnavailable = domain.ErrIdentityStoreUnavailable

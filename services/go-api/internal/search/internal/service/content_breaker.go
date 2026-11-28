@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"errors"
 )
@@ -108,7 +107,7 @@ const (
 )
 
 func isProviderHealthFailure(err error) bool {
-	if errors.Is(err, context.Canceled) || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, domain.ErrProviderRateLimitQueueTimeout) {
 		return false
 	}
 	var auth persistentAuthFailure

@@ -141,7 +141,7 @@ func newTrackersClient(t *testing.T, httpClient *http.Client, index ports.Tracke
 func TestNewClient_RefusesAMissingIndexCache(t *testing.T) {
 	client, err := fansheets.NewClient(http.DefaultClient, testKey, "hub", nil)
 
-	if client != nil || !errors.Is(err, fansheets.ErrCollaboratorRequired) {
+	if client != nil || !errors.Is(err, domain.ErrTrackerSheetCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping fansheets.ErrCollaboratorRequired", client, err)
 	}
 }
@@ -312,7 +312,7 @@ func TestClient_KeepsTheUnreleasedSongsWhenTheReleasedTabFails(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.released, srv.releasedCode = []byte(`{}`), http.StatusInternalServerError
 	songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
-	if !errors.Is(err, ports.ErrTrackerPartial) || len(songs) != 4 {
+	if !errors.Is(err, domain.ErrTrackerPartial) || len(songs) != 4 {
 		t.Errorf("ArtistSongs = %d songs, err %v; want the 4 unreleased songs and a partial error", len(songs), err)
 	}
 }

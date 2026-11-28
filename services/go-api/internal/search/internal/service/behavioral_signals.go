@@ -1,10 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
@@ -46,12 +46,10 @@ type listeningScoring struct {
 
 func NewBehavioralScoring(consumer *ListeningFeedback, now clock.Func) (BehavioralScorer, error) {
 	if consumer == nil || now == nil {
-		return nil, ErrBehavioralConsumerRequired
+		return nil, domain.ErrBehavioralConsumerRequired
 	}
 	return &listeningScoring{consumer: consumer, now: now}, nil
 }
-
-var ErrBehavioralConsumerRequired = errors.New("behavioral scoring needs its listening feedback consumer and clock")
 
 func (l *listeningScoring) Refresh(ctx context.Context) error {
 	signals, err := l.consumer.Signals(ctx, l.now().UTC().Add(-behavioralLookback))

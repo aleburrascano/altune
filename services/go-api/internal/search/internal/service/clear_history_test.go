@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock/clocktest"
@@ -76,7 +77,7 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 func TestNewClearSearchHistoryService_RefusesANilClock(t *testing.T) {
 	svc, err := service.NewClearSearchHistoryService(&memory.FakeHistoryEraser{}, nil)
 
-	if !errors.Is(err, service.ErrClockRequired) || svc != nil {
+	if !errors.Is(err, domain.ErrHistoryClockRequired) || svc != nil {
 		t.Fatalf("NewClearSearchHistoryService(nil clock) = (%v, %v), want history.ErrClockRequired and no service", svc, err)
 	}
 }
@@ -84,7 +85,7 @@ func TestNewClearSearchHistoryService_RefusesANilClock(t *testing.T) {
 func TestNewClearSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
 	svc, err := service.NewClearSearchHistoryService(nil, time.Now)
 
-	if svc != nil || !errors.Is(err, service.ErrHistoryCollaboratorRequired) {
+	if svc != nil || !errors.Is(err, domain.ErrHistoryCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping history.ErrCollaboratorRequired", svc, err)
 	}
 }

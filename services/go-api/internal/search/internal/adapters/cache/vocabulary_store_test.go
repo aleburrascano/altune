@@ -561,7 +561,7 @@ func TestNewVocabularyStore_RefusesAMissingNormalizerOrMetaphone(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store, err := cache.NewVocabularyStore(nil, tt.normalize, tt.metaphone)
 
-			if store != nil || !errors.Is(err, cache.ErrVocabularyCollaboratorRequired) {
+			if store != nil || !errors.Is(err, domain.ErrVocabularyStoreCollaboratorRequired) {
 				t.Fatalf("got (%v, %v), want a refusal wrapping ErrVocabularyCollaboratorRequired", store, err)
 			}
 		})

@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -19,11 +18,9 @@ type RecordEventService struct {
 	now        clock.Func
 }
 
-var ErrActivityCollaboratorRequired = errors.New("record event service needs its event store, activity feed and clock, pass the noop feed to switch the feed off")
-
 func NewRecordEventService(eventStore ports.EventStore, activity ports.ActivityFeed, now clock.Func) (*RecordEventService, error) {
 	if eventStore == nil || activity == nil || now == nil {
-		return nil, ErrActivityCollaboratorRequired
+		return nil, domain.ErrActivityCollaboratorRequired
 	}
 	return &RecordEventService{eventStore: eventStore, activity: activity, now: now}, nil
 }

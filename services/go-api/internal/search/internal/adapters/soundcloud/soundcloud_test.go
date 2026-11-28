@@ -71,7 +71,7 @@ func TestNewSoundCloudAPIAdapter_RefusesAMissingCollaborator(t *testing.T) {
 		},
 	} {
 		adapter, err := build()
-		if adapter != nil || !errors.Is(err, soundcloud.ErrCollaboratorRequired) {
+		if adapter != nil || !errors.Is(err, domain.ErrSoundCloudCollaboratorRequired) {
 			t.Errorf("without %s: got (%v, %v), want a refusal wrapping soundcloud.ErrCollaboratorRequired", name, adapter, err)
 		}
 	}
@@ -640,7 +640,7 @@ func TestSoundCloudAPIAdapter_Resolve_SearchErrorIsUnavailable(t *testing.T) {
 	a := newTestSoundCloudAPI(t, api, nil)
 
 	got, err := a.Resolve(context.Background(), search.ResultKindTrack, "Nothing Here", "", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on search failure = %v, want discovery.ErrArtworkUnavailable", err)
 	}
 	if got != "" {
@@ -1057,7 +1057,7 @@ func TestSoundCloudAPIAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T)
 			a := newTestSoundCloudAPI(t, handler, nil)
 
 			url, err := a.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+			if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
 			}
 			if !strings.Contains(err.Error(), "soundcloud") {
@@ -1085,7 +1085,7 @@ func TestSoundCloudAPIAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testin
 	a := newTestSoundCloudAPI(t, srv.Config.Handler.ServeHTTP, nil)
 
 	url, err := a.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }
@@ -1100,7 +1100,7 @@ func TestSoundCloudAPIAdapter_Resolve_AlreadyCancelledContextIsUnavailableNotAMi
 	cancel()
 
 	url, err := a.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -1258,7 +1258,7 @@ func TestChainedArtworkResolver_MissAfterAProviderFailsIsDegradedAndUnavailable(
 		t.Run(name, func(t *testing.T) {
 			chain := artworkfallback.NewChainedArtworkLookup(broken, &memory.ArtworkLookup{})
 			url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+			if url != "" || !errors.Is(err, domain.ErrArtworkDegraded) || !errors.Is(err, domain.ErrArtworkUnavailable) {
 				t.Errorf("ResolveTagged after %s fails then a miss = (%q, %v), want ErrArtworkDegraded and ErrArtworkUnavailable", name, url, err)
 			}
 			if !ports.IsUnverifiedArtworkMiss(url, err) {

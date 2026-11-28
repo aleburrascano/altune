@@ -179,7 +179,7 @@ func TestCorrect_DoesNotLogRawQueryText(t *testing.T) {
 }
 
 func TestCorrection_RefusesAMissingVocabulary(t *testing.T) {
-	if _, err := service.NewCorrectionService(nil); !errors.Is(err, service.ErrVocabularyCollaboratorRequired) {
+	if _, err := service.NewCorrectionService(nil); !errors.Is(err, domain.ErrVocabularyCollaboratorRequired) {
 		t.Fatalf("err = %v, want vocabulary.ErrCollaboratorRequired", err)
 	}
 }
@@ -193,7 +193,7 @@ func TestVocabularyIngestor_RefusesAMissingStoreOrTracker(t *testing.T) {
 			return err
 		},
 	} {
-		if err := build(); !errors.Is(err, service.ErrVocabularyCollaboratorRequired) {
+		if err := build(); !errors.Is(err, domain.ErrVocabularyCollaboratorRequired) {
 			t.Errorf("missing %s: err = %v, want vocabulary.ErrCollaboratorRequired", name, err)
 		}
 	}

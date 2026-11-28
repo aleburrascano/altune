@@ -488,7 +488,7 @@ func TestOptions_OutOfRangeValuesAreRefused(t *testing.T) {
 		"negative deadline":         service.WithSearchDeadline(-time.Second),
 	} {
 		_, err := service.NewSearchService(searchtest.NewTracker(t), nil, search.NewCircuitBreaker(clock.Now), service.AbsentCollaborators(), opt)
-		if !errors.Is(err, service.ErrInvalidOption) {
+		if !errors.Is(err, domain.ErrInvalidSearchOption) {
 			t.Errorf("%s: err = %v, want query.ErrInvalidOption", name, err)
 		}
 	}
@@ -521,7 +521,7 @@ func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 		"ids":             withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.IDs = nil }),
 	} {
 		svc, err := build()
-		if !errors.Is(err, service.ErrSearchCollaboratorRequired) || svc != nil {
+		if !errors.Is(err, domain.ErrSearchCollaboratorRequired) || svc != nil {
 			t.Errorf("without %s: svc, err = %v, %v, want query.ErrCollaboratorRequired", name, svc, err)
 			continue
 		}

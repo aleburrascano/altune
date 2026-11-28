@@ -56,7 +56,7 @@ type FavoritesService struct {
 
 func NewFavoritesService(repo ports.FavoritesRepository) (*FavoritesService, error) {
 	if repo == nil {
-		return nil, ErrFavoritesCollaboratorRequired
+		return nil, domain.ErrFavoritesCollaboratorRequired
 	}
 	return &FavoritesService{repo: repo}, nil
 }
@@ -73,7 +73,7 @@ func (s *FavoritesService) Add(ctx context.Context, userId ids.UserId, fav domai
 		return domain.NewInvalidFavoriteError("favorite needs a title")
 	}
 	err := s.repo.Add(ctx, userId, fav)
-	if errors.Is(err, ports.ErrFavoritesFull) {
+	if errors.Is(err, domain.ErrFavoritesFull) {
 		return domain.NewFavoritesFullError(ports.MaxFavoritesPerUser)
 	}
 	if err != nil {
@@ -124,11 +124,9 @@ type FavoritesLifter struct {
 	repo ports.FavoritesRepository
 }
 
-var ErrFavoritesCollaboratorRequired = errors.New("favorites services need their repository, pass the absent adapter to switch it off")
-
 func NewFavoritesLifter(repo ports.FavoritesRepository) (*FavoritesLifter, error) {
 	if repo == nil {
-		return nil, ErrFavoritesCollaboratorRequired
+		return nil, domain.ErrFavoritesCollaboratorRequired
 	}
 	return &FavoritesLifter{repo: repo}, nil
 }

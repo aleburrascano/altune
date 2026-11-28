@@ -6,15 +6,12 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 )
 
-var ErrRelatedCollaboratorRequired = errors.New("related services need every collaborator")
-
 func required(name string) error {
-	return fmt.Errorf("%w: %s is nil", ErrRelatedCollaboratorRequired, name)
+	return fmt.Errorf("%w: %s is nil", domain.ErrRelatedCollaboratorRequired, name)
 }
 
 type LookupSource interface {

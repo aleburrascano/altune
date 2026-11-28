@@ -34,8 +34,6 @@ const (
 	scUserAgent          = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-var ErrCollaboratorRequired = errors.New("soundcloud api adapter needs its http client and search fallback, pass NoFallback to switch the fallback off")
-
 var errNoFallback = errors.New("soundcloud search has no fallback")
 
 type NoFallback struct{}
@@ -46,7 +44,7 @@ func (NoFallback) Search(context.Context, string, map[domain.ResultKind]bool) ([
 
 func NewSoundCloudAPIAdapter(client *http.Client, fallback searchFallback, now clock.Func) (*SoundCloudAPIAdapter, error) {
 	if client == nil || fallback == nil || now == nil {
-		return nil, ErrCollaboratorRequired
+		return nil, domain.ErrSoundCloudCollaboratorRequired
 	}
 	return &SoundCloudAPIAdapter{
 		client:   client,

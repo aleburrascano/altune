@@ -28,8 +28,6 @@ type DetailsService struct {
 	mbidIndex ports.MBIDIndex
 }
 
-var ErrDetailsCollaboratorRequired = errors.New("enrichment service needs every collaborator, pass the null object to switch one off")
-
 type NoArtwork struct{}
 
 func (NoArtwork) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, error) {
@@ -81,7 +79,7 @@ func NewEnrichmentService(
 		"mbidIndex": mbidIndex == nil,
 	} {
 		if missing {
-			return nil, fmt.Errorf("%w: %s is nil", ErrDetailsCollaboratorRequired, name)
+			return nil, fmt.Errorf("%w: %s is nil", domain.ErrDetailsCollaboratorRequired, name)
 		}
 	}
 	return &DetailsService{enricher: enricher, artwork: artwork, cache: cache, mbidIndex: mbidIndex}, nil

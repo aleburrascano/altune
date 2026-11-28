@@ -33,7 +33,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	result, err := execute(r.Context(), userId, query, continues)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		Payload:          req.Payload,
 	}
 	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 
@@ -268,8 +268,6 @@ func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.Int
 		Payload:       req.Payload,
 	})
 }
-
-var errAllProvidersFailed = apierror.NewError(apierror.CodeDiscoveryAllProvidersFailed, "")
 
 func anyProviderAnswered(statuses []domain.ProviderSearchResponse) bool {
 	if len(statuses) == 0 {

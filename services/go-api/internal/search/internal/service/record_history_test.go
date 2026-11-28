@@ -17,7 +17,7 @@ import (
 )
 
 func TestRecordHistory_RefusesAMissingRepository(t *testing.T) {
-	if _, err := service.NewRecordSearchHistoryService(nil, time.Now, ids.Real); !errors.Is(err, service.ErrHistoryCollaboratorRequired) {
+	if _, err := service.NewRecordSearchHistoryService(nil, time.Now, ids.Real); !errors.Is(err, domain.ErrHistoryCollaboratorRequired) {
 		t.Fatalf("err = %v, want history.ErrCollaboratorRequired", err)
 	}
 }
@@ -71,7 +71,7 @@ func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
 func TestNewRecordSearchHistoryService_RefusesANilClock(t *testing.T) {
 	svc, err := service.NewRecordSearchHistoryService(&memory.FakeHistoryWriter{}, nil, ids.Real)
 
-	if !errors.Is(err, service.ErrClockRequired) || svc != nil {
+	if !errors.Is(err, domain.ErrHistoryClockRequired) || svc != nil {
 		t.Fatalf("NewRecordSearchHistoryService(nil clock) = (%v, %v), want history.ErrClockRequired and no service", svc, err)
 	}
 }
@@ -79,7 +79,7 @@ func TestNewRecordSearchHistoryService_RefusesANilClock(t *testing.T) {
 func TestNewRecordSearchHistoryService_RefusesANilIDSource(t *testing.T) {
 	svc, err := service.NewRecordSearchHistoryService(&memory.FakeHistoryWriter{}, time.Now, nil)
 
-	if !errors.Is(err, service.ErrIDSourceRequired) || svc != nil {
+	if !errors.Is(err, domain.ErrHistoryIDSourceRequired) || svc != nil {
 		t.Fatalf("NewRecordSearchHistoryService(nil id source) = (%v, %v), want history.ErrIDSourceRequired and no service", svc, err)
 	}
 }

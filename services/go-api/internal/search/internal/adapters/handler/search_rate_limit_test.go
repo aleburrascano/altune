@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
@@ -22,7 +23,7 @@ import (
 func TestNewDiscoveryHandler_RefusesANilClock(t *testing.T) {
 	h, err := handler.NewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), nil)
 
-	if !errors.Is(err, handler.ErrClockRequired) || h != nil {
+	if !errors.Is(err, domain.ErrHandlerClockRequired) || h != nil {
 		t.Fatalf("NewDiscoveryHandler(nil clock) = (%v, %v), want handler.ErrClockRequired and no handler", h, err)
 	}
 }
@@ -30,7 +31,7 @@ func TestNewDiscoveryHandler_RefusesANilClock(t *testing.T) {
 func TestNewDiscoveryHandler_NamesEveryMissingService(t *testing.T) {
 	h, err := handler.NewDiscoveryHandler(handler.DiscoveryServices{}, time.Now)
 
-	if !errors.Is(err, handler.ErrServiceRequired) || h != nil {
+	if !errors.Is(err, domain.ErrHandlerServiceRequired) || h != nil {
 		t.Fatalf("NewDiscoveryHandler(no services) = (%v, %v), want handler.ErrServiceRequired and no handler", h, err)
 	}
 	for _, name := range []string{"search", "album", "unreleased", "lyrics", "ownership", "client events"} {
@@ -46,7 +47,7 @@ func TestNewDiscoveryHandler_RefusesOneMissingService(t *testing.T) {
 
 	_, err := handler.NewDiscoveryHandler(services, time.Now)
 
-	if !errors.Is(err, handler.ErrServiceRequired) || !strings.Contains(err.Error(), "missing client events") {
+	if !errors.Is(err, domain.ErrHandlerServiceRequired) || !strings.Contains(err.Error(), "missing client events") {
 		t.Fatalf("err = %v, want only client events named", err)
 	}
 }
@@ -54,7 +55,7 @@ func TestNewDiscoveryHandler_RefusesOneMissingService(t *testing.T) {
 func TestDiscoveryHandler_AttachOwnershipRefusesNil(t *testing.T) {
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), time.Now)
 
-	if err := h.AttachOwnership(nil); !errors.Is(err, handler.ErrOwnershipRequired) {
+	if err := h.AttachOwnership(nil); !errors.Is(err, domain.ErrOwnershipRequired) {
 		t.Fatalf("AttachOwnership(nil) = %v, want handler.ErrOwnershipRequired", err)
 	}
 }

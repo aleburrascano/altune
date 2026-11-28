@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,19 +22,15 @@ type RecordSearchHistoryService struct {
 	source      ids.Source
 }
 
-var ErrIDSourceRequired = errors.New("history: an id source is required")
-
-var ErrHistoryCollaboratorRequired = errors.New("history services need their repository, pass the absent adapter to switch it off")
-
 func NewRecordSearchHistoryService(historyRepo ports.HistoryWriter, now clock.Func, source ids.Source) (*RecordSearchHistoryService, error) {
 	if historyRepo == nil {
-		return nil, ErrHistoryCollaboratorRequired
+		return nil, domain.ErrHistoryCollaboratorRequired
 	}
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, domain.ErrHistoryClockRequired
 	}
 	if source == nil {
-		return nil, ErrIDSourceRequired
+		return nil, domain.ErrHistoryIDSourceRequired
 	}
 	return &RecordSearchHistoryService{HistoryRepo: historyRepo, now: now, source: source}, nil
 }

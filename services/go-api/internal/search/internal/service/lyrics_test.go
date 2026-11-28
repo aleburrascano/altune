@@ -91,7 +91,7 @@ func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
 	svc := searchtest.NewLyrics(t, provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Hello", "Adele")
-	if !errors.Is(err, service.ErrDegraded) {
+	if !errors.Is(err, domain.ErrEnrichmentDegraded) {
 		t.Fatalf("a fetch error must surface as ErrDegraded (distinct from no data), got %v", err)
 	}
 	if !l.IsZero() {
@@ -118,7 +118,7 @@ func TestLyricsService_RefusesAMissingCollaborator(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, err := service.NewLyricsService(tt.provider, tt.cache)
 
-			if svc != nil || !errors.Is(err, service.ErrDetailsCollaboratorRequired) || !strings.Contains(err.Error(), tt.missing) {
+			if svc != nil || !errors.Is(err, domain.ErrDetailsCollaboratorRequired) || !strings.Contains(err.Error(), tt.missing) {
 				t.Fatalf("got (%v, %v), want a refusal naming %q", svc, err, tt.missing)
 			}
 		})

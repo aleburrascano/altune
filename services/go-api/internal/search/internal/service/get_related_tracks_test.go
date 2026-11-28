@@ -31,7 +31,7 @@ func TestNewGetRelatedTracksService_RefusesAMissingCollaborator(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, err := service.NewGetRelatedTracksService(tc.providers, tc.breaker)
-			if !errors.Is(err, service.ErrRelatedCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), tc.missing) {
+			if !errors.Is(err, domain.ErrRelatedCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), tc.missing) {
 				t.Errorf("svc = %v, err = %v; want nil and related.ErrCollaboratorRequired naming %q", svc, err, tc.missing)
 			}
 		})

@@ -21,7 +21,7 @@ func NewLyricsService(provider ports.LyricsProvider, cache ports.LyricsCache) (*
 		"lyrics cache":    cache == nil,
 	} {
 		if missing {
-			return nil, fmt.Errorf("%w: %s is nil", ErrDetailsCollaboratorRequired, name)
+			return nil, fmt.Errorf("%w: %s is nil", domain.ErrDetailsCollaboratorRequired, name)
 		}
 	}
 	return &LyricsService{provider: provider, cache: cache}, nil

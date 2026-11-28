@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"context"
@@ -153,7 +154,7 @@ func TestNewFeaturedArtistResolver_RefusesAMissingSource(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			resolver, err := service.NewFeaturedArtistResolver(tc.mb, tc.deezer)
-			if !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || resolver != nil {
+			if !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || resolver != nil {
 				t.Fatalf("resolver = %v, err = %v, want artistpage.ErrCollaboratorRequired", resolver, err)
 			}
 			if !strings.Contains(err.Error(), tc.want) {

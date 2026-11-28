@@ -1,11 +1,9 @@
 package service
 
 import (
-	"errors"
+	"altune/go-api/internal/search/internal/domain"
 	"fmt"
 )
-
-var ErrArtistPageCollaboratorRequired = errors.New("artist page services need every collaborator, pass the null adapter to switch one off")
 
 type collaborator struct {
 	name    string
@@ -15,7 +13,7 @@ type collaborator struct {
 func requireCollaborators(service string, collaborators ...collaborator) error {
 	for _, c := range collaborators {
 		if c.missing {
-			return fmt.Errorf("%w: %s needs %s", ErrArtistPageCollaboratorRequired, service, c.name)
+			return fmt.Errorf("%w: %s needs %s", domain.ErrArtistPageCollaboratorRequired, service, c.name)
 		}
 	}
 	return nil

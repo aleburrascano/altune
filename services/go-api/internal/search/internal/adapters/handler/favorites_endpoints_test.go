@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -54,7 +53,7 @@ func TestFavoritesEndpoints_EachFailureIsLoggedOnceByTheBoundary(t *testing.T) {
 		wantLoud   []string
 	}{
 		{name: "a store failure is one error record", err: errors.New("favorites store down"), wantStatus: http.StatusInternalServerError, wantLoud: []string{"request.failed"}},
-		{name: "a full list is a rejection, not an error", err: ports.ErrFavoritesFull, wantStatus: http.StatusConflict},
+		{name: "a full list is a rejection, not an error", err: domain.ErrFavoritesFull, wantStatus: http.StatusConflict},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ring := captureLogs(t)

@@ -65,7 +65,7 @@ func TestArtworkFiller_RefusesEveryMissingCollaborator(t *testing.T) {
 		"tracker":       func() error { _, err := service.NewArtworkFiller(lookup, cache, identities, index, nil); return err },
 		"pending store": func() error { _, err := service.NewPendingFiller(nil, bg); return err },
 	} {
-		if err := build(); !errors.Is(err, service.ErrArtworkCollaboratorRequired) {
+		if err := build(); !errors.Is(err, domain.ErrArtworkCollaboratorRequired) {
 			t.Errorf("without %s: err = %v, want ErrCollaboratorRequired", name, err)
 		}
 	}

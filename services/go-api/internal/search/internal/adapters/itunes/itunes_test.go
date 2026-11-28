@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/itunes"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
 	"errors"
@@ -260,7 +259,7 @@ func TestITunesAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
 
 	adapter := itunes.NewITunesAdapter(contracttest.NewClient(server.URL))
 	art, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -275,7 +274,7 @@ func TestITunesAdapter_Resolve_ContextCancelledBeforeTheRequestIsArtworkUnavaila
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	art, err := adapter.Resolve(ctx, search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -287,7 +286,7 @@ func TestITunesAdapter_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
 	defer server.Close()
 
 	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -299,7 +298,7 @@ func TestITunesAdapter_Resolve_ForbiddenIsArtworkUnavailable(t *testing.T) {
 	defer server.Close()
 
 	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 403 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -337,7 +336,7 @@ func TestITunesAdapter_Resolve_MalformedBodyIsArtworkUnavailable(t *testing.T) {
 	defer server.Close()
 
 	art, err := itunes.NewITunesAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -348,7 +347,7 @@ func TestITunesAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T) 
 	server.Close()
 
 	art, err := itunes.NewITunesAdapter(contracttest.NewClient(serverURL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -459,7 +458,7 @@ func TestITunesAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing.
 
 	err := lookup(context.Background())
 
-	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, domain.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
 	}
 }

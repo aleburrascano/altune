@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"errors"
 	"maps"
@@ -118,8 +119,8 @@ func TestRank_UnknownGroupByIsRefused(t *testing.T) {
 		dc("b", 10, 8),
 	}
 	got, err := persistence.Rank(cases, ports.DiscographyGroupBy("bogus"))
-	if !errors.Is(err, ports.ErrUnknownDiscographyGroupBy) || got != nil {
-		t.Fatalf("Rank(bogus) = (%v, %v), want (nil, %v)", got, err, ports.ErrUnknownDiscographyGroupBy)
+	if !errors.Is(err, domain.ErrUnknownDiscographyGroupBy) || got != nil {
+		t.Fatalf("Rank(bogus) = (%v, %v), want (nil, %v)", got, err, domain.ErrUnknownDiscographyGroupBy)
 	}
 }
 

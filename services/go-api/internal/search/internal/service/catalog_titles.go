@@ -41,7 +41,7 @@ func (s *GetArtistContentService) CatalogTitles(ctx context.Context, provider do
 	}
 	titles = append(titles, albumTracks...)
 	if !tracklistsComplete || isPartial(tracks) || isPartial(albums) {
-		return titles, ports.ErrPartialCatalog
+		return titles, domain.ErrPartialCatalog
 	}
 	return titles, nil
 }

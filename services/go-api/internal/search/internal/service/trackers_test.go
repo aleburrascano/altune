@@ -193,7 +193,7 @@ func TestService_List_CancelledJobIsAnErrorEvenWithTrackerSongs(t *testing.T) {
 }
 
 func TestService_List_APartTrackerReadKeepsItsSongsButCachesShort(t *testing.T) {
-	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Loot", "lootaaaa")}, Err: ports.ErrTrackerPartial}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Loot", "lootaaaa")}, Err: domain.ErrTrackerPartial}
 	cache := newMemoryCache()
 	got, err := listWith(t, nil, trackers, cache)
 	if err != nil || len(got) != 1 {

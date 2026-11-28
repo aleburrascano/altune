@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/titlemarkers"
 	"context"
@@ -14,7 +13,7 @@ import (
 type NoTrackers struct{}
 
 func (NoTrackers) ArtistSongs(context.Context, string) ([]domain.UnreleasedSong, error) {
-	return nil, ErrSourceNotConfigured
+	return nil, domain.ErrSourceNotConfigured
 }
 
 type sourceResult struct {
@@ -28,10 +27,10 @@ func (r sourceResult) answered() bool { return r.used && r.err == nil }
 
 func (s *UnreleasedService) trackerResult(ctx context.Context, artistName string, catalogTitles []string) sourceResult {
 	songs, err := s.trackers.ArtistSongs(ctx, artistName)
-	if errors.Is(err, ErrSourceNotConfigured) {
+	if errors.Is(err, domain.ErrSourceNotConfigured) {
 		return sourceResult{complete: true}
 	}
-	if errors.Is(err, ports.ErrTrackerPartial) {
+	if errors.Is(err, domain.ErrTrackerPartial) {
 		slog.WarnContext(ctx, "trackers.partial", logging.KeyError, err)
 		return sourceResult{songs: withoutReleasedVersions(songs, catalogTitles), used: true}
 	}
@@ -44,7 +43,7 @@ func (s *UnreleasedService) trackerResult(ctx context.Context, artistName string
 
 func (s *UnreleasedService) geniusResult(ctx context.Context, artistName string, catalogTitles []string) sourceResult {
 	artistID, found, err := s.genius.FindArtistID(ctx, artistName, catalogTitles)
-	if errors.Is(err, ErrSourceNotConfigured) {
+	if errors.Is(err, domain.ErrSourceNotConfigured) {
 		return sourceResult{}
 	}
 	if err != nil {

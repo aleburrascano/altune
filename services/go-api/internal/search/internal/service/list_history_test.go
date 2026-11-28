@@ -117,7 +117,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 func TestListSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
 	svc, err := service.NewListSearchHistoryService(nil)
 
-	if svc != nil || !errors.Is(err, service.ErrHistoryCollaboratorRequired) {
+	if svc != nil || !errors.Is(err, domain.ErrHistoryCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping history.ErrCollaboratorRequired", svc, err)
 	}
 }

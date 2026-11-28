@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
@@ -98,7 +99,7 @@ func TestGetArtistContentService_CatalogTitles_IncludesEveryAlbumTracklist(t *te
 
 func TestGetArtistContentService_CatalogTitles_FailedTracklistIsPartialButKeepsTheRest(t *testing.T) {
 	titles, err := tracklistService(t, map[string]bool{"a1": true}).CatalogTitles(context.Background(), search.ProviderDeezer, "artist-1", nil)
-	if !errors.Is(err, ports.ErrPartialCatalog) {
+	if !errors.Is(err, domain.ErrPartialCatalog) {
 		t.Fatalf("err = %v, want ErrPartialCatalog", err)
 	}
 	if !slices.Contains(titles, "Deep Cut Two") || slices.Contains(titles, "Deep Cut One") {
@@ -126,7 +127,7 @@ func TestGetArtistContentService_CatalogTitles_PanickingTracklistIsPartialNotACr
 
 	titles, err := svc.CatalogTitles(context.Background(), search.ProviderDeezer, "artist-1", nil)
 
-	if !errors.Is(err, ports.ErrPartialCatalog) {
+	if !errors.Is(err, domain.ErrPartialCatalog) {
 		t.Fatalf("err = %v, want ErrPartialCatalog", err)
 	}
 	if !slices.Contains(titles, "Deep Cut Two") || slices.Contains(titles, "Deep Cut One") {

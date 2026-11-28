@@ -6,15 +6,12 @@ import (
 	"altune/go-api/internal/shared/ytdlprunner"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
 
 const maxConcurrentYtdlp = 3
-
-var ErrYtdlpBusy = errors.New("yt-dlp soundcloud search: all slots busy")
 
 type SoundCloudAdapter struct {
 	slots    *parallel.Slots
@@ -52,7 +49,7 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 	}
 
 	if !a.slots.TryAcquire() {
-		return nil, ErrYtdlpBusy
+		return nil, domain.ErrYtdlpBusy
 	}
 	defer a.slots.Release()
 

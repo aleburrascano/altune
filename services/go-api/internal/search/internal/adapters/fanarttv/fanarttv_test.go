@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/fanarttv"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"errors"
 	"net/http"
@@ -137,7 +136,7 @@ func TestFanartTvArtworkResolver_Resolve_500IsArtworkUnavailable(t *testing.T) {
 
 	resolver := fanarttv.NewFanartTvArtworkLookup(contracttest.NewClient(server.URL), "test-api-key")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindArtist, "Unknown", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -182,7 +181,7 @@ func TestFanartTvArtworkResolver_Resolve_RateLimitIsArtworkUnavailable(t *testin
 	defer server.Close()
 
 	url, err := fanarttv.NewFanartTvArtworkLookup(contracttest.NewClient(server.URL), "k").Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -218,7 +217,7 @@ func TestFanartTvArtworkResolver_Resolve_AlbumServerErrorIsArtworkUnavailable(t 
 	defer server.Close()
 
 	url, err := fanarttv.NewFanartTvArtworkLookup(contracttest.NewClient(server.URL), "k").Resolve(context.Background(), search.ResultKindAlbum, "Higher Power", "Coldplay", "rg-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("album Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -244,7 +243,7 @@ func TestFanartTvArtworkResolver_Resolve_MalformedBodyIsArtworkUnavailable(t *te
 	defer server.Close()
 
 	url, err := fanarttv.NewFanartTvArtworkLookup(contracttest.NewClient(server.URL), "k").Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a non-JSON body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -255,7 +254,7 @@ func TestFanartTvArtworkResolver_Resolve_TransportErrorIsArtworkUnavailable(t *t
 	server.Close()
 
 	url, err := fanarttv.NewFanartTvArtworkLookup(contracttest.NewClient(serverURL), "k").Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -267,7 +266,7 @@ func TestFanartTvArtworkResolver_Resolve_CancelledContextIsUnavailableAndKeepsTh
 	cancel()
 
 	url, err := fanarttv.NewFanartTvArtworkLookup(contracttest.NewClient(server.URL), "k").Resolve(ctx, search.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", url, err)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/theaudiodb"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"errors"
 	"net/http"
@@ -173,7 +172,7 @@ func TestTheAudioDBAdapter_Resolve_AlbumSearchHTTPErrorIsUnavailable(t *testing.
 
 	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "OK Computer", "Radiohead", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on 500 error = %v, want ports.ErrArtworkUnavailable", err)
 	}
 	if url != "" {
@@ -254,7 +253,7 @@ func TestTheAudioDBAdapter_Resolve_ArtistSearchErrorIsUnavailableNotEmpty(t *tes
 
 	adapter := theaudiodb.New(contracttest.NewClient(server.URL), theaudiodb.WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), search.ResultKindArtist, "Che", "", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on 500 = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
 	}
 	if url != "" {
@@ -314,7 +313,7 @@ func TestTheAudioDBAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
 
 				adapter := theaudiodb.New(contracttest.NewClient(srv.URL), theaudiodb.WithAPIKey("k"))
 				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
-				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+				if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
 				}
 				if !strings.Contains(err.Error(), "theaudiodb") {
@@ -358,7 +357,7 @@ func TestTheAudioDBAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T
 
 			adapter := theaudiodb.New(contracttest.NewClient(srv.URL), theaudiodb.WithAPIKey("k"))
 			url, err := adapter.Resolve(ctx, kind, "OK Computer", "Radiohead", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+			if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 				t.Errorf("Resolve(%s) cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", kind, url, err)
 			}
 		})

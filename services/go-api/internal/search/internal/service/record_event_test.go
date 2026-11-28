@@ -32,7 +32,7 @@ func TestNewRecordEventService_RefusesAMissingCollaborator(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, err := service.NewRecordEventService(tt.store, tt.feed, clock.Now)
 
-			if svc != nil || !errors.Is(err, service.ErrActivityCollaboratorRequired) {
+			if svc != nil || !errors.Is(err, domain.ErrActivityCollaboratorRequired) {
 				t.Fatalf("got (%v, %v), want a refusal wrapping ErrCollaboratorRequired", svc, err)
 			}
 		})
@@ -413,7 +413,7 @@ func TestRecordEventService_Execute_RequiresEventIdForAcquisitionUiAndClientErro
 func TestNewRecordEventService_RefusesANilClock(t *testing.T) {
 	svc, err := service.NewRecordEventService(&searchtest.FakeEventStore{}, service.NoopActivityFeed{}, nil)
 
-	if svc != nil || !errors.Is(err, service.ErrActivityCollaboratorRequired) {
+	if svc != nil || !errors.Is(err, domain.ErrActivityCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrCollaboratorRequired", svc, err)
 	}
 }

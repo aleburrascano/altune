@@ -42,7 +42,7 @@ type cachedStorage struct{ cache ports.UnreleasedCache }
 
 func NewCachedStorage(cache ports.UnreleasedCache) (Storage, error) {
 	if cache == nil {
-		return nil, fmt.Errorf("%w: cache is nil", ErrUnreleasedCollaboratorRequired)
+		return nil, fmt.Errorf("%w: cache is nil", domain.ErrUnreleasedCollaboratorRequired)
 	}
 	return cachedStorage{cache: cache}, nil
 }
@@ -81,7 +81,7 @@ type StoredStorage struct{ store ports.UnreleasedStore }
 
 func NewStoredStorage(store ports.UnreleasedStore) (*StoredStorage, error) {
 	if store == nil {
-		return nil, fmt.Errorf("%w: store is nil", ErrUnreleasedCollaboratorRequired)
+		return nil, fmt.Errorf("%w: store is nil", domain.ErrUnreleasedCollaboratorRequired)
 	}
 	return &StoredStorage{store: store}, nil
 }

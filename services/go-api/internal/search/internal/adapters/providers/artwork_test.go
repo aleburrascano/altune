@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"errors"
 	"testing"
@@ -19,8 +18,8 @@ func TestArtworkFailure(t *testing.T) {
 	}{
 		{name: "404 is a miss", err: outbound.StatusError{Status: 404}, wantMiss: true},
 		{name: "400 is a miss", err: outbound.StatusError{Status: 400}, wantMiss: true},
-		{name: "410 is refused", err: outbound.StatusError{Status: 410}, wantIs: []error{ports.ErrArtworkUnavailable}},
-		{name: "context canceled", err: context.Canceled, wantIs: []error{ports.ErrArtworkUnavailable, context.Canceled}},
+		{name: "410 is refused", err: outbound.StatusError{Status: 410}, wantIs: []error{domain.ErrArtworkUnavailable}},
+		{name: "context canceled", err: context.Canceled, wantIs: []error{domain.ErrArtworkUnavailable, context.Canceled}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

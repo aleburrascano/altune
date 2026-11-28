@@ -13,7 +13,7 @@ type ListSearchHistoryService struct {
 
 func NewListSearchHistoryService(historyRepo ports.HistoryReader) (*ListSearchHistoryService, error) {
 	if historyRepo == nil {
-		return nil, ErrHistoryCollaboratorRequired
+		return nil, domain.ErrHistoryCollaboratorRequired
 	}
 	return &ListSearchHistoryService{historyRepo: historyRepo}, nil
 }

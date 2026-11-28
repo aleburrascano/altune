@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	apierror "altune/go-api/internal/shared/apierror"
@@ -169,7 +168,7 @@ func TestFavoritesService_AddNormalizesKey(t *testing.T) {
 func TestFavoritesService_RefusesAMissingRepository(t *testing.T) {
 	svc, err := service.NewFavoritesService(nil)
 
-	if svc != nil || !errors.Is(err, service.ErrFavoritesCollaboratorRequired) {
+	if svc != nil || !errors.Is(err, domain.ErrFavoritesCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping favorites.ErrCollaboratorRequired", svc, err)
 	}
 }
@@ -289,7 +288,7 @@ func TestFavoritesRemove_OversizeTitleStillDeletes(t *testing.T) {
 }
 
 func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
-	repo := &memory.FakeFavoritesRepo{Err: fmt.Errorf("insert favorite: %w", ports.ErrFavoritesFull)}
+	repo := &memory.FakeFavoritesRepo{Err: fmt.Errorf("insert favorite: %w", domain.ErrFavoritesFull)}
 	err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{},
 		domain.Favorite{Kind: search.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"})
 
@@ -297,7 +296,7 @@ func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 }
 
 func TestFavoritesLifter_RefusesAMissingRepository(t *testing.T) {
-	if _, err := service.NewFavoritesLifter(nil); !errors.Is(err, service.ErrFavoritesCollaboratorRequired) {
+	if _, err := service.NewFavoritesLifter(nil); !errors.Is(err, domain.ErrFavoritesCollaboratorRequired) {
 		t.Fatalf("err = %v, want favorites.ErrCollaboratorRequired", err)
 	}
 }

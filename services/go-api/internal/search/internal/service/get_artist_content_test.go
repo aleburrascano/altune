@@ -955,7 +955,7 @@ func TestNewGetArtistContentService_RefusesEveryMissingCollaborator(t *testing.T
 
 			svc, err := args.build()
 
-			if !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || svc != nil {
+			if !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || svc != nil {
 				t.Fatalf("svc = %v, err = %v, want artistpage.ErrCollaboratorRequired and no service", svc, err)
 			}
 			if !strings.Contains(err.Error(), tc.named) {
@@ -966,19 +966,19 @@ func TestNewGetArtistContentService_RefusesEveryMissingCollaborator(t *testing.T
 }
 
 func TestNewMusicBrainzAnchoring_RefusesEveryMissingCollaborator(t *testing.T) {
-	if _, err := service.NewMusicBrainzAnchoring(stubMBAnchor{}, nil); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
+	if _, err := service.NewMusicBrainzAnchoring(stubMBAnchor{}, nil); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
 		t.Errorf("without a breaker: err = %v, want artistpage.ErrCollaboratorRequired naming the circuit breaker", err)
 	}
-	if _, err := service.NewMusicBrainzAnchoring(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "discography anchor") {
+	if _, err := service.NewMusicBrainzAnchoring(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "discography anchor") {
 		t.Errorf("without an anchor: err = %v, want artistpage.ErrCollaboratorRequired naming the discography anchor", err)
 	}
 }
 
 func TestNewDiscographyTelemetry_RefusesEveryMissingCollaborator(t *testing.T) {
-	if _, err := service.NewDiscographyTelemetry(nil, searchtest.NewTracker(t), clock.Now); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "event store") {
+	if _, err := service.NewDiscographyTelemetry(nil, searchtest.NewTracker(t), clock.Now); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "event store") {
 		t.Errorf("without an event store: err = %v, want artistpage.ErrCollaboratorRequired naming the event store", err)
 	}
-	if _, err := service.NewDiscographyTelemetry(&searchtest.FakeEventStore{}, nil, clock.Now); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "background tracker") {
+	if _, err := service.NewDiscographyTelemetry(&searchtest.FakeEventStore{}, nil, clock.Now); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "background tracker") {
 		t.Errorf("without a tracker: err = %v, want artistpage.ErrCollaboratorRequired naming the background tracker", err)
 	}
 }

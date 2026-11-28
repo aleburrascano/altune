@@ -2,7 +2,6 @@ package cache
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"errors"
 	"strings"
 	"time"
 
@@ -30,8 +29,6 @@ type RedisVocabularyStore struct {
 	metaphone MetaphoneFunc
 }
 
-var ErrVocabularyCollaboratorRequired = errors.New("vocabulary store needs its normalizer and metaphone, pass NoMetaphone to switch phonetic matching off")
-
 func NoMetaphone(string) string { return "" }
 
 func NewVocabularyStore(
@@ -41,7 +38,7 @@ func NewVocabularyStore(
 	opts ...VocabStoreOption,
 ) (*RedisVocabularyStore, error) {
 	if normalize == nil || metaphone == nil {
-		return nil, ErrVocabularyCollaboratorRequired
+		return nil, domain.ErrVocabularyStoreCollaboratorRequired
 	}
 	s := &RedisVocabularyStore{
 		redisJSON: newRedisJSON(client, nil),

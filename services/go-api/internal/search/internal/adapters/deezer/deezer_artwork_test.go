@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/deezer"
 	"altune/go-api/internal/search/internal/contracttest"
-	"altune/go-api/internal/search/internal/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"net/http"
@@ -21,7 +21,7 @@ func TestDeezerAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
 
 	adapter := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL))
 	art, err := adapter.Resolve(context.Background(), search.ResultKindTrack, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -75,7 +75,7 @@ func TestDeezerAdapter_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
 	defer server.Close()
 
 	art, err := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -88,7 +88,7 @@ func TestDeezerAdapter_Resolve_QuotaErrorBodyIsArtworkUnavailable(t *testing.T) 
 	defer server.Close()
 
 	art, err := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a Deezer quota error body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -138,7 +138,7 @@ func TestDeezerAdapter_Resolve_MalformedBodyIsArtworkUnavailable(t *testing.T) {
 	defer server.Close()
 
 	art, err := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -149,7 +149,7 @@ func TestDeezerAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T) 
 	server.Close()
 
 	art, err := deezer.NewDeezerAdapter(contracttest.NewClient(serverURL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -161,7 +161,7 @@ func TestDeezerAdapter_Resolve_CancelledContextIsUnavailableAndKeepsTheCause(t *
 	cancel()
 
 	art, err := deezer.NewDeezerAdapter(contracttest.NewClient(server.URL)).Resolve(ctx, search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", art, err)
 	}
 }

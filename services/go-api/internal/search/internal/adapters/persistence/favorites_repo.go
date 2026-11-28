@@ -33,7 +33,7 @@ func (r *PostgresFavoritesRepository) Add(ctx context.Context, userId ids.UserId
 		return fmt.Errorf("insert favorite: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("insert favorite: %w", ports.ErrFavoritesFull)
+		return fmt.Errorf("insert favorite: %w", domain.ErrFavoritesFull)
 	}
 	return nil
 }

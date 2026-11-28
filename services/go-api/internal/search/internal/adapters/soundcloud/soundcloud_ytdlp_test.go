@@ -3,6 +3,7 @@ package soundcloud_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/soundcloud"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"os/exec"
@@ -102,7 +103,7 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 	for shed < calls-slots {
 		select {
 		case err := <-errs:
-			if !errors.Is(err, soundcloud.ErrYtdlpBusy) {
+			if !errors.Is(err, domain.ErrYtdlpBusy) {
 				t.Fatalf("unexpected early result: %v", err)
 			}
 			shed++

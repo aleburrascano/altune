@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/random"
-	"errors"
 	"slices"
 )
 
@@ -29,11 +28,9 @@ type RankingExperiments struct {
 	bg *background.Tracker
 }
 
-var ErrBehaviorRequired = errors.New("ranking experiments need a behavioral scorer, pass NoBehavioralScoring to switch it off")
-
 func NewRankingExperiments(cfg RankingConfig, bg *background.Tracker) (*RankingExperiments, error) {
 	if cfg.Behavior == nil {
-		return nil, ErrBehaviorRequired
+		return nil, domain.ErrBehaviorRequired
 	}
 	return &RankingExperiments{
 		TailDemotion:        cfg.TailDemotion,

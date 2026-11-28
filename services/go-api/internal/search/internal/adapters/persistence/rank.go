@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"cmp"
 	"fmt"
@@ -24,7 +25,7 @@ func Rank(cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy) ([]po
 		sort.SliceStable(ranked, func(i, j int) bool { return worseThan(ranked[i], ranked[j]) })
 		return ranked, nil
 	default:
-		return nil, fmt.Errorf("%w: %q", ports.ErrUnknownDiscographyGroupBy, groupBy)
+		return nil, fmt.Errorf("%w: %q", domain.ErrUnknownDiscographyGroupBy, groupBy)
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/songfields"
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 )
@@ -38,8 +37,6 @@ type OwnershipEnrichmentService struct {
 	bg           *background.Tracker
 }
 
-var ErrOwnershipCollaboratorRequired = errors.New("ownership enrichment needs its background tracker, ownership reader and track number filler, pass the absent filler to switch filling off")
-
 type AbsentTrackNumberFiller struct{}
 
 func (AbsentTrackNumberFiller) FillTrackNumber(context.Context, ids.UserId, ids.TrackId, int) error {
@@ -52,7 +49,7 @@ func NewOwnershipEnrichmentService(
 	trackNumbers ports.TrackNumberFiller,
 ) (*OwnershipEnrichmentService, error) {
 	if bg == nil || ownership == nil || trackNumbers == nil {
-		return nil, ErrOwnershipCollaboratorRequired
+		return nil, domain.ErrOwnershipCollaboratorRequired
 	}
 	return &OwnershipEnrichmentService{
 		ownership:    ownership,

@@ -43,7 +43,7 @@ func (h *DiscoveryHandler) handleUnreleasedSearch(w http.ResponseWriter, r *http
 	}
 	hits, err := h.unreleasedSvc.Search(r.Context(), query)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		handleError(w, r, err)
 		return
 	}
 	dto := unreleasedSearchToDTO(hits)

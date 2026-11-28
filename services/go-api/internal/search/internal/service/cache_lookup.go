@@ -11,13 +11,11 @@ import (
 	"log/slog"
 )
 
-var ErrDegraded = errors.New("enrichment degraded")
-
 func degraded(err error) error {
-	if err == nil || errors.Is(err, ErrDegraded) {
+	if err == nil || errors.Is(err, domain.ErrEnrichmentDegraded) {
 		return err
 	}
-	return fmt.Errorf("%w: %w", ErrDegraded, err)
+	return fmt.Errorf("%w: %w", domain.ErrEnrichmentDegraded, err)
 }
 
 func CachedLookup[T any](

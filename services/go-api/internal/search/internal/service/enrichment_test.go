@@ -31,7 +31,7 @@ func TestNewEnrichmentService_RefusesAMissingCollaborator(t *testing.T) {
 	for missing, build := range cases {
 		t.Run(missing, func(t *testing.T) {
 			svc, err := build()
-			if !errors.Is(err, service.ErrDetailsCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), missing) {
+			if !errors.Is(err, domain.ErrDetailsCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), missing) {
 				t.Errorf("built (%v, %v), want a nil service and an error naming %s", svc, err, missing)
 			}
 		})
@@ -165,7 +165,7 @@ func TestEnrichmentService_LookupError_DegradesToEmpty(t *testing.T) {
 	svc := newService(t, enr, &fakeArtwork{}, cache, service.NoDetailsMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindArtist, "X", "", "mbid-err")
-	if !errors.Is(err, service.ErrDegraded) {
+	if !errors.Is(err, domain.ErrEnrichmentDegraded) {
 		t.Fatalf("a lookup error must surface as ErrDegraded, got %v", err)
 	}
 	if !got.IsZero() {
@@ -181,7 +181,7 @@ func TestEnrichmentService_PassedMBID_404DegradesToEmpty(t *testing.T) {
 	svc := newService(t, enr, service.NoArtwork{}, service.NoEnrichmentCache{}, service.NoDetailsMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "Stale", "", "stale-mbid")
-	if !errors.Is(err, service.ErrDegraded) || !got.IsZero() {
+	if !errors.Is(err, domain.ErrEnrichmentDegraded) || !got.IsZero() {
 		t.Errorf("404 lookup must degrade to empty+ErrDegraded, got %#v err=%v", got, err)
 	}
 }
@@ -199,7 +199,7 @@ func TestEnrichmentService_ArtworkMerged(t *testing.T) {
 
 func TestEnrichmentService_CoverlessEntryFromADownChainIsNotCached(t *testing.T) {
 	enr := &fakeEnricher{enrichment: sampleEnrichment()}
-	art := &fakeArtwork{err: ports.ErrArtworkDegraded}
+	art := &fakeArtwork{err: domain.ErrArtworkDegraded}
 	cache := newMemEnrichmentCache()
 	svc := newService(t, enr, art, cache, service.NoDetailsMBIDIndex{})
 

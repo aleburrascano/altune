@@ -24,7 +24,7 @@ func NewDeezerEnrichmentService(
 		"deezer cache":    cache == nil,
 	} {
 		if missing {
-			return nil, fmt.Errorf("%w: %s is nil", ErrDetailsCollaboratorRequired, name)
+			return nil, fmt.Errorf("%w: %s is nil", domain.ErrDetailsCollaboratorRequired, name)
 		}
 	}
 	return &DeezerEnrichmentService{enricher: enricher, cache: cache}, nil

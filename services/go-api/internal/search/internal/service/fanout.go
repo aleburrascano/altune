@@ -243,7 +243,7 @@ func (s *SearchService) searchProviderGuarded(
 }
 
 func failureStatus(provCtx context.Context, err error) domain.ProviderStatus {
-	if provCtx.Err() != nil || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) ||
+	if provCtx.Err() != nil || errors.Is(err, domain.ErrProviderRateLimitQueueTimeout) ||
 		errors.Is(err, context.DeadlineExceeded) {
 		return domain.ProviderStatusTimeout
 	}
@@ -260,7 +260,7 @@ func searchBreakerOutcome(provCtx context.Context, err error) error {
 
 func budgetOutcome(provCtx context.Context, err error) error {
 	if err == nil || !errors.Is(provCtx.Err(), context.DeadlineExceeded) ||
-		errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || errors.Is(err, context.DeadlineExceeded) {
+		errors.Is(err, domain.ErrProviderRateLimitQueueTimeout) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
 	return fmt.Errorf("%w: %w", err, context.DeadlineExceeded)

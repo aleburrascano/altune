@@ -30,11 +30,6 @@ func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return outbound.MustNewClient(ytmusicTimeout, transport)
 }
 
-var (
-	ErrSleeperRequired = errors.New("ytmusic: the adapter needs a sleeper")
-	ErrJitterRequired  = errors.New("ytmusic: the adapter needs a jitter source")
-)
-
 type challengePause struct {
 	sleep  clock.Sleeper
 	jitter random.Unit
@@ -43,9 +38,9 @@ type challengePause struct {
 func newChallengePause(constructor string, sleep clock.Sleeper, jitter random.Unit) (challengePause, error) {
 	switch {
 	case sleep == nil:
-		return challengePause{}, fmt.Errorf("%s: %w", constructor, ErrSleeperRequired)
+		return challengePause{}, fmt.Errorf("%s: %w", constructor, domain.ErrSleeperRequired)
 	case jitter == nil:
-		return challengePause{}, fmt.Errorf("%s: %w", constructor, ErrJitterRequired)
+		return challengePause{}, fmt.Errorf("%s: %w", constructor, domain.ErrJitterRequired)
 	}
 	return challengePause{sleep: sleep, jitter: jitter}, nil
 }

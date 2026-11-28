@@ -26,8 +26,6 @@ const (
 	emptyArtHash           = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
-var ErrArtworkCollaboratorRequired = errors.New("artwork filler needs every collaborator, pass the absent adapter to switch one off")
-
 type ArtworkFiller struct {
 	resolver      ports.TaggingArtworkLookup
 	cache         ports.ArtworkCache
@@ -91,7 +89,7 @@ func newFiller(
 		"tracker":       bg == nil,
 	} {
 		if missing {
-			return nil, fmt.Errorf("%w: %s", ErrArtworkCollaboratorRequired, name)
+			return nil, fmt.Errorf("%w: %s", domain.ErrArtworkCollaboratorRequired, name)
 		}
 	}
 	return &ArtworkFiller{resolver: resolver, cache: cache, identityStore: identityStore, mbidIndex: mbidIndex, bg: bg, live: live}, nil

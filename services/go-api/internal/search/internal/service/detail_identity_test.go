@@ -166,7 +166,7 @@ func TestStoreIdentity_AlwaysServesTheIdentityPath(t *testing.T) {
 func TestNewStoreIdentity_RefusesAMissingStore(t *testing.T) {
 	identity, err := service.NewStoreIdentity(nil)
 
-	if !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || identity != nil {
+	if !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || identity != nil {
 		t.Fatalf("identity = %v, err = %v, want artistpage.ErrCollaboratorRequired", identity, err)
 	}
 	if !strings.Contains(err.Error(), "identity store") {

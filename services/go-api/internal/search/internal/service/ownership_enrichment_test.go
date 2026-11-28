@@ -386,7 +386,7 @@ func TestNewOwnershipEnrichmentService_RefusesAMissingCollaborator(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			svc, err := search.NewOwnershipEnrichmentService(tt.bg, tt.reader, tt.filler)
 
-			if svc != nil || !errors.Is(err, service.ErrOwnershipCollaboratorRequired) {
+			if svc != nil || !errors.Is(err, domain.ErrOwnershipCollaboratorRequired) {
 				t.Fatalf("got (%v, %v), want a refusal wrapping inlibrary.ErrCollaboratorRequired", svc, err)
 			}
 		})

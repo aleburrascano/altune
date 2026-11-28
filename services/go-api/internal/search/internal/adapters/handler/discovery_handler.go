@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -91,11 +90,6 @@ type DiscoveryServices struct {
 	ClientEvents  ClientEventSink
 }
 
-var (
-	ErrClockRequired   = errors.New("handler: the discovery handler requires a clock")
-	ErrServiceRequired = errors.New("handler: the discovery handler requires every service")
-)
-
 func (s DiscoveryServices) missing() []string {
 	checks := []struct {
 		name    string
@@ -147,10 +141,10 @@ func MustNewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) *DiscoveryH
 
 func NewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) (*DiscoveryHandler, error) {
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, domain.ErrHandlerClockRequired
 	}
 	if names := svcs.missing(); len(names) > 0 {
-		return nil, fmt.Errorf("%w: missing %s", ErrServiceRequired, strings.Join(names, ", "))
+		return nil, fmt.Errorf("%w: missing %s", domain.ErrHandlerServiceRequired, strings.Join(names, ", "))
 	}
 	h := &DiscoveryHandler{
 		now:             now,

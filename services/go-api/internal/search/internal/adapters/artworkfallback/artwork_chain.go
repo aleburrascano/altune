@@ -56,7 +56,7 @@ func missVerdict(failures error) error {
 	if failures == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: %w", ports.ErrArtworkDegraded, failures)
+	return fmt.Errorf("%w: %w", domain.ErrArtworkDegraded, failures)
 }
 
 func (c *ChainedArtworkLookup) ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {

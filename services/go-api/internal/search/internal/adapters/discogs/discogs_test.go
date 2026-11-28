@@ -124,7 +124,7 @@ func TestDiscogsAdapter_ResolveDiscogsArtist_NoResultsIsNotFound(t *testing.T) {
 	defer srv.Close()
 
 	info, err := newTestDiscogsAdapter(srv).ResolveDiscogsArtist(context.Background(), "NonexistentArtist", nil)
-	if !errors.Is(err, ports.ErrDiscogsArtistNotFound) {
+	if !errors.Is(err, domain.ErrDiscogsArtistNotFound) {
 		t.Fatalf("error = %v, want ErrDiscogsArtistNotFound", err)
 	}
 	if info != nil {
@@ -142,7 +142,7 @@ func TestDiscogsAdapter_Resolve_429(t *testing.T) {
 	adapter := newTestDiscogsAdapter(srv)
 
 	url, err := adapter.Resolve(context.Background(), search.ResultKindArtist, "Artist", "", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on rate limit, got %v", err)
 	}
 	if url != "" {
@@ -310,7 +310,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		adapter := newTestDiscogsAdapter(server)
 		url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
 			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
-		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
+		if !errors.Is(err, domain.ErrArtworkUnavailable) || url != "" {
 			t.Errorf("(%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
@@ -355,7 +355,7 @@ func TestDiscogsAdapter_Resolve_SearchFailureIsArtworkUnavailable(t *testing.T) 
 	if url != "" {
 		t.Errorf("url = %q, want empty on a search failure", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -374,7 +374,7 @@ func TestDiscogsAdapter_ResolveByIdentity_DetailFailureIsArtworkUnavailable(t *t
 	if url != "" {
 		t.Errorf("url = %q, want empty on a detail failure", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -420,7 +420,7 @@ func TestDiscogsAdapter_Resolve_DetailFailureAfterAMatchIsArtworkUnavailable(t *
 	if url != "" {
 		t.Errorf("url = %q, want empty when the detail fetch fails", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -457,7 +457,7 @@ func TestDiscogsAdapter_Resolve_MalformedSearchBodyIsArtworkUnavailable(t *testi
 	adapter := newTestDiscogsAdapter(srv)
 
 	url, err := adapter.Resolve(context.Background(), search.ResultKindArtist, "Artist", "", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -469,7 +469,7 @@ func TestDiscogsAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T)
 	srv.Close()
 
 	url, err := adapter.Resolve(context.Background(), search.ResultKindArtist, "Artist", "", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with the provider unreachable = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -490,7 +490,7 @@ func TestDiscogsAdapter_Resolve_CancelledContextIsArtworkUnavailable(t *testing.
 	if url != "" {
 		t.Errorf("url = %q, want empty on a cancelled lookup", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -506,7 +506,7 @@ func TestDiscogsAdapter_ResolveByIdentity_RateLimitIsArtworkUnavailable(t *testi
 
 	url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
 		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity on 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -642,7 +642,7 @@ func TestDiscogsAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing
 
 	_, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist, id)
 
-	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, domain.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
 	}
 }
@@ -662,7 +662,7 @@ func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *
 	if url != "" {
 		t.Errorf("url = %q, want empty when discogs fails", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkDegraded) || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want both ErrArtworkDegraded and ErrArtworkUnavailable", err)
 	}
 }

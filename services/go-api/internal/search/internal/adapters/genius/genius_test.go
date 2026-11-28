@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/genius"
 	"altune/go-api/internal/search/internal/contracttest"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"context"
 	"errors"
 	"fmt"
@@ -157,7 +156,7 @@ func TestGeniusArtworkResolver_Resolve_HTTPErrorIsUnavailable(t *testing.T) {
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Song", "Artist", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
@@ -173,7 +172,7 @@ func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
@@ -190,7 +189,7 @@ func TestGeniusArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *testing.T
 
 				resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(srv.URL), "token")
 				url, err := resolver.Resolve(context.Background(), kind, "Creep", "Radiohead", "")
-				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+				if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
 				}
 				if !strings.Contains(err.Error(), "genius") {
@@ -228,7 +227,7 @@ func TestGeniusArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testi
 
 	resolver := genius.NewGeniusArtworkLookup(contracttest.NewClient(srv.URL), "token")
 	url, err := resolver.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }

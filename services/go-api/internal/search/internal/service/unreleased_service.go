@@ -47,11 +47,6 @@ type UnreleasedService struct {
 	inflight map[string]*job
 }
 
-var (
-	ErrUnreleasedCollaboratorRequired = errors.New("unreleased service needs every collaborator, pass the null object to switch one off")
-	ErrSourceNotConfigured            = errors.New("unreleased source not configured")
-)
-
 type NoUnreleasedCache struct{}
 
 func (NoUnreleasedCache) Get(context.Context, domain.ProviderName, string, string) ([]domain.UnreleasedSong, bool) {
@@ -65,15 +60,15 @@ func (NoUnreleasedCache) Set(context.Context, domain.ProviderName, string, strin
 type NoGenius struct{}
 
 func (NoGenius) FindArtistID(context.Context, string, []string) (int, bool, error) {
-	return 0, false, ErrSourceNotConfigured
+	return 0, false, domain.ErrSourceNotConfigured
 }
 
 func (NoGenius) ArtistSongs(context.Context, int, int) ([]domain.UnreleasedSong, error) {
-	return nil, ErrSourceNotConfigured
+	return nil, domain.ErrSourceNotConfigured
 }
 
 func (NoGenius) SongDetail(context.Context, int) (domain.GeniusSongDetail, error) {
-	return domain.GeniusSongDetail{}, ErrSourceNotConfigured
+	return domain.GeniusSongDetail{}, domain.ErrSourceNotConfigured
 }
 
 type Wiring struct {
@@ -97,11 +92,11 @@ func NewUnreleasedService(genius ports.GeniusSongCatalog, catalog ports.ArtistCa
 		"now":      w.Now == nil,
 	} {
 		if missing {
-			return nil, fmt.Errorf("%w: %s is nil", ErrUnreleasedCollaboratorRequired, name)
+			return nil, fmt.Errorf("%w: %s is nil", domain.ErrUnreleasedCollaboratorRequired, name)
 		}
 	}
 	if cfg.Wait > 0 && w.Timer == nil {
-		return nil, fmt.Errorf("%w: a Wait needs a timer", ErrUnreleasedCollaboratorRequired)
+		return nil, fmt.Errorf("%w: a Wait needs a timer", domain.ErrUnreleasedCollaboratorRequired)
 	}
 	return &UnreleasedService{
 		genius:   genius,
@@ -145,7 +140,7 @@ func (s *UnreleasedService) cacheTTL(songs []domain.UnreleasedSong) time.Duratio
 
 func (s *UnreleasedService) build(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, bool, error) {
 	titles, err := s.catalog.CatalogTitles(ctx, provider, externalID, known)
-	catalogComplete := !errors.Is(err, ports.ErrPartialCatalog)
+	catalogComplete := !errors.Is(err, domain.ErrPartialCatalog)
 	if err != nil && catalogComplete {
 		return nil, false, err
 	}

@@ -26,7 +26,7 @@ const historyResendWindow = time.Minute
 func eraseRowsOfDeletedIdentities(ctx context.Context, pool *pgxpool.Pool, op, deleteSQL string) (int64, error) {
 	tag, err := pool.Exec(ctx, deleteSQL, ids.SystemUserId().UUID())
 	if err != nil {
-		return 0, database.WrapUnreadable(op, ports.ErrIdentityStoreUnavailable, err)
+		return 0, database.WrapUnreadable(op, domain.ErrIdentityStoreUnavailable, err)
 	}
 	return tag.RowsAffected(), nil
 }

@@ -43,11 +43,9 @@ func (NoIndexCache) Get(context.Context) (map[string]string, bool) { return nil,
 
 func (NoIndexCache) Set(context.Context, map[string]string, time.Duration) error { return nil }
 
-var ErrCollaboratorRequired = errors.New("tracker sheet client needs its http client and index cache")
-
 func NewClient(liveClient *http.Client, apiKey, hubSheetID string, index ports.TrackerIndexCache) (*Client, error) {
 	if liveClient == nil || index == nil {
-		return nil, ErrCollaboratorRequired
+		return nil, domain.ErrTrackerSheetCollaboratorRequired
 	}
 	own := *liveClient
 	own.Timeout = requestTimeout
@@ -64,7 +62,7 @@ func (c *Client) ArtistSongs(ctx context.Context, artistName string) ([]domain.U
 		return []domain.UnreleasedSong{}, nil
 	}
 	rows, err := c.artistRows(ctx, sheetID)
-	if err != nil && !errors.Is(err, ports.ErrTrackerPartial) {
+	if err != nil && !errors.Is(err, domain.ErrTrackerPartial) {
 		return nil, fmt.Errorf("tracker sheet: %w", err)
 	}
 	return songsFromRows(artistName, rows), err
@@ -120,7 +118,7 @@ func (c *Client) artistRows(ctx context.Context, sheetID string) ([]trackerRow, 
 	released, err := c.tabRows(ctx, sheetID, tabs.released, parseReleased)
 	if err != nil {
 		slog.WarnContext(ctx, "trackers.released_tab_failed", "sheet_id", sheetID, logging.KeyError, err)
-		return unreleased, fmt.Errorf("%w: released tab: %w", ports.ErrTrackerPartial, err)
+		return unreleased, fmt.Errorf("%w: released tab: %w", domain.ErrTrackerPartial, err)
 	}
 	return append(unreleased, released...), nil
 }

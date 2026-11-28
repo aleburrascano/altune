@@ -103,7 +103,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 
 		r := coverartarchive.NewCoverArtArchiveResolver(contracttest.NewNoFollowClient(server.URL))
 		url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-1")
-		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
+		if !errors.Is(err, domain.ErrArtworkUnavailable) || url != "" {
 			t.Errorf("Resolve on 500 = (%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
@@ -198,7 +198,7 @@ func TestCoverArtArchiveResolver_ServerErrorIsArtworkUnavailable(t *testing.T) {
 	if url != "" {
 		t.Errorf("url = %q, want empty on a 503", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }
@@ -228,7 +228,7 @@ func TestCoverArtArchiveResolver_TransportErrorIsArtworkUnavailable(t *testing.T
 	if url != "" {
 		t.Errorf("url = %q, want empty when the provider is unreachable", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }
@@ -241,7 +241,7 @@ func TestCoverArtArchiveResolver_RateLimitIsArtworkUnavailable(t *testing.T) {
 
 	r := coverartarchive.NewCoverArtArchiveResolver(contracttest.NewNoFollowClient(server.URL))
 	url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-1")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -260,7 +260,7 @@ func TestCoverArtArchiveResolver_CancelledContextIsUnavailableAndKeepsTheCause(t
 	if url != "" {
 		t.Errorf("url = %q, want empty on a cancelled lookup", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 	if !errors.Is(err, context.Canceled) {

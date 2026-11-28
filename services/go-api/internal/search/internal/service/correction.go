@@ -27,7 +27,7 @@ type CorrectionService struct {
 
 func NewCorrectionService(vocab ports.SpellingHintsReader) (*CorrectionService, error) {
 	if vocab == nil {
-		return nil, ErrVocabularyCollaboratorRequired
+		return nil, domain.ErrVocabularyCollaboratorRequired
 	}
 	return &CorrectionService{vocab: vocab}, nil
 }

@@ -257,7 +257,7 @@ func TestService_List_LooksUpDetailsOnlyForSongsTheCatalogDidNotHide(t *testing.
 func TestService_List_PartialCatalogGetsTheShortTTLAndStillFilters(t *testing.T) {
 	cache := newMemoryCache()
 	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Released", "Leak")}
-	catalog := &searchtest.ArtistCatalogTitles{Titles: []string{"Released"}, Err: ports.ErrPartialCatalog}
+	catalog := &searchtest.ArtistCatalogTitles{Titles: []string{"Released"}, Err: domain.ErrPartialCatalog}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, catalog, cachedConfig, searchtest.UnreleasedWiring(t, cache)))
 	got, err := svc.List(context.Background(), search.ProviderDeezer, "1", "Artist", nil)
 	if err != nil {
@@ -533,7 +533,7 @@ func TestService_List_StoreAlwaysBuildsEvenWhenTheArtistIsBuilt(t *testing.T) {
 func TestService_Rebuild_StoreWritesIncompleteWhenTheCatalogIsPartial(t *testing.T) {
 	store := &searchtest.UnreleasedStore{Artists: map[ports.UnreleasedArtistKey]memory.StoredArtist{drakeKey: {}}}
 	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
-	catalog := &searchtest.ArtistCatalogTitles{Err: ports.ErrPartialCatalog}
+	catalog := &searchtest.ArtistCatalogTitles{Err: domain.ErrPartialCatalog}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 	if _, err := svc.Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
@@ -666,7 +666,7 @@ func TestNewUnreleasedService_RefusesAMissingCollaborator(t *testing.T) {
 	for missing, build := range cases {
 		t.Run(missing, func(t *testing.T) {
 			svc, err := build()
-			if !errors.Is(err, service.ErrUnreleasedCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), missing) {
+			if !errors.Is(err, domain.ErrUnreleasedCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), missing) {
 				t.Errorf("built (%v, %v), want a nil service and an error naming %s", svc, err, missing)
 			}
 		})
@@ -677,10 +677,10 @@ func TestUnreleasedStorage_RefusesAMissingBackend(t *testing.T) {
 	cached, cachedErr := service.NewCachedStorage(nil)
 	stored, storedErr := service.NewStoredStorage(nil)
 
-	if cached != nil || !errors.Is(cachedErr, service.ErrUnreleasedCollaboratorRequired) {
+	if cached != nil || !errors.Is(cachedErr, domain.ErrUnreleasedCollaboratorRequired) {
 		t.Errorf("cached storage = (%v, %v), want a refusal", cached, cachedErr)
 	}
-	if stored != nil || !errors.Is(storedErr, service.ErrUnreleasedCollaboratorRequired) {
+	if stored != nil || !errors.Is(storedErr, domain.ErrUnreleasedCollaboratorRequired) {
 		t.Errorf("stored storage = (%v, %v), want a refusal", stored, storedErr)
 	}
 }

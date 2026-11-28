@@ -478,7 +478,7 @@ func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
 		})
 
 		t.Run(tc.name+" ErrDegraded is 200 with degraded true", func(t *testing.T) {
-			rec := discServe(t, tc.router(service.ErrDegraded), http.MethodGet, tc.path+"?kind=album&title=Illmatic&subtitle=Nas", nil)
+			rec := discServe(t, tc.router(domain.ErrEnrichmentDegraded), http.MethodGet, tc.path+"?kind=album&title=Illmatic&subtitle=Nas", nil)
 			discAssertStatus(t, rec, http.StatusOK)
 			var raw map[string]json.RawMessage
 			discDecodeJSON(t, rec, &raw)

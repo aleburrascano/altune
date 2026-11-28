@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/logging"
@@ -94,7 +95,7 @@ func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
 	fetch := countingFetch(&calls, "", false, errors.New("network down"))
 
 	got, err := service.CachedLookup(context.Background(), cache, "daft punk", "", fetch)
-	if !errors.Is(err, service.ErrDegraded) {
+	if !errors.Is(err, domain.ErrEnrichmentDegraded) {
 		t.Fatalf("a transient error must surface as ErrDegraded, got %v", err)
 	}
 	if got != "" {

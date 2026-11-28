@@ -260,7 +260,7 @@ func assertPayloadInt(t *testing.T, payload map[string]any, key string, want int
 func TestNewDiscographyTelemetry_RefusesANilClock(t *testing.T) {
 	_, err := service.NewDiscographyTelemetry(&searchtest.FakeEventStore{}, searchtest.NewTracker(t), nil)
 
-	if !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "clock") {
+	if !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "clock") {
 		t.Errorf("without a clock: err = %v, want artistpage.ErrCollaboratorRequired naming the clock", err)
 	}
 }

@@ -477,7 +477,7 @@ func TestNewGetAlbumTracksService_RefusesEveryMissingCollaborator(t *testing.T) 
 
 			svc, err := args.build()
 
-			if !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || svc != nil {
+			if !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || svc != nil {
 				t.Fatalf("svc = %v, err = %v, want artistpage.ErrCollaboratorRequired and no service", svc, err)
 			}
 			if !strings.Contains(err.Error(), tc.named) {
@@ -488,16 +488,16 @@ func TestNewGetAlbumTracksService_RefusesEveryMissingCollaborator(t *testing.T) 
 }
 
 func TestNewAlbumCollaborators_RefuseTheirOwnMissingParts(t *testing.T) {
-	if _, err := service.NewDeezerFeaturedEnrichment(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "featured lookup") {
+	if _, err := service.NewDeezerFeaturedEnrichment(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "featured lookup") {
 		t.Errorf("enrichment without a lookup: err = %v, want artistpage.ErrCollaboratorRequired naming the featured lookup", err)
 	}
-	if _, err := service.NewDeezerFeaturedEnrichment(fakeTrackFeatured{}, nil); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
+	if _, err := service.NewDeezerFeaturedEnrichment(fakeTrackFeatured{}, nil); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
 		t.Errorf("enrichment without a breaker: err = %v, want artistpage.ErrCollaboratorRequired naming the circuit breaker", err)
 	}
-	if _, err := service.NewSearchAlbumFallback(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "search provider") {
+	if _, err := service.NewSearchAlbumFallback(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "search provider") {
 		t.Errorf("fallback without a searcher: err = %v, want artistpage.ErrCollaboratorRequired naming the search provider", err)
 	}
-	if _, err := service.NewSearchAlbumFallback(&fakeAlbumSearcher{}, nil); !errors.Is(err, service.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
+	if _, err := service.NewSearchAlbumFallback(&fakeAlbumSearcher{}, nil); !errors.Is(err, domain.ErrArtistPageCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
 		t.Errorf("fallback without a breaker: err = %v, want artistpage.ErrCollaboratorRequired naming the circuit breaker", err)
 	}
 }

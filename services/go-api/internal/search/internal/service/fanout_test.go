@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
@@ -160,7 +159,7 @@ func openBreaker(t *testing.T, cb *service.CircuitBreaker, provider search.Provi
 	}
 }
 
-var errQueueShed = fmt.Errorf("%w: %w", ports.ErrProviderRateLimitQueueTimeout, context.DeadlineExceeded)
+var errQueueShed = fmt.Errorf("%w: %w", domain.ErrProviderRateLimitQueueTimeout, context.DeadlineExceeded)
 
 func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 	bg := searchtest.NewTracker(t)

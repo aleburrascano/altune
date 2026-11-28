@@ -36,8 +36,6 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 	}
 }
 
-var errContentUnserved = apierror.NewError(apierror.CodeDiscoveryContentUnserved, "")
-
 func contentFetchFailure(resp *service.ContentFetchResponse) *apierror.CodedError {
 	if resp.Unserved {
 		return errContentUnserved

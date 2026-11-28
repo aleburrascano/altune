@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/clock"
@@ -62,7 +63,7 @@ func scoringFor(t *testing.T, store ports.ListeningSignalStore) service.Behavior
 func TestRankingExperiments_RefuseAMissingBehavioralScorer(t *testing.T) {
 	ranking, err := service.NewRankingExperiments(service.RankingConfig{}, nil)
 
-	if ranking != nil || !errors.Is(err, service.ErrBehaviorRequired) {
+	if ranking != nil || !errors.Is(err, domain.ErrBehaviorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrBehaviorRequired", ranking, err)
 	}
 }
@@ -70,7 +71,7 @@ func TestRankingExperiments_RefuseAMissingBehavioralScorer(t *testing.T) {
 func TestNewBehavioralScoring_RefusesAMissingConsumer(t *testing.T) {
 	scoring, err := service.NewBehavioralScoring(nil, clock.Now)
 
-	if scoring != nil || !errors.Is(err, service.ErrBehavioralConsumerRequired) {
+	if scoring != nil || !errors.Is(err, domain.ErrBehavioralConsumerRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrBehavioralConsumerRequired", scoring, err)
 	}
 }
@@ -129,7 +130,7 @@ func (s *sinceRecordingStore) SatisfactionSignals(_ context.Context, since time.
 func TestNewBehavioralScoring_RefusesANilClock(t *testing.T) {
 	scoring, err := service.NewBehavioralScoring(service.NewSatisfactionConsumer(&fakeSignalStore{}), nil)
 
-	if scoring != nil || !errors.Is(err, service.ErrBehavioralConsumerRequired) {
+	if scoring != nil || !errors.Is(err, domain.ErrBehavioralConsumerRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrBehavioralConsumerRequired", scoring, err)
 	}
 }

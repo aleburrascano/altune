@@ -245,7 +245,7 @@ func TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted(
 
 	for _, eraser := range deletedIdentityErasers(pool) {
 		erased, err := eraser.EraseRowsOfDeletedIdentities(context.Background())
-		if !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+		if !errors.Is(err, domain.ErrIdentityStoreUnavailable) {
 			t.Errorf("error = %v, want one satisfying ErrIdentityStoreUnavailable", err)
 		}
 		if erased != 0 {

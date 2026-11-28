@@ -35,13 +35,13 @@ type FindRelatedService struct {
 
 func NewFindRelatedService(now clock.Func, sources ...LookupSource) (*FindRelatedService, error) {
 	if now == nil {
-		return nil, fmt.Errorf("%w: a clock is nil", ErrRelatedCollaboratorRequired)
+		return nil, fmt.Errorf("%w: a clock is nil", domain.ErrRelatedCollaboratorRequired)
 	}
 	byKind := make(map[domain.ResultKind][]LookupSource, len(sources))
 	perResult := 0
 	for i, source := range sources {
 		if source == nil {
-			return nil, fmt.Errorf("%w: source %d is nil", ErrRelatedCollaboratorRequired, i)
+			return nil, fmt.Errorf("%w: source %d is nil", domain.ErrRelatedCollaboratorRequired, i)
 		}
 		kind := source.resultKind()
 		byKind[kind] = append(byKind[kind], source)

@@ -54,7 +54,7 @@ func TestChainedArtworkResolver_AggregateTimeoutCapsFullMiss(t *testing.T) {
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindTrack, "Song", "Artist", "mbid")
 	elapsed := time.Since(start)
 
-	if !errors.Is(err, ports.ErrArtworkDegraded) {
+	if !errors.Is(err, domain.ErrArtworkDegraded) {
 		t.Fatalf("a miss cut short by the deadline must report ErrArtworkDegraded, got %v", err)
 	}
 	if url != "" {
@@ -143,7 +143,7 @@ func TestChainedArtworkResolver_MissAfterAFailureIsDegraded(t *testing.T) {
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindTrack, "Song", "Artist", "mbid")
 
-	if !errors.Is(err, ports.ErrArtworkDegraded) {
+	if !errors.Is(err, domain.ErrArtworkDegraded) {
 		t.Fatalf("a miss with one provider down must report ErrArtworkDegraded, got %v", err)
 	}
 	if url != "" {
@@ -160,7 +160,7 @@ func TestChainedArtworkResolver_IdentityMissAfterAFailureIsDegraded(t *testing.T
 	url, _, err := chain.ResolveWithIdentityTagged(
 		context.Background(), search.ResultKindAlbum, "DAMN.", "Kendrick Lamar", ports.ArtworkIdentity{MBID: "mbid"})
 
-	if !errors.Is(err, ports.ErrArtworkDegraded) {
+	if !errors.Is(err, domain.ErrArtworkDegraded) {
 		t.Fatalf("an identity miss with one provider down must report ErrArtworkDegraded, got %v", err)
 	}
 	if url != "" {
@@ -296,10 +296,10 @@ func TestChainedArtworkResolver_MissFromAFailingResolverIsDegradedAndUnavailable
 	if url != "" {
 		t.Errorf("url = %q, want empty on a failing resolver", url)
 	}
-	if !errors.Is(err, ports.ErrArtworkDegraded) {
+	if !errors.Is(err, domain.ErrArtworkDegraded) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkDegraded)", err)
 	}
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	if !errors.Is(err, domain.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }
@@ -406,7 +406,7 @@ func TestChainedArtworkResolver_MissAfterAProviderFailsIsDegradedAndUnavailable(
 		t.Run(name, func(t *testing.T) {
 			chain := artworkfallback.NewChainedArtworkLookup(broken, &memory.ArtworkLookup{})
 			url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+			if url != "" || !errors.Is(err, domain.ErrArtworkDegraded) || !errors.Is(err, domain.ErrArtworkUnavailable) {
 				t.Errorf("ResolveTagged after %s fails then a miss = (%q, %v), want ErrArtworkDegraded and ErrArtworkUnavailable", name, url, err)
 			}
 			if !ports.IsUnverifiedArtworkMiss(url, err) {
@@ -432,7 +432,7 @@ func TestChainedArtworkResolver_DeezerOutageThenITunesMissIsDegraded(t *testing.
 		itunes.NewITunesAdapter(contracttest.NewClient(itunesSrv.URL)),
 	)
 	art, _, err := chain.ResolveTagged(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkDegraded) {
+	if art != "" || !errors.Is(err, domain.ErrArtworkDegraded) {
 		t.Errorf("ResolveTagged with Deezer down and no iTunes match = (%q, %v), want (\"\", ErrArtworkDegraded)", art, err)
 	}
 }

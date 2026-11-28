@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -86,10 +85,6 @@ type Collaborators struct {
 	IDs             ids.Source
 }
 
-var ErrSearchCollaboratorRequired = errors.New("search service needs every collaborator, pass the absent adapter to switch one off")
-
-var ErrInvalidOption = errors.New("search service option is out of range")
-
 func (c Collaborators) missing(bg *background.Tracker, breaker *CircuitBreaker) []string {
 	var missing []string
 	for _, check := range []struct {
@@ -147,7 +142,7 @@ func WithCrossKindProminence() Option {
 func WithExploration(rate float64) Option {
 	return func(c *serviceConfig) error {
 		if rate <= 0 {
-			return fmt.Errorf("%w: exploration rate must be positive, got %v", ErrInvalidOption, rate)
+			return fmt.Errorf("%w: exploration rate must be positive, got %v", domain.ErrInvalidSearchOption, rate)
 		}
 		c.ranking.ExplorationRate = rate
 		return nil
@@ -157,7 +152,7 @@ func WithExploration(rate float64) Option {
 func WithSearchDeadline(d time.Duration) Option {
 	return func(c *serviceConfig) error {
 		if d <= 0 {
-			return fmt.Errorf("%w: search deadline must be positive, got %s", ErrInvalidOption, d)
+			return fmt.Errorf("%w: search deadline must be positive, got %s", domain.ErrInvalidSearchOption, d)
 		}
 		c.deadline = d
 		return nil
@@ -168,7 +163,7 @@ func WithProviderTimeouts(timeouts map[domain.ProviderName]time.Duration) Option
 	return func(c *serviceConfig) error {
 		for name, d := range timeouts {
 			if d <= 0 {
-				return fmt.Errorf("%w: provider %s timeout must be positive, got %s", ErrInvalidOption, name, d)
+				return fmt.Errorf("%w: provider %s timeout must be positive, got %s", domain.ErrInvalidSearchOption, name, d)
 			}
 		}
 		c.timeouts = timeouts
@@ -186,7 +181,7 @@ func (s *SearchService) CircuitBreaker() *CircuitBreaker {
 
 func NewSearchService(bg *background.Tracker, providers []ports.SearchProvider, circuitBreaker *CircuitBreaker, c Collaborators, opts ...Option) (*SearchService, error) {
 	if missing := c.missing(bg, circuitBreaker); len(missing) > 0 {
-		return nil, fmt.Errorf("%w: %s", ErrSearchCollaboratorRequired, strings.Join(missing, ", "))
+		return nil, fmt.Errorf("%w: %s", domain.ErrSearchCollaboratorRequired, strings.Join(missing, ", "))
 	}
 	cfg := serviceConfig{awaitDeadline: noDeadline, ranking: RankingConfig{Behavior: c.Behavior, ExplorationDraw: c.ExplorationDraw}}
 	for _, opt := range opts {

@@ -1,12 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -19,14 +19,12 @@ type ClearSearchHistoryService struct {
 	now         clock.Func
 }
 
-var ErrClockRequired = errors.New("history: the service requires a clock")
-
 func NewClearSearchHistoryService(historyRepo ports.HistoryEraser, now clock.Func) (*ClearSearchHistoryService, error) {
 	if historyRepo == nil {
-		return nil, ErrHistoryCollaboratorRequired
+		return nil, domain.ErrHistoryCollaboratorRequired
 	}
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, domain.ErrHistoryClockRequired
 	}
 	return &ClearSearchHistoryService{historyRepo: historyRepo, now: now}, nil
 }

@@ -1,12 +1,12 @@
 package handler
 
 import (
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 )
@@ -40,11 +40,9 @@ func (NoOwnership) EnrichAlbumTracks(context.Context, ids.UserId, []service.Owna
 	return done
 }
 
-var ErrOwnershipRequired = errors.New("handler: the ownership stamper is required, pass NoOwnership to switch it off")
-
 func (h *DiscoveryHandler) AttachOwnership(stamper OwnershipStamper) error {
 	if stamper == nil {
-		return ErrOwnershipRequired
+		return domain.ErrOwnershipRequired
 	}
 	h.ownership = stamper
 	return nil
