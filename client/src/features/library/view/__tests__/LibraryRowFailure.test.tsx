@@ -7,10 +7,11 @@ import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { LibraryRowFailure } from '@features/library';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
+const TELEMETRY_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 
 type FailedTrack = TrackFields & FailedAcquisition;
@@ -44,7 +45,7 @@ interface SentEvent {
 
 function sentEvents(): SentEvent[] {
   return (__http.requests as { path: string; body: string }[])
-    .filter((request) => request.path === '/v1/discovery/events')
+    .filter((request) => isEventPath(request.path))
     .map((request) => {
       const { type, payload } = JSON.parse(request.body) as SentEvent;
       delete payload['session_id'];

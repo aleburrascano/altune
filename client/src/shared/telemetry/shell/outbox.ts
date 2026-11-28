@@ -9,7 +9,7 @@ import {
 } from '@shared/failure';
 import { clampedExponent, equalJitterMs } from '@shared/timing';
 
-import type { DiscoveryEvent } from '@shared/telemetry/core/discoveryEvent';
+import type { ClientEvent } from '@shared/telemetry/core/operationalEvent';
 import {
   capOutbox,
   dedupeById,
@@ -63,7 +63,7 @@ function withOwner(entry: OutboxEntry, owner: string | null): OutboxEntry {
   return owner === null ? entry : { ...entry, owner_user_id: owner };
 }
 
-function toWire(entry: OutboxEntry): DiscoveryEvent {
+function toWire(entry: OutboxEntry): ClientEvent {
   const wire: OutboxEntry = { ...entry };
   delete wire.owner_user_id;
   return wire;
@@ -238,7 +238,7 @@ export function createOutbox(deps: OutboxDeps) {
     if (kept.length !== queue.length) commit(kept);
   }
 
-  async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
+  async function enqueueCritical(event: ClientEvent): Promise<void> {
     ensureRestored();
     ensureFlushOnForeground();
     const stamped = withEnvelope(event, clock.newId(), new Date(clock.now()).toISOString());

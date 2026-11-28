@@ -18,11 +18,11 @@ import {
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 const SEARCH = 'GET /v1/discovery/search';
-const EVENTS = 'POST /v1/discovery/events';
-const EVENTS_PATH = '/v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const TWO_REQUESTS = 2;
 const THIRD_PAGE_OFFSET = SEARCH_PAGE_SIZE + SEARCH_PAGE_SIZE;
 
@@ -360,7 +360,7 @@ describe('next page failure', () => {
 describe('discover query failures emit a search_failed telemetry event tagged with its source', () => {
   function failureEvents() {
     return (__http.requests as { path: string; body: string }[])
-      .filter((request) => request.path === EVENTS_PATH)
+      .filter((request) => isEventPath(request.path))
       .map(
         (request) =>
           JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> },

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 import { signInTestUser } from '@testing/signInTestUser';
 import { Button, Chip, IconButton } from '@shared/ui';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
 type Sent = { type: string; payload: Record<string, unknown> };
@@ -27,7 +28,7 @@ function Icon() {
 
 beforeEach(async () => {
   await signInTestUser();
-  __http.reply('POST /v1/discovery/events', { status: 202 });
+  __http.reply(EVENT_ROUTES, { status: 202 });
 });
 
 describe('Button', () => {

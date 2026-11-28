@@ -32,6 +32,7 @@ import type { RecordingDialogs } from '@features/library/__tests__/recordingDial
 import { libraryKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 import { rejectAfter } from '@testing/delays';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const realUnpin = usePinnedStore.getState().unpin;
 
@@ -51,7 +52,7 @@ function failCleanupOfB(trackId: TrackId): boolean {
   return trackId === 'b';
 }
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const BULK_DELETE_CONCURRENCY = 4;
 const BULK_DELETE_DEADLINE_MS = 60_000;
 

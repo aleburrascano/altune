@@ -2,11 +2,18 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import { recordFailureShown, recordUserAction } from '@shared/telemetry';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 const SecureStore = require('expo-secure-store');
 
-function sentBody(): { type: string; payload: Record<string, unknown> } {
+interface SentBody {
+  type: string;
+  correlation_id?: string;
+  payload: Record<string, unknown>;
+}
+
+function sentBody(): SentBody {
   return JSON.parse(__http.last().body);
 }
 
@@ -20,7 +27,7 @@ beforeEach(async () => {
 
 describe('recordUserAction()', () => {
   it('POSTs a user_action event carrying the action, outcome and track id', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordUserAction({ action: 'library.retry', outcome: 'tapped', track_id: 't-1' });
     await settle();
@@ -35,7 +42,7 @@ describe('recordUserAction()', () => {
   });
 
   it('carries the status and correlation id on a failed outcome', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordUserAction({
       action: 'detail.save',
@@ -45,11 +52,12 @@ describe('recordUserAction()', () => {
     });
     await settle();
 
-    expect(sentBody().payload).toMatchObject({ status: 500, correlation_id: 'corr-1' });
+    expect(sentBody().payload).toMatchObject({ status: 500 });
+    expect(sentBody().correlation_id).toBe('corr-1');
   });
 
   it('trims an error message longer than 300 characters', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordUserAction({ action: 'detail.save', outcome: 'failed', error: 'x'.repeat(400) });
     await settle();
@@ -58,7 +66,7 @@ describe('recordUserAction()', () => {
   });
 
   it('never throws when the request rejects', async () => {
-    __http.fail('POST /v1/discovery/events', __http.transportError());
+    __http.fail(EVENT_ROUTES, __http.transportError());
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown): void => {
       unhandled.push(reason);
@@ -76,7 +84,7 @@ describe('recordUserAction()', () => {
 
 describe('recordFailureShown()', () => {
   it('POSTs a failure_shown event carrying the surface, message and track id', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordFailureShown({
       surface: 'alert.delete_track',
@@ -95,7 +103,7 @@ describe('recordFailureShown()', () => {
   });
 
   it('trims a message longer than 300 characters', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordFailureShown({ surface: 'banner.track_status', message: 'y'.repeat(400) });
     await settle();
@@ -104,7 +112,7 @@ describe('recordFailureShown()', () => {
   });
 
   it('never throws when the request rejects', async () => {
-    __http.fail('POST /v1/discovery/events', __http.transportError());
+    __http.fail(EVENT_ROUTES, __http.transportError());
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown): void => {
       unhandled.push(reason);
@@ -124,7 +132,7 @@ describe('recordFailureShown()', () => {
 
 describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)', () => {
   it('sends a 300-character failure message unchanged', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const exactly300 = 'm'.repeat(300);
 
     recordFailureShown({ surface: 'banner.track_status', message: exactly300 });
@@ -134,7 +142,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('cuts a 301-character failure message to its first 300 characters', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordFailureShown({ surface: 'banner.track_status', message: `${'a'.repeat(300)}Z` });
     await settle();
@@ -143,7 +151,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('sends a 299-character error unchanged', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const just299 = 'e'.repeat(299);
 
     recordUserAction({ action: 'detail.save', outcome: 'failed', error: just299 });
@@ -153,7 +161,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('keeps the start of a long error, not its end', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordUserAction({
       action: 'detail.save',
@@ -166,7 +174,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('sends an empty failure message as an empty string', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordFailureShown({ surface: 'banner.track_status', message: '' });
     await settle();
@@ -175,7 +183,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('keeps a 300-character accented message (single code units) whole', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const accented = 'é'.repeat(300);
 
     recordFailureShown({ surface: 'banner.track_status', message: accented });
@@ -185,7 +193,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('keeps an emoji wholly inside the limit intact', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const message = `${'a'.repeat(290)}😀`;
 
     recordFailureShown({ surface: 'banner.track_status', message });
@@ -195,7 +203,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('keeps a complete surrogate pair sitting exactly at units 298-299 whole', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const complete = `${'a'.repeat(298)}😀`;
 
     recordFailureShown({ surface: 'banner.track_status', message: `${complete}${'z'.repeat(50)}` });
@@ -205,7 +213,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('still drops a lone high surrogate when its unit value is exactly 0xD800', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const message = `${'a'.repeat(299)}${String.fromCodePoint(0x10000)}${'z'.repeat(50)}`;
 
     recordFailureShown({ surface: 'banner.track_status', message });
@@ -219,7 +227,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('never cuts an emoji in half when a long message is trimmed', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordFailureShown({ surface: 'banner.track_status', message: 'a'.repeat(299) + '😀😀😀' });
     await settle();
@@ -232,7 +240,7 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
   });
 
   it('never cuts an emoji in half when a long error is trimmed', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordUserAction({
       action: 'detail.save',
@@ -251,21 +259,21 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
 
 describe('user telemetry: envelope and privacy (small flat payloads, session_id added by recordEvent)', () => {
   it('POSTs a user_action carrying only the fields the caller gave plus session_id', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordUserAction({ action: 'library.retry', outcome: 'succeeded' });
     await settle();
 
     const request = __http.last();
     expect(request.method).toBe('POST');
-    expect(request.path).toBe('/v1/discovery/events');
+    expect(request.path).toBe('/v1/telemetry/events');
     const body = sentBody();
     expect(Object.keys(body.payload).sort()).toEqual(['action', 'outcome', 'session_id']);
     expect(typeof body.payload.session_id).toBe('string');
   });
 
   it('POSTs a failure_shown carrying only surface, message and session_id when no track is named', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordFailureShown({ surface: 'alert.delete_track', message: 'could not delete' });
     await settle();
@@ -276,7 +284,7 @@ describe('user telemetry: envelope and privacy (small flat payloads, session_id 
   });
 
   it('sends a failed user_action with every optional field populated and flat', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
 
     recordUserAction({
       action: 'detail.save',
@@ -295,10 +303,10 @@ describe('user telemetry: envelope and privacy (small flat payloads, session_id 
       outcome: 'failed',
       track_id: 't-9',
       status: 503,
-      correlation_id: 'corr-9',
       error: 'service unavailable',
       session_id: expect.any(String),
     });
+    expect(body.correlation_id).toBe('corr-9');
   });
 });
 
@@ -333,7 +341,7 @@ describe('user telemetry: errors are swallowed (fire-and-forget, never throws)',
   });
 
   it('leaves no unhandled rejection when the request fails at the transport', async () => {
-    __http.fail('POST /v1/discovery/events', __http.transportError());
+    __http.fail(EVENT_ROUTES, __http.transportError());
     const unhandled = collectUnhandled();
 
     recordUserAction({ action: 'library.retry', outcome: 'tapped' });
@@ -345,7 +353,7 @@ describe('user telemetry: errors are swallowed (fire-and-forget, never throws)',
   });
 
   it('leaves no unhandled rejection when the server answers 500', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 500 });
+    __http.reply(EVENT_ROUTES, { status: 500 });
     const unhandled = collectUnhandled();
 
     recordUserAction({ action: 'detail.save', outcome: 'failed', status: 500 });

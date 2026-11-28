@@ -2,6 +2,7 @@ import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { showFailureAlert, showFailureAlert as showFailureAlertFromUi } from '@shared/ui';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const SETTLE_TICKS = 20;
@@ -22,7 +23,7 @@ function recordedEvents(): RecordedEvent[] {
 }
 
 beforeEach(async () => {
-  __http.reply('POST /v1/discovery/events', { status: 202 });
+  __http.reply(EVENT_ROUTES, { status: 202 });
   await signInTestUser();
   dialogs = recordDialogs();
 });

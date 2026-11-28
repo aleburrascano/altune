@@ -11,6 +11,7 @@ import type { DetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 beforeEach(() => {
   recordLogs();
@@ -21,11 +22,11 @@ const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 
 function postedEventTypes(): string[] {
   return (__http.requests as { method: string; path: string; body: string }[])
-    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .filter((request) => request.method === 'POST' && isEventPath(request.path))
     .map((request) => (JSON.parse(request.body) as { type: string }).type);
 }
 

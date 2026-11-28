@@ -8,6 +8,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import { useClearSearchHistory } from '@shared/searchHistory';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -27,7 +28,7 @@ beforeEach(async () => {
     defaultOptions: { queries: { gcTime: Infinity }, mutations: { gcTime: Infinity } },
   });
   await signInTestUser();
-  __http.reply('POST /v1/discovery/events', { status: 202 });
+  __http.reply(EVENT_ROUTES, { status: 202 });
 });
 
 afterEach(() => {

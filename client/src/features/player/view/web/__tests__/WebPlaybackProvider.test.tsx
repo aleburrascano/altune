@@ -23,9 +23,10 @@ import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures'
 import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
-const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HEALTH_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 
 async function recordedFailures(): Promise<string[]> {
@@ -34,7 +35,7 @@ async function recordedFailures(): Promise<string[]> {
     await flushPromises();
   });
   return (__http.requests as { path: string; body: string }[])
-    .filter((request) => request.path === '/v1/discovery/events')
+    .filter((request) => isEventPath(request.path))
     .flatMap((request) => {
       const { payload } = JSON.parse(request.body) as { payload: Record<string, number> };
       return Object.entries(payload)

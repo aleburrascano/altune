@@ -14,10 +14,10 @@ import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDisco
 import type { DiscoverPort } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
-const EVENTS_PATH = '/v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const CLEAR_HISTORY = 'DELETE /v1/discovery/search-history';
 const NO_CONTENT = 204;
 const BAD_REQUEST = 400;
@@ -61,7 +61,7 @@ function countHistoryInvalidations(client: QueryClient): () => number {
 
 function failureEvents() {
   return (__http.requests as { path: string; body: string }[])
-    .filter((request) => request.path === EVENTS_PATH)
+    .filter((request) => isEventPath(request.path))
     .map(
       (request) => JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> },
     )

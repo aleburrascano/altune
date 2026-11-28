@@ -2,6 +2,7 @@ import { render, waitFor } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
 import { Banner } from '@shared/ui';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -24,7 +25,7 @@ function sent(): Sent[] {
 
 beforeEach(async () => {
   await signInTestUser();
-  __http.reply('POST /v1/discovery/events', { status: 202 });
+  __http.reply(EVENT_ROUTES, { status: 202 });
 });
 
 describe('Banner failure_shown', () => {

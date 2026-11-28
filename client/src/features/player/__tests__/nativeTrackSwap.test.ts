@@ -28,9 +28,9 @@ import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
 } from '@features/player/__tests__/memoryPlaybackPort';
-import '@features/player/adapters/native/loadNativeTrack';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
@@ -43,7 +43,7 @@ beforeEach(async () => {
 });
 
 const { __http } = require('@testing/doubles/fetch.js');
-const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HEALTH_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 
 let restorePort: (() => void) | null = null;

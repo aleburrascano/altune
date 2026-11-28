@@ -12,6 +12,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 import { discoverEnv, type TestEnv } from '@features/discovery/__tests__/discoverEnv';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -68,7 +69,7 @@ function leakHits(count: number) {
 }
 
 function serve(tracks: number, hits: unknown[]): void {
-  __http.reply('POST /v1/discovery/events', { status: 204 });
+  __http.reply(EVENT_ROUTES, { status: 204 });
   __http.reply('GET /v1/discovery/search-history', { json: { items: [] } });
   __http.reply(SEARCH, { json: mainResponse(tracks) });
   __http.reply(UNRELEASED_SEARCH, { json: { items: hits } });

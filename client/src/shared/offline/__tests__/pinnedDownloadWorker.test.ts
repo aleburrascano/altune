@@ -12,6 +12,7 @@ import type { OfflinePort, PinnedEntry } from '@shared/offline';
 import { signInTestUser } from '@testing/signInTestUser';
 import { asTrackId, type TrackId } from '@shared/catalog';
 import { captureWarnings } from '@testing/fakes/log/inMemoryLogger';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const DOWNLOAD_RETRY_BASE_MS = 2_000;
 function noJitter(): number {
@@ -24,7 +25,7 @@ const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MIN_FREE_BYTES = 536_870_912;
 
 const { __http } = require('@testing/doubles/fetch.js');
-const EVENTS_ROUTE = 'POST /v1/discovery/events';
+const EVENTS_ROUTE = EVENT_ROUTES;
 
 const seededUrls: Record<string, { url: string; version: string }> = {};
 const memoryPort = createMemoryOfflinePort({ urls: seededUrls });
@@ -310,7 +311,7 @@ describe('download_failed telemetry', () => {
 
   function sentEvents(): SentEvent[] {
     return __http.requests
-      .filter((request: SentRequest) => request.path === '/v1/discovery/events')
+      .filter((request: SentRequest) => isEventPath(request.path))
       .map((request: SentRequest) => {
         const { type, payload } = JSON.parse(request.body);
         return { type, payload: { ...payload, session_id: undefined } };

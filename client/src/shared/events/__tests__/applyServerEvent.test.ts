@@ -28,10 +28,10 @@ import type { ServerEvent } from '@shared/events';
 
 import { recordingCache } from '@shared/events/__tests__/recordingCache';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const TELEMETRY_PATH = '/v1/discovery/events';
 const ACCEPTED = 202;
 const NUMERIC_ID = 42;
 
@@ -1571,7 +1571,7 @@ describe('status_changed telemetry', () => {
     await flushOutbox();
     await flushPromises();
     return (__http.requests as { path: string; body: string }[])
-      .filter((request) => request.path === TELEMETRY_PATH)
+      .filter((request) => isEventPath(request.path))
       .map((request) => (JSON.parse(request.body) as SentEvent).payload)
       .filter((payload) => payload.action === 'status_changed')
       .map((payload) => payload.source);
@@ -1579,7 +1579,7 @@ describe('status_changed telemetry', () => {
 
   beforeEach(async () => {
     await signInTestUser();
-    __http.reply(`POST ${TELEMETRY_PATH}`, { status: ACCEPTED });
+    __http.reply(EVENT_ROUTES, { status: ACCEPTED });
   });
 
   it.each([

@@ -13,11 +13,12 @@ import {
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
 import { signInTestUser } from '@testing/signInTestUser';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 const authPort = createAuthPortMock();
 
@@ -25,7 +26,7 @@ type SentRequest = { method: string; path: string; body?: string };
 
 function sentHealth(): Record<string, unknown>[] {
   return (__http.requests as SentRequest[])
-    .filter((r) => r.method === 'POST' && r.path === '/v1/discovery/events')
+    .filter((r) => r.method === 'POST' && isEventPath(r.path))
     .map((r) => JSON.parse(r.body ?? '{}') as { type?: string; payload: Record<string, unknown> })
     .filter((event) => event.type === 'playback_health')
     .map((event) => event.payload);

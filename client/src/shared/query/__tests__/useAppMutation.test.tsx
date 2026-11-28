@@ -13,18 +13,18 @@ import {
   useOptimisticMutation,
 } from '@shared/query';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS_PATH = '/v1/discovery/events';
 const SERVICE_UNAVAILABLE = 503;
 
 type SentRequest = { path: string; body: string };
-type SentEvent = { type: string; payload: Record<string, unknown> };
+type SentEvent = { type: string; correlation_id?: string; payload: Record<string, unknown> };
 
 beforeEach(async () => {
   await signInTestUser();
-  __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });
+  __http.reply(EVENT_ROUTES, { status: 202 });
 });
 
 async function sentEvents(type: string): Promise<SentEvent[]> {
@@ -32,14 +32,16 @@ async function sentEvents(type: string): Promise<SentEvent[]> {
     await flushPromises();
   });
   return (__http.requests as SentRequest[])
-    .filter((request) => request.path === EVENTS_PATH)
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as SentEvent)
     .filter((event) => event.type === type);
 }
 
 async function userActions(): Promise<Record<string, unknown>[]> {
   const events = await sentEvents('user_action');
-  return events.map(({ payload: { session_id: _session, ...rest } }) => rest);
+  return events.map(({ correlation_id, payload: { session_id: _session, ...rest } }) =>
+    correlation_id === undefined ? rest : { ...rest, correlation_id },
+  );
 }
 
 type ClientErrorSummary = { source: unknown; message: unknown };

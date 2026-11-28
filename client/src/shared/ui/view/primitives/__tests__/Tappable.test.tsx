@@ -1,13 +1,13 @@
 import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { createAppTelemetry, installTelemetry, type DiscoveryEvent } from '@shared/telemetry';
+import { createAppTelemetry, installTelemetry, type ClientEvent } from '@shared/telemetry';
 import { Tappable } from '@shared/ui';
 
-let sent: DiscoveryEvent[];
+let sent: ClientEvent[];
 let order: string[];
 
-function recordSent(event: DiscoveryEvent): Promise<void> {
+function recordSent(event: ClientEvent): Promise<void> {
   sent.push(event);
   order.push('record');
   return Promise.resolve();

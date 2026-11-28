@@ -2,9 +2,19 @@ package domain_test
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/core/domain"
+	"altune/go-api/internal/shared/jsoncontract"
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func TestWire_TelemetryEventTypes(t *testing.T) {
+	body, err := json.Marshal(domain.ClientEventTypeNames())
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	jsoncontract.AssertWireExact(t, "telemetry_event_types", body)
+}
 
 func TestParseClientEventType_OnlyOperationalTypesAreOurs(t *testing.T) {
 	for _, name := range []string{"client_error", "acquisition_ui", "playback_health", "screen_view"} {

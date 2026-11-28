@@ -29,6 +29,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 beforeEach(() => {
   recordLogs();
@@ -263,7 +264,7 @@ describe('TrackSaveControl', () => {
 
     it('does not show a different, unsaved track as saved when its title/artist space-collides', async () => {
       __http.reply('POST /v1/tracks', { status: 200, json: trackResponse() });
-      __http.reply('POST /v1/discovery/events', { status: 202 });
+      __http.reply(EVENT_ROUTES, { status: 202 });
       const queryClient = createTestQueryClient({ mutations: true });
 
       const saved = render(<SaveRow title={SAVED_TITLE} artist={SAVED_ARTIST} />, {

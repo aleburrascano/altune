@@ -4,8 +4,9 @@ import { showFailureAlert } from '@shared/ui';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { reportPinBatch, reportStorageFull, reportUnpinBatch } from '@features/library';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
-const EVENTS = 'POST /v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 
 const { __http } = require('@testing/doubles/fetch.js');
 

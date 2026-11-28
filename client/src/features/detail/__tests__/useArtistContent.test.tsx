@@ -15,6 +15,7 @@ import type { DetailPort } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 import { freezeDate } from '@testing/freezeDate';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const CLOCK_START = 1_700_000_000_000;
 
@@ -312,12 +313,12 @@ describe('useArtistContent through the detail port', () => {
 });
 
 describe('useArtistContent tallies each fetch for the detail health metric', () => {
-  const EVENTS = 'POST /v1/discovery/events';
+  const EVENTS = EVENT_ROUTES;
   const spotifyArtist = [{ provider: 'spotify', external_id: 'artist-1', url: '' }];
 
   function sentHealth(): Record<string, unknown>[] {
     return (__http.requests as { method: string; path: string; body: string }[])
-      .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+      .filter((request) => request.method === 'POST' && isEventPath(request.path))
       .map(
         (request) => JSON.parse(request.body) as { type: string; payload: Record<string, unknown> },
       )

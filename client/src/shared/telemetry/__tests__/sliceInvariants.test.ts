@@ -5,6 +5,7 @@ import { warn } from '@shared/log';
 import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { createAppTelemetry, createOutboxStore, withEnvelope } from '@shared/telemetry';
 import type { DiscoveryEvent } from '@shared/telemetry';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_ENQUEUED = 2;
@@ -185,7 +186,7 @@ describe('security: no auth material reaches this slice or the disk it writes to
   it('the outbox event id is a v4 uuid, unpredictable to an observer of Math.random (#1774)', async () => {
     const store = createOutboxStore(createMemoryFileStore(), { warn });
     const telemetry = createAppTelemetry({ store, clock: { random: () => PREDICTABLE_RANDOM } });
-    __http.fail('POST /v1/discovery/events');
+    __http.fail(EVENT_ROUTES);
 
     await telemetry.enqueueCritical({ type: 'library_add' });
     await telemetry.enqueueCritical({ type: 'library_add' });

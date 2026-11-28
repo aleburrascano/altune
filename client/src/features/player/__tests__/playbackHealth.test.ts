@@ -37,6 +37,7 @@ import {
   type AppStateDriver,
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { flushPromises } from '@testing/flushPromises';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 
 const player = TrackPlayer as unknown as { getQueue: jest.Mock };
 const { __player } = jest.requireMock('react-native-track-player') as {
@@ -59,7 +60,7 @@ afterEach(() => {
   restorePort = null;
 });
 const { __http } = require('@testing/doubles/fetch.js');
-const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HEALTH_ROUTE = EVENT_ROUTES;
 const HTTP_ACCEPTED = 202;
 let app: AppStateDriver;
 
@@ -75,9 +76,7 @@ const EXTRA_OUTCOMES = 3;
 const FAILURE_EVERY = 5;
 
 function healthRequests(): SentRequest[] {
-  return (__http.requests as SentRequest[]).filter(
-    (request) => request.path === '/v1/discovery/events',
-  );
+  return (__http.requests as SentRequest[]).filter((request) => isEventPath(request.path));
 }
 
 async function sentPayloads(expected = 1): Promise<Record<string, unknown>[]> {

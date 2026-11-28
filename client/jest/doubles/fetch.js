@@ -42,6 +42,10 @@ function parseSpec(spec) {
   return { method: null, path: parts[0] };
 }
 
+function parseSpecs(spec) {
+  return [spec].flat().map(parseSpec);
+}
+
 function normalize(response) {
   const rule = response ?? {};
   return {
@@ -127,12 +131,16 @@ const __http = {
   },
 
   reply(spec, response) {
-    rules.push({ ...parseSpec(spec), ...normalize(response), once: false });
+    for (const each of parseSpecs(spec)) {
+      rules.push({ ...each, ...normalize(response), once: false });
+    }
     return __http;
   },
 
   replyOnce(spec, response) {
-    rules.push({ ...parseSpec(spec), ...normalize(response), once: true });
+    for (const each of parseSpecs(spec)) {
+      rules.push({ ...each, ...normalize(response), once: true });
+    }
     return __http;
   },
 
@@ -142,7 +150,7 @@ const __http = {
   },
 
   hang(spec) {
-    rules.push({ ...parseSpec(spec), hang: true, once: false });
+    for (const each of parseSpecs(spec)) rules.push({ ...each, hang: true, once: false });
     return __http;
   },
 
@@ -151,12 +159,16 @@ const __http = {
     const gate = new Promise((resolve) => {
       release = resolve;
     });
-    rules.push({ ...parseSpec(spec), ...normalize(response), gate, once: false });
+    for (const each of parseSpecs(spec)) {
+      rules.push({ ...each, ...normalize(response), gate, once: false });
+    }
     return release;
   },
 
   fail(spec, error) {
-    rules.push({ ...parseSpec(spec), reject: error ?? transportError(), once: false });
+    for (const each of parseSpecs(spec)) {
+      rules.push({ ...each, reject: error ?? transportError(), once: false });
+    }
     return __http;
   },
 
@@ -167,9 +179,10 @@ const __http = {
   },
 
   countFor(spec) {
-    const wanted = parseSpec(spec);
-    return requests.filter((request) => matches({ ...wanted }, request.method, request.path))
-      .length;
+    const wanted = parseSpecs(spec);
+    return requests.filter((request) =>
+      wanted.some((each) => matches({ ...each }, request.method, request.path)),
+    ).length;
   },
 
   abortError,

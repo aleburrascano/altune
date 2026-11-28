@@ -7,6 +7,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import type { DiscoveryEvent } from '@shared/telemetry';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const TRACKING_FAILED = '[discovery] event tracking failed';
 
@@ -30,7 +31,7 @@ beforeEach(async () => {
 
 describe('useRecordEvent(): best-effort discovery event tracking', () => {
   it('forwards the mutated event to recordEvent and resolves to no data on success', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
+    __http.reply(EVENT_ROUTES, { status: 202 });
     const event: DiscoveryEvent = { type: 'play', search_id: 'search-1' };
     const { result } = renderHook(() => useRecordEvent(), { wrapper });
 
@@ -46,7 +47,7 @@ describe('useRecordEvent(): best-effort discovery event tracking', () => {
   });
 
   it('warns with the failed-tracking message and the error, and never rethrows to the caller', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 500, json: { message: 'unreachable' } });
+    __http.reply(EVENT_ROUTES, { status: 500, json: { message: 'unreachable' } });
     const { result } = renderHook(() => useRecordEvent(), { wrapper });
 
     expect(() => {

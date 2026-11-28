@@ -1,4 +1,9 @@
-import { createAppTelemetry, createOutboxStore, type DiscoveryEvent } from '@shared/telemetry';
+import {
+  createAppTelemetry,
+  createOutboxStore,
+  type ClientEvent,
+  type DiscoveryEvent,
+} from '@shared/telemetry';
 import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { flushPromises } from '@testing/flushPromises';
 
@@ -22,7 +27,7 @@ function settle(): Promise<void> {
 
 const LIBRARY_ADD: DiscoveryEvent = { type: 'library_add' };
 
-function bootWith(send: (event: DiscoveryEvent) => Promise<void>) {
+function bootWith(send: (event: ClientEvent) => Promise<void>) {
   const warn = jest.fn();
   const store = createOutboxStore(createMemoryFileStore(), { warn });
   const telemetry = createAppTelemetry({ store, send, log: { warn } });

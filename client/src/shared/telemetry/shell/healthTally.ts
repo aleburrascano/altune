@@ -1,11 +1,11 @@
 import { subscribeAppState } from '@shared/lifecycle';
-import type { DiscoveryEventType } from '@shared/telemetry/core/discoveryEvent';
+import type { OperationalEventType } from '@shared/telemetry/core/operationalEvent';
 import { recordEvent } from '@shared/telemetry/shell/currentTelemetry';
 
 export const HEALTH_BATCH = 25;
 
 type HealthTallyOptions<K extends string> = {
-  eventType: DiscoveryEventType;
+  eventType: OperationalEventType;
   keys: readonly K[];
   onFlushFailure: (error: unknown) => void;
 };

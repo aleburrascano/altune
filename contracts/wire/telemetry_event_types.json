@@ -1,0 +1,13 @@
+[
+  "acquisition_ui",
+  "client_error",
+  "detail_health",
+  "download_failed",
+  "failure_shown",
+  "outbox_flush_failed",
+  "play_start",
+  "playback_health",
+  "screen_view",
+  "sse_reconnect",
+  "user_action"
+]

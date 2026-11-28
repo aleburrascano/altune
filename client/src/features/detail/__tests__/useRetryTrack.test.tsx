@@ -9,6 +9,7 @@ import {
   type RecordingDetailPort,
 } from '@testing/fakes/detail/inMemoryDetailPort';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
+import { isEventPath } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -19,7 +20,7 @@ interface PostedEvent {
 
 function postedEvents(): PostedEvent[] {
   return (__http.requests as { method: string; path: string; body: string }[])
-    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .filter((request) => request.method === 'POST' && isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as PostedEvent);
 }
 

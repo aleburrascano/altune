@@ -11,6 +11,7 @@ import {
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { discoverEnv, type TestEnv } from '@features/discovery/__tests__/discoverEnv';
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
 let fake: TestEnv;
@@ -18,8 +19,7 @@ let fake: TestEnv;
 const SEARCH = 'GET /v1/discovery/search';
 const SUGGEST = 'GET /v1/discovery/suggest';
 const HISTORY_LIST = 'GET /v1/discovery/search-history';
-const EVENTS = 'POST /v1/discovery/events';
-const EVENTS_PATH = '/v1/discovery/events';
+const EVENTS = EVENT_ROUTES;
 
 let queryClient: QueryClient;
 
@@ -61,7 +61,7 @@ interface RecordedEvent {
 
 function degradedEvents(): RecordedEvent[] {
   return (__http.requests as RecordedRequest[])
-    .filter((request) => request.path === EVENTS_PATH)
+    .filter((request) => isEventPath(request.path))
     .map((request) => JSON.parse(request.body) as RecordedEvent)
     .filter((event) => event.type === 'search_degraded');
 }

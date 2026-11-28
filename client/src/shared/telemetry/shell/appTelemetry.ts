@@ -6,6 +6,7 @@ import { isAppActive, subscribeAppState } from '@shared/lifecycle';
 import { warn } from '@shared/log';
 import { onIdentityChange, onSignOut } from '@shared/session';
 
+import { eventPath } from '@shared/telemetry/core/eventRoute';
 import { createOutboxStore } from '@shared/telemetry/adapters/outboxStore';
 import type { TelemetryClock, TelemetryDeps } from '@shared/telemetry/ports/telemetry';
 import { createTelemetry } from '@shared/telemetry/shell/telemetry';
@@ -18,7 +19,7 @@ const systemDeps: TelemetryDeps = {
     newId: () => randomUuid(),
   },
   send: async (event) => {
-    await apiFetch('/v1/discovery/events', {
+    await apiFetch(eventPath(event), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(event),

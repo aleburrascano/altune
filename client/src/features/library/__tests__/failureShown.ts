@@ -1,17 +1,17 @@
+import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 const { __http } = require('@testing/doubles/fetch.js');
 
-const EVENTS_PATH = '/v1/discovery/events';
 const NO_CONTENT = 204;
 
 type LoggedRequest = { method: string; path: string; body: string };
 type RecordedEvent = { type: string; payload: { surface?: string } };
 
 export function acceptTelemetry(): void {
-  __http.reply(`POST ${EVENTS_PATH}`, { status: NO_CONTENT });
+  __http.reply(EVENT_ROUTES, { status: NO_CONTENT });
 }
 
 function isTelemetryPost(request: LoggedRequest): boolean {
-  return request.method === 'POST' && request.path === EVENTS_PATH;
+  return request.method === 'POST' && isEventPath(request.path);
 }
 
 export function shownFailureSurfaces(): string[] {

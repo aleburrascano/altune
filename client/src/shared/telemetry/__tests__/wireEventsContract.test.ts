@@ -2,13 +2,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { getSessionId, recordEvent } from '@shared/telemetry';
-import type { DiscoveryEventType } from '@shared/telemetry';
+import type { ClientEventType } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
 import { wireFixture } from '@testing/wireFixtures';
+import { EVENT_ROUTES } from '@testing/eventRoutes';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-const CLIENT_EVENT_TYPES: Record<DiscoveryEventType, true> = {
+const CLIENT_EVENT_TYPES: Record<ClientEventType, true> = {
   results_shown: true,
   result_clicked: true,
   play: true,
@@ -58,7 +59,7 @@ beforeEach(async () => {
   await signInTestUser();
 });
 
-describe('event types: the server fixtures against the DiscoveryEventType the client declares', () => {
+describe('event types: the server fixtures against the ClientEventType the client declares', () => {
   it('every type the client declares is a name the server knows', () => {
     expect(clientTypes.filter((name) => !knownTypes.includes(name))).toEqual([]);
   });
@@ -80,7 +81,7 @@ describe('event types: the server fixtures against the DiscoveryEventType the cl
 
 describe('request envelope: the keys the client sends against req_discovery_events', () => {
   it('sends only keys the server request fixture has, and every envelope key it has', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 204 });
+    __http.reply(EVENT_ROUTES, { status: 204 });
     const fixtureKeys = Object.keys(wireFixture('req_discovery_events') as object).sort();
 
     await recordEvent({
@@ -100,7 +101,7 @@ describe('payload value types: what the server fixture says each key accepts', (
   });
 
   it('the session_id recordEvent stamps is of a type the server accepts', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 204 });
+    __http.reply(EVENT_ROUTES, { status: 204 });
 
     await recordEvent({ type: 'play' });
 
