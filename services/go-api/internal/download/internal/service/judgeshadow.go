@@ -70,14 +70,14 @@ func observed(candidates []ports.AudioCandidate, keptURL string, keptProbedSecon
 	return out
 }
 
-func kindOf(k ports.CandidateKind) CandidateKind {
+func kindOf(k ports.CandidateKind) TitleKind {
 	switch k {
 	case ports.KindArtTrack:
-		return KindArtTrack
+		return TitleArtTrack
 	case ports.KindPinnedVideo, ports.KindCatalogPin:
-		return KindPinnedVideo
+		return TitlePinnedVideo
 	case ports.KindUpload:
-		return KindUpload
+		return TitleUpload
 	}
-	return KindUpload
+	return TitleUpload
 }

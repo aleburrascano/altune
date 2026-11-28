@@ -30,7 +30,7 @@ bash scripts/acq-debug.sh summary [days]      # status mix, failure codes, which
 bash scripts/acq-debug.sh track "<title|uuid>" # the row + that track's log lines
 ```
 
-Read `failure_reason` literally. `all N candidates rejected (7 download, 3 identity, …)` counts each judged candidate once (by source key, across both tiers) and why it died: `download` points to the source (step 1), `identity`/`duration` point to the matcher (`internal/download/service/matching.go`), and a trailing `, M not tried` counts candidates never judged (attempt budget ran out or the source was dead), which are not rejections. The per-day "which source delivered" table shows when a source went dark: a source that vanishes from it is the outage start date.
+Read `failure_reason` literally. `all N candidates rejected (7 download, 3 identity, …)` counts each judged candidate once (by source key, across both tiers) and why it died: `download` points to the source (step 1), `identity`/`duration` point to the matcher (`internal/download/internal/service/title_match.go`), and a trailing `, M not tried` counts candidates never judged (attempt budget ran out or the source was dead), which are not rejections. The per-day "which source delivered" table shows when a source went dark: a source that vanishes from it is the outage start date.
 
 Done when: you can name the failing stage for the user's track.
 

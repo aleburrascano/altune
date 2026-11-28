@@ -9,12 +9,12 @@ import (
 	"strings"
 )
 
-type CandidateKind string
+type TitleKind string
 
 const (
-	KindArtTrack    CandidateKind = "art_track"
-	KindPinnedVideo CandidateKind = "pinned_video"
-	KindUpload      CandidateKind = "upload"
+	TitleArtTrack    TitleKind = "art_track"
+	TitlePinnedVideo TitleKind = "pinned_video"
+	TitleUpload      TitleKind = "upload"
 )
 
 type TitleTarget struct {
@@ -27,7 +27,7 @@ type TitleTarget struct {
 
 type TitleCandidate struct {
 	URL      string
-	Kind     CandidateKind
+	Kind     TitleKind
 	Title    string
 	Artists  []string
 	Album    string
@@ -58,7 +58,7 @@ func EvaluateTitle(t TitleTarget, c TitleCandidate) TitleDecision {
 	if want, got := titlemarkers.Labels(t.Title), titlemarkers.Labels(c.Title); !slices.Equal(want, got) {
 		return TitleDecision{TitleReject, "different version: want " + labelList(want) + ", got " + labelList(got)}
 	}
-	if c.Kind == KindUpload {
+	if c.Kind == TitleUpload {
 		return TitleDecision{TitleVerify, "upload: needs a fingerprint match against the official track"}
 	}
 	switch {
@@ -106,13 +106,13 @@ func preferred(t TitleTarget, a, b TitleCandidate) bool {
 	return false
 }
 
-func kindRank(k CandidateKind) int {
+func kindRank(k TitleKind) int {
 	switch k {
-	case KindPinnedVideo:
+	case TitlePinnedVideo:
 		return 0
-	case KindArtTrack:
+	case TitleArtTrack:
 		return 1
-	case KindUpload:
+	case TitleUpload:
 		return 2
 	}
 	return 2

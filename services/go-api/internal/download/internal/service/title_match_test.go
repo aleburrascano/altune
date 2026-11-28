@@ -7,7 +7,7 @@ import (
 
 func artTrack(id, title, album string, length float64, explicit bool, artists ...string) service.TitleCandidate {
 	return service.TitleCandidate{
-		URL: "https://music.youtube.com/watch?v=" + id, Kind: service.KindArtTrack,
+		URL: "https://music.youtube.com/watch?v=" + id, Kind: service.TitleArtTrack,
 		Title: title, Artists: artists, Album: album, Length: length, Explicit: explicit,
 	}
 }
@@ -115,7 +115,7 @@ func TestChoose_RealLibraryCases(t *testing.T) {
 
 func TestEvaluate_AnUnknownAlbumIsNotAnotherAlbum(t *testing.T) {
 	target := service.TitleTarget{Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic"}
-	pin := service.TitleCandidate{Kind: service.KindPinnedVideo, Title: "Finesse", Artists: []string{"Bruno Mars"}}
+	pin := service.TitleCandidate{Kind: service.TitlePinnedVideo, Title: "Finesse", Artists: []string{"Bruno Mars"}}
 	if d := service.EvaluateTitle(target, pin); d.Outcome != service.TitleVerify {
 		t.Errorf("pinned video without album: decision = %+v, want verify", d)
 	}
@@ -127,7 +127,7 @@ func TestEvaluate_AnUnknownAlbumIsNotAnotherAlbum(t *testing.T) {
 
 func TestEvaluate_UploadsNeedAFingerprintMatch(t *testing.T) {
 	d := service.EvaluateTitle(service.TitleTarget{Title: "Nonstop", Artist: "Drake"},
-		service.TitleCandidate{Kind: service.KindUpload, Title: "Nonstop", Artists: []string{"Drake"}, Length: 273})
+		service.TitleCandidate{Kind: service.TitleUpload, Title: "Nonstop", Artists: []string{"Drake"}, Length: 273})
 	if d.Outcome != service.TitleVerify {
 		t.Errorf("decision = %+v, want verify", d)
 	}
@@ -143,30 +143,30 @@ func TestEvaluate_RejectsWithTheReason(t *testing.T) {
 	}{
 		{
 			"common words are part of the title", devil,
-			service.TitleCandidate{Kind: service.KindArtTrack, Title: "Devil New Dress", Artists: []string{"Kanye West"}, Album: devil.Album},
+			service.TitleCandidate{Kind: service.TitleArtTrack, Title: "Devil New Dress", Artists: []string{"Kanye West"}, Album: devil.Album},
 			"different title",
 		},
 		{
 			"another artist", devil,
-			service.TitleCandidate{Kind: service.KindArtTrack, Title: "Devil In A New Dress", Artists: []string{"Rick Ross"}, Album: devil.Album},
+			service.TitleCandidate{Kind: service.TitleArtTrack, Title: "Devil In A New Dress", Artists: []string{"Rick Ross"}, Album: devil.Album},
 			"artist not credited",
 		},
 		{
 			"another version",
 			service.TitleTarget{Title: "Finesse", Artist: "Bruno Mars", Length: 191},
-			service.TitleCandidate{Kind: service.KindArtTrack, Title: "Finesse (Remix)", Artists: []string{"Bruno Mars", "Cardi B"}, Length: 218},
+			service.TitleCandidate{Kind: service.TitleArtTrack, Title: "Finesse (Remix)", Artists: []string{"Bruno Mars", "Cardi B"}, Length: 218},
 			"different version: want none, got remix",
 		},
 		{
 			"catalog length disagrees",
 			service.TitleTarget{Title: "I Ran (So Far Away)", Artist: "A Flock of Seagulls", Length: 238},
-			service.TitleCandidate{Kind: service.KindArtTrack, Title: "I Ran (So Far Away)", Artists: []string{"A Flock of Seagulls"}, Length: 305},
+			service.TitleCandidate{Kind: service.TitleArtTrack, Title: "I Ran (So Far Away)", Artists: []string{"A Flock of Seagulls"}, Length: 305},
 			"length disagrees with the catalog length",
 		},
 		{
 			"no catalog length and another album",
 			service.TitleTarget{Title: "More Than a Feeling", Artist: "Boston", Album: "Greatest Hits"},
-			service.TitleCandidate{Kind: service.KindArtTrack, Title: "More Than a Feeling", Artists: []string{"Boston"}, Album: "Boston", Length: 286},
+			service.TitleCandidate{Kind: service.TitleArtTrack, Title: "More Than a Feeling", Artists: []string{"Boston"}, Album: "Boston", Length: 286},
 			"no catalog length and another album: cannot confirm the cut",
 		},
 	}
