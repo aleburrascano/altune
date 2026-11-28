@@ -5,7 +5,6 @@ const path = require('node:path');
 const CLIENT_ROOT = path.resolve(__dirname, '..', '..');
 const MODULE_FILE = /^src\/(?:(features|shared)\/([^/]+)|(mobile))(?:\/(.*))?$/;
 const DOOR_REST = /^(index(\.tsx?)?)?$/;
-const TEST_HELPER_REST = /(^|\/)__tests__\//;
 const ALIAS_TARGETS = [
   ['@features/', 'src/features/'],
   ['@shared/', 'src/shared/'],
@@ -34,9 +33,7 @@ const targetFile = (importPath, importer) => {
 };
 
 const isAllowed = (own, target) => {
-  if (target.role === own.role && target.name === own.name) {
-    return DOOR_REST.test(target.rest) || TEST_HELPER_REST.test(target.rest);
-  }
+  if (target.role === own.role && target.name === own.name) return true;
   return DOOR_REST.test(target.rest) && DOORS_A_ROLE_MAY_IMPORT[own.role].has(target.role);
 };
 
@@ -45,7 +42,7 @@ module.exports = {
     type: 'problem',
     messages: {
       behindDoor:
-        "A test in {{module}} must not import '{{path}}'. It reaches {{module}} only through its door {{door}}, other modules only through the doors {{module}} may import, and helpers through @testing/. Read client/src/README.md.",
+        "A test in {{module}} must not import '{{path}}'. It reaches the parts of {{module}} directly, other modules only through the doors {{module}} may import ({{door}} is {{module}}'s own door), and helpers through @testing/. Read client/src/README.md.",
     },
     schema: [],
   },

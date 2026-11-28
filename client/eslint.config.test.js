@@ -541,8 +541,14 @@ describe('module rules point at client/src/README.md', () => {
     [
       'local/test-imports-through-doors',
       'src/features/player/__tests__/x.test.ts',
-      "import { q } from '@features/player/core/queue';\nexport const a = q;\n",
+      "import { q } from '@features/detail/core/queue';\nexport const a = q;\n",
       1,
+    ],
+    [
+      'local/test-imports-through-doors',
+      'src/features/player/__tests__/x.test.ts',
+      "import { q } from '@features/player/core/queue';\nexport const a = q;\n",
+      0,
     ],
     [
       'local/test-imports-through-doors',

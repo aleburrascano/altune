@@ -1,9 +1,9 @@
-import type { BackfillFeaturedResult } from '@shared/apiClient';
-
 import type { SettingsPort } from '@features/settings';
 
+type BackfillPage = Awaited<ReturnType<SettingsPort['backfillFeaturedArtists']>>;
+
 export interface MemorySettingsSeed {
-  pages?: BackfillFeaturedResult[];
+  pages?: BackfillPage[];
 }
 
 const EXHAUSTED_MESSAGE = 'no backfill page left to serve';

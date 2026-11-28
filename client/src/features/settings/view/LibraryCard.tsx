@@ -7,7 +7,7 @@ import {
   backfillActionTone,
   backfillDetail,
 } from '@features/settings/core/backfillStatus';
-import type { RetryOptions } from '@features/settings/view/retryOptions';
+import type { RetryOptions } from '@features/settings/core/retryOptions';
 import { useBackfillFeatured } from '@features/settings/view/useBackfillFeatured';
 import { SettingsCard, SettingsRow } from '@features/settings/view/SettingsCard';
 

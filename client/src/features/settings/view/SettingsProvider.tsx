@@ -1,21 +1,21 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import type { SettingsPort } from '@features/settings/ports/settingsPort';
+import type { SettingsPort } from '@features/settings/ports/ports';
 
 const SettingsPortContext = createContext<SettingsPort | null>(null);
 
-interface SettingsPortProviderProps {
+interface SettingsProviderProps {
   port: SettingsPort;
   children: ReactNode;
 }
 
-export function SettingsPortProvider({ port, children }: SettingsPortProviderProps): ReactElement {
+export function SettingsProvider({ port, children }: SettingsProviderProps): ReactElement {
   return <SettingsPortContext.Provider value={port}>{children}</SettingsPortContext.Provider>;
 }
 
 export function useSettingsPort(): SettingsPort {
   const port = use(SettingsPortContext);
-  if (port === null) throw new Error('no settings port provided: mount SettingsPortProvider');
+  if (port === null) throw new Error('no settings port provided: mount SettingsProvider');
   return port;
 }

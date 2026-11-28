@@ -1,51 +1,20 @@
 import 'react-native-gesture-handler/jestSetup';
-import { act, render, screen } from '@testing-library/react-native';
-import type { ComponentType, ReactNode } from 'react';
+import { act, renderRouter, screen } from 'expo-router/testing-library';
 
-type StackProps = { children?: ReactNode };
+import { transientRetryOptions } from '@shared/query';
+import { SettingsScreen } from '@features/settings';
 
-jest.mock('expo-router', () => {
-  const { Text } = require('react-native');
-  const {
-    useSettingsPort: useSettingsPortUnderTest,
-  } = require('@features/settings/view/SettingsPortProvider');
-  function RouteChild() {
-    const port = useSettingsPortUnderTest();
-    return <Text>{typeof port === 'object' ? 'settings port resolved' : 'no port'}</Text>;
-  }
-  function Stack({ children }: StackProps) {
-    return (
-      <>
-        <RouteChild />
-        {children}
-      </>
-    );
-  }
-  Stack.Screen = function StackScreen() {
-    return null;
-  };
-  return {
-    Stack,
-    Redirect: () => null,
-    useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
-    usePathname: () => '/',
-    useSegments: () => ['(auth)'],
-  };
-});
+import RootLayout from '@/app/_layout';
 
-jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
-
-let RootLayout: ComponentType;
-
-beforeAll(() => {
-  RootLayout = require('@/app/_layout').default;
-}, 60_000);
+function RouteChild() {
+  return <SettingsScreen retryOptions={transientRetryOptions} />;
+}
 
 describe('the root layout provides the feature ports to its routes', () => {
   it('resolves a feature port hook for a route child with no test-provided ports', async () => {
-    render(<RootLayout />);
+    renderRouter({ _layout: RootLayout, '(auth)/index': RouteChild });
     await act(async () => undefined);
 
-    expect(await screen.findByText('settings port resolved')).toBeTruthy();
-  });
+    expect(await screen.findByTestId('settings-backfill-featured')).toBeTruthy();
+  }, 60_000);
 });

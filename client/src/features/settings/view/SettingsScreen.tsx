@@ -6,7 +6,7 @@ import { appVersionLabel } from '@shared/device';
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth';
 import { offlineDownloadsSupported } from '@shared/offline';
-import type { RetryOptions } from '@features/settings/view/retryOptions';
+import type { RetryOptions } from '@features/settings/core/retryOptions';
 import { useAccountEmail } from '@features/settings/view/useAccountEmail';
 import { useSettingsClearSearchHistory } from '@features/settings/view/useSettingsClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/view/useDownloads';

@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { render, screen, fireEvent, within } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
-import { LibraryCard } from '@features/settings';
+import { LibraryCard } from '@features/settings/view/LibraryCard';
 import { makeWrapper } from '@testing/makeWrapper';
 import { retryOptionsWithJitter } from '@testing/retryOptions';
 const { __http } = require('@testing/doubles/fetch.js');

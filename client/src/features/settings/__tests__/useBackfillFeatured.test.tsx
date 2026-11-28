@@ -11,7 +11,7 @@ import { makeWrapper } from '@testing/makeWrapper';
 import { ObservedQueryClient } from '@testing/observedQueryClient';
 import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
 import { retryOptionsWithJitter } from '@testing/retryOptions';
-import { useBackfillFeatured } from '@features/settings';
+import { useBackfillFeatured } from '@features/settings/view/useBackfillFeatured';
 import { flushPromises } from '@testing/flushPromises';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;

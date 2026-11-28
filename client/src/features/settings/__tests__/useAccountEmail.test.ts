@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 
-import { accountEmail } from '@features/settings';
+import { accountEmail } from '@features/settings/core/accountEmail';
 
 describe('accountEmail', () => {
   const signedIn = (email: string | undefined) => ({

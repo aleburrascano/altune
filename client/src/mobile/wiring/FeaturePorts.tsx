@@ -9,7 +9,7 @@ import {
   UnreleasedHitsSlotProvider,
 } from '@features/discovery';
 import { LibraryPortProvider } from '@features/library';
-import { SettingsPortProvider } from '@features/settings';
+import { SettingsProvider } from '@features/settings';
 
 import type { FeaturePortSet } from '@/mobile/wiring/httpFeaturePorts';
 
@@ -49,11 +49,11 @@ function SharedPorts({ ports, children }: FeaturePortsProps): ReactElement {
 export function FeaturePorts({ ports, children }: FeaturePortsProps): ReactElement {
   return (
     <SharedPorts ports={ports}>
-      <SettingsPortProvider port={ports.settings}>
+      <SettingsProvider port={ports.settings}>
         <CatalogPorts ports={ports}>
           <DiscoveryPorts ports={ports}>{children}</DiscoveryPorts>
         </CatalogPorts>
-      </SettingsPortProvider>
+      </SettingsProvider>
     </SharedPorts>
   );
 }

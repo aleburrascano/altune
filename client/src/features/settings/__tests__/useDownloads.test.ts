@@ -2,13 +2,12 @@ import { act, renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
 import { pinnedBytes, usePinnedStore, type PinnedEntry } from '@shared/offline';
+import { useDownloadStats, useRemoveDownloads } from '@features/settings/view/useDownloads';
+import { downloadStats } from '@features/settings/core/downloadStatsModel';
 import {
-  useDownloadStats,
-  useRemoveDownloads,
-  downloadStats,
   buildDangerZoneActions,
   type ClearHistoryState,
-} from '@features/settings';
+} from '@features/settings/core/dangerZoneActions';
 import { asTrackId } from '@shared/catalog';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
