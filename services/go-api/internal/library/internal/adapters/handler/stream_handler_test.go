@@ -1,7 +1,11 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/handler"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
@@ -24,27 +28,27 @@ import (
 	"github.com/google/uuid"
 )
 
-func streamOnlyRoute(repo *library.InMemoryTrackRepo, store library.AudioStore, scheduler library.AcquisitionScheduler) chi.Router {
-	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, scheduler, &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), time.Now)
+func streamOnlyRoute(repo *memory.TrackRepo, store ports.AudioStore, scheduler ports.AcquisitionScheduler) chi.Router {
+	h := handler.MustNewStreamHandler(service.NewStreamTrackService(repo, store, scheduler, &librarytest.Metrics{}, service.AlwaysEnabled, clock.Now), time.Now)
 	router := chi.NewRouter()
 	router.Use(asBearer)
 	router.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
 	return router
 }
 
-func streamRoutes(store library.AudioStore) (*library.InMemoryTrackRepo, chi.Router) {
+func streamRoutes(store ports.AudioStore) (*memory.TrackRepo, chi.Router) {
 	return streamRoutesAt(store, time.Now)
 }
 
-func streamRoutesAt(store library.AudioStore, now func() time.Time) (*library.InMemoryTrackRepo, chi.Router) {
-	repo := library.NewInMemoryTrackRepo()
+func streamRoutesAt(store ports.AudioStore, now func() time.Time) (*memory.TrackRepo, chi.Router) {
+	repo := memory.NewTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), now).Routes(router)
+	handler.MustNewStreamHandler(service.NewStreamTrackService(repo, store, ports.NoopAcquisitionScheduler(), &librarytest.Metrics{}, service.AlwaysEnabled, clock.Now), now).Routes(router)
 	return repo, router
 }
 
-func seedReady(t *testing.T, repo *library.InMemoryTrackRepo, title, audioRef string) *library.Track {
+func seedReady(t *testing.T, repo *memory.TrackRepo, title, audioRef string) *domain.Track {
 	t.Helper()
 	return librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), title, "Artist", "Album", audioRef)
 }
@@ -52,14 +56,14 @@ func seedReady(t *testing.T, repo *library.InMemoryTrackRepo, title, audioRef st
 func TestHandleStreamAudio(t *testing.T) {
 	tests := []struct {
 		name            string
-		setup           func(*testing.T, *library.InMemoryTrackRepo, *library.InMemoryAudioStore) string
+		setup           func(*testing.T, *memory.TrackRepo, *memory.AudioStore) string
 		wantStatus      int
 		wantContentType string
 		wantBodyLen     int
 	}{
 		{
 			name: "mp3 track serves audio/mpeg",
-			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
+			setup: func(t *testing.T, repo *memory.TrackRepo, store *memory.AudioStore) string {
 				track := seedReady(t, repo, "Track", "audio/123.mp3")
 				store.Seed("audio/123.mp3", []byte("fake-audio-data"))
 				return track.ID().UUID().String()
@@ -70,7 +74,7 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "m4a track serves audio/mp4",
-			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
+			setup: func(t *testing.T, repo *memory.TrackRepo, store *memory.AudioStore) string {
 				track := seedReady(t, repo, "Track", "audio/456.m4a")
 				store.Seed("audio/456.m4a", []byte("fake-audio-data"))
 				return track.ID().UUID().String()
@@ -81,7 +85,7 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "opus track serves audio/opus",
-			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
+			setup: func(t *testing.T, repo *memory.TrackRepo, store *memory.AudioStore) string {
 				track := seedReady(t, repo, "Track", "audio/789.opus")
 				store.Seed("audio/789.opus", []byte("fake-audio-data"))
 				return track.ID().UUID().String()
@@ -92,21 +96,21 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "invalid track ID returns 400",
-			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
+			setup: func(t *testing.T, repo *memory.TrackRepo, store *memory.AudioStore) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "track not found returns 404",
-			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
+			setup: func(t *testing.T, repo *memory.TrackRepo, store *memory.AudioStore) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "pending track (not streamable) returns 404",
-			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
+			setup: func(t *testing.T, repo *memory.TrackRepo, store *memory.AudioStore) string {
 				track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Pending", "Artist", "Album")
 				return track.ID().UUID().String()
 			},
@@ -114,7 +118,7 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "ready track with missing audio file returns 404 and reconciles",
-			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
+			setup: func(t *testing.T, repo *memory.TrackRepo, store *memory.AudioStore) string {
 				track := seedReady(t, repo, "Gone", "audio/gone.opus")
 				return track.ID().UUID().String()
 			},
@@ -124,10 +128,10 @@ func TestHandleStreamAudio(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := library.NewInMemoryTrackRepo()
-			store := library.NewInMemoryAudioStore()
+			repo := memory.NewTrackRepo()
+			store := memory.NewAudioStore()
 			trackId := tt.setup(t, repo, store)
-			router := streamOnlyRoute(repo, store, library.NoopAcquisitionScheduler())
+			router := streamOnlyRoute(repo, store, ports.NoopAcquisitionScheduler())
 
 			rec := request(t, router, http.MethodGet, "/tracks/"+trackId+"/stream", nil)
 
@@ -145,10 +149,10 @@ func TestHandleStreamAudio(t *testing.T) {
 }
 
 func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
-	sched := &library.InMemoryScheduler{}
+	repo := memory.NewTrackRepo()
+	sched := &memory.Scheduler{}
 	track := seedReady(t, repo, "Gone", "audio/gone.opus")
-	router := streamOnlyRoute(repo, library.NewInMemoryAudioStore(), sched)
+	router := streamOnlyRoute(repo, memory.NewAudioStore(), sched)
 
 	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID().UUID().String()+"/stream", nil)
 
@@ -162,15 +166,15 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 }
 
 func TestHandleRecover(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
-	sched := &library.InMemoryScheduler{}
+	repo := memory.NewTrackRepo()
+	sched := &memory.Scheduler{}
 	foreign := librarytest.SeedReadyTrack(t, repo, librarytest.OtherUserId(), "Theirs", "Artist", "Album", "audio/theirs.opus")
 	pending := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Pending", "Artist", "Album")
 	gone := seedReady(t, repo, "Gone", "audio/gone.opus")
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now)
-	library.MustNewStreamHandler(svc, time.Now).Routes(router)
+	svc := service.NewStreamTrackService(repo, memory.NewAudioStore(), sched, &librarytest.Metrics{}, service.AlwaysEnabled, clock.Now)
+	handler.MustNewStreamHandler(svc, time.Now).Routes(router)
 
 	tests := []struct {
 		name       string
@@ -194,18 +198,18 @@ func TestHandleRecover(t *testing.T) {
 }
 
 type probeCountingStore struct {
-	*library.InMemoryAudioStore
+	*memory.AudioStore
 	probes int
 }
 
 func (s *probeCountingStore) Exists(ctx context.Context, audioRef string) (bool, error) {
 	s.probes++
-	return s.InMemoryAudioStore.Exists(ctx, audioRef)
+	return s.AudioStore.Exists(ctx, audioRef)
 }
 
 func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	clock := newFakeClock()
-	store := &probeCountingStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
+	store := &probeCountingStore{AudioStore: memory.NewAudioStore()}
 	repo, router := streamRoutesAt(store, clock.now)
 	track := seedReady(t, repo, "Track", "audio/present.opus")
 	store.Seed("audio/present.opus", []byte("fake-audio-data"))
@@ -230,12 +234,12 @@ func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 var errStorageReadFailed = errors.New("storage read failed")
 
 type truncatingAudioStore struct {
-	*library.InMemoryAudioStore
+	*memory.AudioStore
 	failAfter int64
 }
 
-func (s *truncatingAudioStore) Stream(ctx context.Context, audioRef string) (library.AudioStream, int64, error) {
-	stream, size, err := s.InMemoryAudioStore.Stream(ctx, audioRef)
+func (s *truncatingAudioStore) Stream(ctx context.Context, audioRef string) (ports.AudioStream, int64, error) {
+	stream, size, err := s.AudioStore.Stream(ctx, audioRef)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -243,7 +247,7 @@ func (s *truncatingAudioStore) Stream(ctx context.Context, audioRef string) (lib
 }
 
 type truncatingStream struct {
-	library.AudioStream
+	ports.AudioStream
 	failAfter int64
 	read      int64
 }
@@ -276,7 +280,7 @@ func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 	ring := logging.CaptureRing(t, "info")
 
 	const deliverable = 4096
-	store := &truncatingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore(), failAfter: deliverable}
+	store := &truncatingAudioStore{AudioStore: memory.NewAudioStore(), failAfter: deliverable}
 	repo, router := streamRoutes(store)
 	track := seedReady(t, repo, "Half", "audio/half.opus")
 	store.Seed("audio/half.opus", bytes.Repeat([]byte{0x5a}, 4*deliverable))
@@ -302,7 +306,7 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 	ring := logging.CaptureRing(t, "info")
 
 	audio := []byte("fake-audio-data")
-	store := library.NewInMemoryAudioStore()
+	store := memory.NewAudioStore()
 	repo, router := streamRoutes(store)
 	track := seedReady(t, repo, "Whole", "audio/whole.opus")
 	store.Seed("audio/whole.opus", audio)
@@ -324,7 +328,7 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 	ring := logging.CaptureRing(t, "info")
 
-	store := &truncatingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore(), failAfter: 1024}
+	store := &truncatingAudioStore{AudioStore: memory.NewAudioStore(), failAfter: 1024}
 	repo, router := streamRoutes(store)
 	track := seedReady(t, repo, "Skipped", "audio/skipped.opus")
 	store.Seed("audio/skipped.opus", bytes.Repeat([]byte{0x5a}, 4096))
@@ -344,7 +348,7 @@ func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 }
 
 func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
-	store := library.NewInMemoryAudioStore()
+	store := memory.NewAudioStore()
 	repo, router := streamRoutes(store)
 	track := seedReady(t, repo, "Track", "audio/framed.opus")
 	store.Seed("audio/framed.opus", bytes.Repeat([]byte{0x5a}, 4096))
@@ -371,10 +375,10 @@ const (
 	audioSize          = 2 << 20
 )
 
-func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, opts ...func(*library.StreamHandler)) audioServer {
+func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, opts ...func(*handler.StreamHandler)) audioServer {
 	t.Helper()
-	repo := library.NewInMemoryTrackRepo()
-	store := library.NewInMemoryAudioStore()
+	repo := memory.NewTrackRepo()
+	store := memory.NewAudioStore()
 	track := seedReady(t, repo, "Long", "audio/long.opus")
 	store.Seed("audio/long.opus", bytes.Repeat([]byte{0xAB}, audioSize))
 
@@ -391,7 +395,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 	r.Use(httpserver.WriteDeadline(clock.Now, routeDeadline))
 	r.Use(httpserver.RequestLogger(clock.Now))
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), time.Now, opts...).Routes(r)
+	handler.MustNewStreamHandler(service.NewStreamTrackService(repo, store, ports.NoopAcquisitionScheduler(), &librarytest.Metrics{}, service.AlwaysEnabled, clock.Now), time.Now, opts...).Routes(r)
 	srv := slowclienttest.NewServer(t, r)
 
 	path := "/tracks/" + track.ID().UUID().String() + "/audio"
@@ -421,7 +425,7 @@ type audioServer struct {
 }
 
 func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
-	srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, library.WithStreamWriteIdleTimeout(time.Second))
+	srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, handler.WithStreamWriteIdleTimeout(time.Second))
 	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
@@ -443,7 +447,7 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 
 func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 	const idle = 150 * time.Millisecond
-	srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, library.WithStreamWriteIdleTimeout(idle))
+	srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, handler.WithStreamWriteIdleTimeout(idle))
 	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
@@ -457,7 +461,7 @@ func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 func TestHandleStreamAudio_ANonPositiveIdleTimeoutKeepsTheDefault(t *testing.T) {
 	for _, idle := range []time.Duration{0, -time.Second} {
 		t.Run(idle.String(), func(t *testing.T) {
-			srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, library.WithStreamWriteIdleTimeout(idle))
+			srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, handler.WithStreamWriteIdleTimeout(idle))
 			resp := srv.get()
 			defer func() { _ = resp.Body.Close() }()
 

@@ -1,10 +1,12 @@
 package playback
 
 import (
-	ports "altune/go-api/internal/playback/internal"
+	"altune/go-api/internal/playback/internal/adapters/catalog"
 	"altune/go-api/internal/playback/internal/adapters/handler"
 	"altune/go-api/internal/playback/internal/adapters/persistence"
+	playbacktelemetry "altune/go-api/internal/playback/internal/adapters/telemetry"
 	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/playback/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/telemetry"
@@ -19,7 +21,7 @@ type (
 	TrackSource     = ports.TrackSource
 	NowPlayingTrack = ports.NowPlayingTrack
 	QueueSaveLimit  = handler.QueueSaveLimit
-	MetricsSnapshot = handler.Snapshot
+	MetricsSnapshot = playbacktelemetry.Snapshot
 )
 
 var (
@@ -60,10 +62,14 @@ func New(d Deps) (*Module, error) {
 	if err := d.validate(); err != nil {
 		return nil, err
 	}
-	metrics := handler.NewPlaybackMetrics(d.Metrics)
+	metrics := playbacktelemetry.NewPlaybackMetrics(d.Metrics)
 	queueStates := persistence.NewPostgresQueueStateRepository(d.DB, metrics, clock.Now)
 
-	nowPlaying, err := service.NewNowPlayingReader(d.Tracks, metrics, clock.Now, d.NowPlayingLookupTimeout)
+	guardedTracks, err := catalog.NewGuardedSource(d.Tracks, metrics, clock.Now, d.NowPlayingLookupTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("guard the track source: %w", err)
+	}
+	nowPlaying, err := service.NewNowPlayingReader(guardedTracks)
 	if err != nil {
 		return nil, fmt.Errorf("build the now-playing reader: %w", err)
 	}
@@ -94,4 +100,6 @@ func (m *Module) EraseDeletedUserData(ctx context.Context) (int, error) {
 
 func DefaultQueueSaveLimit() QueueSaveLimit { return handler.DefaultQueueSaveLimit() }
 
-func ReadSnapshot(reg *telemetry.Registry) MetricsSnapshot { return handler.ReadSnapshot(reg) }
+func ReadSnapshot(reg *telemetry.Registry) MetricsSnapshot {
+	return playbacktelemetry.ReadSnapshot(reg)
+}

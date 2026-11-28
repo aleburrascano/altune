@@ -1,0 +1,91 @@
+package service_test
+
+import (
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/service"
+	"altune/go-api/internal/library/librarytest"
+	"context"
+	"errors"
+	"strings"
+	"testing"
+)
+
+func TestSetTrackNumberService(t *testing.T) {
+	userId := librarytest.UserId()
+
+	t.Run("rejects a non-positive number", func(t *testing.T) {
+		svc := service.NewSetTrackNumberService(memory.NewTrackRepo())
+		if _, err := svc.Execute(context.Background(), userId, librarytest.NewTrackId(), 0); err == nil {
+			t.Fatal("expected an error for a zero track number")
+		}
+	})
+
+	t.Run("rejects an out-of-range number", func(t *testing.T) {
+		repo := memory.NewTrackRepo()
+		svc := service.NewSetTrackNumberService(repo)
+		_, err := svc.Execute(context.Background(), userId, librarytest.NewTrackId(), 3000000000)
+		if err == nil {
+			t.Fatal("expected a validation error for an out-of-range track number")
+		}
+		librarytest.AssertValidationError(t, err)
+		if !strings.Contains(err.Error(), "track_number") {
+			t.Fatalf("error = %q, want it to mention %q", err.Error(), "track_number")
+		}
+	})
+
+	t.Run("missing or foreign track is not found", func(t *testing.T) {
+		repo := memory.NewTrackRepo()
+		svc := service.NewSetTrackNumberService(repo)
+		foreign := librarytest.SeedTrack(t, repo, librarytest.OtherUserId(), "Theirs", "Artist", "Album")
+
+		for _, id := range []domain.TrackId{librarytest.NewTrackId(), foreign.ID()} {
+			updated, err := svc.Execute(context.Background(), userId, id, 4)
+			if !errors.Is(err, domain.ErrTrackNotFound) || updated {
+				t.Fatalf("Execute = (%v, %v), want (false, ErrTrackNotFound)", updated, err)
+			}
+		}
+		if foreign.TrackNumber() != nil {
+			t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber())
+		}
+	})
+
+	t.Run("lookup failure after a no-op write is returned", func(t *testing.T) {
+		repo := memory.NewTrackRepo()
+		svc := service.NewSetTrackNumberService(repo)
+		errLookup := errors.New("db down")
+		repo.ErrOnGetBy = errLookup
+
+		if _, err := svc.Execute(context.Background(), userId, librarytest.NewTrackId(), 4); !errors.Is(err, errLookup) {
+			t.Fatalf("error = %v, want wrapping %v", err, errLookup)
+		}
+	})
+
+	t.Run("fills an unset position and refuses to overwrite it", func(t *testing.T) {
+		repo := memory.NewTrackRepo()
+		svc := service.NewSetTrackNumberService(repo)
+		track := librarytest.SeedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
+
+		updated, err := svc.Execute(context.Background(), userId, track.ID(), 3)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !updated {
+			t.Fatal("expected updated=true on the first fill")
+		}
+		if got := repo.Tracks[track.ID().String()].TrackNumber(); got == nil || *got != 3 {
+			t.Fatalf("track number = %v, want 3", got)
+		}
+
+		updated, err = svc.Execute(context.Background(), userId, track.ID(), 9)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if updated {
+			t.Fatal("expected updated=false when a number is already set")
+		}
+		if got := repo.Tracks[track.ID().String()].TrackNumber(); got == nil || *got != 3 {
+			t.Fatalf("track number changed to %v, want it to stay 3", got)
+		}
+	})
+}

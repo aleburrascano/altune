@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	"altune/go-api/internal/shared/database"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
@@ -330,7 +330,7 @@ func checkFence(ctx context.Context, q rowQuerier, track *domain.Track, fence in
 	}
 	if current > 0 && current != fence {
 		return fmt.Errorf("%w: track %s held by attempt %d, caller holds %d",
-			ports.ErrTrackFenceSuperseded, track.ID().String(), current, fence)
+			domain.ErrTrackFenceSuperseded, track.ID().String(), current, fence)
 	}
 	return nil
 }
@@ -367,7 +367,7 @@ func classifyFailedCAS(ctx context.Context, q rowQuerier, track *domain.Track, e
 		return classifyDBError(err)
 	}
 	return fmt.Errorf("%w: track %s expected version %d, found %d",
-		ports.ErrTrackVersionConflict, track.ID().String(), expectedVersion, currentVersion)
+		domain.ErrTrackVersionConflict, track.ID().String(), expectedVersion, currentVersion)
 }
 
 const gradeRankSQL = `array_position(ARRAY['F', 'D', 'C', 'B', 'A', 'A_user'], %s)`
@@ -805,20 +805,34 @@ func catalogSourcesJSON(sources []domain.CatalogSource) ([]byte, error) {
 	if len(sources) == 0 {
 		return []byte("[]"), nil
 	}
-	encoded, err := json.Marshal(sources)
+	records := make([]catalogSourceRecord, len(sources))
+	for i, s := range sources {
+		records[i] = catalogSourceRecord{Provider: s.Provider, ExternalID: s.ExternalID, URL: s.URL}
+	}
+	encoded, err := json.Marshal(records)
 	if err != nil {
 		return nil, fmt.Errorf("encode catalog_sources: %w", err)
 	}
 	return encoded, nil
 }
 
+type catalogSourceRecord struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
+	URL        string `json:"url,omitempty"`
+}
+
 func decodeCatalogSources(raw []byte) ([]domain.CatalogSource, error) {
-	var sources []domain.CatalogSource
-	if err := json.Unmarshal(raw, &sources); err != nil {
+	var records []catalogSourceRecord
+	if err := json.Unmarshal(raw, &records); err != nil {
 		return nil, fmt.Errorf("decode catalog_sources: %w", err)
 	}
-	if len(sources) == 0 {
+	if len(records) == 0 {
 		return nil, nil
+	}
+	sources := make([]domain.CatalogSource, len(records))
+	for i, rec := range records {
+		sources[i] = domain.CatalogSource{Provider: rec.Provider, ExternalID: rec.ExternalID, URL: rec.URL}
 	}
 	return sources, nil
 }

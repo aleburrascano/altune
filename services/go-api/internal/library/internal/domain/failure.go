@@ -1,6 +1,8 @@
 package domain
 
-import "altune/go-api/internal/shared/downloadfailure"
+import (
+	"altune/go-api/internal/shared/downloadfailure"
+)
 
 type FailureCode = downloadfailure.FailureCode
 

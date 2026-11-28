@@ -1,7 +1,6 @@
 package domain
 
 import (
-	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/ids"
 	"fmt"
 	"strings"
@@ -30,8 +29,6 @@ type PlaylistTrack struct {
 const PreviewArtworkLimit = 4
 
 const MaxPlaylistTracks = MaxLibraryPageSize
-
-var ErrPlaylistFull = apierror.NewError(apierror.CodeCatalogPlaylistFull, "playlist is full")
 
 func RequirePlaylistWithinCap(total int) error {
 	if total > MaxPlaylistTracks {

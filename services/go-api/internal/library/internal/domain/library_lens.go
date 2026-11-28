@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/apierror"
 	"strings"
 	"time"
 )
@@ -39,8 +38,6 @@ func ParseLibrarySort(s string) (LibrarySort, error) {
 const MaxLibraryPageSize = 2000
 
 const MaxTracksPerUser = 50_000
-
-var ErrLibraryFull = apierror.NewError(apierror.CodeCatalogLibraryFull, "library is full")
 
 const MaxLibrarySearchLength = maxTrackTextLength
 

@@ -1,7 +1,10 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/handler"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/jsoncontract"
 	"bytes"
@@ -16,7 +19,7 @@ import (
 )
 
 type wireSigner struct {
-	*library.InMemoryAudioStore
+	*memory.AudioStore
 }
 
 func (wireSigner) SignsLinks() bool { return true }
@@ -27,24 +30,24 @@ func (wireSigner) PresignGet(_ context.Context, audioRef string, _ time.Duration
 
 type wireRig struct {
 	router chi.Router
-	tracks *library.InMemoryTrackRepo
+	tracks *memory.TrackRepo
 }
 
 func newWireRig(t *testing.T) *wireRig {
 	t.Helper()
 	clk := newFakeClock()
-	tracks := library.NewInMemoryTrackRepo()
-	playlists := library.NewInMemoryPlaylistRepo()
+	tracks := memory.NewTrackRepo()
+	playlists := memory.NewPlaylistRepo()
 	playlists.Tracks = tracks
-	store := library.NewInMemoryAudioStore()
+	store := memory.NewAudioStore()
 	store.Seed("audio/ok.opus", []byte("opus"))
-	resolver := library.InMemoryFeaturedResolver{ByTitle: map[string][]library.FeaturedArtist{"Song": {{Name: "Guest"}}}}
-	deps := trackDeps{backfill: library.MustNewBackfillFeaturedService(tracks, tracks, resolver, clk.now)}
+	resolver := memory.FeaturedResolver{ByTitle: map[string][]domain.FeaturedArtist{"Song": {{Name: "Guest"}}}}
+	deps := trackDeps{backfill: service.MustNewBackfillFeaturedService(tracks, tracks, resolver, clk.now)}
 	router := newRouter()
 	mountTracks(router, tracks, deps, clk.now)
 	mountPlaylists(router, playlists, tracks, clk.now)
-	router.Mount("/library", library.NewLibraryHandler(library.NewLibraryLensService(tracks)).Routes())
-	audio := library.MustNewAudioURLHandler(library.MustNewAudioURLService(tracks, wireSigner{store}, clk.now, &librarytest.Metrics{}), clk.now)
+	router.Mount("/library", handler.NewLibraryHandler(service.NewLibraryLensService(tracks)).Routes())
+	audio := handler.MustNewAudioURLHandler(service.MustNewAudioURLService(tracks, wireSigner{store}, clk.now, &librarytest.Metrics{}), clk.now)
 	audio.Routes(router)
 	return &wireRig{router: router, tracks: tracks}
 }

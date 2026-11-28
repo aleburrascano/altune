@@ -1,7 +1,9 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/handler"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -16,15 +18,15 @@ import (
 )
 
 func TestWire_TrackAddedToLibraryEventCarriesTheTrackResponseShape(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
-	published := &library.InMemoryRecordingPublisher{}
-	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, published, &library.InMemoryScheduler{}, time.Now, ids.Real),
-		library.NewListTracksService(repo),
-		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
-		library.NewSetTrackNumberService(repo),
-		library.NewFeaturedArtistHandler(library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now), library.NewListFeaturingService(repo)), time.Now)
+	repo := memory.NewTrackRepo()
+	published := &memory.RecordingPlaylistPublisher{}
+	tracks := handler.MustNewTrackHandler(
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(published), &memory.Scheduler{}, time.Now, ids.Real),
+		service.NewListTracksService(repo),
+		service.NewGetTrackStatusService(repo),
+		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),
+		service.NewSetTrackNumberService(repo),
+		handler.NewFeaturedArtistHandler(service.MustNewBackfillFeaturedService(repo, repo, memory.FeaturedResolver{}, time.Now), service.NewListFeaturingService(repo)), time.Now)
 	router := newRouter()
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
 

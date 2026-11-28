@@ -1,8 +1,8 @@
 package service
 
 import (
-	ports "altune/go-api/internal/playback/internal"
 	"altune/go-api/internal/playback/internal/domain"
+	"altune/go-api/internal/playback/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"

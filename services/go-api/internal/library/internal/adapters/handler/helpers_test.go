@@ -1,7 +1,12 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/handler"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/adapters/persistence"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
@@ -36,22 +41,22 @@ func asBearer(next http.Handler) http.Handler {
 }
 
 type trackDeps struct {
-	scheduler *library.InMemoryScheduler
-	backfill  *library.FillFeaturedArtistsService
+	scheduler *memory.Scheduler
+	backfill  *service.FillFeaturedArtistsService
 }
 
-func (d trackDeps) addScheduler() library.AcquisitionScheduler {
+func (d trackDeps) addScheduler() ports.AcquisitionScheduler {
 	if d.scheduler == nil {
-		return &library.InMemoryScheduler{}
+		return &memory.Scheduler{}
 	}
 	return d.scheduler
 }
 
-func (d trackDeps) backfillFor(repo *library.InMemoryTrackRepo) *library.FillFeaturedArtistsService {
+func (d trackDeps) backfillFor(repo *memory.TrackRepo) *service.FillFeaturedArtistsService {
 	if d.backfill != nil {
 		return d.backfill
 	}
-	return library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now)
+	return service.MustNewBackfillFeaturedService(repo, repo, memory.FeaturedResolver{}, time.Now)
 }
 
 func newRouter() chi.Router {
@@ -60,38 +65,38 @@ func newRouter() chi.Router {
 	return router
 }
 
-func trackRoutes(repo *library.InMemoryTrackRepo, opts ...func(*library.TrackHandler)) chi.Router {
+func trackRoutes(repo *memory.TrackRepo, opts ...func(*handler.TrackHandler)) chi.Router {
 	return trackRoutesWith(repo, trackDeps{}, opts...)
 }
 
-func trackRoutesWith(repo *library.InMemoryTrackRepo, deps trackDeps, opts ...func(*library.TrackHandler)) chi.Router {
+func trackRoutesWith(repo *memory.TrackRepo, deps trackDeps, opts ...func(*handler.TrackHandler)) chi.Router {
 	router := newRouter()
 	mountTracks(router, repo, deps, time.Now, opts...)
 	return router
 }
 
-func mountTracks(router chi.Router, repo *library.InMemoryTrackRepo, deps trackDeps, now func() time.Time, opts ...func(*library.TrackHandler)) {
-	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, events.NoopPublisher(), deps.addScheduler(), time.Now, ids.Real),
-		library.NewListTracksService(repo),
-		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
-		library.NewSetTrackNumberService(repo),
-		library.NewFeaturedArtistHandler(deps.backfillFor(repo), library.NewListFeaturingService(repo)), now,
+func mountTracks(router chi.Router, repo *memory.TrackRepo, deps trackDeps, now func() time.Time, opts ...func(*handler.TrackHandler)) {
+	tracks := handler.MustNewTrackHandler(
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(events.NoopPublisher()), deps.addScheduler(), time.Now, ids.Real),
+		service.NewListTracksService(repo),
+		service.NewGetTrackStatusService(repo),
+		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),
+		service.NewSetTrackNumberService(repo),
+		handler.NewFeaturedArtistHandler(deps.backfillFor(repo), service.NewListFeaturingService(repo)), now,
 		opts...)
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
 }
 
-func playlistRoutes(playlists *library.InMemoryPlaylistRepo, tracks *library.InMemoryTrackRepo, opts ...func(*library.PlaylistHandler)) chi.Router {
+func playlistRoutes(playlists *memory.PlaylistRepo, tracks *memory.TrackRepo, opts ...func(*handler.PlaylistHandler)) chi.Router {
 	router := newRouter()
 	mountPlaylists(router, playlists, tracks, time.Now, opts...)
 	return router
 }
 
-func mountPlaylists(router chi.Router, playlists *library.InMemoryPlaylistRepo, tracks *library.InMemoryTrackRepo, now func() time.Time, opts ...func(*library.PlaylistHandler)) {
-	h := library.MustNewPlaylistHandler(
-		library.MustNewPlaylistLifecycleService(playlists, events.NoopPublisher(), time.Now, ids.Real),
-		library.MustNewPlaylistMembershipService(playlists, tracks, events.NoopPublisher(), time.Now), now,
+func mountPlaylists(router chi.Router, playlists *memory.PlaylistRepo, tracks *memory.TrackRepo, now func() time.Time, opts ...func(*handler.PlaylistHandler)) {
+	h := handler.MustNewPlaylistHandler(
+		service.MustNewPlaylistLifecycleService(playlists, events.NoopPublisher(), time.Now, ids.Real),
+		service.MustNewPlaylistMembershipService(playlists, tracks, events.NoopPublisher(), time.Now), now,
 		opts...)
 	router.Mount("/playlists", h.Routes())
 }
@@ -111,8 +116,8 @@ func requestAs(t *testing.T, router http.Handler, user ids.UserId, method, path 
 }
 
 func newWriteRig(now func() time.Time) *writeRig {
-	tracks := library.NewInMemoryTrackRepo()
-	playlists := library.NewInMemoryPlaylistRepo()
+	tracks := memory.NewTrackRepo()
+	playlists := memory.NewPlaylistRepo()
 	router := newRouter()
 	mountTracks(router, tracks, trackDeps{}, now)
 	mountPlaylists(router, playlists, tracks, now)
@@ -230,8 +235,8 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 
 type writeRig struct {
 	router    chi.Router
-	tracks    *library.InMemoryTrackRepo
-	playlists *library.InMemoryPlaylistRepo
+	tracks    *memory.TrackRepo
+	playlists *memory.PlaylistRepo
 }
 
 func newThrottledWriteRig(now func() time.Time) *writeRig {
@@ -253,17 +258,17 @@ func (rig *writeRig) createPlaylist(t *testing.T, user ids.UserId, name string) 
 	return rig.post(t, user, "/playlists/", map[string]string{"name": name})
 }
 
-func (rig *writeRig) addTrackToPlaylist(t *testing.T, user ids.UserId, playlistId library.PlaylistId, trackId library.TrackId) *httptest.ResponseRecorder {
+func (rig *writeRig) addTrackToPlaylist(t *testing.T, user ids.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) *httptest.ResponseRecorder {
 	t.Helper()
 	return rig.post(t, user, "/playlists/"+playlistId.String()+"/tracks", map[string]string{"track_id": trackId.String()})
 }
 
-func (rig *writeRig) addTracksToPlaylist(t *testing.T, user ids.UserId, playlistId library.PlaylistId, trackId library.TrackId) *httptest.ResponseRecorder {
+func (rig *writeRig) addTracksToPlaylist(t *testing.T, user ids.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) *httptest.ResponseRecorder {
 	t.Helper()
 	return rig.post(t, user, "/playlists/"+playlistId.String()+"/tracks/batch", map[string][]string{"track_ids": {trackId.String()}})
 }
 
-func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (library.PlaylistId, library.TrackId) {
+func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (domain.PlaylistId, domain.TrackId) {
 	t.Helper()
 	playlist := librarytest.SeedPlaylist(t, rig.playlists, user, "Seeded")
 	track := librarytest.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
@@ -271,16 +276,16 @@ func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (librar
 }
 
 func postgresTrackRoutes(pool *pgxpool.Pool) chi.Router {
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
-	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real),
-		library.NewListTracksService(repo),
-		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
-		library.NewSetTrackNumberService(repo),
-		library.NewFeaturedArtistHandler(
-			library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now),
-			library.NewListFeaturingService(repo),
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	tracks := handler.MustNewTrackHandler(
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(events.NoopPublisher()), &memory.Scheduler{}, time.Now, ids.Real),
+		service.NewListTracksService(repo),
+		service.NewGetTrackStatusService(repo),
+		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),
+		service.NewSetTrackNumberService(repo),
+		handler.NewFeaturedArtistHandler(
+			service.MustNewBackfillFeaturedService(repo, repo, memory.FeaturedResolver{}, time.Now),
+			service.NewListFeaturingService(repo),
 		), time.Now)
 	router := newRouter()
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
@@ -315,45 +320,45 @@ func assertCatalogTemporarilyUnavailable(t *testing.T, rec *httptest.ResponseRec
 }
 
 type failingTrackRepo struct {
-	*library.InMemoryTrackRepo
+	*memory.TrackRepo
 	err error
 }
 
-func (r *failingTrackRepo) Add(context.Context, *library.Track) (*library.Track, bool, error) {
+func (r *failingTrackRepo) Add(context.Context, *domain.Track) (*domain.Track, bool, error) {
 	return nil, false, r.err
 }
 
-func (r *failingTrackRepo) ListFilteredForUser(context.Context, ids.UserId, library.LibraryQuery) ([]*library.Track, int, error) {
+func (r *failingTrackRepo) ListFilteredForUser(context.Context, ids.UserId, domain.LibraryQuery) ([]*domain.Track, int, error) {
 	return nil, 0, r.err
 }
 
-func (r *failingTrackRepo) ListByIDs(context.Context, ids.UserId, []library.TrackId) ([]*library.Track, error) {
+func (r *failingTrackRepo) ListByIDs(context.Context, ids.UserId, []domain.TrackId) ([]*domain.Track, error) {
 	return nil, r.err
 }
 
-func (r *failingTrackRepo) SetTrackNumber(context.Context, library.TrackId, ids.UserId, int) (bool, error) {
+func (r *failingTrackRepo) SetTrackNumber(context.Context, domain.TrackId, ids.UserId, int) (bool, error) {
 	return false, r.err
 }
 
-func (r *failingTrackRepo) Delete(context.Context, library.TrackId, ids.UserId) (bool, *string, error) {
+func (r *failingTrackRepo) Delete(context.Context, domain.TrackId, ids.UserId) (bool, *string, error) {
 	return false, nil, r.err
 }
 
 func failingRepoRoutes(err error) chi.Router {
-	repo := &failingTrackRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), err: err}
-	tracks := library.MustNewTrackHandler(
-		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now, ids.Real),
-		library.NewListTracksService(repo),
-		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
-		library.NewSetTrackNumberService(repo),
-		library.NewFeaturedArtistHandler(
-			library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now),
-			library.NewListFeaturingService(repo),
+	repo := &failingTrackRepo{TrackRepo: memory.NewTrackRepo(), err: err}
+	tracks := handler.MustNewTrackHandler(
+		service.MustNewAddTrackService(repo, handler.NewWireEvents(events.NoopPublisher()), &memory.Scheduler{}, time.Now, ids.Real),
+		service.NewListTracksService(repo),
+		service.NewGetTrackStatusService(repo),
+		service.NewDeleteTrackService(repo, memory.NewAudioStore(), events.NoopPublisher(), &memory.Metrics{}, memory.NewOrphanedAudioQueue(memory.NewTrackRepo(), clock.Now)),
+		service.NewSetTrackNumberService(repo),
+		handler.NewFeaturedArtistHandler(
+			service.MustNewBackfillFeaturedService(repo, repo, memory.FeaturedResolver{}, time.Now),
+			service.NewListFeaturingService(repo),
 		), time.Now)
 	router := newRouter()
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
-	signer := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
+	signer := &countingAudioStore{AudioStore: memory.NewAudioStore()}
+	handler.MustNewAudioURLHandler(service.MustNewAudioURLService(repo, signer, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 	return router
 }

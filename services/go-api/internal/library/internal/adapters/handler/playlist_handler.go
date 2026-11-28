@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/library/internal/domain"
-	playlistservice "altune/go-api/internal/library/internal/service/playlist"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
@@ -10,20 +10,19 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type PlaylistHandler struct {
-	lifecycle    *playlistservice.PlaylistLifecycleService
-	membership   *playlistservice.PlaylistMembershipService
+	lifecycle    *service.PlaylistLifecycleService
+	membership   *service.PlaylistMembershipService
 	now          func() time.Time
 	writeLimiter rateLimitMiddleware
 }
 
-func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, membership *playlistservice.PlaylistMembershipService, now clock.Func, opts ...func(*PlaylistHandler)) (*PlaylistHandler, error) {
+func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService, now clock.Func, opts ...func(*PlaylistHandler)) (*PlaylistHandler, error) {
 	if now == nil {
-		return nil, fmt.Errorf("NewPlaylistHandler: %w", ErrClockRequired)
+		return nil, fmt.Errorf("NewPlaylistHandler: %w", domain.ErrHandlerClockRequired)
 	}
 	h := &PlaylistHandler{
 		lifecycle:  lifecycle,
@@ -37,78 +36,12 @@ func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, mem
 	return h, nil
 }
 
-func MustNewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, membership *playlistservice.PlaylistMembershipService, now clock.Func, opts ...func(*PlaylistHandler)) *PlaylistHandler {
+func MustNewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService, now clock.Func, opts ...func(*PlaylistHandler)) *PlaylistHandler {
 	h, err := NewPlaylistHandler(lifecycle, membership, now, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return h
-}
-
-func (h *PlaylistHandler) Routes() chi.Router {
-	r := chi.NewRouter()
-	r.Group(func(r chi.Router) {
-		r.Use(h.writeLimiter)
-		r.Post("/", h.handleCreate)
-		r.Post("/{playlistId}/tracks", h.handleAddTrack)
-		r.Post("/{playlistId}/tracks/batch", h.handleAddTracks)
-	})
-	r.Get("/", h.handleList)
-	r.Get("/{playlistId}", h.handleGet)
-	r.Patch("/{playlistId}", h.handleRename)
-	r.Delete("/{playlistId}", h.handleDelete)
-	r.Delete("/{playlistId}/tracks/{trackId}", h.handleRemoveTrack)
-	r.Delete("/{playlistId}/tracks", h.handleRemoveTracks)
-	r.Patch("/{playlistId}/tracks/reorder", h.handleReorder)
-	return r
-}
-
-type CreatePlaylistRequest struct {
-	Name string `json:"name"`
-}
-
-type RenamePlaylistRequest struct {
-	Name string `json:"name"`
-}
-
-type AddTrackToPlaylistRequest struct {
-	TrackID uuid.UUID `json:"track_id"`
-}
-
-type AddTracksToPlaylistRequest struct {
-	TrackIDs []uuid.UUID `json:"track_ids"`
-}
-
-type AddTracksToPlaylistResponse struct {
-	Added   int `json:"added"`
-	Skipped int `json:"skipped"`
-}
-
-type RemoveTracksFromPlaylistRequest struct {
-	TrackIDs []uuid.UUID `json:"track_ids"`
-}
-
-type RemoveTracksFromPlaylistResponse struct {
-	Removed int `json:"removed"`
-}
-
-type ReorderTracksRequest struct {
-	TrackIDs []uuid.UUID `json:"track_ids"`
-}
-
-type PlaylistResponse struct {
-	ID                 uuid.UUID `json:"id"`
-	Name               string    `json:"name"`
-	TrackCount         int       `json:"track_count"`
-	PreviewArtworkURLs []string  `json:"preview_artwork_urls"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-}
-
-type PlaylistDetailResponse struct {
-	PlaylistResponse
-	TotalDurationSeconds float64         `json:"total_duration_seconds"`
-	Tracks               []TrackResponse `json:"tracks"`
 }
 
 func trackIdsFromUUIDs(ids []uuid.UUID) []domain.TrackId {
@@ -117,20 +50,6 @@ func trackIdsFromUUIDs(ids []uuid.UUID) []domain.TrackId {
 		trackIds[i] = domain.TrackIdFromUUID(id)
 	}
 	return trackIds
-}
-
-func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string) PlaylistResponse {
-	if artworkURLs == nil {
-		artworkURLs = []string{}
-	}
-	return PlaylistResponse{
-		ID:                 p.ID.UUID(),
-		Name:               p.Name,
-		TrackCount:         trackCount,
-		PreviewArtworkURLs: artworkURLs,
-		CreatedAt:          p.CreatedAt,
-		UpdatedAt:          p.UpdatedAt,
-	}
 }
 
 func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +62,7 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	playlist, created, err := h.lifecycle.Create(r.Context(), userId, req.Name, httpserver.IdempotencyKey(r))
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -159,12 +78,12 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	limit, offset, err := pageBounds(r)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 	playlists, err := h.lifecycle.List(r.Context(), userId, limit, offset)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -184,7 +103,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	playlist, tracks, err := h.lifecycle.Get(r.Context(), userId, playlistId)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -213,7 +132,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 
 	playlist, summary, err := h.lifecycle.Rename(r.Context(), userId, playlistId, req.Name)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -228,7 +147,7 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.lifecycle.Delete(r.Context(), userId, playlistId); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -249,7 +168,7 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 
 	trackId := domain.TrackIdFromUUID(req.TrackID)
 	if err := h.membership.AddTrack(r.Context(), userId, playlistId, trackId); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -268,7 +187,7 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if len(req.TrackIDs) == 0 {
-		httpserver.HandleServiceError(w, r, domain.ErrTrackIDsRequired)
+		HandleError(w, r, domain.ErrTrackIDsRequired)
 		return
 	}
 
@@ -276,7 +195,7 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 
 	added, err := h.membership.AddTracks(r.Context(), userId, playlistId, trackIds)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -298,7 +217,7 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.membership.RemoveTrack(r.Context(), userId, playlistId, trackId); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -317,7 +236,7 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if len(req.TrackIDs) == 0 {
-		httpserver.HandleServiceError(w, r, domain.ErrTrackIDsRequired)
+		HandleError(w, r, domain.ErrTrackIDsRequired)
 		return
 	}
 
@@ -325,7 +244,7 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 
 	removed, err := h.membership.RemoveTracks(r.Context(), userId, playlistId, trackIds)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -347,7 +266,7 @@ func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) 
 	trackIds := trackIdsFromUUIDs(req.TrackIDs)
 
 	if err := h.membership.Reorder(r.Context(), userId, playlistId, trackIds); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 

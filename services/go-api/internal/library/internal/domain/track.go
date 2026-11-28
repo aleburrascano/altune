@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/tracklength"
@@ -138,7 +137,7 @@ type NewTrackInput struct {
 	IdempotencyKey  *string
 }
 
-func NewTrack(in NewTrackInput, wallClock clock.Func, source ids.Source) (*Track, error) {
+func NewTrack(in NewTrackInput, wallClock func() time.Time, source ids.Source) (*Track, error) {
 	if wallClock == nil {
 		return nil, ErrTrackTimestampClockRequired
 	}
@@ -162,7 +161,7 @@ func NewTrack(in NewTrackInput, wallClock clock.Func, source ids.Source) (*Track
 			return nil, err
 		}
 	}
-	now := wallClock.UTC()
+	now := wallClock().UTC()
 	return &Track{
 		id:                   source.NewTrackId(),
 		userId:               in.UserId,
@@ -238,12 +237,6 @@ const (
 	ProvenanceCorroborated = downloadprovenance.ProvenanceCorroborated
 	ProvenanceBestEffort   = downloadprovenance.ProvenanceBestEffort
 )
-
-var ErrTrackTimestampClockRequired = errors.New("domain: a track needs a clock")
-
-var ErrIDSourceRequired = errors.New("domain: an id source is required")
-
-var ErrIllegalAcquisitionTransition = errors.New("illegal acquisition status transition")
 
 func illegalTransition(op string, from DownloadStatus) error {
 	return fmt.Errorf("%w: %s from %s", ErrIllegalAcquisitionTransition, op, from)
@@ -432,7 +425,7 @@ func validateRecordingLabel(mbid, title, album string, durationSeconds float64) 
 	return recordingLabel{mbid: normalizedMBID, title: title, album: resolved, duration: durationSeconds}, nil
 }
 
-func (t *Track) RelabelAsRecording(mbid, title, album string, year int, isrc string, durationSeconds float64, wallClock clock.Func) error {
+func (t *Track) RelabelAsRecording(mbid, title, album string, year int, isrc string, durationSeconds float64, wallClock func() time.Time) error {
 	if wallClock == nil {
 		return ErrTrackTimestampClockRequired
 	}
@@ -506,7 +499,7 @@ func (t *Track) FailAcquisition(reason string) error {
 	return t.MarkFailed(reason)
 }
 
-func (t *Track) RevertToPending(wallClock clock.Func) error {
+func (t *Track) RevertToPending(wallClock func() time.Time) error {
 	if wallClock == nil {
 		return ErrTrackTimestampClockRequired
 	}
@@ -514,7 +507,7 @@ func (t *Track) RevertToPending(wallClock clock.Func) error {
 	if err != nil {
 		return err
 	}
-	now := wallClock.UTC()
+	now := wallClock().UTC()
 	t.downloadStatus = next
 	t.audioRef = nil
 	t.failureReason = nil

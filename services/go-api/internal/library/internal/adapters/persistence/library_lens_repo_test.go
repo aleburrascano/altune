@@ -1,7 +1,8 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/persistence"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
@@ -13,9 +14,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func seedLibraryTrack(t *testing.T, repo *library.PostgresCatalogTrackRepository, userId ids.UserId, spec libraryTrackSpec) *library.Track {
+func seedLibraryTrack(t *testing.T, repo *persistence.PostgresCatalogTrackRepository, userId ids.UserId, spec libraryTrackSpec) *domain.Track {
 	t.Helper()
-	track, err := library.NewTrack(library.NewTrackInput{UserId: userId, Title: spec.title, Artist: spec.artist, Album: spec.album}, time.Now, ids.Real)
+	track, err := domain.NewTrack(domain.NewTrackInput{UserId: userId, Title: spec.title, Artist: spec.artist, Album: spec.album}, time.Now, ids.Real)
 	if err != nil {
 		t.Fatalf("NewTrack(%q): %v", spec.title, err)
 	}
@@ -43,7 +44,7 @@ type libraryTrackSpec struct {
 	addedAt     time.Time
 }
 
-func titlesOf(ts []*library.Track) []string {
+func titlesOf(ts []*domain.Track) []string {
 	out := make([]string, len(ts))
 	for i, tr := range ts {
 		out[i] = tr.Title()
@@ -51,7 +52,7 @@ func titlesOf(ts []*library.Track) []string {
 	return out
 }
 
-func assertOrder(t *testing.T, sort library.LibrarySort, got, want []string) {
+func assertOrder(t *testing.T, sort domain.LibrarySort, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("sort=%s len = %d %v, want %d %v", sort, len(got), got, len(want), want)
@@ -65,7 +66,7 @@ func assertOrder(t *testing.T, sort library.LibrarySort, got, want []string) {
 
 func TestPostgresTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -88,15 +89,15 @@ func TestPostgresTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 	})
 
 	cases := []struct {
-		sort library.LibrarySort
+		sort domain.LibrarySort
 		want []string
 	}{
-		{library.SortAlphabetical, []string{"Alpha", "bravo", "Charlie"}},
-		{library.SortRecent, []string{"Charlie", "bravo", "Alpha"}},
-		{library.SortYear, []string{"bravo", "Alpha", "Charlie"}},
+		{domain.SortAlphabetical, []string{"Alpha", "bravo", "Charlie"}},
+		{domain.SortRecent, []string{"Charlie", "bravo", "Alpha"}},
+		{domain.SortYear, []string{"bravo", "Alpha", "Charlie"}},
 	}
 	for _, c := range cases {
-		got, total, err := repo.ListFilteredForUser(ctx, userId, library.LibraryQuery{Sort: c.sort, Limit: 100})
+		got, total, err := repo.ListFilteredForUser(ctx, userId, domain.LibraryQuery{Sort: c.sort, Limit: 100})
 		if err != nil {
 			t.Fatalf("ListFilteredForUser(sort=%s): %v", c.sort, err)
 		}
@@ -109,7 +110,7 @@ func TestPostgresTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 
 func TestPostgresTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -143,8 +144,8 @@ func TestPostgresTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
 		{"no match", "nonexistent", []string{}},
 	}
 	for _, c := range cases {
-		got, total, err := repo.ListFilteredForUser(ctx, userId, library.LibraryQuery{
-			Search: c.search, Sort: library.SortRecent, Limit: 100,
+		got, total, err := repo.ListFilteredForUser(ctx, userId, domain.LibraryQuery{
+			Search: c.search, Sort: domain.SortRecent, Limit: 100,
 		})
 		if err != nil {
 			t.Fatalf("%s: ListFilteredForUser: %v", c.name, err)
@@ -164,7 +165,7 @@ func TestPostgresTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
 	}
 }
 
-func albumsOf(gs []library.AlbumGroup) []string {
+func albumsOf(gs []domain.AlbumGroup) []string {
 	out := make([]string, len(gs))
 	for i, g := range gs {
 		out[i] = g.Album
@@ -174,7 +175,7 @@ func albumsOf(gs []library.AlbumGroup) []string {
 
 func TestPostgresTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -197,15 +198,15 @@ func TestPostgresTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 	})
 
 	cases := []struct {
-		sort library.LibrarySort
+		sort domain.LibrarySort
 		want []string
 	}{
-		{library.SortAlphabetical, []string{"Avenue", "Melody", "Zephyr"}},
-		{library.SortYear, []string{"Zephyr", "Avenue", "Melody"}},
-		{library.SortRecent, []string{"Zephyr", "Melody", "Avenue"}},
+		{domain.SortAlphabetical, []string{"Avenue", "Melody", "Zephyr"}},
+		{domain.SortYear, []string{"Zephyr", "Avenue", "Melody"}},
+		{domain.SortRecent, []string{"Zephyr", "Melody", "Avenue"}},
 	}
 	for _, c := range cases {
-		got, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Sort: c.sort})
+		got, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: c.sort})
 		if err != nil {
 			t.Fatalf("ListAlbumsForUser(sort=%s): %v", c.sort, err)
 		}
@@ -215,7 +216,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 
 func TestPostgresTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -234,7 +235,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 		title: "l3", artist: "Cal", album: "Album Three", addedAt: base.Add(-1 * time.Hour),
 	})
 
-	got, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Sort: library.SortRecent, Limit: 1})
+	got, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(Limit:1): %v", err)
 	}
@@ -245,7 +246,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 		t.Errorf("Limit:1 sort=recent = %q, want Album Three", got[0].Album)
 	}
 
-	page2, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Sort: library.SortRecent, Limit: 1, Offset: 1})
+	page2, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1, Offset: 1})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(Limit:1,Offset:1): %v", err)
 	}
@@ -256,7 +257,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 
 func TestPostgresTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -275,7 +276,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 		title: "r3", artist: "Cal", album: "a3", addedAt: base.Add(-1 * time.Hour),
 	})
 
-	got, err := repo.ListArtistsForUser(ctx, userId, library.LibraryQuery{Sort: library.SortRecent, Limit: 1})
+	got, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1})
 	if err != nil {
 		t.Fatalf("ListArtistsForUser(Limit:1): %v", err)
 	}
@@ -286,7 +287,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 
 func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -304,7 +305,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 		albumArtist: new("Various Composers"), addedAt: base.Add(-1 * time.Hour),
 	})
 
-	byArtist, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Search: "solo"})
+	byArtist, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Search: "solo"})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(artist search): %v", err)
 	}
@@ -312,7 +313,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 		t.Fatalf("artist search got %v, want [Blue Skies]", albumsOf(byArtist))
 	}
 
-	byAlbumArtist, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Search: "composers"})
+	byAlbumArtist, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Search: "composers"})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(album_artist search): %v", err)
 	}
@@ -320,7 +321,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 		t.Fatalf("album_artist search got %v, want [Compiled]", albumsOf(byAlbumArtist))
 	}
 
-	byAlbum, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Search: "BLUE"})
+	byAlbum, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Search: "BLUE"})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(album search): %v", err)
 	}
@@ -331,7 +332,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 
 func TestPostgresTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -349,7 +350,7 @@ func TestPostgresTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing
 		addedAt: base.Add(-1 * time.Hour),
 	})
 
-	albums, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Sort: library.SortRecent})
+	albums, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser: %v", err)
 	}
@@ -360,7 +361,7 @@ func TestPostgresTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing
 		t.Errorf("album track_count = %d, want 2", albums[0].TrackCount)
 	}
 
-	artists, err := repo.ListArtistsForUser(ctx, userId, library.LibraryQuery{Sort: library.SortRecent})
+	artists, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent})
 	if err != nil {
 		t.Fatalf("ListArtistsForUser: %v", err)
 	}
@@ -372,7 +373,7 @@ func TestPostgresTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing
 	}
 }
 
-func artistsOf(gs []library.ArtistGroup) []string {
+func artistsOf(gs []domain.ArtistGroup) []string {
 	out := make([]string, len(gs))
 	for i, g := range gs {
 		out[i] = g.Artist
@@ -382,7 +383,7 @@ func artistsOf(gs []library.ArtistGroup) []string {
 
 func TestPostgresTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -405,14 +406,14 @@ func TestPostgresTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 	})
 
 	cases := []struct {
-		sort library.LibrarySort
+		sort domain.LibrarySort
 		want []string
 	}{
-		{library.SortAlphabetical, []string{"Alpha Artist", "Mid Artist", "Zeta Artist"}},
-		{library.SortRecent, []string{"Zeta Artist", "Mid Artist", "Alpha Artist"}},
+		{domain.SortAlphabetical, []string{"Alpha Artist", "Mid Artist", "Zeta Artist"}},
+		{domain.SortRecent, []string{"Zeta Artist", "Mid Artist", "Alpha Artist"}},
 	}
 	for _, c := range cases {
-		got, err := repo.ListArtistsForUser(ctx, userId, library.LibraryQuery{Sort: c.sort})
+		got, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: c.sort})
 		if err != nil {
 			t.Fatalf("ListArtistsForUser(sort=%s): %v", c.sort, err)
 		}
@@ -422,7 +423,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 
 func TestPostgresTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -440,7 +441,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 		addedAt: base.Add(-1 * time.Hour),
 	})
 
-	got, err := repo.ListArtistsForUser(ctx, userId, library.LibraryQuery{Search: "beatles"})
+	got, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Search: "beatles"})
 	if err != nil {
 		t.Fatalf("ListArtistsForUser(search): %v", err)
 	}
@@ -451,7 +452,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 
 func TestPostgresTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	t.Cleanup(func() {
@@ -483,8 +484,8 @@ func TestPostgresTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testin
 		{"search no match", "nothing", 2, 0, 0, 0},
 	}
 	for _, c := range cases {
-		got, total, err := repo.ListFilteredForUser(ctx, userId, library.LibraryQuery{
-			Search: c.search, Sort: library.SortRecent, Limit: c.limit, Offset: c.offset,
+		got, total, err := repo.ListFilteredForUser(ctx, userId, domain.LibraryQuery{
+			Search: c.search, Sort: domain.SortRecent, Limit: c.limit, Offset: c.offset,
 		})
 		if err != nil {
 			t.Fatalf("%s: ListFilteredForUser: %v", c.name, err)
@@ -510,7 +511,7 @@ func tiedArtistNames() []string {
 
 func TestPostgresTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -526,10 +527,10 @@ func TestPostgresTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *tes
 		})
 	}
 
-	for _, sort := range []library.LibrarySort{library.SortAlphabetical, library.SortYear, library.SortRecent} {
+	for _, sort := range []domain.LibrarySort{domain.SortAlphabetical, domain.SortYear, domain.SortRecent} {
 		seen := map[string]int{}
 		for offset := 0; offset < tiedGroupCount; offset += tiedPageSize {
-			page, err := repo.ListAlbumsForUser(ctx, userId, library.LibraryQuery{Sort: sort, Limit: tiedPageSize, Offset: offset})
+			page, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: sort, Limit: tiedPageSize, Offset: offset})
 			if err != nil {
 				t.Fatalf("ListAlbumsForUser(sort=%s, offset=%d): %v", sort, offset, err)
 			}
@@ -550,7 +551,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *tes
 
 func TestPostgresTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -567,7 +568,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *te
 
 	seen := map[string]int{}
 	for offset := 0; offset < tiedGroupCount; offset += tiedPageSize {
-		page, err := repo.ListArtistsForUser(ctx, userId, library.LibraryQuery{Sort: library.SortRecent, Limit: tiedPageSize, Offset: offset})
+		page, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: tiedPageSize, Offset: offset})
 		if err != nil {
 			t.Fatalf("ListArtistsForUser(offset=%d): %v", offset, err)
 		}
@@ -587,7 +588,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *te
 
 func TestPostgresTrackRepo_ListAlbumsForUser_GroupsACompilationByItsAlbumArtist(t *testing.T) {
 	pool := dbtest.Pool(t)
-	repo := library.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
+	repo := persistence.NewPostgresCatalogTrackRepository(pool, librarytest.DiscardDBCallMetrics())
 	userId := ids.NewUserId(uuid.New())
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
@@ -601,7 +602,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_GroupsACompilationByItsAlbumArtist(
 		})
 	}
 
-	albums, err := repo.ListAlbumsForUser(context.Background(), userId, library.LibraryQuery{Sort: library.SortRecent})
+	albums, err := repo.ListAlbumsForUser(context.Background(), userId, domain.LibraryQuery{Sort: domain.SortRecent})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser: %v", err)
 	}

@@ -1,9 +1,8 @@
 package domain_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/library/librarytest"
-	"altune/go-api/internal/shared/dbtest"
 	"strings"
 	"testing"
 )
@@ -11,19 +10,19 @@ import (
 func TestParseLibrarySort(t *testing.T) {
 	tests := []struct {
 		input   string
-		want    library.LibrarySort
+		want    domain.LibrarySort
 		wantErr bool
 	}{
-		{"", library.SortRecent, false},
-		{"recent", library.SortRecent, false},
-		{"az", library.SortAlphabetical, false},
-		{"year", library.SortYear, false},
-		{"popularity", library.SortRecent, true},
+		{"", domain.SortRecent, false},
+		{"recent", domain.SortRecent, false},
+		{"az", domain.SortAlphabetical, false},
+		{"year", domain.SortYear, false},
+		{"popularity", domain.SortRecent, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got, err := library.ParseLibrarySort(tt.input)
+			got, err := domain.ParseLibrarySort(tt.input)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
@@ -36,8 +35,8 @@ func TestParseLibrarySort(t *testing.T) {
 }
 
 func TestLibrarySort_String(t *testing.T) {
-	if library.SortAlphabetical.String() != "az" {
-		t.Errorf("SortAlphabetical.String() = %q, want %q", library.SortAlphabetical.String(), "az")
+	if domain.SortAlphabetical.String() != "az" {
+		t.Errorf("SortAlphabetical.String() = %q, want %q", domain.SortAlphabetical.String(), "az")
 	}
 }
 
@@ -59,7 +58,7 @@ func TestFailureMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := library.FailureMessage(tt.reason); got != tt.want {
+			if got := domain.FailureMessage(tt.reason); got != tt.want {
 				t.Errorf("FailureMessage() = %q, want %q", got, tt.want)
 			}
 		})
@@ -68,13 +67,13 @@ func TestFailureMessage(t *testing.T) {
 
 func TestTotalDurationSeconds(t *testing.T) {
 	seconds := func(f float64) *float64 { return &f }
-	tracks := []*library.Track{
+	tracks := []*domain.Track{
 		librarytest.RestoreTrack(librarytest.TrackSnapshot{DurationSeconds: seconds(90)}),
 		librarytest.RestoreTrack(librarytest.TrackSnapshot{DurationSeconds: nil}),
 		librarytest.RestoreTrack(librarytest.TrackSnapshot{DurationSeconds: seconds(30.5)}),
 	}
 
-	if got := library.TotalDurationSeconds(tracks); got != 120.5 {
+	if got := domain.TotalDurationSeconds(tracks); got != 120.5 {
 		t.Errorf("TotalDurationSeconds() = %v, want 120.5", got)
 	}
 }
@@ -98,13 +97,13 @@ func TestNormalizePage(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			limit, err := library.NormalizePage(c.limit, c.offset)
+			limit, err := domain.NormalizePage(c.limit, c.offset)
 
 			if c.wantErr {
 				if err == nil {
 					t.Fatalf("expected a validation error, got limit = %d", limit)
 				}
-				dbtest.AssertValidationError(t, err)
+				librarytest.AssertValidationError(t, err)
 				if !strings.Contains(err.Error(), "offset") {
 					t.Fatalf("error = %q, want it to mention %q", err.Error(), "offset")
 				}

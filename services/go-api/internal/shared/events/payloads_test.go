@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-type libraryTrack struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-}
-
 func TestPayloads_KeepTheWireShapeClientsParse(t *testing.T) {
 	cases := []struct {
 		payload events.Payload
@@ -32,7 +27,7 @@ func TestPayloads_KeepTheWireShapeClientsParse(t *testing.T) {
 		{events.PlaylistCreated{PlaylistID: "p", Name: "N"}, "playlist_created", `{"playlist_id":"p","name":"N"}`},
 		{events.PlaylistDeleted{PlaylistID: "p"}, "playlist_deleted", `{"playlist_id":"p"}`},
 		{events.PlaylistRenamed{PlaylistID: "p", Name: "N"}, "playlist_renamed", `{"playlist_id":"p","name":"N"}`},
-		{events.TrackAddedToLibrary{TrackID: "t1", Track: libraryTrack{ID: "t1", Title: "T"}}, "track_added_to_library", `{"id":"t1","title":"T","track_id":"t1"}`},
+		{events.TrackAddedToLibrary{TrackID: "t1", Track: json.RawMessage(`{"id":"t1","title":"T"}`)}, "track_added_to_library", `{"id":"t1","title":"T","track_id":"t1"}`},
 	}
 	seen := map[events.EventType]bool{}
 	for _, tc := range cases {
@@ -81,14 +76,14 @@ func TestPayloads_NameTheSubjectTheTapShows(t *testing.T) {
 }
 
 func TestTrackAddedToLibrary_RefusesAnUnmarshalableTrack(t *testing.T) {
-	_, err := json.Marshal(events.TrackAddedToLibrary{TrackID: "t1", Track: make(chan int)})
+	_, err := json.Marshal(events.TrackAddedToLibrary{TrackID: "t1"})
 	if err == nil {
 		t.Fatal("marshal succeeded, want the error so the stream resyncs instead of sending a half frame")
 	}
 }
 
 func TestTrackAddedToLibrary_RefusesATrackThatIsNotAnObject(t *testing.T) {
-	_, err := json.Marshal(events.TrackAddedToLibrary{TrackID: "t1", Track: []string{"x"}})
+	_, err := json.Marshal(events.TrackAddedToLibrary{TrackID: "t1", Track: json.RawMessage(`["x"]`)})
 	if err == nil {
 		t.Fatal("marshal succeeded for a non-object track")
 	}

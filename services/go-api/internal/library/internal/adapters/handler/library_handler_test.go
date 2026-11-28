@@ -1,7 +1,10 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/handler"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"net/http"
 	"net/url"
@@ -11,8 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func libraryRoutes(repo *library.InMemoryTrackRepo) chi.Router {
-	library := library.NewLibraryHandler(library.NewLibraryLensService(repo))
+func libraryRoutes(repo *memory.TrackRepo) chi.Router {
+	library := handler.NewLibraryHandler(service.NewLibraryLensService(repo))
 	router := chi.NewRouter()
 	router.Use(asBearer)
 	router.Mount("/library", library.Routes())
@@ -22,7 +25,7 @@ func libraryRoutes(repo *library.InMemoryTrackRepo) chi.Router {
 func TestLibraryHandler_NegativeOffsetRejected(t *testing.T) {
 	for _, path := range []string{"/library/albums", "/library/artists"} {
 		t.Run(path, func(t *testing.T) {
-			repo := library.NewInMemoryTrackRepo()
+			repo := memory.NewTrackRepo()
 			librarytest.SeedTrack(t, repo, librarytest.UserId(), "One", "Metallica", "And Justice for All")
 			router := libraryRoutes(repo)
 
@@ -39,7 +42,7 @@ func TestLibraryHandler_UnparseableLimitOrOffsetRejected(t *testing.T) {
 		"?offset=x":  "offset must be an integer",
 	} {
 		t.Run(query, func(t *testing.T) {
-			router := libraryRoutes(library.NewInMemoryTrackRepo())
+			router := libraryRoutes(memory.NewTrackRepo())
 
 			rec := request(t, router, http.MethodGet, "/library/albums"+query, nil)
 
@@ -52,7 +55,7 @@ func TestLibraryHandler_UnparseableLimitOrOffsetRejected(t *testing.T) {
 func TestLibraryHandler_ZeroAndPositiveOffsetStillServed(t *testing.T) {
 	for _, path := range []string{"/library/albums?offset=0", "/library/artists?offset=5"} {
 		t.Run(path, func(t *testing.T) {
-			repo := library.NewInMemoryTrackRepo()
+			repo := memory.NewTrackRepo()
 			librarytest.SeedTrack(t, repo, librarytest.UserId(), "One", "Metallica", "And Justice for All")
 			router := libraryRoutes(repo)
 
@@ -64,7 +67,7 @@ func TestLibraryHandler_ZeroAndPositiveOffsetStillServed(t *testing.T) {
 }
 
 func TestLibraryHandler_SearchTermLengthCapped(t *testing.T) {
-	atCap := strings.Repeat("a", library.MaxLibrarySearchLength)
+	atCap := strings.Repeat("a", domain.MaxLibrarySearchLength)
 	overCap := atCap + "a"
 	tests := []struct {
 		name       string
@@ -79,7 +82,7 @@ func TestLibraryHandler_SearchTermLengthCapped(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := libraryRoutes(library.NewInMemoryTrackRepo())
+			router := libraryRoutes(memory.NewTrackRepo())
 
 			rec := request(t, router, http.MethodGet, tt.path+"?q="+url.QueryEscape(tt.q), nil)
 
@@ -91,7 +94,7 @@ func TestLibraryHandler_SearchTermLengthCapped(t *testing.T) {
 func TestSearchTermWithNulByteRejected(t *testing.T) {
 	for _, path := range []string{"/library/albums", "/library/artists"} {
 		t.Run(path, func(t *testing.T) {
-			router := libraryRoutes(library.NewInMemoryTrackRepo())
+			router := libraryRoutes(memory.NewTrackRepo())
 
 			rec := request(t, router, http.MethodGet, path+"?q=%00", nil)
 
@@ -99,7 +102,7 @@ func TestSearchTermWithNulByteRejected(t *testing.T) {
 		})
 	}
 	t.Run("/tracks", func(t *testing.T) {
-		router := trackRoutes(library.NewInMemoryTrackRepo())
+		router := trackRoutes(memory.NewTrackRepo())
 
 		rec := request(t, router, http.MethodGet, "/tracks?q=%00", nil)
 
@@ -108,8 +111,8 @@ func TestSearchTermWithNulByteRejected(t *testing.T) {
 }
 
 func TestHandleListTracks_SearchTermLengthCapped(t *testing.T) {
-	router := trackRoutes(library.NewInMemoryTrackRepo())
-	overCap := strings.Repeat("a", library.MaxLibrarySearchLength+1)
+	router := trackRoutes(memory.NewTrackRepo())
+	overCap := strings.Repeat("a", domain.MaxLibrarySearchLength+1)
 
 	rec := request(t, router, http.MethodGet, "/tracks?q="+overCap, nil)
 

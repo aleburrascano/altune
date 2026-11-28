@@ -1,8 +1,8 @@
 package handler
 
 import (
-	libraryservice "altune/go-api/internal/library/internal/core/libraryviews"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
@@ -12,41 +12,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type LibraryHandler struct {
-	lenses *libraryservice.LibraryViewService
+	lenses *service.LibraryViewService
 }
 
-func NewLibraryHandler(lenses *libraryservice.LibraryViewService) *LibraryHandler {
+func NewLibraryHandler(lenses *service.LibraryViewService) *LibraryHandler {
 	return &LibraryHandler{lenses: lenses}
-}
-
-func (h *LibraryHandler) Routes() chi.Router {
-	r := chi.NewRouter()
-	r.Get("/albums", h.handleAlbums)
-	r.Get("/artists", h.handleArtists)
-	return r
-}
-
-type AlbumGroupDTO struct {
-	Key               string  `json:"key"`
-	Album             string  `json:"album"`
-	Artist            string  `json:"artist"`
-	ArtworkURL        *string `json:"artwork_url"`
-	Year              *int    `json:"year"`
-	TrackCount        int     `json:"track_count"`
-	MostRecentAddedAt string  `json:"most_recent_added_at"`
-}
-
-type ArtistGroupDTO struct {
-	Key               string  `json:"key"`
-	Artist            string  `json:"artist"`
-	ArtworkURL        *string `json:"artwork_url"`
-	TrackCount        int     `json:"track_count"`
-	MostRecentAddedAt string  `json:"most_recent_added_at"`
 }
 
 func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
@@ -110,13 +83,13 @@ func (h *LibraryHandler) handleAlbums(w http.ResponseWriter, r *http.Request) {
 	userId := requestuser.UserID(r)
 	query, err := libraryQuery(r)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
 	albums, err := h.lenses.Albums(r.Context(), userId, query)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
@@ -138,13 +111,13 @@ func (h *LibraryHandler) handleArtists(w http.ResponseWriter, r *http.Request) {
 	userId := requestuser.UserID(r)
 	query, err := libraryQuery(r)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
 	artists, err := h.lenses.Artists(r.Context(), userId, query)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 

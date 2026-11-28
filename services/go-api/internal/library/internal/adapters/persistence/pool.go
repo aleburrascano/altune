@@ -1,7 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
@@ -13,11 +14,9 @@ const dbCallTimeout = 5 * time.Second
 
 var errDBCallTimeout = errors.New("catalog db call exceeded dbCallTimeout")
 
-var ErrDBCallMetricsRequired = errors.New("persistence: the repository requires db call metrics")
-
 func requireDBCallMetrics(name string, m ports.DBCallMetrics) {
 	if m == nil {
-		panic(name + ": " + ErrDBCallMetricsRequired.Error())
+		panic(name + ": " + domain.ErrDBCallMetricsRequired.Error())
 	}
 }
 
@@ -30,10 +29,10 @@ func withDBTimeout(ctx context.Context, metrics ports.DBCallMetrics) (context.Co
 }
 
 func classifyDBError(err error) error {
-	if errors.Is(err, ports.ErrDBTransient) || !database.IsTransient(err) {
+	if errors.Is(err, domain.ErrDBTransient) || !database.IsTransient(err) {
 		return err
 	}
-	return fmt.Errorf("%w: %w", ports.ErrDBTransient, err)
+	return fmt.Errorf("%w: %w", domain.ErrDBTransient, err)
 }
 
 func recordIfDBCallTimedOut(dbCtx context.Context, metrics ports.DBCallMetrics) {

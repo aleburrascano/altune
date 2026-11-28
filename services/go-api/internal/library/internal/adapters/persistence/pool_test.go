@@ -1,7 +1,9 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/persistence"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
@@ -41,8 +43,8 @@ func poolWith(t *testing.T, addr, params string) *pgxpool.Pool {
 	return pool
 }
 
-func getMissingTrack(ctx context.Context, pool *pgxpool.Pool, metrics library.DBCallMetrics) error {
-	_, err := library.NewPostgresTrackRepository(pool, metrics).GetByID(ctx, librarytest.NewTrackId(), sharedids.NewUserId(uuid.New()))
+func getMissingTrack(ctx context.Context, pool *pgxpool.Pool, metrics ports.DBCallMetrics) error {
+	_, err := persistence.NewPostgresTrackRepository(pool, metrics).GetByID(ctx, librarytest.NewTrackId(), sharedids.NewUserId(uuid.New()))
 	return err
 }
 
@@ -91,7 +93,7 @@ func TestPostgresRepos_EachFailureShapeIsClassifiedTransientOrNot(t *testing.T) 
 			if err == nil {
 				t.Fatal("GetByID succeeded against a failing database")
 			}
-			if got := errors.Is(err, library.ErrDBTransient); got != tc.transient {
+			if got := errors.Is(err, domain.ErrDBTransient); got != tc.transient {
 				t.Fatalf("transient = %v, want %v (err: %v)", got, tc.transient, err)
 			}
 		})
@@ -110,7 +112,7 @@ func TestPostgresTrackRepo_ADeadlineWhileWaitingForAPooledConnectionIsTransient(
 
 	err = getMissingTrack(ctx, pool, librarytest.DiscardDBCallMetrics())
 
-	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, library.ErrDBTransient) {
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, domain.ErrDBTransient) {
 		t.Fatalf("err = %v, want a transient context.DeadlineExceeded", err)
 	}
 }
@@ -123,9 +125,9 @@ func TestPostgresPlaylistRepo_AddTrack_ACancelInsideItsTransactionIsNotTransient
 	pool, trace := tracedPool(t)
 	trace.afterNextQuery(cancel)
 
-	err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).AddTrack(ctx, userId, playlistId, librarytest.NewTrackId())
+	err := persistence.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).AddTrack(ctx, userId, playlistId, librarytest.NewTrackId())
 
-	if !errors.Is(err, context.Canceled) || errors.Is(err, library.ErrDBTransient) {
+	if !errors.Is(err, context.Canceled) || errors.Is(err, domain.ErrDBTransient) {
 		t.Fatalf("err = %v, want context.Canceled, not transient", err)
 	}
 }
@@ -133,12 +135,12 @@ func TestPostgresPlaylistRepo_AddTrack_ACancelInsideItsTransactionIsNotTransient
 func TestPostgresPlaylistRepo_GetWithTracks_NamesATransientFailureOnce(t *testing.T) {
 	pool := poolAt(t, refusedAddr(t))
 
-	_, _, err := library.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).GetWithTracks(context.Background(), librarytest.NewPlaylistId(), sharedids.NewUserId(uuid.New()))
+	_, _, err := persistence.NewPostgresPlaylistRepository(pool, librarytest.DiscardDBCallMetrics()).GetWithTracks(context.Background(), librarytest.NewPlaylistId(), sharedids.NewUserId(uuid.New()))
 
-	if !errors.Is(err, library.ErrDBTransient) {
+	if !errors.Is(err, domain.ErrDBTransient) {
 		t.Fatalf("err = %v, want ErrDBTransient", err)
 	}
-	if n := strings.Count(err.Error(), library.ErrDBTransient.Error()); n != 1 {
+	if n := strings.Count(err.Error(), domain.ErrDBTransient.Error()); n != 1 {
 		t.Errorf("err %q names ErrDBTransient %d times, want once", err, n)
 	}
 }
@@ -152,40 +154,40 @@ type repoCall struct {
 	call func(ctx context.Context, pool *pgxpool.Pool) error
 }
 
-func unansweredCalls(t *testing.T, metrics library.DBCallMetrics) []repoCall {
+func unansweredCalls(t *testing.T, metrics ports.DBCallMetrics) []repoCall {
 	userId := sharedids.NewUserId(uuid.New())
 	track := newTestTrackForDB(t, userId)
-	playlist, err := library.NewPlaylist(userId, "stuck", time.Now(), sharedids.Real)
+	playlist, err := domain.NewPlaylist(userId, "stuck", time.Now(), sharedids.Real)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
 	return []repoCall{
 		{"track.Query/ListForUser", func(ctx context.Context, pool *pgxpool.Pool) error {
-			_, _, err := library.NewPostgresTrackRepository(pool, metrics).ListForUser(ctx, userId, 10, 0)
+			_, _, err := persistence.NewPostgresTrackRepository(pool, metrics).ListForUser(ctx, userId, 10, 0)
 			return err
 		}},
 		{"track.QueryRow/GetByID", func(ctx context.Context, pool *pgxpool.Pool) error {
-			_, err := library.NewPostgresTrackRepository(pool, metrics).GetByID(ctx, track.ID(), userId)
+			_, err := persistence.NewPostgresTrackRepository(pool, metrics).GetByID(ctx, track.ID(), userId)
 			return err
 		}},
 		{"track.Exec/Update", func(ctx context.Context, pool *pgxpool.Pool) error {
-			return library.NewPostgresTrackRepository(pool, metrics).Update(ctx, track, track.Version())
+			return persistence.NewPostgresTrackRepository(pool, metrics).Update(ctx, track, track.Version())
 		}},
 		{"track.Begin/Add", func(ctx context.Context, pool *pgxpool.Pool) error {
-			_, _, err := library.NewPostgresTrackRepository(pool, metrics).Add(ctx, track)
+			_, _, err := persistence.NewPostgresTrackRepository(pool, metrics).Add(ctx, track)
 			return err
 		}},
 		{"playlist.Exec/Create", func(ctx context.Context, pool *pgxpool.Pool) error {
-			return library.NewPostgresPlaylistRepository(pool, metrics).Create(ctx, playlist)
+			return persistence.NewPostgresPlaylistRepository(pool, metrics).Create(ctx, playlist)
 		}},
 		{"playlist.Begin/AddTrack", func(ctx context.Context, pool *pgxpool.Pool) error {
-			return library.NewPostgresPlaylistRepository(pool, metrics).AddTrack(ctx, userId, playlist.ID, track.ID())
+			return persistence.NewPostgresPlaylistRepository(pool, metrics).AddTrack(ctx, userId, playlist.ID, track.ID())
 		}},
 		{"featured.Begin/ReplaceFeaturedArtists", func(ctx context.Context, pool *pgxpool.Pool) error {
-			return library.NewPostgresCatalogTrackRepository(pool, metrics).ReplaceFeaturedArtists(ctx, track.ID(), userId, nil)
+			return persistence.NewPostgresCatalogTrackRepository(pool, metrics).ReplaceFeaturedArtists(ctx, track.ID(), userId, nil)
 		}},
 		{"lens.Query/ListFilteredForUser", func(ctx context.Context, pool *pgxpool.Pool) error {
-			_, _, err := library.NewPostgresCatalogTrackRepository(pool, metrics).ListFilteredForUser(ctx, userId, library.LibraryQuery{Limit: 10})
+			_, _, err := persistence.NewPostgresCatalogTrackRepository(pool, metrics).ListFilteredForUser(ctx, userId, domain.LibraryQuery{Limit: 10})
 			return err
 		}},
 	}
@@ -243,7 +245,7 @@ func assertCutAtTheDBCallTimeout(t *testing.T, err error, elapsed time.Duration)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
 	}
-	if !errors.Is(err, library.ErrDBTransient) {
+	if !errors.Is(err, domain.ErrDBTransient) {
 		t.Errorf("err = %v, want it named catalog.ErrDBTransient", err)
 	}
 	if elapsed < dbCallTimeout || elapsed > dbCallTimeout+dbCallTimeoutSlack {
@@ -451,7 +453,7 @@ func TestPostgresRepos_EveryMethodNamesARefusedConnectionTransient(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.call(context.Background(), pool)
 
-			if !errors.Is(err, library.ErrDBTransient) {
+			if !errors.Is(err, domain.ErrDBTransient) {
 				t.Fatalf("err = %v, want catalog.ErrDBTransient", err)
 			}
 		})
@@ -463,7 +465,7 @@ func TestPostgresRepos_ABackendTerminatedInsideATransactionIsTransient(t *testin
 	id, userId := librarytest.NewTrackId(), sharedids.NewUserId(uuid.New())
 	calls := []repoCall{
 		{"PostgresCatalogTrackRepository.ReplaceFeaturedArtists", func(ctx context.Context, p *pgxpool.Pool) error {
-			return library.NewPostgresCatalogTrackRepository(p, librarytest.DiscardDBCallMetrics()).ReplaceFeaturedArtists(ctx, id, userId, nil)
+			return persistence.NewPostgresCatalogTrackRepository(p, librarytest.DiscardDBCallMetrics()).ReplaceFeaturedArtists(ctx, id, userId, nil)
 		}},
 	}
 
@@ -471,7 +473,7 @@ func TestPostgresRepos_ABackendTerminatedInsideATransactionIsTransient(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.call(context.Background(), pool)
 
-			if !errors.Is(err, library.ErrDBTransient) {
+			if !errors.Is(err, domain.ErrDBTransient) {
 				t.Fatalf("err = %v, want catalog.ErrDBTransient", err)
 			}
 		})
@@ -500,14 +502,14 @@ func terminateAfterBegin(conn net.Conn) {
 
 type repoFixture struct {
 	userId   sharedids.UserId
-	track    *library.Track
-	playlist *library.Playlist
+	track    *domain.Track
+	playlist *domain.Playlist
 }
 
 func everyRepoMethod(t *testing.T) []repoCall {
 	t.Helper()
 	userId := sharedids.NewUserId(uuid.New())
-	playlist, err := library.NewPlaylist(userId, "refused", time.Now(), sharedids.Real)
+	playlist, err := domain.NewPlaylist(userId, "refused", time.Now(), sharedids.Real)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
@@ -517,8 +519,8 @@ func everyRepoMethod(t *testing.T) []repoCall {
 
 func trackRepoMethods(f repoFixture) []repoCall {
 	u, tr := f.userId, f.track
-	repo := func(p *pgxpool.Pool) *library.PostgresTrackRepository {
-		return library.NewPostgresTrackRepository(p, librarytest.DiscardDBCallMetrics())
+	repo := func(p *pgxpool.Pool) *persistence.PostgresTrackRepository {
+		return persistence.NewPostgresTrackRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	return []repoCall{
 		{"PostgresTrackRepository.Add", func(ctx context.Context, p *pgxpool.Pool) error {
@@ -546,7 +548,7 @@ func trackRepoMethods(f repoFixture) []repoCall {
 			return errOf(repo(p).GetByIdempotencyKey(ctx, u, "key"))
 		}},
 		{"PostgresTrackRepository.ListByIDs", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).ListByIDs(ctx, u, []library.TrackId{tr.ID()}))
+			return errOf(repo(p).ListByIDs(ctx, u, []domain.TrackId{tr.ID()}))
 		}},
 		{"PostgresTrackRepository.ListForUser", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf3(repo(p).ListForUser(ctx, u, 10, 0))
@@ -558,7 +560,7 @@ func trackRepoMethods(f repoFixture) []repoCall {
 			return errOf(repo(p).ListReadyAudioTracks(ctx))
 		}},
 		{"PostgresTrackRepository.RecordInPlaceVerdict", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).RecordInPlaceVerdict(ctx, tr.ID(), "ref", library.InPlaceVerdict{}))
+			return errOf(repo(p).RecordInPlaceVerdict(ctx, tr.ID(), "ref", ports.InPlaceVerdict{}))
 		}},
 		{"PostgresTrackRepository.UpdateFenced", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).UpdateFenced(ctx, tr, tr.Version(), 1)
@@ -577,13 +579,13 @@ func trackRepoMethods(f repoFixture) []repoCall {
 
 func catalogTrackRepoMethods(f repoFixture) []repoCall {
 	u, tr := f.userId, f.track
-	repo := func(p *pgxpool.Pool) *library.PostgresCatalogTrackRepository {
-		return library.NewPostgresCatalogTrackRepository(p, librarytest.DiscardDBCallMetrics())
+	repo := func(p *pgxpool.Pool) *persistence.PostgresCatalogTrackRepository {
+		return persistence.NewPostgresCatalogTrackRepository(p, librarytest.DiscardDBCallMetrics())
 	}
-	query := library.LibraryQuery{Limit: 10}
+	query := domain.LibraryQuery{Limit: 10}
 	return []repoCall{
 		{"PostgresCatalogTrackRepository.ListTracksFeaturing", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf(repo(p).ListTracksFeaturing(ctx, u, library.FeaturedArtist{Name: "Guest"}))
+			return errOf(repo(p).ListTracksFeaturing(ctx, u, domain.FeaturedArtist{Name: "Guest"}))
 		}},
 		{"PostgresCatalogTrackRepository.ReplaceFeaturedArtists", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).ReplaceFeaturedArtists(ctx, tr.ID(), u, nil)
@@ -602,9 +604,9 @@ func catalogTrackRepoMethods(f repoFixture) []repoCall {
 
 func playlistRepoMethods(f repoFixture) []repoCall {
 	u, pl, tr := f.userId, f.playlist, f.track
-	ids := []library.TrackId{tr.ID()}
-	repo := func(p *pgxpool.Pool) *library.PostgresPlaylistRepository {
-		return library.NewPostgresPlaylistRepository(p, librarytest.DiscardDBCallMetrics())
+	ids := []domain.TrackId{tr.ID()}
+	repo := func(p *pgxpool.Pool) *persistence.PostgresPlaylistRepository {
+		return persistence.NewPostgresPlaylistRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	return []repoCall{
 		{"PostgresPlaylistRepository.AddTrack", func(ctx context.Context, p *pgxpool.Pool) error {
@@ -650,7 +652,7 @@ func playlistRepoMethods(f repoFixture) []repoCall {
 			return errOf(repo(p).RemoveTracks(ctx, u, pl.ID, ids))
 		}},
 		{"PostgresPlaylistRepository.ReorderTracks", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).ReorderTracks(ctx, u, pl.ID, []library.PlaylistTrack{{TrackId: tr.ID()}})
+			return repo(p).ReorderTracks(ctx, u, pl.ID, []domain.PlaylistTrack{{TrackId: tr.ID()}})
 		}},
 		{"PostgresPlaylistRepository.Update", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).Update(ctx, pl)
@@ -660,8 +662,8 @@ func playlistRepoMethods(f repoFixture) []repoCall {
 
 func orphanedAudioRepoMethods(f repoFixture) []repoCall {
 	u, tr := f.userId, f.track
-	repo := func(p *pgxpool.Pool) *library.PostgresOrphanedAudioRepository {
-		return library.NewPostgresOrphanedAudioRepository(p, librarytest.DiscardDBCallMetrics())
+	repo := func(p *pgxpool.Pool) *persistence.PostgresOrphanedAudioRepository {
+		return persistence.NewPostgresOrphanedAudioRepository(p, librarytest.DiscardDBCallMetrics())
 	}
 	return []repoCall{
 		{"PostgresOrphanedAudioRepository.AudioUsage", func(ctx context.Context, p *pgxpool.Pool) error {
@@ -674,7 +676,7 @@ func orphanedAudioRepoMethods(f repoFixture) []repoCall {
 			return repo(p).MarkOrphanedAudioAttempt(ctx, "audio/ref", "delete failed")
 		}},
 		{"PostgresOrphanedAudioRepository.RecordOrphanedAudio", func(ctx context.Context, p *pgxpool.Pool) error {
-			return repo(p).RecordOrphanedAudio(ctx, library.OrphanedAudio{AudioRef: "audio/ref", UserId: u, TrackId: tr.ID()})
+			return repo(p).RecordOrphanedAudio(ctx, ports.OrphanedAudio{AudioRef: "audio/ref", UserId: u, TrackId: tr.ID()})
 		}},
 		{"PostgresOrphanedAudioRepository.ResolveOrphanedAudio", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).ResolveOrphanedAudio(ctx, "audio/ref")
@@ -688,10 +690,10 @@ func errOf3[A, B any](_ A, _ B, err error) error { return err }
 
 func TestPostgresRepos_TheRefusedConnectionTableCallsEveryRepositoryMethod(t *testing.T) {
 	want := slices.Concat(
-		methodNames(&library.PostgresTrackRepository{}, struct{}{}),
-		methodNames(&library.PostgresCatalogTrackRepository{}, &library.PostgresTrackRepository{}),
-		methodNames(&library.PostgresPlaylistRepository{}, struct{}{}),
-		methodNames(&library.PostgresOrphanedAudioRepository{}, struct{}{}),
+		methodNames(&persistence.PostgresTrackRepository{}, struct{}{}),
+		methodNames(&persistence.PostgresCatalogTrackRepository{}, &persistence.PostgresTrackRepository{}),
+		methodNames(&persistence.PostgresPlaylistRepository{}, struct{}{}),
+		methodNames(&persistence.PostgresOrphanedAudioRepository{}, struct{}{}),
 	)
 	var got []string
 	for _, tc := range everyRepoMethod(t) {
@@ -727,10 +729,10 @@ func setDiff(a, b []string) []string {
 
 func TestPostgresRepos_RefuseNilDBCallMetricsAtConstruction(t *testing.T) {
 	constructors := map[string]func(){
-		"track":    func() { library.NewPostgresTrackRepository(nil, nil) },
-		"catalog":  func() { library.NewPostgresCatalogTrackRepository(nil, nil) },
-		"playlist": func() { library.NewPostgresPlaylistRepository(nil, nil) },
-		"orphaned": func() { library.NewPostgresOrphanedAudioRepository(nil, nil) },
+		"track":    func() { persistence.NewPostgresTrackRepository(nil, nil) },
+		"catalog":  func() { persistence.NewPostgresCatalogTrackRepository(nil, nil) },
+		"playlist": func() { persistence.NewPostgresPlaylistRepository(nil, nil) },
+		"orphaned": func() { persistence.NewPostgresOrphanedAudioRepository(nil, nil) },
 	}
 	for name, construct := range constructors {
 		t.Run(name, func(t *testing.T) {

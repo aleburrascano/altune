@@ -57,7 +57,6 @@ linters:
         - '(^|/)[a-z]*test/'
     wrapcheck:
       extra-ignore-sigs:
-        - domain.WrapRepoError(
         - providerrequests.ArtworkFailure(
         - database.WrapUnreadable(
         - journey.StepFailed(
@@ -72,7 +71,7 @@ linters:
         - outbound.GetBytesCapped
       ignore-package-globs:
         - altune/go-api/internal/*/internal/core/ports
-        - altune/go-api/internal/*/internal
+        - altune/go-api/internal/*/internal/ports
       ignore-sig-regexps:
         - '\(context\.Context\)\.Err\(\)'
         - '\(io\.Reader\)\.Read\('
@@ -99,7 +98,6 @@ linters:
             - "**/internal/**/service/**"
             - "**/internal/**/domain/**"
             - "**/internal/**/ports/**"
-            - "**/internal/*/internal/*.go"
             - "**/internal/**/shell/**"
             - "!$test"
           deny:
@@ -123,8 +121,7 @@ linters:
           list-mode: lax
           files:
             - "**/internal/**/core/**"
-            - "**/internal/*/internal/*.go"
-            - "**/internal/playback/internal/domain/**"
+            - "**/internal/*/internal/domain/**"
             - "!$test"
           deny:
             - pkg: log/slog

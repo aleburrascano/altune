@@ -2,25 +2,23 @@ package handler
 
 import (
 	"altune/go-api/internal/library/internal/domain"
-	featuredservice "altune/go-api/internal/library/internal/service/featured"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type FeaturedArtistHandler struct {
-	backfillFeatured *featuredservice.FillFeaturedArtistsService
-	listFeaturing    *featuredservice.ListFeaturingService
+	backfillFeatured *service.FillFeaturedArtistsService
+	listFeaturing    *service.ListFeaturingService
 }
 
 func NewFeaturedArtistHandler(
-	backfillFeatured *featuredservice.FillFeaturedArtistsService,
-	listFeaturing *featuredservice.ListFeaturingService,
+	backfillFeatured *service.FillFeaturedArtistsService,
+	listFeaturing *service.ListFeaturingService,
 ) *FeaturedArtistHandler {
 	return &FeaturedArtistHandler{
 		backfillFeatured: backfillFeatured,
@@ -28,27 +26,22 @@ func NewFeaturedArtistHandler(
 	}
 }
 
-func (h *FeaturedArtistHandler) Routes(r chi.Router) {
-	r.Get("/featuring", h.handleListFeaturing)
-	r.Post("/featured-backfill", h.handleBackfillFeatured)
-}
-
 func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
 	userId := requestuser.UserID(r)
 	_, offset, err := pageBounds(r)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 	result, err := h.backfillFeatured.Execute(r.Context(), userId, offset)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, withBackfillProgress(err, result))
+		HandleError(w, r, withBackfillProgress(err, result))
 		return
 	}
-	httpserver.WriteJSON(w, http.StatusOK, result)
+	httpserver.WriteJSON(w, http.StatusOK, backfillResponse(result))
 }
 
-func withBackfillProgress(err error, result *featuredservice.BackfillFeaturedResult) error {
+func withBackfillProgress(err error, result *service.BackfillFeaturedResult) error {
 	if result == nil || result.Scanned == 0 {
 		return err
 	}
@@ -60,13 +53,13 @@ func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *ht
 	userId := requestuser.UserID(r)
 	fa, err := featuredArtistFromQuery(r.URL.Query())
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 
 	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 

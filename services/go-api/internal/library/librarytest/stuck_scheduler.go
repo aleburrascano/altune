@@ -1,6 +1,8 @@
 package librarytest
 
-import memory "altune/go-api/internal/library/internal/adapters/memory"
+import (
+	"altune/go-api/internal/library/internal/adapters/memory"
+)
 
 type StuckScheduler = memory.StuckScheduler
 
