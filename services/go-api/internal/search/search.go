@@ -357,7 +357,10 @@ func (m *Module) PublicRoutes(r chi.Router) {
 }
 
 func (m *Module) AttachOwnership(o handler.OwnershipStamper) error {
-	return m.handler.AttachOwnership(o)
+	if err := m.handler.AttachOwnership(o); err != nil {
+		return fmt.Errorf("attach ownership: %w", err)
+	}
+	return nil
 }
 
 func newHandlerServices(ctx context.Context, w wiring) (handler.DiscoveryServices, error) {
@@ -858,12 +861,12 @@ func (t *providerTable) addTrackers(apiKey, hubSheetID string, c providerClients
 }
 
 func newAlbumService(t *providerTable, breaker *service.CircuitBreaker) (*service.GetAlbumTracksService, error) {
-	deezer := t.named(rowDeezer)
-	featured, err := albumFeaturedEnrichment(deezer, breaker)
+	deezerRow := t.named(rowDeezer)
+	featured, err := albumFeaturedEnrichment(deezerRow, breaker)
 	if err != nil {
 		return nil, err
 	}
-	fallback, err := albumFallback(deezer, breaker)
+	fallback, err := albumFallback(deezerRow, breaker)
 	if err != nil {
 		return nil, err
 	}
@@ -874,22 +877,22 @@ func newAlbumService(t *providerTable, breaker *service.CircuitBreaker) (*servic
 	return r0, nil
 }
 
-func albumFeaturedEnrichment(deezer provider, breaker *service.CircuitBreaker) (service.FeaturedEnrichment, error) {
-	if deezer.trackFeatured == nil {
+func albumFeaturedEnrichment(row provider, breaker *service.CircuitBreaker) (service.FeaturedEnrichment, error) {
+	if row.trackFeatured == nil {
 		return service.NoFeaturedEnrichment{}, nil
 	}
-	r0, err := service.NewDeezerFeaturedEnrichment(deezer.trackFeatured, breaker)
+	r0, err := service.NewDeezerFeaturedEnrichment(row.trackFeatured, breaker)
 	if err != nil {
 		return r0, fmt.Errorf("new deezer featured enrichment: %w", err)
 	}
 	return r0, nil
 }
 
-func albumFallback(deezer provider, breaker *service.CircuitBreaker) (service.AlbumFallback, error) {
-	if deezer.albumFallback == nil {
+func albumFallback(row provider, breaker *service.CircuitBreaker) (service.AlbumFallback, error) {
+	if row.albumFallback == nil {
 		return service.NoAlbumFallback{}, nil
 	}
-	r0, err := service.NewSearchAlbumFallback(deezer.albumFallback, breaker)
+	r0, err := service.NewSearchAlbumFallback(row.albumFallback, breaker)
 	if err != nil {
 		return r0, fmt.Errorf("new search album fallback: %w", err)
 	}
@@ -913,11 +916,11 @@ func newArtistService(t *providerTable, s storeSet, breaker *service.CircuitBrea
 	if err != nil {
 		return nil, err
 	}
-	telemetry, err := service.NewDiscographyTelemetry(s.Events, bg, clock.Now)
+	discographyTelemetry, err := service.NewDiscographyTelemetry(s.Events, bg, clock.Now)
 	if err != nil {
 		return nil, fmt.Errorf("build the discography telemetry: %w", err)
 	}
-	r0, err := service.NewGetArtistContentService(t.artistProviders(), t.albumProviders(), identity, anchoring, telemetry, breaker)
+	r0, err := service.NewGetArtistContentService(t.artistProviders(), t.albumProviders(), identity, anchoring, discographyTelemetry, breaker)
 	if err != nil {
 		return r0, fmt.Errorf("new get artist content service: %w", err)
 	}
@@ -951,11 +954,11 @@ func newFeaturedArtists(t *providerTable) (*service.FeaturedArtistResolver, erro
 	if searcher := t.named(rowMusicBrainz).featuredSearch; searcher != nil {
 		mb = searcher
 	}
-	var deezer service.DeezerFeaturedLookup = service.NoDeezerFeatured{}
+	var deezerLookup service.DeezerFeaturedLookup = service.NoDeezerFeatured{}
 	if lookup := t.named(rowDeezer).trackFeatured; lookup != nil {
-		deezer = lookup
+		deezerLookup = lookup
 	}
-	r0, err := service.NewFeaturedArtistResolver(mb, deezer)
+	r0, err := service.NewFeaturedArtistResolver(mb, deezerLookup)
 	if err != nil {
 		return r0, fmt.Errorf("new featured artist resolver: %w", err)
 	}
@@ -976,12 +979,12 @@ func newEnrichment(t *providerTable, s storeSet, artwork ports.TaggingArtworkLoo
 }
 
 func newDetailEnrichers(t *providerTable, s storeSet) (handler.DetailEnrichers, error) {
-	deezer := t.named(rowDeezer)
-	deezerEnrichment, err := service.NewDeezerEnrichmentService(deezer.deezerDetails, cache.NewRedisDeezerEnrichmentCache(s.Redis, s.option()))
+	deezerRow := t.named(rowDeezer)
+	deezerEnrichment, err := service.NewDeezerEnrichmentService(deezerRow.deezerDetails, cache.NewRedisDeezerEnrichmentCache(s.Redis, s.option()))
 	if err != nil {
 		return handler.DetailEnrichers{}, fmt.Errorf("build the deezer enrichment service: %w", err)
 	}
-	lyrics, err := service.NewLyricsService(deezer.lyrics, cache.NewRedisDeezerLyricsCache(s.Redis, s.option()))
+	lyrics, err := service.NewLyricsService(deezerRow.lyrics, cache.NewRedisDeezerLyricsCache(s.Redis, s.option()))
 	if err != nil {
 		return handler.DetailEnrichers{}, fmt.Errorf("build the lyrics service: %w", err)
 	}
@@ -1189,9 +1192,9 @@ func newUnreleasedServices(ctx context.Context, d Deps, t *providerTable, s stor
 	if songs == nil && lists == nil {
 		return unreleasedServices{lookup: handler.NoUnreleased{}}, nil
 	}
-	var genius ports.GeniusSongCatalog = service.NoGenius{}
+	var geniusSongs ports.GeniusSongCatalog = service.NoGenius{}
 	if songs != nil {
-		genius = songs
+		geniusSongs = songs
 	}
 	var trackers ports.TrackerSongs = service.NoTrackers{}
 	if lists != nil {
@@ -1201,7 +1204,7 @@ func newUnreleasedServices(ctx context.Context, d Deps, t *providerTable, s stor
 	if err != nil {
 		return unreleasedServices{}, err
 	}
-	lookup, err := service.NewUnreleasedService(genius, artists, d.Unreleased.Tuning, service.Wiring{
+	lookup, err := service.NewUnreleasedService(geniusSongs, artists, d.Unreleased.Tuning, service.Wiring{
 		Trackers: trackers,
 		Storage:  storage,
 		Backend:  backend,
