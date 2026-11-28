@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
-	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -180,14 +180,19 @@ func TestFavoritesService_AddRejectsEmptyTitle(t *testing.T) {
 	}
 }
 
-func assertTypedError(t *testing.T, err error, wantKind apierror.Kind, wantCode string) {
+func assertInvalidFavorite(t *testing.T, err error) {
 	t.Helper()
-	var typed *apierror.CodedError
-	if !errors.As(err, &typed) {
-		t.Fatalf("err = %v, want a typed %s %s", err, wantKind, wantCode)
+	var invalid *domain.InvalidFavoriteError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want a domain.InvalidFavoriteError", err)
 	}
-	if typed.Code().Kind() != wantKind || typed.Code().String() != wantCode {
-		t.Fatalf("err = %s %s, want %s %s", typed.Code().Kind(), typed.Code(), wantKind, wantCode)
+}
+
+func assertFavoritesFull(t *testing.T, err error) {
+	t.Helper()
+	var full *domain.FavoritesFullError
+	if !errors.As(err, &full) || full.Limit != ports.MaxFavoritesPerUser {
+		t.Fatalf("err = %v, want a domain.FavoritesFullError at the per-user cap", err)
 	}
 }
 
@@ -196,7 +201,7 @@ func assertRejectedWithoutWriting(t *testing.T, fav domain.Favorite) {
 	repo := &memory.FakeFavoritesRepo{}
 	err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav)
 
-	assertTypedError(t, err, apierror.KindInvalid, "discovery.invalid_favorite")
+	assertInvalidFavorite(t, err)
 	if len(repo.Added) != 0 {
 		t.Errorf("repo.Add called %d times for a rejected favorite", len(repo.Added))
 	}
@@ -292,7 +297,7 @@ func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 	err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{},
 		domain.Favorite{Kind: search.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"})
 
-	assertTypedError(t, err, apierror.KindConflict, "discovery.favorites_full")
+	assertFavoritesFull(t, err)
 }
 
 func TestFavoritesLifter_RefusesAMissingRepository(t *testing.T) {

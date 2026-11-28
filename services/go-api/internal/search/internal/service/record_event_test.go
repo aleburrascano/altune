@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/ports"
 	"altune/go-api/internal/search/internal/service"
 	"altune/go-api/internal/search/searchtest"
-	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
@@ -119,8 +118,8 @@ func assertRejected400(t *testing.T, store *searchtest.FakeEventStore, err error
 	if err == nil {
 		t.Fatal("expected a validation error")
 	}
-	var coded *apierror.CodedError
-	if !errors.As(err, &coded) || coded.Code().Kind() != apierror.KindInvalid {
+	var invalid *domain.InvalidEventError
+	if !errors.As(err, &invalid) {
 		t.Errorf("error should be an invalid-input error, got %v", err)
 	}
 	if len(store.Recorded()) != 0 {
@@ -314,12 +313,12 @@ func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
 }
 
 func TestInvalidEventLookAlikeIsNotCoded(t *testing.T) {
-	var coded *apierror.CodedError
-	if errors.As(errors.New("discovery.invalid_event"), &coded) {
-		t.Error("a plain error whose text is the code must not match *apierror.CodedError")
+	var invalid *domain.InvalidEventError
+	if errors.As(errors.New("discovery.invalid_event"), &invalid) {
+		t.Error("a plain error whose text is the code must not match *domain.InvalidEventError")
 	}
-	if !errors.As(domain.NewInvalidEventError("x"), &coded) || coded.Code().String() != "discovery.invalid_event" {
-		t.Errorf("NewInvalidEventError should match *apierror.CodedError with code discovery.invalid_event, got %v", coded)
+	if !errors.As(domain.NewInvalidEventError("x"), &invalid) || invalid.Reason != "x" {
+		t.Errorf("NewInvalidEventError should match *domain.InvalidEventError carrying its reason, got %v", invalid)
 	}
 }
 
@@ -369,8 +368,8 @@ func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a validation error")
 	}
-	var coded *apierror.CodedError
-	if !errors.As(err, &coded) || coded.Code().Kind() != apierror.KindInvalid {
+	var invalid *domain.InvalidEventError
+	if !errors.As(err, &invalid) {
 		t.Fatalf("error = %v, want an invalid-input error", err)
 	}
 	if !strings.Contains(err.Error(), "not client-submittable") {
