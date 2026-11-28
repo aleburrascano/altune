@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/library/internal/ports"
 	"bytes"
 	"context"
 	"fmt"

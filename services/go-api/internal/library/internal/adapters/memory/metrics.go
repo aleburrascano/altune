@@ -1,6 +1,8 @@
 package memory
 
-import "altune/go-api/internal/library/internal/core/ports"
+import (
+	"altune/go-api/internal/library/internal/ports"
+)
 
 type Metrics struct {
 	PresignFailures                int

@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	"altune/go-api/internal/shared/database"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
@@ -330,7 +330,7 @@ func checkFence(ctx context.Context, q rowQuerier, track *domain.Track, fence in
 	}
 	if current > 0 && current != fence {
 		return fmt.Errorf("%w: track %s held by attempt %d, caller holds %d",
-			ports.ErrTrackFenceSuperseded, track.ID().String(), current, fence)
+			domain.ErrTrackFenceSuperseded, track.ID().String(), current, fence)
 	}
 	return nil
 }
@@ -367,7 +367,7 @@ func classifyFailedCAS(ctx context.Context, q rowQuerier, track *domain.Track, e
 		return classifyDBError(err)
 	}
 	return fmt.Errorf("%w: track %s expected version %d, found %d",
-		ports.ErrTrackVersionConflict, track.ID().String(), expectedVersion, currentVersion)
+		domain.ErrTrackVersionConflict, track.ID().String(), expectedVersion, currentVersion)
 }
 
 const gradeRankSQL = `array_position(ARRAY['F', 'D', 'C', 'B', 'A', 'A_user'], %s)`

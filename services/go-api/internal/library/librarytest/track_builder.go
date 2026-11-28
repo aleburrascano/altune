@@ -1,6 +1,8 @@
 package librarytest
 
-import "altune/go-api/internal/library/internal/domain"
+import (
+	"altune/go-api/internal/library/internal/domain"
+)
 
 type TrackSnapshot = domain.TrackSnapshot
 

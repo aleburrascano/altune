@@ -1,7 +1,7 @@
 package domain_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/domain"
 	"strings"
 	"testing"
 
@@ -57,7 +57,7 @@ func TestComputeDedupKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := library.TrackDedupKey(tt.title, tt.artist, tt.album)
+			got := domain.TrackDedupKey(tt.title, tt.artist, tt.album)
 			if got != tt.want {
 				t.Errorf("TrackDedupKey(%q, %q, %q) = %q, want %q",
 					tt.title, tt.artist, tt.album, got, tt.want)
@@ -68,10 +68,10 @@ func TestComputeDedupKey(t *testing.T) {
 
 func TestTrackDedupKey_AnEmptyAlbumKeysAsTheTitleLikeANewTrack(t *testing.T) {
 	t.Parallel()
-	if got := library.TrackDedupKey("Song", "Artist", ""); got != "song|artist|song" {
+	if got := domain.TrackDedupKey("Song", "Artist", ""); got != "song|artist|song" {
 		t.Errorf("empty album: %q", got)
 	}
-	if got := library.TrackDedupKey("Song", "Artist", "  LP "); got != "song|artist|lp" {
+	if got := domain.TrackDedupKey("Song", "Artist", "  LP "); got != "song|artist|lp" {
 		t.Errorf("album LP: %q", got)
 	}
 }
@@ -83,7 +83,7 @@ func asciiWord() *rapid.Generator[string] {
 func TestTrackDedupKey_AlwaysHasThreeParts(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
-		key := library.TrackDedupKey(rapid.String().Draw(t, "title"), rapid.String().Draw(t, "artist"), rapid.String().Draw(t, "album"))
+		key := domain.TrackDedupKey(rapid.String().Draw(t, "title"), rapid.String().Draw(t, "artist"), rapid.String().Draw(t, "album"))
 
 		if got := strings.Count(key, "|"); got != 2 {
 			t.Fatalf("key %q has %d separators, want 2", key, got)
@@ -96,8 +96,8 @@ func TestTrackDedupKey_IgnoresCaseAndSurroundingSpace(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		title, artist, album := asciiWord().Draw(t, "title"), asciiWord().Draw(t, "artist"), asciiWord().Draw(t, "album")
 
-		plain := library.TrackDedupKey(title, artist, album)
-		shouted := library.TrackDedupKey("  "+strings.ToUpper(title)+" ", strings.ToLower(artist), " "+strings.ToUpper(album))
+		plain := domain.TrackDedupKey(title, artist, album)
+		shouted := domain.TrackDedupKey("  "+strings.ToUpper(title)+" ", strings.ToLower(artist), " "+strings.ToUpper(album))
 
 		if plain != shouted {
 			t.Fatalf("keys differ: %q vs %q", plain, shouted)
@@ -108,13 +108,13 @@ func TestTrackDedupKey_IgnoresCaseAndSurroundingSpace(t *testing.T) {
 func TestTrackDedupKey_NormalizingTwiceChangesNothing(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
-		key := library.TrackDedupKey(rapid.String().Draw(t, "title"), rapid.String().Draw(t, "artist"), rapid.String().Draw(t, "album"))
+		key := domain.TrackDedupKey(rapid.String().Draw(t, "title"), rapid.String().Draw(t, "artist"), rapid.String().Draw(t, "album"))
 		parts := strings.Split(key, "|")
 		if parts[0] == "" || parts[1] == "" || parts[2] == "" {
 			t.Skip("an empty part is refilled from the title")
 		}
 
-		if again := library.TrackDedupKey(parts[0], parts[1], parts[2]); again != key {
+		if again := domain.TrackDedupKey(parts[0], parts[1], parts[2]); again != key {
 			t.Fatalf("key %q renormalised to %q", key, again)
 		}
 	})

@@ -1,5 +1,7 @@
 package librarytest
 
-import contract "altune/go-api/internal/library/internal/adapters/contracttest"
+import (
+	"altune/go-api/internal/library/internal/contracttest"
+)
 
-var FeaturedResolverContract = contract.FeaturedResolverContract
+var FeaturedResolverContract = contracttest.FeaturedResolverContract

@@ -25,11 +25,7 @@ type catalogWiring struct {
 	audioStore        library.AudioStore
 	orphanedAudio     *library.PostgresOrphanedAudioRepository
 	setTrackNumberSvc *library.SetTrackNumberService
-	trackHandler      *library.TrackHandler
-	libraryHandler    *library.LibraryHandler
-	playlistHandler   *library.PlaylistHandler
-	streamHandler     *library.StreamHandler
-	audioURLHandler   *library.AudioURLHandler
+	libraryRoutes     library.Routes
 	retryH            *download.RetryHandler
 	reacquireH        *download.ReacquireHandler
 	acquisitionOn     bool
@@ -171,11 +167,7 @@ func (a *application) wireCatalogHandlers(audio audioSourcesStaging, module *lib
 		audioStore:        audio.audioStore,
 		orphanedAudio:     module.OrphanedAudio,
 		setTrackNumberSvc: module.SetTrackNumber,
-		trackHandler:      module.TrackHandler,
-		libraryHandler:    module.LibraryHandler,
-		playlistHandler:   module.PlaylistHandler,
-		streamHandler:     module.StreamHandler,
-		audioURLHandler:   module.AudioURLHandler,
+		libraryRoutes:     module.Routes(),
 		retryH:            retryH,
 		reacquireH:        reacquireH,
 		acquisitionOn:     audio.acquisitionOn,

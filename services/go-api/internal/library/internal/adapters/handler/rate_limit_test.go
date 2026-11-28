@@ -1,7 +1,11 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/handler"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
 	sharedids "altune/go-api/internal/shared/ids"
@@ -32,17 +36,17 @@ const (
 )
 
 type countingAudioStore struct {
-	*library.InMemoryAudioStore
+	*memory.AudioStore
 	mu       sync.Mutex
 	streams  int
 	presigns int
 }
 
-func (s *countingAudioStore) Stream(ctx context.Context, ref string) (library.AudioStream, int64, error) {
+func (s *countingAudioStore) Stream(ctx context.Context, ref string) (ports.AudioStream, int64, error) {
 	s.mu.Lock()
 	s.streams++
 	s.mu.Unlock()
-	return s.InMemoryAudioStore.Stream(ctx, ref)
+	return s.AudioStore.Stream(ctx, ref)
 }
 
 func (s *countingAudioStore) SignsLinks() bool { return true }
@@ -59,32 +63,32 @@ const audioTestBytes = 64 * 1024
 type audioRig struct {
 	router chi.Router
 	store  *countingAudioStore
-	repo   *library.InMemoryTrackRepo
+	repo   *memory.TrackRepo
 }
 
 func TestHandlers_RefuseANilClock(t *testing.T) {
 	constructors := map[string]func() error{
 		"NewStreamHandler": func() error {
-			_, err := library.NewStreamHandler(nil, nil)
+			_, err := handler.NewStreamHandler(nil, nil)
 			return err
 		},
 		"NewAudioURLHandler": func() error {
-			_, err := library.NewAudioURLHandler(nil, nil)
+			_, err := handler.NewAudioURLHandler(nil, nil)
 			return err
 		},
 		"NewPlaylistHandler": func() error {
-			_, err := library.NewPlaylistHandler(nil, nil, nil)
+			_, err := handler.NewPlaylistHandler(nil, nil, nil)
 			return err
 		},
 		"NewTrackHandler": func() error {
-			_, err := library.NewTrackHandler(nil, nil, nil, nil, nil, nil, nil)
+			_, err := handler.NewTrackHandler(nil, nil, nil, nil, nil, nil, nil)
 			return err
 		},
 	}
 	for name, construct := range constructors {
 		t.Run(name, func(t *testing.T) {
 			err := construct()
-			if !errors.Is(err, library.ErrHandlerClockRequired) || !strings.Contains(err.Error(), name) {
+			if !errors.Is(err, domain.ErrHandlerClockRequired) || !strings.Contains(err.Error(), name) {
 				t.Fatalf("constructing with a nil clock = %v, want ErrHandlerClockRequired naming %s", err, name)
 			}
 		})
@@ -99,18 +103,18 @@ func firstClock(clocks []func() time.Time) func() time.Time {
 }
 
 func newAudioRig(now func() time.Time) *audioRig {
-	repo := library.NewInMemoryTrackRepo()
-	store := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
+	repo := memory.NewTrackRepo()
+	store := &countingAudioStore{AudioStore: memory.NewAudioStore()}
 	r := chi.NewRouter()
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), &librarytest.Metrics{}, library.AlwaysEnabled, clock.Now), now).Routes(r)
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, now, &librarytest.Metrics{}), now).Routes(r)
+	handler.MustNewStreamHandler(service.NewStreamTrackService(repo, store, ports.NoopAcquisitionScheduler(), &librarytest.Metrics{}, service.AlwaysEnabled, clock.Now), now).Routes(r)
+	handler.MustNewAudioURLHandler(service.MustNewAudioURLService(repo, store, now, &librarytest.Metrics{}), now).Routes(r)
 	return &audioRig{router: r, store: store, repo: repo}
 }
 
-func (rig *audioRig) seedTracks(t *testing.T, user sharedids.UserId, n int) []*library.Track {
+func (rig *audioRig) seedTracks(t *testing.T, user sharedids.UserId, n int) []*domain.Track {
 	t.Helper()
-	tracks := make([]*library.Track, 0, n)
+	tracks := make([]*domain.Track, 0, n)
 	for i := range n {
 		ref := fmt.Sprintf("audio/%s-%d.opus", user.String(), i)
 		tracks = append(tracks, librarytest.SeedReadyTrack(t, rig.repo, user, fmt.Sprintf("Track %d", i), "Artist", "Album", ref))
@@ -119,7 +123,7 @@ func (rig *audioRig) seedTracks(t *testing.T, user sharedids.UserId, n int) []*l
 	return tracks
 }
 
-func (rig *audioRig) stream(user sharedids.UserId, track *library.Track, rangeHdr string) *httptest.ResponseRecorder {
+func (rig *audioRig) stream(user sharedids.UserId, track *domain.Track, rangeHdr string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID().UUID().String()+"/audio", nil)
 	if rangeHdr != "" {
 		req.Header.Set("Range", rangeHdr)
@@ -127,7 +131,7 @@ func (rig *audioRig) stream(user sharedids.UserId, track *library.Track, rangeHd
 	return sendAs(rig.router, req, user)
 }
 
-func (rig *audioRig) resolve(user sharedids.UserId, tracks ...*library.Track) *httptest.ResponseRecorder {
+func (rig *audioRig) resolve(user sharedids.UserId, tracks ...*domain.Track) *httptest.ResponseRecorder {
 	ids := make([]string, 0, len(tracks))
 	for _, t := range tracks {
 		ids = append(ids, `"`+t.ID().UUID().String()+`"`)
@@ -168,13 +172,13 @@ func TestAudioRateLimit_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	user := sharedids.NewUserId(uuid.New())
 	tracks := rig.seedTracks(t, user, 200)
 
-	mustResolve := func(what string, batch ...*library.Track) {
+	mustResolve := func(what string, batch ...*domain.Track) {
 		t.Helper()
 		if rec := rig.resolve(user, batch...); rec.Code != http.StatusOK {
 			t.Fatalf("%s throttled: %d %q", what, rec.Code, rec.Body.String())
 		}
 	}
-	mustStream := func(what string, track *library.Track, rangeHdr string) {
+	mustStream := func(what string, track *domain.Track, rangeHdr string) {
 		t.Helper()
 		rec := rig.stream(user, track, rangeHdr)
 		if rec.Code != http.StatusOK && rec.Code != http.StatusPartialContent {

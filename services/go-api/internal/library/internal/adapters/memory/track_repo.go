@@ -1,8 +1,8 @@
 package memory
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"fmt"
@@ -286,7 +286,7 @@ func (r *TrackRepo) Update(_ context.Context, track *domain.Track, expectedVersi
 	}
 	if existing.Version() != expectedVersion {
 		return fmt.Errorf("%w: track %s expected version %d, found %d",
-			ports.ErrTrackVersionConflict, track.ID().String(), expectedVersion, existing.Version())
+			domain.ErrTrackVersionConflict, track.ID().String(), expectedVersion, existing.Version())
 	}
 	track.RecordVersion(expectedVersion + 1)
 	r.Tracks[track.ID().String()] = track

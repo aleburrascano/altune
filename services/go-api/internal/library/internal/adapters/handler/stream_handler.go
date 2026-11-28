@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
-	audioservice "altune/go-api/internal/library/internal/service/audio"
+	"altune/go-api/internal/library/internal/ports"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
@@ -15,24 +15,20 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 const audioWriteIdleTimeout = 30 * time.Second
 
 type StreamHandler struct {
-	svc              *audioservice.StreamTrackService
+	svc              *service.StreamTrackService
 	writeIdleTimeout time.Duration
 	now              clock.Func
 	limiter          rateLimitMiddleware
 }
 
-var ErrClockRequired = errors.New("handler: the handler requires a clock")
-
-func NewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) (*StreamHandler, error) {
+func NewStreamHandler(svc *service.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) (*StreamHandler, error) {
 	if now == nil {
-		return nil, fmt.Errorf("NewStreamHandler: %w", ErrClockRequired)
+		return nil, fmt.Errorf("NewStreamHandler: %w", domain.ErrHandlerClockRequired)
 	}
 	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, now: now}
 	for _, opt := range opts {
@@ -42,7 +38,7 @@ func NewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts
 	return h, nil
 }
 
-func MustNewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) *StreamHandler {
+func MustNewStreamHandler(svc *service.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) *StreamHandler {
 	h, err := NewStreamHandler(svc, now, opts...)
 	if err != nil {
 		panic(err)
@@ -58,19 +54,6 @@ func WithStreamWriteIdleTimeout(idle time.Duration) func(*StreamHandler) {
 	}
 }
 
-func (h *StreamHandler) Routes(r chi.Router) {
-	h.StreamRoute(r)
-	h.RecoverRoute(r)
-}
-
-func (h *StreamHandler) StreamRoute(r chi.Router) {
-	r.With(h.limiter).Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
-}
-
-func (h *StreamHandler) RecoverRoute(r chi.Router) {
-	r.With(h.limiter).Post("/tracks/{trackId}/audio/recover", h.HandleRecover)
-}
-
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	start := h.now()
 	w = httpserver.ExtendWriteDeadlineOnWrite(h.now, w, h.writeIdleTimeout)
@@ -83,7 +66,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 
 	out, err := h.svc.Execute(r.Context(), userId, trackId)
 	if err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 	defer func() { _ = out.Reader.Close() }()
@@ -172,7 +155,7 @@ func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.RecoverIfMissing(r.Context(), userId, trackId); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		HandleError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)

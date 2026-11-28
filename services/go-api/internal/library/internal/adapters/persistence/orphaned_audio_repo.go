@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -137,7 +137,7 @@ func orphanQueueErr(op string, err error) error {
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == undefinedTableCode {
-		return fmt.Errorf("%s: %w: %w", op, ports.ErrOrphanedAudioQueueUnavailable, err)
+		return fmt.Errorf("%s: %w: %w", op, domain.ErrOrphanedAudioQueueUnavailable, err)
 	}
 	return fmt.Errorf("%s: %w", op, classifyDBError(err))
 }

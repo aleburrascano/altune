@@ -1,8 +1,8 @@
 package memory
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -218,7 +218,7 @@ func (r *PlaylistRepo) Update(_ context.Context, playlist *domain.Playlist) erro
 func (r *PlaylistRepo) ownedBy(playlistId domain.PlaylistId, userId sharedids.UserId) (*domain.Playlist, error) {
 	p, ok := r.Playlists[playlistId.String()]
 	if !ok || p == nil || p.UserId != userId {
-		return nil, ports.ErrPlaylistNotOwned
+		return nil, domain.ErrPlaylistNotOwned
 	}
 	return p, nil
 }
@@ -320,7 +320,7 @@ func (r *PlaylistRepo) ReorderTracks(_ context.Context, userId sharedids.UserId,
 		return err
 	}
 	if !coversExactly(tracks, p.Tracks) {
-		return ports.ErrPlaylistChangedDuringReorder
+		return domain.ErrPlaylistChangedDuringReorder
 	}
 	p.Tracks = append([]domain.PlaylistTrack(nil), tracks...)
 	return nil

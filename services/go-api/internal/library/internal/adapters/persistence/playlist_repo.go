@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/ports"
 	"altune/go-api/internal/shared/database"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
@@ -283,7 +283,7 @@ func (r *PostgresPlaylistRepository) Update(ctx context.Context, playlist *domai
 		return classifyDBError(err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ports.ErrPlaylistNotOwned
+		return domain.ErrPlaylistNotOwned
 	}
 	return nil
 }
@@ -312,7 +312,7 @@ func lockOwnedPlaylist(ctx context.Context, tx pgx.Tx, playlistId domain.Playlis
 		playlistId.UUID(), userId.UUID(),
 	).Scan(&one)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.ErrPlaylistNotOwned
+		return domain.ErrPlaylistNotOwned
 	}
 	if err != nil {
 		return fmt.Errorf("lock playlist %s: %w", playlistId.UUID(), err)
@@ -403,7 +403,7 @@ const foreignKeyViolation = "23503"
 func missingTrackError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
-		return fmt.Errorf("%w: %w", ports.ErrTrackMissing, err)
+		return fmt.Errorf("%w: %w", domain.ErrTrackMissing, err)
 	}
 	return err
 }
@@ -594,11 +594,11 @@ func requirePlanCoversMembership(ctx context.Context, tx pgx.Tx, playlistId doma
 		return err
 	}
 	if len(planned) != len(members) {
-		return ports.ErrPlaylistChangedDuringReorder
+		return domain.ErrPlaylistChangedDuringReorder
 	}
 	for _, id := range planned {
 		if !members[id] {
-			return ports.ErrPlaylistChangedDuringReorder
+			return domain.ErrPlaylistChangedDuringReorder
 		}
 	}
 	return nil

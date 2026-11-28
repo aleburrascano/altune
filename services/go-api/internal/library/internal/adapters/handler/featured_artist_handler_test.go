@@ -1,7 +1,9 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -22,7 +24,7 @@ type backfillResponse struct {
 	NextOffset int  `json:"next_offset"`
 }
 
-func seedTracks(t *testing.T, repo *library.InMemoryTrackRepo, titles ...string) {
+func seedTracks(t *testing.T, repo *memory.TrackRepo, titles ...string) {
 	t.Helper()
 	for _, title := range titles {
 		librarytest.SeedTrack(t, repo, librarytest.UserId(), title, "Artist", "Album")
@@ -30,7 +32,7 @@ func seedTracks(t *testing.T, repo *library.InMemoryTrackRepo, titles ...string)
 }
 
 func TestHandleBackfillFeatured_BackToBackIsThrottled(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
+	repo := memory.NewTrackRepo()
 	seedTracks(t, repo, "Song")
 	router := trackRoutes(repo)
 
@@ -43,7 +45,7 @@ func TestHandleBackfillFeatured_BackToBackIsThrottled(t *testing.T) {
 }
 
 func TestHandleBackfillFeatured_ResumesFromTheOffsetQuery(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
+	repo := memory.NewTrackRepo()
 	seedTracks(t, repo, "One", "Two", "Three")
 	router := trackRoutes(repo)
 
@@ -61,7 +63,7 @@ func TestHandleBackfillFeatured_ResumesFromTheOffsetQuery(t *testing.T) {
 }
 
 func TestHandleBackfillFeatured_RejectsANegativeOffset(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
+	repo := memory.NewTrackRepo()
 	seedTracks(t, repo, "Song")
 	router := trackRoutes(repo)
 
@@ -73,7 +75,7 @@ func TestHandleBackfillFeatured_RejectsANegativeOffset(t *testing.T) {
 }
 
 func TestHandleBackfillFeatured_RejectsANonNumericOffset(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
+	repo := memory.NewTrackRepo()
 	seedTracks(t, repo, "Song")
 	router := trackRoutes(repo)
 
@@ -84,25 +86,25 @@ func TestHandleBackfillFeatured_RejectsANonNumericOffset(t *testing.T) {
 }
 
 type listFailsAfterFirstPage struct {
-	*library.InMemoryTrackRepo
+	*memory.TrackRepo
 	served bool
 }
 
-func (r *listFailsAfterFirstPage) ListForUser(ctx context.Context, userId ids.UserId, limit, offset int) ([]*library.Track, int, error) {
+func (r *listFailsAfterFirstPage) ListForUser(ctx context.Context, userId ids.UserId, limit, offset int) ([]*domain.Track, int, error) {
 	if r.served {
 		return nil, 0, errors.New("track store unreachable")
 	}
 	r.served = true
-	tracks, _, err := r.InMemoryTrackRepo.ListForUser(ctx, userId, limit, offset)
+	tracks, _, err := r.TrackRepo.ListForUser(ctx, userId, limit, offset)
 	return tracks, len(tracks) + 1, err
 }
 
 func TestHandleBackfillFeatured_LogsTheFailedRunsProgressOnceAtError(t *testing.T) {
 	ring := logging.CaptureRing(t, "info")
 
-	repo := &listFailsAfterFirstPage{InMemoryTrackRepo: library.NewInMemoryTrackRepo()}
-	seedTracks(t, repo.InMemoryTrackRepo, "Song")
-	router := trackRoutesWith(repo.InMemoryTrackRepo, trackDeps{backfill: library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now)})
+	repo := &listFailsAfterFirstPage{TrackRepo: memory.NewTrackRepo()}
+	seedTracks(t, repo.TrackRepo, "Song")
+	router := trackRoutesWith(repo.TrackRepo, trackDeps{backfill: service.MustNewBackfillFeaturedService(repo, repo, memory.FeaturedResolver{}, time.Now)})
 
 	rec := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 
@@ -125,7 +127,7 @@ func TestHandleBackfillFeatured_LogsTheFailedRunsProgressOnceAtError(t *testing.
 }
 
 func TestHandleListFeaturing_RejectsAnUnreadableDeezerID(t *testing.T) {
-	router := trackRoutes(library.NewInMemoryTrackRepo())
+	router := trackRoutes(memory.NewTrackRepo())
 
 	for _, query := range []string{"deezer_id=abc", "deezer_id=0", "deezer_id=-5", "name=SZA&deezer_id=abc", "deezer_id=99999999999999999999"} {
 		t.Run(query, func(t *testing.T) {
@@ -138,7 +140,7 @@ func TestHandleListFeaturing_RejectsAnUnreadableDeezerID(t *testing.T) {
 }
 
 func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
-	router := trackRoutes(library.NewInMemoryTrackRepo())
+	router := trackRoutes(memory.NewTrackRepo())
 
 	rec := request(t, router, http.MethodGet, "/tracks/featuring", nil)
 
@@ -147,10 +149,10 @@ func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
 }
 
 func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
+	repo := memory.NewTrackRepo()
 	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Feature", "Artist", "Album")
 	librarytest.AmendTrack(track, func(s *librarytest.TrackSnapshot) {
-		s.FeaturedArtists = []library.FeaturedArtist{library.NewFeaturedArtistIdentityOnly("SZA", "", 42)}
+		s.FeaturedArtists = []domain.FeaturedArtist{domain.NewFeaturedArtistIdentityOnly("SZA", "", 42)}
 	})
 	router := trackRoutes(repo)
 
@@ -170,7 +172,7 @@ type stallsAfterFirstResolver struct {
 	calls int
 }
 
-func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]library.FeaturedArtist, error) {
+func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]domain.FeaturedArtist, error) {
 	r.calls++
 	if r.calls > 1 {
 		<-ctx.Done()
@@ -179,9 +181,9 @@ func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]
 }
 
 func TestHandleBackfillFeatured_AnswersWithinTheBudgetAndResumesWithoutCooldown(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
+	repo := memory.NewTrackRepo()
 	seedTracks(t, repo, "One", "Two", "Three")
-	backfill := library.MustNewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, time.Now, library.WithBackfillTimeBudget(50*time.Millisecond))
+	backfill := service.MustNewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, time.Now, service.WithBackfillTimeBudget(50*time.Millisecond))
 	router := trackRoutesWith(repo, trackDeps{backfill: backfill})
 
 	start := time.Now()

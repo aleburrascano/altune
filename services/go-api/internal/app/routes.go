@@ -38,17 +38,11 @@ func (a *application) mountRoutes(
 			r.Group(func(r chi.Router) {
 				r.Use(requireAuth)
 
-				r.Route("/tracks", func(r chi.Router) {
-					r.Mount("/", cat.trackHandler.Routes())
-				})
-				cat.streamHandler.RecoverRoute(r)
-				cat.audioURLHandler.Routes(r)
+				cat.libraryRoutes.Bounded(r)
 				if cat.acquisitionOn {
 					r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
 					r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
 				}
-				r.Mount("/library", cat.libraryHandler.Routes())
-				r.Mount("/playlists", cat.playlistHandler.Routes())
 				r.Mount("/playback", playbackRoutes)
 				r.Mount("/discovery", discoveryH.Routes())
 				r.Mount("/telemetry", clientEventRoutes)
@@ -57,7 +51,7 @@ func (a *application) mountRoutes(
 		LongLived: func(r chi.Router) {
 			r.Use(requireAuth)
 
-			cat.streamHandler.StreamRoute(r)
+			cat.libraryRoutes.LongLived(r)
 			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		},
 	})

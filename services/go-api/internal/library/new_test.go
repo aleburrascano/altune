@@ -2,13 +2,26 @@ package library_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
+	"errors"
+	"net/http"
 	"testing"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type noLinks struct{}
+
+func (noLinks) SignsLinks() bool { return false }
+
+func (noLinks) PresignGet(context.Context, string, time.Duration) (string, error) {
+	return "", errors.New("no links")
+}
 
 func completeDeps(t *testing.T) library.Deps {
 	t.Helper()
@@ -24,8 +37,8 @@ func completeDeps(t *testing.T) library.Deps {
 		OrphanedAudio:  library.NewPostgresOrphanedAudioRepository(pool, metrics),
 		Events:         events.NoopPublisher(),
 		Scheduler:      library.NoopAcquisitionScheduler(),
-		AudioLinks:     library.NoAudioLinks{},
-		AudioMetrics:   &library.InMemoryAudioStoreMetrics{},
+		AudioLinks:     noLinks{},
+		AudioMetrics:   &librarytest.Metrics{},
 		StreamRecovery: func() bool { return false },
 	}
 }
@@ -39,18 +52,50 @@ func TestNewBuildsEveryHandlerFromCompleteDeps(t *testing.T) {
 	}
 
 	built := map[string]bool{
-		"track handler":     module.TrackHandler != nil,
-		"library handler":   module.LibraryHandler != nil,
-		"playlist handler":  module.PlaylistHandler != nil,
-		"stream handler":    module.StreamHandler != nil,
-		"audio url handler": module.AudioURLHandler != nil,
-		"set track number":  module.SetTrackNumber != nil,
-		"orphaned audio":    module.OrphanedAudio != nil,
+		"set track number": module.SetTrackNumber != nil,
+		"orphaned audio":   module.OrphanedAudio != nil,
 	}
 	for name, ok := range built {
 		if !ok {
 			t.Errorf("%s was not built", name)
 		}
+	}
+}
+
+func TestRoutesMountEveryLibraryRoute(t *testing.T) {
+	t.Parallel()
+
+	module, err := library.New(completeDeps(t))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	bounded, longLived := chi.NewRouter(), chi.NewRouter()
+	module.Routes().Bounded(bounded)
+	module.Routes().LongLived(longLived)
+
+	mounted := func(r chi.Router, method, path string) bool {
+		return r.Match(chi.NewRouteContext(), method, path)
+	}
+	for _, want := range []struct{ method, path string }{
+		{http.MethodGet, "/tracks/"},
+		{http.MethodPost, "/tracks/"},
+		{http.MethodGet, "/tracks/abc/status"},
+		{http.MethodPost, "/tracks/abc/audio/recover"},
+		{http.MethodPost, "/audio-urls"},
+		{http.MethodGet, "/library/albums"},
+		{http.MethodGet, "/library/artists"},
+		{http.MethodGet, "/playlists/"},
+		{http.MethodPost, "/playlists/abc/tracks/batch"},
+	} {
+		if !mounted(bounded, want.method, want.path) {
+			t.Errorf("%s %s is not mounted in the bounded group", want.method, want.path)
+		}
+	}
+	if !mounted(longLived, http.MethodGet, "/tracks/abc/audio") {
+		t.Error("GET /tracks/{trackId}/audio is not mounted in the long-lived group")
+	}
+	if mounted(bounded, http.MethodGet, "/tracks/abc/audio") {
+		t.Error("the audio stream is mounted in the bounded group, where the request timeout would cut it off")
 	}
 }
 

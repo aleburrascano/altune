@@ -1,7 +1,12 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/internal/adapters/handler"
+	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/adapters/persistence"
+	"altune/go-api/internal/library/internal/adapters/storage"
+	"altune/go-api/internal/library/internal/ports"
+	"altune/go-api/internal/library/internal/service"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
@@ -24,17 +29,17 @@ type resolveRequest struct {
 	TrackIDs []string `json:"track_ids"`
 }
 
-func audioURLRoutes(store library.AudioLinkSigner, opts ...func(*library.AudioURLHandler)) (*library.InMemoryTrackRepo, chi.Router) {
-	repo := library.NewInMemoryTrackRepo()
+func audioURLRoutes(store ports.AudioLinkSigner, opts ...func(*handler.AudioURLHandler)) (*memory.TrackRepo, chi.Router) {
+	repo := memory.NewTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, time.Now, &librarytest.Metrics{}), time.Now, opts...).Routes(router)
+	handler.MustNewAudioURLHandler(service.MustNewAudioURLService(repo, store, time.Now, &librarytest.Metrics{}), time.Now, opts...).Routes(router)
 	return repo, router
 }
 
-func resolveOneReadyTrack(t *testing.T, opts ...func(*library.AudioURLHandler)) map[string]any {
+func resolveOneReadyTrack(t *testing.T, opts ...func(*handler.AudioURLHandler)) map[string]any {
 	t.Helper()
-	repo, router := audioURLRoutes(library.NoAudioLinks{}, opts...)
+	repo, router := audioURLRoutes(storage.NoAudioLinks{}, opts...)
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID().UUID().String()}}))
@@ -51,10 +56,10 @@ func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
 	if got := resolveOneReadyTrack(t)["prefetch_enabled"]; got != true {
 		t.Errorf("default prefetch_enabled = %v, want true (preserve current behavior)", got)
 	}
-	if got := resolveOneReadyTrack(t, library.WithPrefetchEnabled(true))["prefetch_enabled"]; got != true {
+	if got := resolveOneReadyTrack(t, handler.WithPrefetchEnabled(true))["prefetch_enabled"]; got != true {
 		t.Errorf("enabled prefetch_enabled = %v, want true", got)
 	}
-	if got := resolveOneReadyTrack(t, library.WithPrefetchEnabled(false))["prefetch_enabled"]; got != false {
+	if got := resolveOneReadyTrack(t, handler.WithPrefetchEnabled(false))["prefetch_enabled"]; got != false {
 		t.Errorf("disabled prefetch_enabled = %v, want false so clients stop prefetching", got)
 	}
 }
@@ -68,7 +73,7 @@ func unknownTrackIDs(n int) []string {
 }
 
 func TestAudioURLs_TheBatchCapIsTwoHundred(t *testing.T) {
-	_, router := audioURLRoutes(library.NoAudioLinks{})
+	_, router := audioURLRoutes(storage.NoAudioLinks{})
 
 	atCap := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap)}))
 	assertStatus(t, atCap, http.StatusOK)
@@ -79,7 +84,7 @@ func TestAudioURLs_TheBatchCapIsTwoHundred(t *testing.T) {
 }
 
 func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
-	_, router := audioURLRoutes(library.NoAudioLinks{})
+	_, router := audioURLRoutes(storage.NoAudioLinks{})
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{"not-a-uuid"}}))
 
@@ -88,7 +93,7 @@ func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
 }
 
 func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
-	repo, router := audioURLRoutes(library.NoAudioLinks{})
+	repo, router := audioURLRoutes(storage.NoAudioLinks{})
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID().UUID().String()}}))
@@ -98,7 +103,7 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 }
 
 type failingSigner struct {
-	*library.InMemoryAudioStore
+	*memory.AudioStore
 }
 
 func (failingSigner) SignsLinks() bool { return true }
@@ -110,13 +115,13 @@ func (failingSigner) PresignGet(context.Context, string, time.Duration) (string,
 func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	ring := logging.CaptureRing(t, "info")
 
-	repo := library.NewInMemoryTrackRepo()
+	repo := memory.NewTrackRepo()
 	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 	router := chi.NewRouter()
 	router.Use(httpserver.CorrelationID)
 	router.Use(httpserver.RequestLogger(clock.Now))
 	router.Use(asBearer)
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, failingSigner{library.NewInMemoryAudioStore()}, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
+	handler.MustNewAudioURLHandler(service.MustNewAudioURLService(repo, failingSigner{memory.NewAudioStore()}, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 
 	const inbound = "trace-abc12345"
 	req := httptest.NewRequest(http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID().UUID().String()}}))
@@ -147,9 +152,9 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 func TestAudioURLs_ARefusedCatalogDatabaseAnswersTemporarilyUnavailable(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	repo := library.NewPostgresTrackRepository(refusedPool(t), librarytest.DiscardDBCallMetrics())
-	signer := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
+	repo := persistence.NewPostgresTrackRepository(refusedPool(t), librarytest.DiscardDBCallMetrics())
+	signer := &countingAudioStore{AudioStore: memory.NewAudioStore()}
+	handler.MustNewAudioURLHandler(service.MustNewAudioURLService(repo, signer, time.Now, &librarytest.Metrics{}), time.Now).Routes(router)
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{uuid.NewString()}}))
 
