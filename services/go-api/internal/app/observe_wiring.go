@@ -66,10 +66,10 @@ func mountObserve(r chi.Router, verifier auth.TokenVerifier, metrics *telemetry.
 }
 
 func (a *application) observeAcquisition() monitoring.AcquisitionReader {
-	if !a.acquisitionOn {
+	if !a.download.On() {
 		return nil
 	}
-	return monitoringfromdownload.NewAcquisitionReader(a.scheduler)
+	return monitoringfromdownload.NewAcquisitionReader(a.download.Scheduler())
 }
 
 func (a *application) liveMetrics() monitoring.LiveMetrics {

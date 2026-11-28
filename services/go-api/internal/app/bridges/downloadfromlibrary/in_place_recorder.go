@@ -12,23 +12,17 @@ type VerdictStore interface {
 	RecordInPlaceVerdict(ctx context.Context, id ids.TrackId, audioRef string, v library.InPlaceVerdict) (bool, error)
 }
 
-type InPlaceStateStore interface {
-	RecordInPlaceState(ctx context.Context, trackID ids.TrackId, generation int, basis string, bitErrorRate float64) error
-	NoteInPlaceFailure(ctx context.Context, trackID ids.TrackId) (int, error)
-}
-
-type InPlaceRecorder struct {
+type InPlaceVerdicts struct {
 	verdicts VerdictStore
-	state    InPlaceStateStore
 }
 
-var _ download.InPlaceStore = (*InPlaceRecorder)(nil)
+var _ download.InPlaceVerdicts = (*InPlaceVerdicts)(nil)
 
-func NewInPlaceRecorder(verdicts VerdictStore, state InPlaceStateStore) *InPlaceRecorder {
-	return &InPlaceRecorder{verdicts: verdicts, state: state}
+func NewInPlaceVerdicts(verdicts VerdictStore) *InPlaceVerdicts {
+	return &InPlaceVerdicts{verdicts: verdicts}
 }
 
-func (r *InPlaceRecorder) RecordInPlace(ctx context.Context, trackID ids.TrackId, record download.InPlaceRecord) (bool, error) {
+func (r *InPlaceVerdicts) RecordInPlaceVerdict(ctx context.Context, trackID ids.TrackId, record download.InPlaceRecord) (bool, error) {
 	recorded, err := r.verdicts.RecordInPlaceVerdict(ctx, trackID, record.AudioRef, library.InPlaceVerdict{
 		Verdict:            record.Verdict,
 		Score:              record.Score,
@@ -40,19 +34,5 @@ func (r *InPlaceRecorder) RecordInPlace(ctx context.Context, trackID ids.TrackId
 	if err != nil {
 		return false, fmt.Errorf("record in-place verdict: %w", err)
 	}
-	if !recorded {
-		return false, nil
-	}
-	if err := r.state.RecordInPlaceState(ctx, trackID, record.Generation, record.Basis, record.BitErrorRate); err != nil {
-		return false, fmt.Errorf("record in-place state: %w", err)
-	}
-	return true, nil
-}
-
-func (r *InPlaceRecorder) NoteInPlaceFailure(ctx context.Context, trackID ids.TrackId) (int, error) {
-	r0, err := r.state.NoteInPlaceFailure(ctx, trackID)
-	if err != nil {
-		return r0, fmt.Errorf("note in place failure: %w", err)
-	}
-	return r0, nil
+	return recorded, nil
 }

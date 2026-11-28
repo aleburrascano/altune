@@ -2,7 +2,6 @@ package downloadfromlibrary_test
 
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
-	"altune/go-api/internal/app/bridges/downloadfromlibrary/upgradestatetest"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
@@ -61,7 +60,7 @@ func rowState(t *testing.T, pool *pgxpool.Pool, trackID library.TrackId) (string
 
 func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew(t *testing.T) {
 	pool := dbtest.Pool(t)
-	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), time.Now, upgradestatetest.New(), ids.Real)
+	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), time.Now, ids.Real)
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
 
@@ -109,7 +108,7 @@ func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *t
 	held := reclaimTrack(t, pool, track.ID())
 	store := &claimDuringUpdateStore{PostgresTrackRepository: library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), pool: pool, t: t}
 
-	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New(), ids.Real).Complete(context.Background(), track.ID(), track.UserId(), held, download.Completion{AudioRef: "old-owner-ref"})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, ids.Real).Complete(context.Background(), track.ID(), track.UserId(), held, download.Completion{AudioRef: "old-owner-ref"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost from the fenced write", err)
@@ -160,6 +159,6 @@ func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) 
 func TestTrackLedger_OnPostgresMeetsTheLedgerContract(t *testing.T) {
 	store := library.NewPostgresTrackRepository(dbtest.Pool(t), librarytest.DiscardDBCallMetrics())
 	downloadtest.LedgerContract(t, func(*testing.T) downloadtest.LedgerUnderTest {
-		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New(), ids.Real), store: store}
+		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now, ids.Real), store: store}
 	})
 }

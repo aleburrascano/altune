@@ -155,8 +155,7 @@ func (a *application) wireFeatures(ctx context.Context, transport http.RoundTrip
 	if err != nil {
 		return features{}, fmt.Errorf("catalog: %w", err)
 	}
-	a.scheduler = cat.scheduler
-	a.acquisitionOn = cat.acquisitionOn
+	a.download = cat.download
 	if err := a.applyStartupSwitches(ctx); err != nil {
 		return features{}, fmt.Errorf("startup switches: %w", err)
 	}

@@ -472,6 +472,24 @@ func TestPostgresUpgradeStore_SettleAcquisitionAppendsRejectedKeysOnceAndResetsO
 	}
 }
 
+func TestPostgresUpgradeStore_SettleAcquisitionWithNoRejectedKeysStillResetsTheEvidence(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
+	store := persistence.NewPostgresUpgradeStore(pool)
+	ctx := context.Background()
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","upgrade_tries":3}`, sourceURL: sourceURL("nokeys")})
+
+	if err := store.SettleAcquisition(ctx, id, 0, nil, ports.ResetEvidence); err != nil {
+		t.Fatalf("SettleAcquisition with no keys: %v", err)
+	}
+
+	state, err := store.State(ctx, id)
+	if err != nil || len(state.RejectedSourceKeys) != 0 || string(state.Evidence) != "{}" {
+		t.Errorf("state = %s %v, %v, want no keys and the evidence reset", state.Evidence, state.RejectedSourceKeys, err)
+	}
+}
+
 func TestPostgresUpgradeStore_SettleAcquisitionKeepsTheNewestTwentyFive(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)

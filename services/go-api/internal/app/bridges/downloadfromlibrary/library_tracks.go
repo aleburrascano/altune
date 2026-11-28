@@ -27,21 +27,19 @@ type TrackStore interface {
 type LibraryTracks struct {
 	store  TrackStore
 	now    clock.Func
-	state  download.UpgradeState
 	source ids.Source
 }
 
-func NewLibraryTracks(store TrackStore, now clock.Func, state download.UpgradeState, source ids.Source) *LibraryTracks {
+var _ download.TrackLibrary = (*LibraryTracks)(nil)
+
+func NewLibraryTracks(store TrackStore, now clock.Func, source ids.Source) *LibraryTracks {
 	if now == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires a clock")
-	}
-	if state == nil {
-		panic("downloadfromlibrary: NewLibraryTracks requires the upgrade state, or rejected source keys are silently dropped")
 	}
 	if source == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires an id source")
 	}
-	return &LibraryTracks{store: store, now: now, state: state, source: source}
+	return &LibraryTracks{store: store, now: now, source: source}
 }
 
 type illegalTransitionError struct {
@@ -89,19 +87,7 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 	if track == nil {
 		return nil, download.ErrTrackNotFound
 	}
-	snapshot, err := snapshotOf(track)
-	if err != nil {
-		return nil, err
-	}
-	state, err := l.state.State(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("read upgrade state: %w", err)
-	}
-	snapshot.RejectedSourceKeys = state.RejectedSourceKeys
-	if snapshot.Evidence, err = download.MergeUpgradeEvidence(snapshot.Evidence, state.Evidence); err != nil {
-		return nil, fmt.Errorf("merge upgrade evidence: %w", err)
-	}
-	return snapshot, nil
+	return snapshotOf(track)
 }
 
 func snapshotOf(track *library.Track) (*download.TrackSnapshot, error) {
@@ -165,36 +151,12 @@ func mapStatus(s library.DownloadStatus) (download.TrackStatus, error) {
 }
 
 func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {
-	if err := l.settleUpgradeState(ctx, id, userId, fence, c); err != nil {
-		return err
-	}
 	return l.loadAndUpdate(ctx, id, userId, fence, func(track *library.Track) error {
 		return complete(ctx, track, c, l.source, l.now)
 	})
 }
 
-func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {
-	evidence := download.KeepEvidence
-	if evidenceAccepted(c) {
-		evidence = download.ResetEvidence
-	}
-	if len(c.RejectedSourceKeys) == 0 && evidence == download.KeepEvidence {
-		return nil
-	}
-	_, err := l.store.GetByID(ctx, id, userId)
-	if errors.Is(err, library.ErrTrackNotFound) {
-		return download.ErrTrackNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("get track: %w", err)
-	}
-	if err := l.state.SettleAcquisition(ctx, id, fence, c.RejectedSourceKeys, evidence); err != nil {
-		return fmt.Errorf("settle upgrade state: %w", err)
-	}
-	return nil
-}
-
-func evidenceAccepted(c download.Completion) bool {
+func (l *LibraryTracks) EvidenceAccepted(c download.Completion) bool {
 	return c.Evidence != nil && (&library.Track{}).SetAcquisitionConfidence(c.Confidence, c.Evidence) == nil
 }
 

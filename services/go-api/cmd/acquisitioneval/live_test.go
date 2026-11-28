@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -59,7 +60,7 @@ func (s liveServer) client(t *testing.T) *download.YouTubeMusicSearchClient {
 
 func liveClient(t *testing.T, baseURL string, timeout time.Duration) *download.YouTubeMusicSearchClient {
 	t.Helper()
-	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, MusicURL: baseURL, OEmbedURL: baseURL + "/oembed", Timeout: timeout})
+	client, err := downloadtest.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, MusicURL: baseURL, OEmbedURL: baseURL + "/oembed", Timeout: timeout})
 	if err != nil {
 		t.Fatalf("build the live client: %v", err)
 	}

@@ -3,6 +3,7 @@ package downloadfromsearch_test
 import (
 	"altune/go-api/internal/app/bridges/downloadfromsearch"
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
@@ -134,10 +135,10 @@ func TestSearchRecordings_KeysSourcesByAcquisitionsProviderConstants(t *testing.
 		t.Fatalf("Resolve: %v", err)
 	}
 
-	for key, wantID := range map[download.RecordingProvider]string{
-		download.ProviderYouTube:    "vid123",
-		download.ProviderDeezer:     "3135556",
-		download.ProviderSoundCloud: "999",
+	for key, wantID := range map[downloadtest.RecordingProvider]string{
+		downloadtest.ProviderYouTube:    "vid123",
+		downloadtest.ProviderDeezer:     "3135556",
+		downloadtest.ProviderSoundCloud: "999",
 	} {
 		got, ok := identity.SourceFor(key)
 		if !ok || got.ExternalID != wantID {

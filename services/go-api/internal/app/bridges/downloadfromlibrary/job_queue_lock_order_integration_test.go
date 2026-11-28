@@ -2,6 +2,7 @@ package downloadfromlibrary_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
@@ -27,12 +28,12 @@ func TestPostgresJobQueue_QueueWritesRacingACatalogWriteThatChangesAMirroredColu
 	}{
 		{"claim", func(ids.TrackId) error {
 			_, err := queue.Claim(ctx, time.Minute)
-			if errors.Is(err, download.ErrNoJobAvailable) {
+			if errors.Is(err, downloadtest.ErrNoJobAvailable) {
 				return nil
 			}
 			return err
 		}},
-		{"enqueue", func(id ids.TrackId) error { return queue.Enqueue(ctx, id, download.JobKindAcquire, 0) }},
+		{"enqueue", func(id ids.TrackId) error { return queue.Enqueue(ctx, id, downloadtest.JobKindAcquire, 0) }},
 		{"heartbeat", func(id ids.TrackId) error { return queue.Heartbeat(ctx, id, 1, time.Minute) }},
 		{"release", func(id ids.TrackId) error { return queue.Release(ctx, id, 1, time.Second) }},
 		{"settle", func(id ids.TrackId) error { return queue.Settle(ctx, id, 1) }},

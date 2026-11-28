@@ -677,6 +677,16 @@ type PreviewingSource interface {
 	PreviewFetcher
 }
 
+type SourceOrder struct {
+	First      []AudioSource
+	Fallback   []AudioSource
+	Previewing []PreviewingSource
+}
+
+func (t SourceOrder) All() []AudioSource {
+	return append(append([]AudioSource{}, t.First...), t.Fallback...)
+}
+
 type FetchedAudio struct {
 	Path   string
 	Format SourceFormat
@@ -922,6 +932,20 @@ type InPlaceRecord struct {
 type InPlaceStore interface {
 	RecordInPlace(ctx context.Context, trackID ids.TrackId, record InPlaceRecord) (recorded bool, err error)
 	NoteInPlaceFailure(ctx context.Context, trackID ids.TrackId) (failures int, err error)
+}
+
+type InPlaceVerdicts interface {
+	RecordInPlaceVerdict(ctx context.Context, trackID ids.TrackId, record InPlaceRecord) (recorded bool, err error)
+}
+
+type InPlaceState interface {
+	RecordInPlaceState(ctx context.Context, trackID ids.TrackId, generation int, basis string, bitErrorRate float64) error
+	NoteInPlaceFailure(ctx context.Context, trackID ids.TrackId) (int, error)
+}
+
+type TrackLibrary interface {
+	LibraryTracks
+	EvidenceAccepted(c Completion) bool
 }
 
 type UpgradeStore interface {

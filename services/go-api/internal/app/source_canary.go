@@ -2,20 +2,17 @@ package app
 
 import (
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/app/sourcecheck"
-	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/download"
 	"context"
 	"time"
 )
 
 const sourceCanaryInterval = time.Hour
 
-func (a *application) startSourceCanary(ctx context.Context, probes sourcecheck.Probes) {
-	checks := sourcecheck.Checks(probes)
-	if len(checks) == 0 {
+func (a *application) startSourceCanary(ctx context.Context, module *download.Module) {
+	if !module.HasSourceChecks() {
 		return
 	}
-	a.startSimpleJob(ctx, jobs.AcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
-		return sourcecheck.Run(ctx, clock.Now, checks)
-	}, "interval", sourceCanaryInterval.String())
+	a.startSimpleJob(ctx, jobs.AcquisitionSourceCanary, sourceCanaryInterval, module.CheckSources,
+		"interval", sourceCanaryInterval.String())
 }
