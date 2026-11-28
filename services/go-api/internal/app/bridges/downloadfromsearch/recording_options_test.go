@@ -43,7 +43,7 @@ func (p *countingProvider) Search(ctx context.Context, query string, kinds map[s
 
 func searchFinding(t *testing.T, p *countingProvider) *search.SearchService {
 	t.Helper()
-	p.Provider = search.ProviderDeezer
+	p.Provider = searchtest.ProviderDeezer
 	p.Results = []search.SearchResult{searchtest.NewResult(
 		search.ResultKindTrack,
 		unfoundTitle,
@@ -51,7 +51,7 @@ func searchFinding(t *testing.T, p *countingProvider) *search.SearchService {
 		searchtest.WithISRCCode(unfoundISRC),
 		searchtest.WithRecordingMBID(searchOnlyMBID),
 	)}
-	return searchtest.NewSearchService(t, searchtest.NewTracker(t), []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
+	return searchtest.NewSearchService(t, searchtest.NewTracker(t), []searchtest.SearchProvider{p}, searchtest.NewCircuitBreaker(clock.Now))
 }
 
 type musicBrainzLog struct {
@@ -91,7 +91,7 @@ func (m *musicBrainzLog) RecordingDetail(_ context.Context, mbid string) (search
 	return search.MusicBrainzRecordingDetail{}, false, nil
 }
 
-func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *string) {
+func acquireUnfoundTrack(t *testing.T, disc *search.Module, catalogMBID *string) {
 	t.Helper()
 	isrc := unfoundISRC
 	track := download.TrackSnapshot{
@@ -141,7 +141,7 @@ func TestRecordingOptions_WithSearchAndMusicBrainzTheRunAnchorsTheISRCAndLooksFo
 	provider := &countingProvider{}
 	musicBrainz := &musicBrainzLog{}
 
-	acquireUnfoundTrack(t, &search.Discovery{Search: searchFinding(t, provider), Recordings: musicBrainz}, nil)
+	acquireUnfoundTrack(t, &search.Module{Search: searchFinding(t, provider), Recordings: musicBrainz}, nil)
 
 	if provider.searches.Load() == 0 {
 		t.Error("discovery search was never asked, want the resolver to search for the track")
@@ -159,7 +159,7 @@ func TestRecordingOptions_WithSearchAndMusicBrainzTheResolverLooksUpTheCatalogPi
 	musicBrainz := &musicBrainzLog{}
 	pin := catalogPin
 
-	acquireUnfoundTrack(t, &search.Discovery{Search: searchFinding(t, &countingProvider{}), Recordings: musicBrainz}, &pin)
+	acquireUnfoundTrack(t, &search.Module{Search: searchFinding(t, &countingProvider{}), Recordings: musicBrainz}, &pin)
 
 	if asked := musicBrainz.asked(); !slices.Contains(asked, pinLookup) {
 		t.Errorf("MusicBrainz was asked %q, want the resolver's recording lookup asked for the catalog pin %s", asked, catalogPin)
@@ -169,7 +169,7 @@ func TestRecordingOptions_WithSearchAndMusicBrainzTheResolverLooksUpTheCatalogPi
 func TestRecordingOptions_WithSearchAloneTheRunStillResolvesThroughSearch(t *testing.T) {
 	provider := &countingProvider{}
 
-	acquireUnfoundTrack(t, &search.Discovery{Search: searchFinding(t, provider)}, nil)
+	acquireUnfoundTrack(t, &search.Module{Search: searchFinding(t, provider)}, nil)
 
 	if provider.searches.Load() == 0 {
 		t.Error("discovery search was never asked, want the resolver wired without MusicBrainz")
@@ -179,7 +179,7 @@ func TestRecordingOptions_WithSearchAloneTheRunStillResolvesThroughSearch(t *tes
 func TestRecordingOptions_WithoutSearchMusicBrainzIsNeverAsked(t *testing.T) {
 	musicBrainz := &musicBrainzLog{}
 
-	acquireUnfoundTrack(t, &search.Discovery{Recordings: musicBrainz}, nil)
+	acquireUnfoundTrack(t, &search.Module{Recordings: musicBrainz}, nil)
 
 	if asked := musicBrainz.asked(); len(asked) != 0 {
 		t.Errorf("MusicBrainz was asked %q, want nothing: without discovery search there are no recording options", asked)

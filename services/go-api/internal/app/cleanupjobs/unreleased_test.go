@@ -16,7 +16,7 @@ type limitRecordingStore struct {
 	asOf   []time.Time
 }
 
-func (l *limitRecordingStore) Due(_ context.Context, now time.Time, limit int) ([]search.UnreleasedDueArtist, error) {
+func (l *limitRecordingStore) Due(_ context.Context, now time.Time, limit int) ([]searchtest.UnreleasedDueArtist, error) {
 	l.limits = append(l.limits, limit)
 	l.asOf = append(l.asOf, now)
 	return nil, nil
@@ -24,7 +24,7 @@ func (l *limitRecordingStore) Due(_ context.Context, now time.Time, limit int) (
 
 func TestRefreshDueUnreleased_AsksForWhatIsDueAtTheClocksInstantInUTC(t *testing.T) {
 	store := &limitRecordingStore{}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
+	svc := searchtest.MustUnreleased(searchtest.NewUnreleasedService(searchtest.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, searchtest.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 
 	if err := cleanupjobs.RefreshDueUnreleased(svc, atTestNow)(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
@@ -37,7 +37,7 @@ func TestRefreshDueUnreleased_AsksForWhatIsDueAtTheClocksInstantInUTC(t *testing
 
 func TestRefreshDueUnreleased_EachRunAsksTheStoreForAtMostTwoArtists(t *testing.T) {
 	store := &limitRecordingStore{}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
+	svc := searchtest.MustUnreleased(searchtest.NewUnreleasedService(searchtest.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(t, searchtest.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 	if err := cleanupjobs.RefreshDueUnreleased(svc, atTestNow)(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
 	}

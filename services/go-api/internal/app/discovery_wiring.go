@@ -23,7 +23,7 @@ type EvalHandles struct {
 	Metrics   *telemetry.Registry
 }
 
-func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*search.Discovery, error) {
+func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*search.Module, error) {
 	if h.Transport == nil {
 		return nil, errors.New("eval discovery: EvalHandles.Transport is required, so provider calls never fall back to an unguarded transport")
 	}
@@ -57,7 +57,7 @@ func (a *application) discoveryDeps(ctx context.Context, transport http.RoundTri
 
 const behavioralRankingRefreshInterval = 30 * time.Minute
 
-func (a *application) startDiscoveryBackgroundJobs(ctx context.Context, disc *search.Discovery) {
+func (a *application) startDiscoveryBackgroundJobs(ctx context.Context, disc *search.Module) {
 	a.startUnreleasedRefresh(ctx, disc.UnreleasedRefresh)
 	if a.cfg.BehavioralRankingEnabled {
 		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, behavioralRankingRefreshInterval,

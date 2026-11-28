@@ -109,7 +109,7 @@ func (a *application) compose(ctx context.Context, transport http.RoundTripper) 
 	if err != nil {
 		return nil, fmt.Errorf("client events: %w", err)
 	}
-	r := a.mountRoutes(verifier, f.catalog, f.playback.Routes(), f.discovery.Handler, clientEventRoutes)
+	r := a.mountRoutes(verifier, f.catalog, f.playback.Routes(), f.discovery, clientEventRoutes)
 	if err := a.startAlertMonitor(ctx); err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (a *application) openEventBus(ctx context.Context) error {
 }
 
 type features struct {
-	discovery *search.Discovery
+	discovery *search.Module
 	catalog   catalogWiring
 	playback  *playback.Module
 }
@@ -165,7 +165,7 @@ func (a *application) wireFeatures(ctx context.Context, transport http.RoundTrip
 	if err != nil {
 		return features{}, fmt.Errorf("ownership enrichment: %w", err)
 	}
-	if err := disc.Handler.AttachOwnership(ownership); err != nil {
+	if err := disc.AttachOwnership(ownership); err != nil {
 		return features{}, fmt.Errorf("ownership enrichment: %w", err)
 	}
 	return features{discovery: disc, catalog: cat, playback: playbackModule}, nil

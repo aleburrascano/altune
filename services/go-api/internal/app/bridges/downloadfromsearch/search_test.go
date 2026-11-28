@@ -60,7 +60,7 @@ func TestSearchRecordings_CarriesEveryFactOfATrackHit(t *testing.T) {
 		searchtest.WithAlbum("Glee"),
 		searchtest.WithYear(1997),
 		searchtest.WithExplicit(&explicit),
-		searchtest.WithSources([]search.ProviderLink{{Provider: search.ProviderYouTube, ExternalID: "vid", URL: "https://youtu.be/vid"}}),
+		searchtest.WithSources([]searchtest.ProviderLink{{Provider: searchtest.ProviderYouTube, ExternalID: "vid", URL: "https://youtu.be/vid"}}),
 	)
 	searcher := searching(hit)
 
@@ -90,9 +90,9 @@ func TestSearchRecordings_KeepsOnlyTrackHits(t *testing.T) {
 }
 
 func TestSearchRecordings_KeepsEveryDiscoveryProviderNameByteForByte(t *testing.T) {
-	var sources []search.ProviderLink
-	for p := search.ProviderUnknown; p <= search.ProviderSpotify; p++ {
-		sources = append(sources, search.ProviderLink{Provider: p, ExternalID: "id-" + p.String()})
+	var sources []searchtest.ProviderLink
+	for p := searchtest.ProviderUnknown; p <= searchtest.ProviderSpotify; p++ {
+		sources = append(sources, searchtest.ProviderLink{Provider: p, ExternalID: "id-" + p.String()})
 	}
 	searcher := searching(searchtest.NewResult(search.ResultKindTrack, "Song", searchtest.WithSources(sources)))
 
@@ -113,10 +113,10 @@ func TestSearchRecordings_KeysSourcesByAcquisitionsProviderConstants(t *testing.
 		search.ResultKindTrack,
 		"Song",
 		searchtest.WithSubtitle("Artist"),
-		searchtest.WithSources([]search.ProviderLink{
-			{Provider: search.ProviderYouTube, ExternalID: "vid123"},
-			{Provider: search.ProviderDeezer, ExternalID: "3135556"},
-			{Provider: search.ProviderSoundCloud, ExternalID: "999"},
+		searchtest.WithSources([]searchtest.ProviderLink{
+			{Provider: searchtest.ProviderYouTube, ExternalID: "vid123"},
+			{Provider: searchtest.ProviderDeezer, ExternalID: "3135556"},
+			{Provider: searchtest.ProviderSoundCloud, ExternalID: "999"},
 		}),
 	))
 	resolver, err := download.NewRecordingResolver(download.RecordingResolverPorts{

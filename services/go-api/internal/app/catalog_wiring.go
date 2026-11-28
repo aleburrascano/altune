@@ -52,7 +52,7 @@ func (a *application) wireCatalog(
 	ctx context.Context,
 	transport http.RoundTripper,
 	tap *monitoring.EventTap,
-	disc *search.Discovery,
+	disc *search.Module,
 ) (catalogWiring, error) {
 	download.SweepStaleTempDirs(ctx, download.NewTempWorkspace(), clock.Now)
 
@@ -79,7 +79,7 @@ func (a *application) wireCatalog(
 	return a.wireCatalogHandlers(audio, module), nil
 }
 
-func featuredBridge(disc *search.Discovery) library.FeaturedArtistResolver {
+func featuredBridge(disc *search.Module) library.FeaturedArtistResolver {
 	if disc.FeaturedArtists == nil {
 		return nil
 	}
@@ -90,7 +90,7 @@ func (a *application) wireAudioSources(
 	ctx context.Context,
 	transport http.RoundTripper,
 	tap *monitoring.EventTap,
-	disc *search.Discovery,
+	disc *search.Module,
 ) (audioSourcesStaging, error) {
 	backend, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default(), library.NewFSCallMetrics(a.metrics))
 	if err != nil {
@@ -141,7 +141,7 @@ func (a *application) liveTiers(ctx context.Context, transport http.RoundTripper
 	return r0, r1, nil
 }
 
-func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
+func (a *application) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Module, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) (downloadsetup.Deps, error) {
 	recording, err := downloadfromsearch.RecordingOptions(disc)
 	if err != nil {
 		return downloadsetup.Deps{}, fmt.Errorf("wire recording resolver: %w", err)

@@ -35,7 +35,7 @@ func resolverOverCatalogCredits(t *testing.T, feats []librarytest.FeaturedArtist
 	for _, f := range feats {
 		upstream = append(upstream, search.FeaturedArtist{Name: f.Name, MBID: f.MBID, DeezerID: f.DeezerID})
 	}
-	discovered := searchtest.NewFeaturedResolver(t, search.NoMBFeatured{}, fakeDeezerFeatured{feats: upstream, err: err})
+	discovered := searchtest.NewFeaturedResolver(t, searchtest.NoMBFeatured{}, fakeDeezerFeatured{feats: upstream, err: err})
 	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(discovered))
 }
 
@@ -86,8 +86,8 @@ func TestFeaturedArtistCredits_ReturnsDiscoverysError(t *testing.T) {
 
 func liveDiscoveryProviderNames() []string {
 	var names []string
-	for p := search.ProviderUnknown + 1; p <= search.ProviderSpotify; p++ {
-		if _, err := search.ParseProviderName(p.String()); err == nil {
+	for p := searchtest.ProviderUnknown + 1; p <= searchtest.ProviderSpotify; p++ {
+		if _, err := searchtest.ParseProviderName(p.String()); err == nil {
 			names = append(names, p.String())
 		}
 	}

@@ -10,7 +10,7 @@ import (
 	"slices"
 )
 
-const adapterRoot = "services/go-api/internal/search/internal/adapters/providers/"
+const adapterRoot = "services/go-api/internal/search/internal/adapters/"
 
 type provider struct {
 	adapter      string

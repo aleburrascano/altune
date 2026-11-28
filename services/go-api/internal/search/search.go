@@ -44,7 +44,6 @@ import (
 )
 
 type (
-	Routes                      = handler.Routes
 	ClientEventSink             = handler.ClientEventSink
 	NoClientEvents              = handler.NoClientEvents
 	FeaturedArtist              = domain.FeaturedArtist
@@ -143,8 +142,8 @@ type UnreleasedSettings struct {
 }
 
 var (
-	errDepsMissing        = errors.New("search: deps are missing")
-	errProviderTimeoutLow = errors.New("search: ProviderTimeout must exceed the longest rate-limit queue wait")
+	errDepsMissing        = errors.New("discovery: deps are missing")
+	errProviderTimeoutLow = errors.New("discovery: ProviderTimeout")
 )
 
 type requiredHandle struct {
@@ -174,10 +173,10 @@ func (d Deps) validate() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("%w: %s", errDepsMissing, strings.Join(missing, ", "))
+		return fmt.Errorf("%w %s", errDepsMissing, strings.Join(missing, ", "))
 	}
 	if d.ProviderTimeout <= queuetimeout.MaxWait {
-		return fmt.Errorf("%w: ProviderTimeout %v, longest wait %v", errProviderTimeoutLow, d.ProviderTimeout, queuetimeout.MaxWait)
+		return fmt.Errorf("%w %v must exceed the longest rate-limit queue wait %v", errProviderTimeoutLow, d.ProviderTimeout, queuetimeout.MaxWait)
 	}
 	return nil
 }
@@ -294,7 +293,7 @@ type wiring struct {
 
 func New(ctx context.Context, d Deps) (*Module, error) {
 	if err := d.validate(); err != nil {
-		return nil, fmt.Errorf("set up search: %w", err)
+		return nil, fmt.Errorf("set up discovery: %w", err)
 	}
 	w, err := newWiring(ctx, d)
 	if err != nil {
@@ -351,7 +350,7 @@ func (m *Module) RankingOnlySearch() *service.SearchService {
 	return m.rankingOnly
 }
 
-func (m *Module) Routes() Routes { return handler.NewRoutes(m.handler) }
+func (m *Module) Routes() handler.Routes { return handler.NewRoutes(m.handler) }
 
 func (m *Module) PublicRoutes(r chi.Router) {
 	m.handler.PublicRoutes(r, handler.DefaultAuthFailureLimit)

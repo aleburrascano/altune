@@ -23,10 +23,11 @@ func (a *application) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
 	playbackRoutes playback.Routes,
-	discoveryH *search.DiscoveryHandler,
+	discovery *search.Module,
 	clientEventRoutes http.Handler,
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
+	discoveryRoutes := discovery.Routes()
 
 	requireAuth := authMiddleware(verifier, a.metrics)
 
@@ -34,7 +35,7 @@ func (a *application) mountRoutes(
 
 	router.MountV1(r, apiRequestTimeout, router.V1{
 		Bounded: func(r chi.Router) {
-			discoveryH.PublicRoutes(r, search.DefaultAuthFailureLimit)
+			discovery.PublicRoutes(r)
 
 			r.Group(func(r chi.Router) {
 				r.Use(requireAuth)
@@ -45,7 +46,7 @@ func (a *application) mountRoutes(
 					r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
 				}
 				playbackRoutes.Bounded(r)
-				r.Mount("/discovery", discoveryH.Routes())
+				discoveryRoutes.Bounded(r)
 				r.Mount("/telemetry", clientEventRoutes)
 			})
 		},
@@ -54,6 +55,7 @@ func (a *application) mountRoutes(
 
 			cat.libraryRoutes.LongLived(r)
 			playbackRoutes.LongLived(r)
+			discoveryRoutes.LongLived(r)
 			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		},
 	})

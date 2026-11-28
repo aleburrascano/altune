@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/dbtest"
@@ -51,7 +52,7 @@ func (rt *countingProviderRT) roundTrips() int {
 	return rt.calls
 }
 
-func totalProviderCounts(s search.ProviderMetricsSnapshot) int64 {
+func totalProviderCounts(s searchtest.ProviderMetricsSnapshot) int64 {
 	var total int64
 	for _, o := range s {
 		total += o.OK + o.Quota + o.Error
