@@ -33,6 +33,15 @@ func TestSentinelErrorCodes(t *testing.T) {
 		{domain.ErrStorageStalled, "catalog.audio_temporarily_unavailable"},
 		{domain.ErrPlaylistFull, "catalog.playlist_full"},
 		{domain.ErrLibraryFull, "catalog.library_full"},
+		{domain.ErrTooManyPlaylists, "catalog.too_many_playlists"},
+		{domain.ErrTrackAlreadyInPlaylist, "catalog.track_already_in_playlist"},
+		{domain.ErrTrackIDsRequired, "catalog.track_ids_required"},
+		{domain.ErrBatchTooLarge, "catalog.batch_too_large"},
+		{domain.ErrInvalidTrackID, "catalog.invalid_track_id"},
+		{domain.ErrFeaturedArtistKeyRequired, "catalog.featured_artist_key_required"},
+		{domain.ErrInvalidDeezerID, "catalog.invalid_deezer_id"},
+		{domain.ErrBackfillInProgress, "catalog.backfill_in_progress"},
+		{domain.ErrBackfillCoolingDown, "catalog.backfill_cooling_down"},
 	}
 	for _, c := range cases {
 		coded := codeFor(t, c.err)

@@ -57,7 +57,6 @@ linters:
         - '(^|/)[a-z]*test/'
     wrapcheck:
       extra-ignore-sigs:
-        - domain.WrapRepoError(
         - providerrequests.ArtworkFailure(
         - database.WrapUnreadable(
         - journey.StepFailed(
