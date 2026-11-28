@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock/clocktest"
@@ -38,7 +39,7 @@ func (p *progressStages) reported() []string {
 }
 
 type finishedJob struct {
-	record ports.JobRecord
+	record domain.JobRecord
 	stages []string
 }
 
@@ -89,7 +90,7 @@ type timedSource struct {
 	clock *clocktest.Manual
 }
 
-func (s timedSource) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s timedSource) Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	s.clock.Advance(s.takes[candidate.URL])
 	return s.perURLSource.Fetch(ctx, candidate, outDir)
 }
@@ -130,13 +131,13 @@ func TestStatus_AJobTimesEveryPipelineStageThatRanAndOnlyThose(t *testing.T) {
 }
 
 func TestStatus_AJobSumsTheTimeOfEveryFetchAndReportsTheFormatAndFileItStored(t *testing.T) {
-	format := ports.SourceFormat{ID: "140", Codec: "mp4a.40.2"}
+	format := domain.SourceFormat{ID: "140", Codec: "mp4a.40.2"}
 	manual := clocktest.NewManual(time.Unix(0, 0))
 	source := timedSource{
 		clock: manual,
 		perURLSource: perURLSource{
 			found:   blindingLightsAt(failingRank1URL, storedRank2URL),
-			formats: map[string]ports.SourceFormat{storedRank2URL: format},
+			formats: map[string]domain.SourceFormat{storedRank2URL: format},
 			broken:  map[string]bool{failingRank1URL: true},
 		},
 		takes: map[string]time.Duration{failingRank1URL: 120 * time.Millisecond, storedRank2URL: 30 * time.Millisecond},
@@ -153,7 +154,7 @@ func TestStatus_AJobSumsTheTimeOfEveryFetchAndReportsTheFormatAndFileItStored(t 
 	if job.record.Source != format {
 		t.Errorf("source format = %+v, want %+v, the format of the file it kept", job.record.Source, format)
 	}
-	if want := (ports.StoredFile{Bytes: int64(len("audio bytes")), Codec: "mp3"}); job.record.Stored != want {
+	if want := (domain.StoredFile{Bytes: int64(len("audio bytes")), Codec: "mp3"}); job.record.Stored != want {
 		t.Errorf("stored file = %+v, want %+v", job.record.Stored, want)
 	}
 }
@@ -163,7 +164,7 @@ func TestStatus_AJobReportsTheStoredCandidateAsItsSource(t *testing.T) {
 
 	job := scheduleAndFinishWith(t, source, resolving(resolvedTo(blindingLightsRecording), verifiedBy(&identifier{})))
 
-	if job.record.State != ports.JobSucceeded || job.record.ResolvedSource != storedRank2URL {
+	if job.record.State != domain.JobSucceeded || job.record.ResolvedSource != storedRank2URL {
 		t.Errorf("job = %v from %q, want succeeded from the stored rank-2 candidate %q", job.record.State, job.record.ResolvedSource, storedRank2URL)
 	}
 }

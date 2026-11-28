@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"testing"
 )
@@ -100,14 +99,14 @@ func TestStage_NamesStoredInAcquisitionRejectionsStayStable(t *testing.T) {
 		service.RejectFingerprint: "fingerprint",
 	}
 	for stage, reason := range stored {
-		recs := service.LastingRejections([]service.RejectionEntry{{URL: rejectedURL, Stage: stage}}, "t1", ports.RejectionBasis{})
+		recs := service.LastingRejections([]service.RejectionEntry{{URL: rejectedURL, Stage: stage}}, "t1", domain.RejectionBasis{})
 		if len(recs) != 1 || recs[0].Reason != reason {
 			t.Errorf("stage %q stored as %+v, want one acquisition_rejections row with reason %q", stage, recs, reason)
 		}
 	}
 
 	for _, stage := range []service.RejectionStage{service.RejectDownload, service.RejectNotAttempted, service.RejectCurrentFile} {
-		if recs := service.LastingRejections([]service.RejectionEntry{{URL: rejectedURL, Stage: stage}}, "t1", ports.RejectionBasis{}); len(recs) != 0 {
+		if recs := service.LastingRejections([]service.RejectionEntry{{URL: rejectedURL, Stage: stage}}, "t1", domain.RejectionBasis{}); len(recs) != 0 {
 			t.Errorf("stage %q stored as %+v, want no row: it says nothing lasting about the source", stage, recs)
 		}
 	}
@@ -120,7 +119,7 @@ func TestLasting_KeepsFingerprintAndDropsTransientStages(t *testing.T) {
 		{URL: "https://youtube.com/watch?v=ccccccccccc", Stage: service.RejectNotAttempted, Reason: "skipped"},
 	}
 
-	recs := service.LastingRejections(entries, "t1", ports.RejectionBasis{})
+	recs := service.LastingRejections(entries, "t1", domain.RejectionBasis{})
 
 	if len(recs) != 1 || recs[0].Reason != "fingerprint" || recs[0].TrackID != "t1" ||
 		recs[0].SourceKey != domain.SourceKey("https://youtube.com/watch?v=aaaaaaaaaaa") || recs[0].Detail != "other version" {
@@ -129,7 +128,7 @@ func TestLasting_KeepsFingerprintAndDropsTransientStages(t *testing.T) {
 }
 
 func TestLasting_CarriesTheRunsBasis(t *testing.T) {
-	basis := ports.RejectionBasis{ExpectedSeconds: 322, ReferenceMBID: "mbid-1"}
+	basis := domain.RejectionBasis{ExpectedSeconds: 322, ReferenceMBID: "mbid-1"}
 
 	recs := service.LastingRejections([]service.RejectionEntry{{URL: "https://youtube.com/watch?v=aaaaaaaaaaa", Stage: service.RejectDuration, Reason: "too short"}}, "t1", basis)
 
@@ -144,7 +143,7 @@ func TestLasting_DropsAnUnmeasuredDuration(t *testing.T) {
 		{URL: "https://youtube.com/watch?v=bbbbbbbbbbb", Stage: service.RejectDuration, Reason: "duration 30s vs expected 200s"},
 	}
 
-	recs := service.LastingRejections(entries, "t1", ports.RejectionBasis{})
+	recs := service.LastingRejections(entries, "t1", domain.RejectionBasis{})
 
 	if len(recs) != 1 || recs[0].SourceKey != domain.SourceKey("https://youtube.com/watch?v=bbbbbbbbbbb") {
 		t.Errorf("records = %+v, want only the measured duration rejection", recs)
@@ -152,7 +151,7 @@ func TestLasting_DropsAnUnmeasuredDuration(t *testing.T) {
 }
 
 func TestLasting_DropsAnEntryWithNoSourceKey(t *testing.T) {
-	if recs := service.LastingRejections([]service.RejectionEntry{{Stage: service.RejectFingerprint}}, "t1", ports.RejectionBasis{}); len(recs) != 0 {
+	if recs := service.LastingRejections([]service.RejectionEntry{{Stage: service.RejectFingerprint}}, "t1", domain.RejectionBasis{}); len(recs) != 0 {
 		t.Errorf("records = %+v, want none: a row needs a source key", recs)
 	}
 }

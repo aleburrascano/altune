@@ -19,6 +19,7 @@ type InPlaceChecker struct {
 	identifier      ports.AudioIdentifier
 	previews        ports.PreviewMatcher
 	recordingLookup ports.RecordingLookup
+	evidence        ports.EvidenceCodec
 	now             clock.Func
 	cuts            Cuts
 }
@@ -32,23 +33,24 @@ func NewInPlaceChecker(acquire *AcquireTrackAudioService) *InPlaceChecker {
 		identifier:      p.identifier,
 		previews:        p.previews,
 		recordingLookup: p.recordingLookup,
+		evidence:        p.evidence,
 		now:             p.now,
 		cuts:            p.cuts,
 	}
 }
 
-func (c *InPlaceChecker) CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (Finding, error) {
+func (c *InPlaceChecker) CheckInPlace(ctx context.Context, track *domain.TrackSnapshot) (Finding, error) {
 	if track.AudioRef == nil {
 		return Finding{}, ErrInPlaceUnavailable
 	}
 	finding, err := c.checkStoredFile(ctx, track)
-	if errors.Is(err, ports.ErrNoStoredAudioReader) || errors.Is(err, ports.ErrNoAudioIdentifier) {
+	if errors.Is(err, domain.ErrNoStoredAudioReader) || errors.Is(err, domain.ErrNoAudioIdentifier) {
 		return Finding{}, ErrInPlaceUnavailable
 	}
 	return finding, err
 }
 
-func (c *InPlaceChecker) checkStoredFile(ctx context.Context, track *ports.TrackSnapshot) (Finding, error) {
+func (c *InPlaceChecker) checkStoredFile(ctx context.Context, track *domain.TrackSnapshot) (Finding, error) {
 	dir, err := c.workspace.Create("in-place-*")
 	if err != nil {
 		return Finding{}, fmt.Errorf("create in-place dir: %w", err)
@@ -63,8 +65,8 @@ func (c *InPlaceChecker) checkStoredFile(ctx context.Context, track *ports.Track
 	return c.judgeInPlace(ctx, ac, track, path)
 }
 
-func (c *InPlaceChecker) judgeInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (Finding, error) {
-	input := judgeInput(ac, nil, deref(track.StoredDurationSeconds), storedSourceOf(ctx, track))
+func (c *InPlaceChecker) judgeInPlace(ctx context.Context, ac *AcquisitionContext, track *domain.TrackSnapshot, path string) (Finding, error) {
+	input := judgeInput(ac, nil, deref(track.StoredDurationSeconds), storedSourceOf(ctx, c.evidence, track))
 	score, err := c.fingerprintInto(ctx, ac, &input, path)
 	if err != nil {
 		return Finding{}, err
@@ -99,9 +101,9 @@ func (c *InPlaceChecker) fingerprintInto(ctx context.Context, ac *AcquisitionCon
 	return topScore(match.Results), nil
 }
 
-func (c *InPlaceChecker) previewInPlace(ctx context.Context, track *ports.TrackSnapshot, path string) *PreviewEvidence {
+func (c *InPlaceChecker) previewInPlace(ctx context.Context, track *domain.TrackSnapshot, path string) *PreviewEvidence {
 	target := previewTargetOf(track)
-	if target == (ports.PreviewTarget{}) {
+	if target == (domain.PreviewTarget{}) {
 		return nil
 	}
 	comparison, err := c.previews.MatchesPreview(ctx, path, target)

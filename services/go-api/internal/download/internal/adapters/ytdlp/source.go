@@ -23,7 +23,7 @@ func NewSource(searcher *YouTubeAudioSearcher) *Source {
 
 func (s *Source) Name() domain.SourceName { return SourceName }
 
-func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *Source) Find(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	candidates, err := s.searcher.SearchQueries(ctx, searchQueries(req))
 	if err != nil {
 		return nil, err
@@ -32,10 +32,10 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	return candidates, nil
 }
 
-func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *Source) Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	return s.searcher.Download(ctx, candidate.URL, outDir)
 }
 
-func (s *Source) FetchPreview(ctx context.Context, candidate ports.AudioCandidate, outDir string, seconds int) (string, error) {
+func (s *Source) FetchPreview(ctx context.Context, candidate domain.AudioCandidate, outDir string, seconds int) (string, error) {
 	return s.searcher.DownloadPreview(ctx, candidate.URL, outDir, seconds)
 }

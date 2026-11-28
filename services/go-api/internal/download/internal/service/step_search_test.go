@@ -16,17 +16,17 @@ import (
 
 type searchSource struct {
 	name   domain.SourceName
-	found  []ports.AudioCandidate
+	found  []domain.AudioCandidate
 	err    error
 	onFind func()
 
 	mu       sync.Mutex
-	requests []ports.FindRequest
+	requests []domain.FindRequest
 }
 
 func (s *searchSource) Name() domain.SourceName { return s.name }
 
-func (s *searchSource) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *searchSource) Find(_ context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	s.mu.Lock()
 	s.requests = append(s.requests, req)
 	s.mu.Unlock()
@@ -36,14 +36,14 @@ func (s *searchSource) Find(_ context.Context, req ports.FindRequest) ([]ports.A
 	return s.found, s.err
 }
 
-func (s *searchSource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
-	return ports.FetchedAudio{}, errors.New("fetch refused")
+func (s *searchSource) Fetch(context.Context, domain.AudioCandidate, string) (domain.FetchedAudio, error) {
+	return domain.FetchedAudio{}, errors.New("fetch refused")
 }
 
-func (s *searchSource) seen() []ports.FindRequest {
+func (s *searchSource) seen() []domain.FindRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]ports.FindRequest(nil), s.requests...)
+	return append([]domain.FindRequest(nil), s.requests...)
 }
 
 func runPipeline(ctx context.Context, registry *service.SourceRegistry, ac *service.AcquisitionContext) error {
@@ -87,7 +87,7 @@ func TestSearchStep_CancelledMidSearch_ReportsCancellation(t *testing.T) {
 }
 
 func TestSearchStep_Execute(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
+	source := &searchSource{name: "ytdlp", found: []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://youtube.com/watch?v=abcAAAAAAAA",
 			downloadtest.WithTitle("Artist - Song Title"),
@@ -123,7 +123,7 @@ func TestSearchStep_Execute(t *testing.T) {
 func TestSearchStep_Execute_NoCandidates(t *testing.T) {
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Nonexistent Song", Artist: "Nobody"}}
 
-	err := runPipeline(context.Background(), service.NewSourceRegistry(&searchSource{name: "ytdlp", found: []ports.AudioCandidate{}}), ac)
+	err := runPipeline(context.Background(), service.NewSourceRegistry(&searchSource{name: "ytdlp", found: []domain.AudioCandidate{}}), ac)
 
 	step := failedStep(t, err)
 	if step.Step != "search" || step.Err.Error() != "no candidates found" {
@@ -148,7 +148,7 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 }
 
 func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
+	source := &searchSource{name: "ytdlp", found: []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://youtube.com/watch?v=sameSameSam",
 			downloadtest.WithTitle("Artist - Song"),
@@ -175,7 +175,7 @@ func TestSearchStep_Name(t *testing.T) {
 func searchWithAllExcluded(t *testing.T, down *searchSource) error {
 	t.Helper()
 	const url = "https://example.com/a"
-	healthy := &searchSource{name: "healthy", found: []ports.AudioCandidate{downloadtest.Candidate(url)}}
+	healthy := &searchSource{name: "healthy", found: []domain.AudioCandidate{downloadtest.Candidate(url)}}
 	ac := &service.AcquisitionContext{Replace: service.ReplaceState{ExcludeKeys: []string{domain.SourceKey(url)}}}
 	err := runPipeline(context.Background(), service.NewSourceRegistry(down, healthy), ac)
 	if failedStep(t, err).Step != "search" {
@@ -215,7 +215,7 @@ func TestSearchStep_HealthyAllExcluded_StaysNoMatchFound(t *testing.T) {
 	}
 }
 
-func searchedWith(t *testing.T, ac *service.AcquisitionContext) ports.FindRequest {
+func searchedWith(t *testing.T, ac *service.AcquisitionContext) domain.FindRequest {
 	t.Helper()
 	source := &searchSource{name: "ytdlp"}
 	_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
@@ -228,7 +228,7 @@ func searchedWith(t *testing.T, ac *service.AcquisitionContext) ports.FindReques
 
 func TestSearchStep_TheRequestCarriesTheCatalogPins(t *testing.T) {
 	explicit := false
-	sources := []ports.CatalogSource{{Provider: "ytmusic", ExternalID: "dQw4w9WgXcQ"}}
+	sources := []domain.CatalogSource{{Provider: "ytmusic", ExternalID: "dQw4w9WgXcQ"}}
 
 	req := searchedWith(t, &service.AcquisitionContext{Track: service.TrackRef{CatalogSources: sources, CatalogExplicit: &explicit}})
 
@@ -244,10 +244,10 @@ func TestSearchStep_TheRequestCarriesTheCatalogPins(t *testing.T) {
 }
 
 func TestSearchStep_TheRequestHintsTheResolvedISRCWhenTheTrackHasNone(t *testing.T) {
-	guessed := &service.AcquisitionContext{Identity: ports.RecordingIdentity{ISRC: "CAA509814003"}}
+	guessed := &service.AcquisitionContext{Identity: domain.RecordingIdentity{ISRC: "CAA509814003"}}
 	owned := &service.AcquisitionContext{
 		Track:    service.TrackRef{ISRC: "USWB19901214"},
-		Identity: ports.RecordingIdentity{ISRC: "DEUM71724939"},
+		Identity: domain.RecordingIdentity{ISRC: "DEUM71724939"},
 	}
 
 	if got := searchedWith(t, guessed).ISRC; got != "CAA509814003" {
@@ -259,8 +259,8 @@ func TestSearchStep_TheRequestHintsTheResolvedISRCWhenTheTrackHasNone(t *testing
 }
 
 func TestSearchStep_AFallbackOnlyPassStaysAFallbackOnlyPass(t *testing.T) {
-	first := &searchSource{name: "first", found: []ports.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithTitle("Blinding Lights"))}}
-	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{downloadtest.Candidate("u2", downloadtest.WithTitle("Blinding Lights"))}}
+	first := &searchSource{name: "first", found: []domain.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithTitle("Blinding Lights"))}}
+	fallback := &searchSource{name: "fallback", found: []domain.AudioCandidate{downloadtest.Candidate("u2", downloadtest.WithTitle("Blinding Lights"))}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}, Pass: service.PassFallbackOnly}
 
 	_ = runPipeline(context.Background(), service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback}), ac)
@@ -274,11 +274,11 @@ func TestSearchStep_AFallbackOnlyPassStaysAFallbackOnlyPass(t *testing.T) {
 }
 
 func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing.T) {
-	first := &searchSource{name: "first", found: []ports.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithTitle("Blinding Lights"))}}
-	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{downloadtest.Candidate(
+	first := &searchSource{name: "first", found: []domain.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithTitle("Blinding Lights"))}}
+	fallback := &searchSource{name: "fallback", found: []domain.AudioCandidate{downloadtest.Candidate(
 		"u2",
 		downloadtest.WithTitle("Blinding Lights"),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 	)}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}}
 

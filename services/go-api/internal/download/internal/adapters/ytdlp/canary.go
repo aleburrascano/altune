@@ -1,7 +1,7 @@
 package ytdlp
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -13,16 +13,16 @@ import (
 	"time"
 )
 
-const cookieCopyDirPattern = ports.TempDirPrefix + "cookies-*"
+const cookieCopyDirPattern = domain.TempDirPrefix + "cookies-*"
 
 const canaryTimeout = 60 * time.Second
 
 const soundCloudPreviewDuration = 30.0
 
 const (
-	youtubeCanaryName    = string(ports.ProviderYouTube)
+	youtubeCanaryName    = string(domain.ProviderYouTube)
 	ytMusicCanaryName    = "ytmusic"
-	soundCloudCanaryName = string(ports.ProviderSoundCloud)
+	soundCloudCanaryName = string(domain.ProviderSoundCloud)
 )
 
 type CanarySource struct {
@@ -75,7 +75,7 @@ func (s *YouTubeAudioSearcher) runCanaryProbe(parent context.Context, source Can
 }
 
 func (s *YouTubeAudioSearcher) canaryStopped(parent, run context.Context) error {
-	if ports.RunTimedOut(parent, run) {
+	if domain.RunTimedOut(parent, run) {
 		return fmt.Errorf("timed out after %s", s.canaryTimeout)
 	}
 	if err := parent.Err(); err != nil {

@@ -1,13 +1,13 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"cmp"
 	"slices"
 	"strings"
 )
 
-func appendSorted(ranked []ports.AudioCandidate, bucket []entry, compare func(a, b entry) int) []ports.AudioCandidate {
+func appendSorted(ranked []domain.AudioCandidate, bucket []entry, compare func(a, b entry) int) []domain.AudioCandidate {
 	slices.SortStableFunc(bucket, compare)
 	for _, e := range bucket {
 		ranked = append(ranked, e.candidate)
@@ -53,7 +53,7 @@ func compareTie(a, b entry) int {
 }
 
 func isUsersPick(e entry) bool {
-	return e.candidate.Kind == ports.KindCatalogPin
+	return e.candidate.Kind == domain.KindCatalogPin
 }
 
 func trueFirst(a, b bool) int {

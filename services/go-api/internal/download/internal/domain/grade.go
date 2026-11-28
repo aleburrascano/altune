@@ -7,12 +7,12 @@ const PipelineGeneration = 2
 type Grade string
 
 const (
-	A     Grade = "A"
-	AUser Grade = "A_user"
-	B     Grade = "B"
-	C     Grade = "C"
-	D     Grade = "D"
-	F     Grade = "F"
+	GradeA     Grade = "A"
+	GradeAUser Grade = "A_user"
+	GradeB     Grade = "B"
+	GradeC     Grade = "C"
+	GradeD     Grade = "D"
+	GradeF     Grade = "F"
 
 	BestAvailable Grade = "best_available"
 )
@@ -20,30 +20,30 @@ const (
 type FingerprintResult int
 
 const (
-	Silent FingerprintResult = iota
-	Approximates
-	Matches
-	Contradicts
-	Unsupported
+	FingerprintSilent FingerprintResult = iota
+	FingerprintApproximates
+	FingerprintMatches
+	FingerprintContradicts
+	FingerprintUnsupported
 )
 
-func Of(fingerprint FingerprintResult, provenance downloadprovenance.AcquisitionProvenance, kind SourceKind) Grade {
+func GradeOf(fingerprint FingerprintResult, provenance downloadprovenance.AcquisitionProvenance, kind SourceKind) Grade {
 	switch fingerprint {
-	case Contradicts:
-		return F
-	case Matches:
+	case FingerprintContradicts:
+		return GradeF
+	case FingerprintMatches:
 		if kind.IsOfficial() {
-			return A
+			return GradeA
 		}
-		return B
-	case Approximates:
-		return B
-	case Unsupported:
-		return D
-	case Silent:
+		return GradeB
+	case FingerprintApproximates:
+		return GradeB
+	case FingerprintUnsupported:
+		return GradeD
+	case FingerprintSilent:
 	}
 	if provenance == downloadprovenance.ProvenanceVerified || provenance == downloadprovenance.ProvenanceCorroborated {
-		return C
+		return GradeC
 	}
-	return D
+	return GradeD
 }

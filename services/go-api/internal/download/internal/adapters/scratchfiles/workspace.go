@@ -1,6 +1,7 @@
 package scratchfiles
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
@@ -20,7 +21,7 @@ type Workspace struct{}
 func New() *Workspace { return &Workspace{} }
 
 func (*Workspace) Create(pattern string) (string, error) {
-	dir, err := os.MkdirTemp("", ports.TempDirPrefix+pattern)
+	dir, err := os.MkdirTemp("", domain.TempDirPrefix+pattern)
 	if err != nil {
 		return "", fmt.Errorf("create a temp workspace: %w", err)
 	}
@@ -70,7 +71,7 @@ func removeStale(ctx context.Context, path string) bool {
 }
 
 func isAbandoned(entry os.DirEntry, abandonedBefore time.Time) bool {
-	if !entry.IsDir() || !strings.HasPrefix(entry.Name(), ports.TempDirPrefix) {
+	if !entry.IsDir() || !strings.HasPrefix(entry.Name(), domain.TempDirPrefix) {
 		return false
 	}
 	info, err := entry.Info()

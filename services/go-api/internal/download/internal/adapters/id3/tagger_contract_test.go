@@ -2,6 +2,7 @@ package id3_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/id3"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"context"
 	"errors"
@@ -21,7 +22,7 @@ func TestTagger_SkipsNonMp3(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := id3.NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A"}); !errors.Is(err, id3.ErrUnsupportedContainer) {
+	if err := id3.NewTagger().Tag(context.Background(), file, domain.TrackTags{Title: "T", Artist: "A"}); !errors.Is(err, id3.ErrUnsupportedContainer) {
 		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
 	}
 
@@ -41,7 +42,7 @@ func TestTagger_AnUnsupportedContainerIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := id3.NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A"})
+	err := id3.NewTagger().Tag(context.Background(), file, domain.TrackTags{Title: "T", Artist: "A"})
 	if !errors.Is(err, id3.ErrUnsupportedContainer) {
 		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
 	}
@@ -57,7 +58,7 @@ func TestTagger_AnUnsupportedContainerIsAnError(t *testing.T) {
 
 func TestTagger_BadPath_ReturnsError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "does-not-exist.mp3")
-	if err := id3.NewTagger().Tag(context.Background(), path, ports.TrackTags{Title: "T", Artist: "A"}); err == nil {
+	if err := id3.NewTagger().Tag(context.Background(), path, domain.TrackTags{Title: "T", Artist: "A"}); err == nil {
 		t.Fatal("expected an error for a missing file, got nil")
 	}
 }
@@ -68,7 +69,7 @@ func TestTagger_WritesTags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tags := ports.TrackTags{
+	tags := domain.TrackTags{
 		Title:  "Blinding Lights",
 		Artist: "The Weeknd",
 		Album:  "After Hours",
@@ -101,7 +102,7 @@ func TestTagger_WritesTheISRCFrame(t *testing.T) {
 	if err := os.WriteFile(file, []byte{}, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := id3.NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A", ISRC: "USRC17607839"}); err != nil {
+	if err := id3.NewTagger().Tag(context.Background(), file, domain.TrackTags{Title: "T", Artist: "A", ISRC: "USRC17607839"}); err != nil {
 		t.Fatalf("Tag error: %v", err)
 	}
 	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})

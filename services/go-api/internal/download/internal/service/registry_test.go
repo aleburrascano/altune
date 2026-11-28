@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -17,18 +18,18 @@ import (
 
 type stubSource struct {
 	name       domain.SourceName
-	found      []ports.AudioCandidate
+	found      []domain.AudioCandidate
 	findErr    error
 	panicValue any
 	fetchPath  string
 	fetchErr   error
-	fetched    []ports.AudioCandidate
+	fetched    []domain.AudioCandidate
 	finds      int
 }
 
 func (s *stubSource) Name() domain.SourceName { return s.name }
 
-func (s *stubSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *stubSource) Find(_ context.Context, _ domain.FindRequest) ([]domain.AudioCandidate, error) {
 	s.finds++
 	if s.panicValue != nil {
 		panic(s.panicValue)
@@ -36,19 +37,19 @@ func (s *stubSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.Audio
 	return s.found, s.findErr
 }
 
-func (s *stubSource) Fetch(_ context.Context, candidate ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
+func (s *stubSource) Fetch(_ context.Context, candidate domain.AudioCandidate, _ string) (domain.FetchedAudio, error) {
 	s.fetched = append(s.fetched, candidate)
 	return fetchedAt(s.fetchPath, s.fetchErr)
 }
 
 func TestSourceRegistry_DropsACandidateWhoseYouTubeURLHasNoValidVideoID(t *testing.T) {
-	source := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{
+	source := &stubSource{name: "ytdlp", found: []domain.AudioCandidate{
 		downloadtest.Candidate("https://music.youtube.com/watch?v=short"),
 		downloadtest.Candidate("https://music.youtube.com/watch?v=aaaaaaaaaaa"),
 		downloadtest.Candidate("https://music.youtube.com/watch?v=bbbbbbbbbbb"),
 	}}
 
-	got, err := service.NewSourceRegistry(source).Find(context.Background(), ports.FindRequest{})
+	got, err := service.NewSourceRegistry(source).Find(context.Background(), domain.FindRequest{})
 	if err != nil {
 		t.Fatalf("Find returned error: %v", err)
 	}
@@ -58,8 +59,8 @@ func TestSourceRegistry_DropsACandidateWhoseYouTubeURLHasNoValidVideoID(t *testi
 }
 
 func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
-	reg := service.NewSourceRegistry(nil, &stubSource{name: "a", found: []ports.AudioCandidate{downloadtest.Candidate("u1")}}, nil)
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	reg := service.NewSourceRegistry(nil, &stubSource{name: "a", found: []domain.AudioCandidate{downloadtest.Candidate("u1")}}, nil)
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if err != nil {
 		t.Fatalf("Find returned error: %v, want nil sources dropped", err)
 	}
@@ -70,18 +71,18 @@ func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
 
 func TestSourceRegistry_FindNoSourcesConfigured(t *testing.T) {
 	reg := service.NewSourceRegistry()
-	_, err := reg.Find(context.Background(), ports.FindRequest{})
+	_, err := reg.Find(context.Background(), domain.FindRequest{})
 	if !errors.Is(err, service.ErrNoAudioSources) {
 		t.Fatalf("err = %v, want ErrNoAudioSources", err)
 	}
 }
 
 func TestSourceRegistry_FindMergesStampsAndDedupesByURL(t *testing.T) {
-	a := &stubSource{name: "a", found: []ports.AudioCandidate{downloadtest.Candidate("u1"), downloadtest.Candidate("shared")}}
-	b := &stubSource{name: "b", found: []ports.AudioCandidate{downloadtest.Candidate("shared"), downloadtest.Candidate("u2"), downloadtest.Candidate("")}}
+	a := &stubSource{name: "a", found: []domain.AudioCandidate{downloadtest.Candidate("u1"), downloadtest.Candidate("shared")}}
+	b := &stubSource{name: "b", found: []domain.AudioCandidate{downloadtest.Candidate("shared"), downloadtest.Candidate("u2"), downloadtest.Candidate("")}}
 	reg := service.NewSourceRegistry(a, b)
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if err != nil {
 		t.Fatalf("Find returned error: %v", err)
 	}
@@ -102,10 +103,10 @@ func TestSourceRegistry_FindMergesStampsAndDedupesByURL(t *testing.T) {
 
 func TestSourceRegistry_FindSurvivesPanickingSource(t *testing.T) {
 	panicky := &stubSource{name: "panicky", panicValue: "boom"}
-	healthy := &stubSource{name: "healthy", found: []ports.AudioCandidate{downloadtest.Candidate("u1")}}
+	healthy := &stubSource{name: "healthy", found: []domain.AudioCandidate{downloadtest.Candidate("u1")}}
 	reg := service.NewSourceRegistry(panicky, healthy)
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if err != nil {
 		t.Fatalf("one panicking source must not fail the search, got err: %v", err)
 	}
@@ -116,10 +117,10 @@ func TestSourceRegistry_FindSurvivesPanickingSource(t *testing.T) {
 
 func TestSourceRegistry_FindReturnsPartialOnSingleFailure(t *testing.T) {
 	failing := &stubSource{name: "failing", findErr: errors.New("down")}
-	healthy := &stubSource{name: "healthy", found: []ports.AudioCandidate{downloadtest.Candidate("u1")}}
+	healthy := &stubSource{name: "healthy", found: []domain.AudioCandidate{downloadtest.Candidate("u1")}}
 	reg := service.NewSourceRegistry(failing, healthy)
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if err != nil {
 		t.Fatalf("one failing source must not fail the search, got err: %v", err)
 	}
@@ -133,7 +134,7 @@ func TestSourceRegistry_FindFailsWhenEverySourceFails(t *testing.T) {
 	second := &stubSource{name: "second", panicValue: "second boom"}
 	reg := service.NewSourceRegistry(first, second)
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if got != nil {
 		t.Fatalf("got %v, want nil when every source failed", got)
 	}
@@ -151,7 +152,7 @@ func TestSourceRegistry_Find_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
 		&stubSource{name: "b"},
 		&stubSource{name: "c"},
 	}
-	slots := [][]ports.AudioCandidate{
+	slots := [][]domain.AudioCandidate{
 		{downloadtest.Candidate("u1"), downloadtest.Candidate("dup")},
 		nil,
 		{downloadtest.Candidate("dup"), downloadtest.Candidate("u2")},
@@ -173,7 +174,7 @@ func TestSourceRegistry_Find_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
 	}
 
 	allErrs := []error{errors.New("a failed"), errors.New("b failed"), errors.New("c failed")}
-	_, err = findAcross(context.Background(), sources, [][]ports.AudioCandidate{nil, nil, nil}, allErrs)
+	_, err = findAcross(context.Background(), sources, [][]domain.AudioCandidate{nil, nil, nil}, allErrs)
 	if err == nil || !strings.Contains(err.Error(), "a failed") {
 		t.Fatalf("err = %v, want every-source-failed wrapping the first error", err)
 	}
@@ -181,7 +182,7 @@ func TestSourceRegistry_Find_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
 
 func TestSourceRegistry_Find_CollapsesOneVideoSpelledByTwoSources(t *testing.T) {
 	sources := []ports.AudioSource{&stubSource{name: "ytmusic"}, &stubSource{name: "ytdlp"}}
-	slots := [][]ports.AudioCandidate{
+	slots := [][]domain.AudioCandidate{
 		{downloadtest.Candidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
 		{downloadtest.Candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDabc")},
 	}
@@ -197,7 +198,7 @@ func TestSourceRegistry_Find_CollapsesOneVideoSpelledByTwoSources(t *testing.T) 
 
 func TestSourceRegistry_Find_PrefersTheResolvedSpellingOfOneVideo(t *testing.T) {
 	sources := []ports.AudioSource{&stubSource{name: "ytdlp"}, &stubSource{name: "ytmusic"}}
-	slots := [][]ports.AudioCandidate{
+	slots := [][]domain.AudioCandidate{
 		{downloadtest.Candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")},
 		{downloadtest.ResolvedCandidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
 	}
@@ -213,7 +214,7 @@ func TestSourceRegistry_Find_PrefersTheResolvedSpellingOfOneVideo(t *testing.T) 
 
 func TestSourceRegistry_Find_KeepsTheResolvedCandidateAheadOfALaterDuplicate(t *testing.T) {
 	sources := []ports.AudioSource{&stubSource{name: "ytmusic"}, &stubSource{name: "ytdlp"}}
-	slots := [][]ports.AudioCandidate{
+	slots := [][]domain.AudioCandidate{
 		{downloadtest.ResolvedCandidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
 		{downloadtest.Candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")},
 	}
@@ -263,7 +264,7 @@ type previewingSource struct {
 	*stubSource
 }
 
-func (s previewingSource) FetchPreview(context.Context, ports.AudioCandidate, string, int) (string, error) {
+func (s previewingSource) FetchPreview(context.Context, domain.AudioCandidate, string, int) (string, error) {
 	return "/tmp/preview.mp3", nil
 }
 
@@ -305,7 +306,7 @@ func searchFailureCode(t *testing.T, reg *service.SourceRegistry) downloadfailur
 	t.Helper()
 	track := pendingSong()
 	ledger := memory.NewLedger(track)
-	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
+	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err == nil {
 		t.Fatal("Execute succeeded, want a search failure")
 	}
 	return persistedCode(t, ledger, track.ID)
@@ -314,7 +315,7 @@ func searchFailureCode(t *testing.T, reg *service.SourceRegistry) downloadfailur
 func TestSourceRegistry_FindEmptyWithUnavailableSourceReportsUnavailable(t *testing.T) {
 	reg := service.NewSourceRegistry(throttledSource(), &stubSource{name: "ytmusic"})
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if !domain.IsSourceUnavailable(err) || len(got) != 0 {
 		t.Fatalf("Find = %v, %v; want empty and a source-unavailable error", got, err)
 	}
@@ -326,10 +327,10 @@ func TestSourceRegistry_FindEmptyWithUnavailableSourceReportsUnavailable(t *test
 func TestSourceRegistry_FindPartialFailureWithCandidatesSucceeds(t *testing.T) {
 	reg := service.NewSourceRegistry(
 		throttledSource(),
-		&stubSource{name: "ytmusic", found: []ports.AudioCandidate{downloadtest.Candidate("u1")}},
+		&stubSource{name: "ytmusic", found: []domain.AudioCandidate{downloadtest.Candidate("u1")}},
 	)
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %v, %v; want one candidate and nil error", got, err)
 	}
@@ -338,7 +339,7 @@ func TestSourceRegistry_FindPartialFailureWithCandidatesSucceeds(t *testing.T) {
 func TestSourceRegistry_FindAllEmptyWithoutErrorIsNoMatch(t *testing.T) {
 	reg := service.NewSourceRegistry(&stubSource{name: "a"}, &stubSource{name: "b"})
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if err != nil || len(got) != 0 {
 		t.Fatalf("Find = %v, %v; want empty and nil error", got, err)
 	}
@@ -350,26 +351,26 @@ func TestSourceRegistry_FindAllEmptyWithoutErrorIsNoMatch(t *testing.T) {
 func findAcross(
 	ctx context.Context,
 	sources []ports.AudioSource,
-	slots [][]ports.AudioCandidate,
+	slots [][]domain.AudioCandidate,
 	errs []error,
-) ([]ports.AudioCandidate, error) {
+) ([]domain.AudioCandidate, error) {
 	for i, source := range sources {
 		stub := source.(*stubSource)
 		stub.found, stub.findErr = slots[i], errs[i]
 	}
-	return service.NewSourceRegistry(sources...).Find(ctx, ports.FindRequest{})
+	return service.NewSourceRegistry(sources...).Find(ctx, domain.FindRequest{})
 }
 
-func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
-	return ports.FetchedAudio{Path: path}, err
+func fetchedAt(path string, err error) (domain.FetchedAudio, error) {
+	return domain.FetchedAudio{Path: path}, err
 }
 
 func TestSourceRegistry_AResolvedFirstTierHitSkipsTheFallback(t *testing.T) {
-	first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{downloadtest.ResolvedCandidate("https://music.youtube.com/watch?v=abcabcabcab")}}
-	fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate("u1")}}
+	first := &stubSource{name: "ytmsearch", found: []domain.AudioCandidate{downloadtest.ResolvedCandidate("https://music.youtube.com/watch?v=abcabcabcab")}}
+	fallback := &stubSource{name: "ytdlp", found: []domain.AudioCandidate{downloadtest.Candidate("u1")}}
 	reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback})
 
-	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	got, err := reg.Find(context.Background(), domain.FindRequest{})
 	if err != nil {
 		t.Fatalf("Find returned error: %v", err)
 	}
@@ -383,15 +384,15 @@ func TestSourceRegistry_AResolvedFirstTierHitSkipsTheFallback(t *testing.T) {
 
 func TestSourceRegistry_TheFallbackRunsWhenTheFirstTierHasNoResolvedHit(t *testing.T) {
 	for name, first := range map[string]*stubSource{
-		"unresolved only": {name: "ytmsearch", found: []ports.AudioCandidate{downloadtest.Candidate("u0")}},
+		"unresolved only": {name: "ytmsearch", found: []domain.AudioCandidate{downloadtest.Candidate("u0")}},
 		"nothing":         {name: "ytmsearch"},
 		"error":           {name: "ytmsearch", findErr: errors.New("innertube 503")},
 	} {
 		t.Run(name, func(t *testing.T) {
-			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate("u1")}}
+			fallback := &stubSource{name: "ytdlp", found: []domain.AudioCandidate{downloadtest.Candidate("u1")}}
 			reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback})
 
-			got, err := reg.Find(context.Background(), ports.FindRequest{})
+			got, err := reg.Find(context.Background(), domain.FindRequest{})
 			if err != nil {
 				t.Fatalf("Find returned error: %v", err)
 			}
@@ -419,23 +420,23 @@ func TestSourceRegistry_FetchReachesFallbackSources(t *testing.T) {
 
 func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 	artTrack := downloadtest.Candidate("https://music.youtube.com/watch?v=abcabcabcab")
-	artTrack.Kind = ports.KindArtTrack
+	artTrack.Kind = domain.KindArtTrack
 	upload := downloadtest.Candidate("https://www.youtube.com/watch?v=def")
-	upload.Kind = ports.KindUpload
+	upload.Kind = domain.KindUpload
 
 	for name, tc := range map[string]struct {
-		hit            ports.AudioCandidate
+		hit            domain.AudioCandidate
 		wantSecondTier int
 	}{
 		"art track": {artTrack, 0},
 		"upload":    {upload, 1},
 	} {
 		t.Run(name, func(t *testing.T) {
-			first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{tc.hit}}
-			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate("u1")}}
+			first := &stubSource{name: "ytmsearch", found: []domain.AudioCandidate{tc.hit}}
+			fallback := &stubSource{name: "ytdlp", found: []domain.AudioCandidate{downloadtest.Candidate("u1")}}
 			reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback})
 
-			if _, err := reg.Find(context.Background(), ports.FindRequest{}); err != nil {
+			if _, err := reg.Find(context.Background(), domain.FindRequest{}); err != nil {
 				t.Fatalf("Find returned error: %v", err)
 			}
 			if fallback.finds != tc.wantSecondTier {
@@ -448,21 +449,21 @@ func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 	tests := []struct {
 		name         string
-		first        []ports.AudioCandidate
+		first        []domain.AudioCandidate
 		withFallback bool
-		req          ports.FindRequest
+		req          domain.FindRequest
 		want         bool
 	}{
-		{"resolved first-tier hit skips the configured fallback", []ports.AudioCandidate{downloadtest.ResolvedCandidate("u1")}, true, ports.FindRequest{}, true},
-		{"unresolved first tier runs the fallback", []ports.AudioCandidate{downloadtest.Candidate("u1")}, true, ports.FindRequest{}, false},
-		{"no fallback configured", []ports.AudioCandidate{downloadtest.ResolvedCandidate("u1")}, false, ports.FindRequest{}, false},
-		{"fallback only", []ports.AudioCandidate{downloadtest.ResolvedCandidate("u1")}, true, ports.FindRequest{Tier: ports.TierFallbackOnly}, false},
+		{"resolved first-tier hit skips the configured fallback", []domain.AudioCandidate{downloadtest.ResolvedCandidate("u1")}, true, domain.FindRequest{}, true},
+		{"unresolved first tier runs the fallback", []domain.AudioCandidate{downloadtest.Candidate("u1")}, true, domain.FindRequest{}, false},
+		{"no fallback configured", []domain.AudioCandidate{downloadtest.ResolvedCandidate("u1")}, false, domain.FindRequest{}, false},
+		{"fallback only", []domain.AudioCandidate{downloadtest.ResolvedCandidate("u1")}, true, domain.FindRequest{Tier: domain.TierFallbackOnly}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var fallback []ports.AudioSource
 			if tt.withFallback {
-				fallback = []ports.AudioSource{&stubSource{name: "fb", found: []ports.AudioCandidate{downloadtest.Candidate("u2")}}}
+				fallback = []ports.AudioSource{&stubSource{name: "fb", found: []domain.AudioCandidate{downloadtest.Candidate("u2")}}}
 			}
 			reg := service.NewSourceRegistryWithFallback([]ports.AudioSource{&stubSource{name: "first", found: tt.first}}, fallback)
 			res, err := reg.FindReportingOutage(context.Background(), tt.req)
@@ -479,9 +480,9 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 func TestFindReportingOutage_LogsEachCandidateDroppedForNoSourceKey(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelWarn)
 	keyless := downloadtest.Candidate("https://www.youtube.com/", downloadtest.WithSource("stub"))
-	reg := service.NewSourceRegistry(&stubSource{name: "stub", found: []ports.AudioCandidate{downloadtest.Candidate("u1"), keyless}})
+	reg := service.NewSourceRegistry(&stubSource{name: "stub", found: []domain.AudioCandidate{downloadtest.Candidate("u1"), keyless}})
 
-	res, err := reg.FindReportingOutage(context.Background(), ports.FindRequest{})
+	res, err := reg.FindReportingOutage(context.Background(), domain.FindRequest{})
 	if err != nil {
 		t.Fatalf("FindReportingOutage: %v", err)
 	}
@@ -497,5 +498,67 @@ func TestFindReportingOutage_LogsEachCandidateDroppedForNoSourceKey(t *testing.T
 	}
 	if dropped != 1 {
 		t.Fatalf("drop log lines = %d, want 1 for the keyless candidate in %q", dropped, logs.String())
+	}
+}
+
+func unavailable() error {
+	return &domain.SourceUnavailableError{Source: "yt", Err: errors.New("429")}
+}
+
+func isSourceUnavailable(err error) bool {
+	var u *domain.SourceUnavailableError
+	return errors.As(err, &u)
+}
+
+func findBesideFailure(failure error) ([]domain.AudioCandidate, error) {
+	return service.NewSourceRegistry(&stubSource{name: "a", findErr: failure}, &stubSource{name: "b"}).
+		Find(context.Background(), domain.FindRequest{Title: "t", Artist: "a"})
+}
+
+func TestFind_EmptyMergeBesideUnavailableFailureIsUnavailable(t *testing.T) {
+	got, err := findBesideFailure(unavailable())
+
+	if !isSourceUnavailable(err) || len(got) != 0 {
+		t.Fatalf("got %v, %v; want empty and a source-unavailable error", got, err)
+	}
+}
+
+func TestFind_EmptyMergeBesidePlainFailureIsDegraded(t *testing.T) {
+	parseErr := errors.New("parse")
+
+	_, err := findBesideFailure(parseErr)
+
+	if !errors.Is(err, domain.ErrSearchDegraded) || !errors.Is(err, parseErr) {
+		t.Fatalf("err = %v, want ErrSearchDegraded wrapping the parse failure", err)
+	}
+}
+
+func TestFindReportingOutage_KeepsCandidatesBesideAnUnavailableFailure(t *testing.T) {
+	want := downloadtest.Candidate("https://example.com/a")
+	registry := service.NewSourceRegistry(
+		&stubSource{name: "a", findErr: unavailable()},
+		&stubSource{name: "b", found: []domain.AudioCandidate{want}})
+
+	got, err := registry.FindReportingOutage(context.Background(), domain.FindRequest{Title: "t", Artist: "a"})
+
+	if err != nil || len(got.Candidates) != 1 || got.Candidates[0].URL != want.URL || !isSourceUnavailable(got.Outage) {
+		t.Fatalf("got %+v, err %v; want the candidate and the outage", got, err)
+	}
+}
+
+func TestFindReportingOutage_MergesEverySource(t *testing.T) {
+	sources := make([]ports.AudioSource, 0, 3)
+	for i := range 3 {
+		out := make([]domain.AudioCandidate, 0, 5)
+		for j := range 5 {
+			out = append(out, downloadtest.Candidate(fmt.Sprintf("https://example.com/%d/%d", i, j)))
+		}
+		sources = append(sources, &stubSource{name: domain.SourceName(fmt.Sprint(i)), found: out})
+	}
+
+	got, err := service.NewSourceRegistry(sources...).FindReportingOutage(context.Background(), domain.FindRequest{Title: "t", Artist: "a"})
+
+	if err != nil || got.Outage != nil || len(got.Candidates) != 15 {
+		t.Fatalf("got %d candidates, outage %v, err %v; want all 15 from 3 sources", len(got.Candidates), got.Outage, err)
 	}
 }

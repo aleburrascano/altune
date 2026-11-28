@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -11,7 +11,7 @@ import (
 
 type panickingTagger struct{}
 
-func (panickingTagger) Tag(context.Context, string, ports.TrackTags) error {
+func (panickingTagger) Tag(context.Context, string, domain.TrackTags) error {
 	panic("tagger exploded")
 }
 

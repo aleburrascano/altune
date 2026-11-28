@@ -12,11 +12,11 @@ import (
 
 const (
 	SourceName  domain.SourceName = "ytmusic"
-	identityKey                   = ports.ProviderYouTube
+	identityKey                   = domain.ProviderYouTube
 )
 
 type audioFetcher interface {
-	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
+	Download(ctx context.Context, url string, outDir string) (domain.FetchedAudio, error)
 }
 
 type videoLookup interface {
@@ -36,7 +36,7 @@ func NewSource(fetcher audioFetcher, lookup videoLookup) *Source {
 
 func (s *Source) Name() domain.SourceName { return SourceName }
 
-func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *Source) Find(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	videoID, fromCatalogPin := pinnedVideoID(req)
 	if videoID == "" {
 		return nil, nil
@@ -50,10 +50,10 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	slog.InfoContext(ctx, "acquisition.ytmusic_resolved",
 		"video_id", videoID, "title", req.Title)
 
-	return []ports.AudioCandidate{s.pinnedCandidate(ctx, videoID, fromCatalogPin)}, nil
+	return []domain.AudioCandidate{s.pinnedCandidate(ctx, videoID, fromCatalogPin)}, nil
 }
 
-func pinnedVideoID(req ports.FindRequest) (videoID string, fromCatalogPin bool) {
+func pinnedVideoID(req domain.FindRequest) (videoID string, fromCatalogPin bool) {
 	for _, pin := range req.CatalogSources {
 		if pin.Provider == string(identityKey) && pin.ExternalID != "" {
 			return pin.ExternalID, true
@@ -63,17 +63,17 @@ func pinnedVideoID(req ports.FindRequest) (videoID string, fromCatalogPin bool) 
 	return resolved.ExternalID, false
 }
 
-func (s *Source) pinnedCandidate(ctx context.Context, videoID string, fromCatalogPin bool) ports.AudioCandidate {
+func (s *Source) pinnedCandidate(ctx context.Context, videoID string, fromCatalogPin bool) domain.AudioCandidate {
 	return CandidateForWatch(videoID, s.observe(ctx, videoID), fromCatalogPin)
 }
 
-func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) ports.AudioCandidate {
+func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) domain.AudioCandidate {
 	resolved := pinned || isCatalogVideo(observed.Type)
-	kind := ports.KindUpload
+	kind := domain.KindUpload
 	if resolved {
 		kind = resolvedKind(observed.Type)
 	}
-	return ports.AudioCandidate{
+	return domain.AudioCandidate{
 		Title:       observed.Title,
 		Artists:     observed.Artists,
 		Explicit:    observed.Explicit,
@@ -88,11 +88,11 @@ func isCatalogVideo(videoType ytmsearch.VideoType) bool {
 	return videoType == ytmsearch.VideoTypeAudioOnly || videoType == ytmsearch.VideoTypeOfficialVideo
 }
 
-func resolvedKind(videoType ytmsearch.VideoType) ports.CandidateKind {
+func resolvedKind(videoType ytmsearch.VideoType) domain.CandidateKind {
 	if videoType == ytmsearch.VideoTypeAudioOnly {
-		return ports.KindArtTrack
+		return domain.KindArtTrack
 	}
-	return ports.KindPinnedVideo
+	return domain.KindPinnedVideo
 }
 
 func (s *Source) observe(ctx context.Context, videoID string) ytmsearch.Watch {
@@ -104,7 +104,7 @@ func (s *Source) observe(ctx context.Context, videoID string) ytmsearch.Watch {
 	return watch
 }
 
-func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *Source) Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	r0, err := s.fetcher.Download(ctx, candidate.URL, outDir)
 	if err != nil {
 		return r0, fmt.Errorf("download audio: %w", err)

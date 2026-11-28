@@ -47,23 +47,23 @@ func (r *SourceRegistry) all() []ports.AudioSource {
 	return append(append([]ports.AudioSource{}, r.sources...), r.fallback...)
 }
 
-func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (r *SourceRegistry) Find(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	res, err := r.FindReportingOutage(ctx, req)
 	return res.Candidates, err
 }
 
 type FindResult struct {
-	Candidates      []ports.AudioCandidate
+	Candidates      []domain.AudioCandidate
 	Outage          error
 	FallbackSkipped bool
 }
 
-func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.FindRequest) (FindResult, error) {
+func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req domain.FindRequest) (FindResult, error) {
 	if len(r.sources) == 0 && len(r.fallback) == 0 {
 		return FindResult{}, ErrNoAudioSources
 	}
 
-	if req.Tier == ports.TierFallbackOnly {
+	if req.Tier == domain.TierFallbackOnly {
 		slots, errs := findAll(ctx, req, r.fallback)
 		return mergeSlotsReportingOutage(ctx, r.fallback, slots, errs)
 	}
@@ -80,8 +80,8 @@ func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.Find
 	return mergeSlotsReportingOutage(ctx, r.all(), append(slots, fallbackSlots...), append(errs, fallbackErrs...))
 }
 
-func findAll(ctx context.Context, req ports.FindRequest, sources []ports.AudioSource) ([][]ports.AudioCandidate, []error) {
-	slots := make([][]ports.AudioCandidate, len(sources))
+func findAll(ctx context.Context, req domain.FindRequest, sources []ports.AudioSource) ([][]domain.AudioCandidate, []error) {
+	slots := make([][]domain.AudioCandidate, len(sources))
 	errs := make([]error, len(sources))
 
 	g := parallel.New("acquisition.source_find_panic", len(sources))
@@ -92,8 +92,8 @@ func findAll(ctx context.Context, req ports.FindRequest, sources []ports.AudioSo
 	return slots, errs
 }
 
-func findOne(ctx context.Context, req ports.FindRequest, source ports.AudioSource) ([]ports.AudioCandidate, error) {
-	var found []ports.AudioCandidate
+func findOne(ctx context.Context, req domain.FindRequest, source ports.AudioSource) ([]domain.AudioCandidate, error) {
+	var found []domain.AudioCandidate
 	var err error
 	panicked := background.SafeRun(ctx, "acquisition.source_find_panic", func() { found, err = findStamped(ctx, req, source) })
 	if panicked != nil {
@@ -102,7 +102,7 @@ func findOne(ctx context.Context, req ports.FindRequest, source ports.AudioSourc
 	return found, err
 }
 
-func findStamped(ctx context.Context, req ports.FindRequest, source ports.AudioSource) ([]ports.AudioCandidate, error) {
+func findStamped(ctx context.Context, req domain.FindRequest, source ports.AudioSource) ([]domain.AudioCandidate, error) {
 	candidates, err := source.Find(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("source %s: %w", source.Name(), err)
@@ -110,7 +110,7 @@ func findStamped(ctx context.Context, req ports.FindRequest, source ports.AudioS
 	return stampSource(source.Name(), candidates), nil
 }
 
-func anyResolved(slots [][]ports.AudioCandidate) bool {
+func anyResolved(slots [][]domain.AudioCandidate) bool {
 	for _, slot := range slots {
 		for _, c := range slot {
 			if c.IsResolved() {
@@ -124,13 +124,13 @@ func anyResolved(slots [][]ports.AudioCandidate) bool {
 func mergeSlotsReportingOutage(
 	ctx context.Context,
 	sources []ports.AudioSource,
-	slots [][]ports.AudioCandidate,
+	slots [][]domain.AudioCandidate,
 	errs []error,
 ) (FindResult, error) {
-	candidates, outage, err := ports.CollectCandidatesReportingOutage(
+	candidates, outage, err := domain.CollectCandidatesReportingOutage(
 		len(sources),
-		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
-		func(i int, candidates []ports.AudioCandidate) {
+		func(i int) ([]domain.AudioCandidate, error) { return slots[i], errs[i] },
+		func(i int, candidates []domain.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.source_find_results",
 				"source", sources[i].Name(), "candidates", len(candidates))
 			for _, c := range candidates {
@@ -147,11 +147,14 @@ func mergeSlotsReportingOutage(
 			return fmt.Errorf("every audio source failed: %w", firstErr)
 		},
 	)
-	return FindResult{Candidates: candidates, Outage: outage}, err
+	if err != nil {
+		return FindResult{Candidates: candidates, Outage: outage}, fmt.Errorf("%w", err)
+	}
+	return FindResult{Candidates: candidates, Outage: outage}, nil
 }
 
-func stampSource(name domain.SourceName, candidates []ports.AudioCandidate) []ports.AudioCandidate {
-	out := make([]ports.AudioCandidate, 0, len(candidates))
+func stampSource(name domain.SourceName, candidates []domain.AudioCandidate) []domain.AudioCandidate {
+	out := make([]domain.AudioCandidate, 0, len(candidates))
 	for _, c := range candidates {
 		c.Source = name
 		out = append(out, c)
@@ -159,16 +162,16 @@ func stampSource(name domain.SourceName, candidates []ports.AudioCandidate) []po
 	return out
 }
 
-func (r *SourceRegistry) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (r *SourceRegistry) Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	for _, s := range r.all() {
 		if s.Name() == candidate.Source {
 			return s.Fetch(ctx, candidate, outDir)
 		}
 	}
-	return ports.FetchedAudio{}, fmt.Errorf("no source named %q for candidate %q", candidate.Source, candidate.URL)
+	return domain.FetchedAudio{}, fmt.Errorf("no source named %q for candidate %q", candidate.Source, candidate.URL)
 }
 
-func (r *SourceRegistry) PreviewFetcherFor(candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+func (r *SourceRegistry) PreviewFetcherFor(candidate domain.AudioCandidate) (ports.PreviewFetcher, bool) {
 	fetcher, ok := r.previewed[candidate.Source]
 	return fetcher, ok
 }

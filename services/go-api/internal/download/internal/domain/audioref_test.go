@@ -12,7 +12,7 @@ import (
 )
 
 func collisionRef(title string) string {
-	return domain.Build(domain.Names{UserID: "u", Artist: "A", Album: "B", Title: title}, "x.mp3")
+	return domain.NewAudioRef(domain.AudioRefParts{UserID: "u", Artist: "A", Album: "B", Title: title}, "x.mp3")
 }
 
 func TestBuild_DistinctRecordingsNeverShareAKey(t *testing.T) {
@@ -36,20 +36,20 @@ func TestBuild_VariantsOfOneRecordingShareAKey(t *testing.T) {
 }
 
 func legacySegment(s string) string {
-	return strings.Split(domain.BuildLegacy(domain.Names{UserID: "u", Artist: s, Album: "b", Title: "t"}, "x.mp3"), "/")[1]
+	return strings.Split(domain.LegacyAudioRef(domain.AudioRefParts{UserID: "u", Artist: s, Album: "b", Title: "t"}, "x.mp3"), "/")[1]
 }
 
 const testAttemptID = "11111111-1111-1111-1111-111111111111"
 
-func longTracks() map[string]domain.Names {
-	return map[string]domain.Names{
+func longTracks() map[string]domain.AudioRefParts {
+	return map[string]domain.AudioRefParts{
 		"ascii": {UserID: "u1", Artist: strings.Repeat("a", 300), Album: strings.Repeat("b", 300), Title: strings.Repeat("t", 300)},
 		"cjk":   {UserID: "u1", Artist: strings.Repeat("歌", 90), Album: strings.Repeat("集", 90), Title: strings.Repeat("曲", 90)},
 	}
 }
 
 func TestBuild_SegmentsFitFilesystemLimit(t *testing.T) {
-	builders := map[string]func(domain.Names, string) string{"canonical": domain.Build, "legacy": domain.BuildLegacy}
+	builders := map[string]func(domain.AudioRefParts, string) string{"canonical": domain.NewAudioRef, "legacy": domain.LegacyAudioRef}
 	for name, track := range longTracks() {
 		for builder, build := range builders {
 			ref := build(track, "/tmp/x.mp3")
@@ -73,7 +73,7 @@ func TestBuild_LongNamesStoreOnFilesystem(t *testing.T) {
 		if err := os.WriteFile(src, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		dest := filepath.Join(t.TempDir(), domain.StagedReplace(domain.Build(track, src), testAttemptID))
+		dest := filepath.Join(t.TempDir(), domain.StagedReplace(domain.NewAudioRef(track, src), testAttemptID))
 		if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
 			t.Fatalf("%s: mkdir failed: %v", name, err)
 		}
@@ -84,15 +84,15 @@ func TestBuild_LongNamesStoreOnFilesystem(t *testing.T) {
 }
 
 func TestBuild_ShortNamesUnchanged(t *testing.T) {
-	track := domain.Names{UserID: "u1", Artist: "Björk", Album: "", Title: "Army of Me"}
-	if got, want := domain.BuildLegacy(track, "x.flac"), "u1/Björk/Unknown Album/Army of Me.flac"; got != want {
+	track := domain.AudioRefParts{UserID: "u1", Artist: "Björk", Album: "", Title: "Army of Me"}
+	if got, want := domain.LegacyAudioRef(track, "x.flac"), "u1/Björk/Unknown Album/Army of Me.flac"; got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
 
 func TestBuild_StripsControlBytesAndInvalidUTF8(t *testing.T) {
-	track := domain.Names{UserID: "u1", Artist: "Bad\x01Artist", Album: "Album", Title: "Title\xffBytes"}
-	ref := domain.BuildLegacy(track, "x.mp3")
+	track := domain.AudioRefParts{UserID: "u1", Artist: "Bad\x01Artist", Album: "Album", Title: "Title\xffBytes"}
+	ref := domain.LegacyAudioRef(track, "x.mp3")
 
 	if !utf8.ValidString(ref) {
 		t.Fatalf("ref is not valid UTF-8: %q", ref)
@@ -119,7 +119,7 @@ func TestBuildLegacy_DropsAControlCharDeterministically(t *testing.T) {
 func TestBuild_LongNamesDifferingInTailDoNotCollide(t *testing.T) {
 	base := strings.Repeat("x", 200)
 	mk := func(tail string) string {
-		return domain.Build(domain.Names{UserID: "u1", Artist: "a", Album: "b", Title: base + tail}, "x.mp3")
+		return domain.NewAudioRef(domain.AudioRefParts{UserID: "u1", Artist: "a", Album: "b", Title: base + tail}, "x.mp3")
 	}
 	if mk("1") == mk("2") {
 		t.Fatal("distinct long titles collided")
@@ -133,12 +133,12 @@ func TestBuild_LongNamesDifferingInTailDoNotCollide(t *testing.T) {
 func TestBuild(t *testing.T) {
 	tests := []struct {
 		name  string
-		track domain.Names
+		track domain.AudioRefParts
 		want  string
 	}{
 		{
 			name: "normal track",
-			track: domain.Names{
+			track: domain.AudioRefParts{
 				UserID: "uid",
 				Artist: "The Weeknd",
 				Album:  "After Hours",
@@ -148,7 +148,7 @@ func TestBuild(t *testing.T) {
 		},
 		{
 			name: "empty album defaults to Unknown Album",
-			track: domain.Names{
+			track: domain.AudioRefParts{
 				UserID: "uid",
 				Artist: "Artist",
 				Album:  "",
@@ -158,7 +158,7 @@ func TestBuild(t *testing.T) {
 		},
 		{
 			name: "forbidden chars stripped and case/unicode normalized",
-			track: domain.Names{
+			track: domain.AudioRefParts{
 				UserID: "uid",
 				Artist: "AC/DC",
 				Album:  `The "Best" Album`,
@@ -170,7 +170,7 @@ func TestBuild(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := domain.Build(tt.track, "/tmp/acquire/downloaded.mp3")
+			got := domain.NewAudioRef(tt.track, "/tmp/acquire/downloaded.mp3")
 			if got != tt.want {
 				t.Errorf("Build() = %q, want %q", got, tt.want)
 			}
@@ -217,7 +217,7 @@ func TestTrackScoped_IgnoresDotsInTheDirectories(t *testing.T) {
 }
 
 func legacyTitle(title string) string {
-	ref := domain.BuildLegacy(domain.Names{UserID: "u", Artist: "a", Album: "b", Title: title}, "x.mp3")
+	ref := domain.LegacyAudioRef(domain.AudioRefParts{UserID: "u", Artist: "a", Album: "b", Title: title}, "x.mp3")
 	return strings.TrimSuffix(strings.Split(ref, "/")[3], ".mp3")
 }
 

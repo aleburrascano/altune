@@ -30,8 +30,8 @@ type jobRunner struct {
 
 func (r *jobRunner) inFlight() int { return int(r.inflightCount.Load()) }
 
-func (r *jobRunner) leaseFence(job ports.Job) func(context.Context) error {
-	if job.Kind != ports.JobKindUpgrade {
+func (r *jobRunner) leaseFence(job domain.Job) func(context.Context) error {
+	if job.Kind != domain.JobKindUpgrade {
 		return nil
 	}
 	return func(ctx context.Context) error {
@@ -39,14 +39,14 @@ func (r *jobRunner) leaseFence(job ports.Job) func(context.Context) error {
 	}
 }
 
-func (r *jobRunner) eventsFor(kind ports.JobKind) events.Publisher {
-	if kind == ports.JobKindUpgrade {
+func (r *jobRunner) eventsFor(kind domain.JobKind) events.Publisher {
+	if kind == domain.JobKindUpgrade {
 		return events.NoopPublisher()
 	}
 	return r.events
 }
 
-func (r *jobRunner) runClaimedJob(ctx context.Context, job ports.Job) {
+func (r *jobRunner) runClaimedJob(ctx context.Context, job domain.Job) {
 	run := r.acquisitionRunFor(job.Kind)
 
 	jobCtx, cancelJob := r.jobContextFor(ctx, job)
@@ -66,18 +66,18 @@ func (r *jobRunner) runClaimedJob(ctx context.Context, job ports.Job) {
 	r.finisher.finishJob(finishCtx, job, end)
 }
 
-func (r *jobRunner) startClaimedJob(job ports.Job) ports.AcquisitionJob {
+func (r *jobRunner) startClaimedJob(job domain.Job) domain.AcquisitionJob {
 	trackId := job.TrackID
 	r.inflightCount.Add(1)
 	r.log.register(trackId, "")
 	r.log.markRunning(trackId)
-	r.log.update(trackId, func(rec *ports.JobRecord) {
+	r.log.update(trackId, func(rec *domain.JobRecord) {
 		rec.Kind = job.Kind
 		rec.Run = job.Run
 	})
 	reporter := schedulerJobReporter{log: r.log, events: r.eventsFor(job.Kind), trackID: trackId, userId: job.UserID}
 	reporter.Timing("queue", job.Waited)
-	return ports.AcquisitionJob{
+	return domain.AcquisitionJob{
 		UserID:         job.UserID,
 		TrackID:        job.TrackID,
 		Attempt:        job.Run,
@@ -94,19 +94,19 @@ func (r *jobRunner) stopClaimedJob(cancelJob context.CancelFunc, heartbeatDone <
 	r.inflightCount.Add(-1)
 }
 
-func (r *jobRunner) acquisitionRunFor(kind ports.JobKind) acquisitionRun {
+func (r *jobRunner) acquisitionRunFor(kind domain.JobKind) acquisitionRun {
 	switch kind {
-	case ports.JobKindReplace:
+	case domain.JobKindReplace:
 		return r.svc.ExecuteReplace
-	case ports.JobKindUpgrade:
+	case domain.JobKindUpgrade:
 		return r.upgrades.runner.ExecuteUpgrade
-	case ports.JobKindAcquire:
+	case domain.JobKindAcquire:
 		return r.svc.Execute
 	}
 	return r.svc.Execute
 }
 
-func (r *jobRunner) jobContextFor(ctx context.Context, job ports.Job) (context.Context, context.CancelFunc) {
+func (r *jobRunner) jobContextFor(ctx context.Context, job domain.Job) (context.Context, context.CancelFunc) {
 	jobCtx, cancelJob := context.WithCancel(ctx)
 	if job.CorrelationID != "" {
 		jobCtx = logging.ContextWithCorrelationID(jobCtx, job.CorrelationID)
@@ -114,7 +114,7 @@ func (r *jobRunner) jobContextFor(ctx context.Context, job ports.Job) (context.C
 	return jobCtx, cancelJob
 }
 
-func (r *jobRunner) execClaimedJob(ctx context.Context, run acquisitionRun, job ports.AcquisitionJob) error {
+func (r *jobRunner) execClaimedJob(ctx context.Context, run acquisitionRun, job domain.AcquisitionJob) error {
 	trackId := job.TrackID
 	var err error
 	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job) }, logging.KeyTrackID, trackId.String()); panicked != nil {
@@ -125,9 +125,9 @@ func (r *jobRunner) execClaimedJob(ctx context.Context, run acquisitionRun, job 
 
 var errJobPanicked = errors.New("acquisition job panicked")
 
-type acquisitionRun func(ctx context.Context, job ports.AcquisitionJob) error
+type acquisitionRun func(ctx context.Context, job domain.AcquisitionJob) error
 
-func (r *jobRunner) heartbeatLoop(ctx context.Context, job ports.Job, cancelJob context.CancelFunc, done chan<- struct{}) {
+func (r *jobRunner) heartbeatLoop(ctx context.Context, job domain.Job, cancelJob context.CancelFunc, done chan<- struct{}) {
 	defer close(done)
 	ticks, stop := r.ticker(r.heartbeatInterval)
 	defer stop()
@@ -145,7 +145,7 @@ func (r *jobRunner) heartbeatLoop(ctx context.Context, job ports.Job, cancelJob 
 	}
 }
 
-func (r *jobRunner) sendHeartbeat(jobCtx context.Context, job ports.Job, lastSuccess *time.Time) bool {
+func (r *jobRunner) sendHeartbeat(jobCtx context.Context, job domain.Job, lastSuccess *time.Time) bool {
 	ctx, cancel := background.Detach(jobCtx, queueCallBudget)
 	defer cancel()
 	err := r.queue.Heartbeat(ctx, job.TrackID, job.ClaimNumber, r.leaseDuration)

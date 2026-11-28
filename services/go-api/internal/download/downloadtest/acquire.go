@@ -1,8 +1,10 @@
 package downloadtest
 
 import (
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock"
@@ -15,16 +17,16 @@ import (
 )
 
 type (
-	RecordingProvider = ports.RecordingProvider
+	RecordingProvider = domain.RecordingProvider
 	RecordingLookup   = ports.RecordingLookup
 	RerecordingFinder = ports.RerecordingFinder
 	RecordingResolver = ports.RecordingResolver
 )
 
 const (
-	ProviderYouTube    = ports.ProviderYouTube
-	ProviderDeezer     = ports.ProviderDeezer
-	ProviderSoundCloud = ports.ProviderSoundCloud
+	ProviderYouTube    = domain.ProviderYouTube
+	ProviderDeezer     = domain.ProviderDeezer
+	ProviderSoundCloud = domain.ProviderSoundCloud
 )
 
 type RecordingPorts struct {
@@ -36,18 +38,19 @@ type RecordingPorts struct {
 func AcquireWithNoSource(ctx context.Context, ledger *memory.Ledger, recording RecordingPorts, userID ids.UserId, trackID ids.TrackId) error {
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(), memory.NewAudioStore(), scratchfiles.New(),
 		service.VerificationPorts{
-			Identifier:      ports.NoopAudioIdentifier(),
+			Identifier:      memory.NoopAudioIdentifier(),
 			RecordingLookup: recording.Lookup,
 			Rerecordings:    recording.Rerecordings,
-			Previews:        ports.NoopPreviewMatcher(),
+			Previews:        memory.NoopPreviewMatcher(),
 			Recordings:      recording.Resolver,
 		}, service.StagePorts{
 			Prober:        SilentAudioProber(),
-			Tagger:        ports.NoopAudioTagger(),
-			Rejections:    ports.NoopRejectionStore(),
-			StoredAudio:   ports.NoopStoredAudioReader(),
+			Tagger:        memory.NoopAudioTagger(),
+			Rejections:    memory.NoopRejectionStore(),
+			StoredAudio:   memory.NoopStoredAudioReader(),
 			Orphans:       service.MustDirectDeleteOrphans(memory.NewAudioStore()),
-			Skips:         ports.NoopVerifySkipRecorder(),
+			Skips:         memory.NoopVerifySkipRecorder(),
+			Evidence:      evidence.NewCodec(),
 			Events:        events.NoopPublisher(),
 			DownloadLimit: service.Unlimited(),
 			Observer:      service.NoObserver(),
@@ -55,7 +58,7 @@ func AcquireWithNoSource(ctx context.Context, ledger *memory.Ledger, recording R
 			Now:           time.Now,
 			Unit:          random.Real,
 		})
-	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: userID, TrackID: trackID}); err != nil {
+	if err := svc.Execute(ctx, domain.AcquisitionJob{UserID: userID, TrackID: trackID}); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 	return nil

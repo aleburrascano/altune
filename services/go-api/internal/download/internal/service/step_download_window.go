@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/logging"
@@ -25,7 +26,7 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 			recordNotAttempted(ac, pending)
 			break
 		}
-		var window []ports.AudioCandidate
+		var window []domain.AudioCandidate
 		window, pending = s.nextWindow(ctx, ac, pending, used, &failures)
 		if len(window) == 0 {
 			break
@@ -44,10 +45,10 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 func (s *DownloadStep) nextWindow(
 	ctx context.Context,
 	ac *AcquisitionContext,
-	pending []ports.AudioCandidate,
+	pending []domain.AudioCandidate,
 	used int,
 	failures *downloadFailures,
-) (window, rest []ports.AudioCandidate) {
+) (window, rest []domain.AudioCandidate) {
 	limit := min(s.width, MaxDownloadAttempts-used)
 	for i, candidate := range pending {
 		if len(window) == limit {
@@ -74,13 +75,13 @@ func nextWindowIndex(attempted []AttemptedCandidate) int {
 	return next
 }
 
-func recordWindow(ac *AcquisitionContext, window []ports.AudioCandidate, index int) {
+func recordWindow(ac *AcquisitionContext, window []domain.AudioCandidate, index int) {
 	for _, candidate := range window {
 		ac.Attempted = append(ac.Attempted, AttemptedCandidate{URL: candidate.URL, Window: index})
 	}
 }
 
-func remainingAfter(ac *AcquisitionContext, rest []ports.AudioCandidate, started int) []ports.AudioCandidate {
+func remainingAfter(ac *AcquisitionContext, rest []domain.AudioCandidate, started int) []domain.AudioCandidate {
 	if started < MaxDownloadAttempts {
 		return rest
 	}
@@ -88,7 +89,7 @@ func remainingAfter(ac *AcquisitionContext, rest []ports.AudioCandidate, started
 	return nil
 }
 
-func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, window []ports.AudioCandidate) []attempt {
+func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, window []domain.AudioCandidate) []attempt {
 	results := make([]attempt, len(window))
 	cutoff := newSlotCutoff(len(window))
 	g := parallel.New("acquisition.download_attempt_panic", len(window))
@@ -137,7 +138,7 @@ func (c *slotCutoff) cancelAfter(rank int) {
 	}
 }
 
-func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) attempt {
+func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate domain.AudioCandidate) attempt {
 	var result attempt
 	panicked := background.SafeRun(ctx, "acquisition.download_attempt_panic", func() { result = s.runWindowAttempt(ctx, ac, candidate) }, logging.KeyTrackID, ac.Track.ID)
 	if panicked != nil {
@@ -148,7 +149,7 @@ func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *Acquisition
 	return result
 }
 
-func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) attempt {
+func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate domain.AudioCandidate) attempt {
 	tmpDir, err := s.workspace.Create("*")
 	if err != nil {
 		return attempt{candidate: candidate, rejection: &downloadRejection{

@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/titlemarkers"
 	"fmt"
@@ -18,7 +18,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 	tests := []struct {
 		name       string
 		track      service.RankTrack
-		candidates []ports.AudioCandidate
+		candidates []domain.AudioCandidate
 		wantNil    bool
 		wantTitle  string
 		wantReason string
@@ -30,7 +30,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 				Artist:         "The Weeknd",
 				ExpectedLength: 200,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=vevo1",
 					downloadtest.WithTitle("The Weeknd - Blinding Lights"),
@@ -58,7 +58,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 				Artist:         "The Weeknd",
 				ExpectedLength: 230,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=far",
 					downloadtest.WithTitle("The Weeknd - Starboy (Extended Remix)"),
@@ -85,7 +85,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 				Title:  "Nonexistent",
 				Artist: "Nobody",
 			},
-			candidates: []ports.AudioCandidate{},
+			candidates: []domain.AudioCandidate{},
 			wantNil:    true,
 			wantReason: "empty candidate list must return nil",
 		},
@@ -96,7 +96,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 				Artist:         "The Weeknd",
 				ExpectedLength: 215,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=cook1",
 					downloadtest.WithTitle("Cooking Tutorial Episode 47"),
@@ -124,7 +124,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 				Artist:         "The Weeknd",
 				ExpectedLength: 260,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=vevo2",
 					downloadtest.WithTitle("The Weeknd - Die For You (Official Video)"),
@@ -162,7 +162,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 				Artist:         "The Weeknd",
 				ExpectedLength: 361,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=vevo3",
 					downloadtest.WithTitle("The Weeknd - After Hours (Official Video)"),
@@ -208,7 +208,7 @@ func TestRank_PicksTheBestCandidate(t *testing.T) {
 
 func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T) {
 	track := service.RankTrack{Title: "Blinding Lights", Artist: "The Weeknd", ExpectedLength: 200}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://youtube.com/watch?v=slowed",
 			downloadtest.WithTitle("Blinding Lights"),
@@ -239,7 +239,7 @@ func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T)
 
 func TestRankCandidates_TotalTieIsStillDeterministic(t *testing.T) {
 	track := service.RankTrack{Title: "Song", Artist: "Artist"}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://b.example/x",
 			downloadtest.WithTitle("Artist - Song"),
@@ -269,7 +269,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 	tests := []struct {
 		name         string
 		track        service.RankTrack
-		candidates   []ports.AudioCandidate
+		candidates   []domain.AudioCandidate
 		wantNil      bool
 		wantChannel  string
 		wantContains string
@@ -282,7 +282,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:         "Dr. Dre",
 				ExpectedLength: 280,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=kendrick",
 					downloadtest.WithTitle("DIE HARD"),
@@ -311,7 +311,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:         "Kendrick Lamar",
 				ExpectedLength: 238,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=kendrick",
 					downloadtest.WithTitle("Kendrick Lamar - DIE HARD (Official Audio)"),
@@ -340,7 +340,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:         "The Weeknd",
 				ExpectedLength: 200,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=vevo",
 					downloadtest.WithTitle("The Weeknd - Blinding Lights (Official Video)"),
@@ -368,7 +368,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:         "Eminem",
 				ExpectedLength: 326,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=eminem",
 					downloadtest.WithTitle("Eminem - Lose Yourself (Official Video)"),
@@ -396,7 +396,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:         "The Weeknd",
 				ExpectedLength: 215,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=cook1",
 					downloadtest.WithTitle("Cooking Tutorial Episode 47"),
@@ -416,7 +416,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:         "Fatt Smaxk",
 				ExpectedLength: 0,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=solo",
 					downloadtest.WithTitle("Fatt Smaxk - Smaxk Or Die (Official Music Video) | [Dir. By Kharkee]"),
@@ -444,7 +444,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:         "Post Malone",
 				ExpectedLength: 215,
 			},
-			candidates: []ports.AudioCandidate{
+			candidates: []domain.AudioCandidate{
 				downloadtest.Candidate(
 					"https://youtube.com/watch?v=postmalone",
 					downloadtest.WithTitle("Circles"),
@@ -494,7 +494,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 func TestRank_SoundCloudFillsGap(t *testing.T) {
 	track := service.RankTrack{Title: "Fell In Love", Artist: "Lil Tecca", ExpectedLength: 150}
 
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://soundcloud.com/liltecca/fell-in-love",
 			downloadtest.WithTitle("Lil Tecca - Fell In Love"),
@@ -515,7 +515,7 @@ func TestRank_SoundCloudFillsGap(t *testing.T) {
 func TestRank_TopicChannelBeatsSoundCloud(t *testing.T) {
 	track := service.RankTrack{Title: "Blinding Lights", Artist: "The Weeknd", ExpectedLength: 200}
 
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://soundcloud.com/x/blinding-lights",
 			downloadtest.WithTitle("The Weeknd - Blinding Lights"),
@@ -578,7 +578,7 @@ func TestUnrequestedQualifiers_RequestedWordAtEndOfTrackTitleIsNotAQualifier(t *
 
 func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing.T) {
 	track := service.RankTrack{Title: "Sunglasses at Night", Artist: "Corey Hart", ExpectedLength: 232}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://youtube.com/watch?v=acoustic000",
 			downloadtest.WithTitle("Sunglasses at Night (Acoustic Version)"),
@@ -609,7 +609,7 @@ func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing
 
 func TestRankCandidates_MusicVideoLosesToPlainAudio(t *testing.T) {
 	track := service.RankTrack{Title: "Never Surrender", Artist: "Corey Hart", ExpectedLength: 262}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://youtube.com/watch?v=video000000",
 			downloadtest.WithTitle("Never Surrender (Official Music Video)"),
@@ -636,7 +636,7 @@ func TestRankCandidates_MusicVideoLosesToPlainAudio(t *testing.T) {
 
 func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing.T) {
 	track := service.RankTrack{Title: "Die For You", Artist: "The Weeknd", ExpectedLength: 260}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://youtube.com/watch?v=lyrics00000",
 			downloadtest.WithTitle("The Weeknd - Die For You (Lyrics)"),
@@ -824,7 +824,7 @@ func TestUnrequestedQualifiers_OtherMixesStayVetoed(t *testing.T) {
 
 func TestRank_RejectsUnrequestedVersionBeforeDownload(t *testing.T) {
 	track := service.RankTrack{Title: "Rollacoasta", Artist: "prettifun", ExpectedLength: 159}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://youtube.com/watch?v=instrumental",
 			downloadtest.WithTitle("prettifun - Rollacoasta (Instrumental) [100% Accurate]"),
@@ -853,7 +853,7 @@ func TestRank_RejectsUnrequestedVersionBeforeDownload(t *testing.T) {
 
 func TestRank_RadioEditRanksAfterEveryCleanCandidate(t *testing.T) {
 	track := service.RankTrack{Title: "Harbour Lights", Artist: "The Marram", ExpectedLength: 236}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://x.example/edit",
 			downloadtest.WithTitle("Harbour Lights (Radio Edit)"),
@@ -879,7 +879,7 @@ func TestRank_RadioEditRanksAfterEveryCleanCandidate(t *testing.T) {
 
 func TestRank_MustHold8_UnplayableCandidatesAreRejectedBeforeRanking(t *testing.T) {
 	track := service.RankTrack{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ExpectedLength: 240}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"sc:drm",
 			downloadtest.WithTitle("Drinking in L.A."),
@@ -928,13 +928,13 @@ func TestRank_AnArtTrackIsResolvedByItsKind(t *testing.T) {
 	)
 
 	art := weak
-	art.Kind = ports.KindArtTrack
+	art.Kind = domain.KindArtTrack
 	if got := best(track, art); got == nil || got.URL != art.URL {
 		t.Errorf("selected %v, want the art track: its kind skips the identity gate", got)
 	}
 
 	upload := weak
-	upload.Kind = ports.KindUpload
+	upload.Kind = domain.KindUpload
 	if got := best(track, upload); got != nil {
 		t.Errorf("selected %v, want nothing: an upload goes through the identity gate", got)
 	}
@@ -946,13 +946,13 @@ func TestRank_AnExplicitResolvedTrackBeatsACloserCleanOne(t *testing.T) {
 		"https://music.youtube.com/watch?v=cleanAAAAAA",
 		downloadtest.WithTitle("Matches"),
 		downloadtest.WithDuration(180),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 	)
 	explicit := downloadtest.Candidate(
 		"https://music.youtube.com/watch?v=explicitAAA",
 		downloadtest.WithTitle("Matches"),
 		downloadtest.WithDuration(182),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 		downloadtest.WithExplicit(true),
 	)
 
@@ -966,13 +966,13 @@ func TestRank_TheCatalogExplicitFlagPicksTheTwin(t *testing.T) {
 		"https://music.youtube.com/watch?v=cleanAAAAAA",
 		downloadtest.WithTitle("Matches"),
 		downloadtest.WithDuration(182),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 	)
 	explicit := downloadtest.Candidate(
 		"https://music.youtube.com/watch?v=explicitAAA",
 		downloadtest.WithTitle("Matches"),
 		downloadtest.WithDuration(180),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 		downloadtest.WithExplicit(true),
 	)
 	yes, no := true, false
@@ -996,13 +996,13 @@ func TestRank_TheCatalogExplicitFlagPicksTheTwin(t *testing.T) {
 }
 
 func TestUploaderOf_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t *testing.T) {
-	artTrack := func(artists ...string) ports.AudioCandidate {
-		return downloadtest.Candidate("", downloadtest.WithKind(ports.KindArtTrack), downloadtest.WithArtists(artists))
+	artTrack := func(artists ...string) domain.AudioCandidate {
+		return downloadtest.Candidate("", downloadtest.WithKind(domain.KindArtTrack), downloadtest.WithArtists(artists))
 	}
 	tests := []struct {
 		name      string
 		artist    string
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      string
 	}{
 		{"credited art track counts as topic", "ezcodylee", artTrack("ezcodylee"), service.ChannelTopic},
@@ -1041,7 +1041,7 @@ func TestUnrequestedQualifiers_ReleaseVariantsAreQualifiers(t *testing.T) {
 
 func TestRank_RejectsPlainlyTitledAcousticAndDemoUploads(t *testing.T) {
 	track := service.RankTrack{Title: "Sunglasses at Night", Artist: "Corey Hart", ExpectedLength: 233}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://www.youtube.com/watch?v=acousticUp1",
 			downloadtest.WithTitle("Sunglasses at Night (Acoustic)"),
@@ -1078,7 +1078,7 @@ func TestRank_RejectsPlainlyTitledAcousticAndDemoUploads(t *testing.T) {
 func TestUploaderOf_TheCatalogPinIsTrusted(t *testing.T) {
 	pin := downloadtest.Candidate(
 		"",
-		downloadtest.WithKind(ports.KindCatalogPin),
+		downloadtest.WithKind(domain.KindCatalogPin),
 		downloadtest.WithArtists([]string{"Sophie Ellis-Bextor"}),
 	)
 	if got := service.UploaderOf("Sophie Ellis-Bextor", pin); got != service.ChannelTopic {
@@ -1091,13 +1091,13 @@ func TestUploaderOf_TheCatalogPinIsTrusted(t *testing.T) {
 }
 
 func TestUploaderOf_APinnedVideoIsTrustedByItsCredits(t *testing.T) {
-	pinned := func(artists ...string) ports.AudioCandidate {
-		return downloadtest.Candidate("", downloadtest.WithKind(ports.KindPinnedVideo), downloadtest.WithArtists(artists))
+	pinned := func(artists ...string) domain.AudioCandidate {
+		return downloadtest.Candidate("", downloadtest.WithKind(domain.KindPinnedVideo), downloadtest.WithArtists(artists))
 	}
 	tests := []struct {
 		name      string
 		artist    string
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      string
 	}{
 		{"credited pinned video counts as topic", "slayr", pinned("slayr"), service.ChannelTopic},
@@ -1106,7 +1106,7 @@ func TestUploaderOf_APinnedVideoIsTrustedByItsCredits(t *testing.T) {
 		{"pinned video without credits is untrusted", "slayr", pinned(), service.ChannelOther},
 		{"upload crediting the artist stays untrusted", "slayr", downloadtest.Candidate(
 			"",
-			downloadtest.WithKind(ports.KindUpload),
+			downloadtest.WithKind(domain.KindUpload),
 			downloadtest.WithArtists([]string{"slayr"}),
 		), service.ChannelOther},
 	}
@@ -1124,29 +1124,29 @@ func TestRankCandidates_TheUsersPickGoesBeforeTheArtTrack(t *testing.T) {
 		downloadtest.WithTitle("Murder On The Dancefloor"),
 		downloadtest.WithDuration(232),
 		downloadtest.WithArtists([]string{"Sophie Ellis-Bextor"}),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 	)
 	pickedUpload := downloadtest.Candidate(
 		"https://soundcloud.com/sophie-ellis-bextor-official/murder-on-the-dancefloor-album",
 		downloadtest.WithTitle("Murder On The Dancefloor"),
 		downloadtest.WithArtists([]string{"Sophie Ellis-Bextor"}),
-		downloadtest.WithKind(ports.KindCatalogPin),
+		downloadtest.WithKind(domain.KindCatalogPin),
 	)
 	catalogVideo := downloadtest.Candidate(
 		"https://music.youtube.com/watch?v=Zv6M1xG4T0w",
 		downloadtest.WithTitle("Murder On The Dancefloor"),
 		downloadtest.WithArtists([]string{"Sophie Ellis-Bextor"}),
-		downloadtest.WithKind(ports.KindPinnedVideo),
+		downloadtest.WithKind(domain.KindPinnedVideo),
 	)
 	tests := []struct {
 		name       string
-		candidates []ports.AudioCandidate
+		candidates []domain.AudioCandidate
 		wantFirst  string
 	}{
-		{"pick listed after the art track", []ports.AudioCandidate{artTrack, pickedUpload}, pickedUpload.URL},
-		{"pick listed before the art track", []ports.AudioCandidate{pickedUpload, artTrack}, pickedUpload.URL},
-		{"a pinned video stays behind the art track", []ports.AudioCandidate{catalogVideo, artTrack}, artTrack.URL},
-		{"pick still first beside a pinned video and an art track", []ports.AudioCandidate{artTrack, catalogVideo, pickedUpload}, pickedUpload.URL},
+		{"pick listed after the art track", []domain.AudioCandidate{artTrack, pickedUpload}, pickedUpload.URL},
+		{"pick listed before the art track", []domain.AudioCandidate{pickedUpload, artTrack}, pickedUpload.URL},
+		{"a pinned video stays behind the art track", []domain.AudioCandidate{catalogVideo, artTrack}, artTrack.URL},
+		{"pick still first beside a pinned video and an art track", []domain.AudioCandidate{artTrack, catalogVideo, pickedUpload}, pickedUpload.URL},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1162,13 +1162,13 @@ func TestRankCandidates_TheUsersPickGoesBeforeTheArtTrack(t *testing.T) {
 }
 
 func TestUploaderOf_ATopicChannelMustBeTheTracksArtist(t *testing.T) {
-	upload := func(channel string) ports.AudioCandidate {
-		return downloadtest.Candidate("", downloadtest.WithChannel(channel), downloadtest.WithKind(ports.KindUpload))
+	upload := func(channel string) domain.AudioCandidate {
+		return downloadtest.Candidate("", downloadtest.WithChannel(channel), downloadtest.WithKind(domain.KindUpload))
 	}
 	tests := []struct {
 		name      string
 		artist    string
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      string
 	}{
 		{"the artist's own topic channel is topic", "Cutting Crew", upload("Cutting Crew - Topic"), service.ChannelTopic},
@@ -1189,7 +1189,7 @@ func TestUploaderOf_ATopicChannelMustBeTheTracksArtist(t *testing.T) {
 		"",
 		downloadtest.WithTitle("Eve - Song"),
 		downloadtest.WithChannel("Steve Lacy"),
-		downloadtest.WithKind(ports.KindUpload),
+		downloadtest.WithKind(domain.KindUpload),
 	)
 	if got := evaluation(t, song("Song", "Eve", 200), steve)["artist_match"]; got != false {
 		t.Errorf("artist_match for Eve on Steve Lacy's channel = %v, want a whole-name comparison", got)
@@ -1197,13 +1197,13 @@ func TestUploaderOf_ATopicChannelMustBeTheTracksArtist(t *testing.T) {
 }
 
 func TestUploaderOf_AnyCreditedArtistOwnsTheTopicChannel(t *testing.T) {
-	upload := func(channel string) ports.AudioCandidate {
-		return downloadtest.Candidate("", downloadtest.WithChannel(channel), downloadtest.WithKind(ports.KindUpload))
+	upload := func(channel string) domain.AudioCandidate {
+		return downloadtest.Candidate("", downloadtest.WithChannel(channel), downloadtest.WithKind(domain.KindUpload))
 	}
 	tests := []struct {
 		name      string
 		artist    string
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      string
 	}{
 		{"first of a featuring credit", "Usher featuring Pitbull", upload("Usher - Topic"), service.ChannelTopic},
@@ -1230,14 +1230,14 @@ func TestRank_AnArtistChannelUploadOutranksAnEqualReupload(t *testing.T) {
 		downloadtest.WithTitle("Blinding Lights"),
 		downloadtest.WithChannel("RandomUploader"),
 		downloadtest.WithDuration(200),
-		downloadtest.WithKind(ports.KindUpload),
+		downloadtest.WithKind(domain.KindUpload),
 	)
 	artist := downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=zzzzzzzzzzz",
 		downloadtest.WithTitle("Blinding Lights"),
 		downloadtest.WithChannel("The Weeknd"),
 		downloadtest.WithDuration(200),
-		downloadtest.WithKind(ports.KindUpload),
+		downloadtest.WithKind(domain.KindUpload),
 	)
 
 	got := best(track, reupload, artist)
@@ -1254,7 +1254,7 @@ func TestRank_RejectsRerecordingTitleTheTrackDoesNotCarry(t *testing.T) {
 		"It's Only Love (Re-Recorded)",
 		"It's Only Love (Re-Recording)",
 	} {
-		for _, kind := range []ports.CandidateKind{ports.KindArtTrack, ports.KindUpload} {
+		for _, kind := range []domain.CandidateKind{domain.KindArtTrack, domain.KindUpload} {
 			c := downloadtest.Candidate(
 				"https://music.youtube.com/watch?v=Ml2N72dMv_8",
 				downloadtest.WithTitle(title),
@@ -1277,7 +1277,7 @@ func TestRank_RanksRerecordingWhenTrackCarriesIt(t *testing.T) {
 		"https://music.youtube.com/watch?v=Ml2N72dMv_8",
 		downloadtest.WithTitle("It's Only Love (Classic Version)"),
 		downloadtest.WithDuration(194),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 		downloadtest.WithArtists([]string{"Bryan Adams"}),
 		downloadtest.WithChannel("Bryan Adams - Topic"),
 	)
@@ -1289,7 +1289,7 @@ func TestRank_RanksRerecordingWhenTrackCarriesIt(t *testing.T) {
 
 func TestRank_TheUsersOwnPickIsStillRefusedWhenItIsARerecording(t *testing.T) {
 	track := service.RankTrack{Title: "It's Only Love", Artist: "Bryan Adams", ExpectedLength: 195}
-	for _, kind := range []ports.CandidateKind{ports.KindCatalogPin, ports.KindPinnedVideo} {
+	for _, kind := range []domain.CandidateKind{domain.KindCatalogPin, domain.KindPinnedVideo} {
 		c := downloadtest.Candidate(
 			"https://music.youtube.com/watch?v=pin",
 			downloadtest.WithTitle("It's Only Love (Classic Version)"),
@@ -1320,7 +1320,7 @@ func TestRank_RerecordingPhraseIsRefusedWhateverItsCaseApostropheOrBracket(t *te
 			"https://music.youtube.com/watch?v=x",
 			downloadtest.WithTitle(title),
 			downloadtest.WithDuration(235),
-			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithKind(domain.KindArtTrack),
 			downloadtest.WithArtists([]string{"Taylor Swift"}),
 			downloadtest.WithChannel("Taylor Swift - Topic"),
 		)
@@ -1348,7 +1348,7 @@ func TestRank_ClassicOrVersionAloneIsNotARerecording(t *testing.T) {
 			"https://music.youtube.com/watch?v=y",
 			downloadtest.WithTitle(c.candidate),
 			downloadtest.WithDuration(195),
-			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithKind(domain.KindArtTrack),
 			downloadtest.WithArtists([]string{"Bryan Adams"}),
 			downloadtest.WithChannel("Bryan Adams - Topic"),
 		)
@@ -1370,7 +1370,7 @@ func TestRank_RerecordingPhraseOnlyInChannelOrAlbumDoesNotRefuseTheCandidate(t *
 		"https://music.youtube.com/watch?v=z",
 		downloadtest.WithTitle("It's Only Love"),
 		downloadtest.WithDuration(195),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 		downloadtest.WithArtists([]string{"Bryan Adams"}),
 		downloadtest.WithChannel("Taylor's Version Archive"),
 		downloadtest.WithAlbum("Classic Version Hits"),
@@ -1387,7 +1387,7 @@ func TestRank_TrackTitledAsATaylorsVersionAcceptsEitherApostrophe(t *testing.T) 
 		"https://music.youtube.com/watch?v=tv",
 		downloadtest.WithTitle("Love Story (Taylor’s Version)"),
 		downloadtest.WithDuration(235),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 		downloadtest.WithArtists([]string{"Taylor Swift"}),
 		downloadtest.WithChannel("Taylor Swift - Topic"),
 	)
@@ -1399,12 +1399,12 @@ func TestRank_TrackTitledAsATaylorsVersionAcceptsEitherApostrophe(t *testing.T) 
 
 func TestRank_RefusingTheRerecordingStillRanksTheOriginalBesideIt(t *testing.T) {
 	track := service.RankTrack{Title: "It's Only Love", Artist: "Bryan Adams", ExpectedLength: 195}
-	candidates := []ports.AudioCandidate{
+	candidates := []domain.AudioCandidate{
 		downloadtest.Candidate(
 			"https://music.youtube.com/watch?v=classic",
 			downloadtest.WithTitle("It's Only Love (Classic Version)"),
 			downloadtest.WithDuration(194),
-			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithKind(domain.KindArtTrack),
 			downloadtest.WithArtists([]string{"Bryan Adams"}),
 			downloadtest.WithChannel("Bryan Adams - Topic"),
 		),
@@ -1430,15 +1430,15 @@ func TestRank_EveryCandidateIsRankedOrRefusedExactlyOnceWhateverTheOrder(t *test
 	channels := []string{"Artist - Topic", "ArtistVEVO", "Someone Else", ""}
 	rapid.Check(t, func(t *rapid.T) {
 		count := rapid.IntRange(0, 12).Draw(t, "count")
-		candidates := make([]ports.AudioCandidate, count)
+		candidates := make([]domain.AudioCandidate, count)
 		for i := range candidates {
-			candidates[i] = ports.AudioCandidate{
+			candidates[i] = domain.AudioCandidate{
 				Title:      rapid.SampledFrom(titles).Draw(t, "title"),
 				Channel:    rapid.SampledFrom(channels).Draw(t, "channel"),
 				Duration:   rapid.Float64Range(60, 400).Draw(t, "duration"),
 				ViewCount:  rapid.Int64Range(0, 1_000_000).Draw(t, "views"),
 				URL:        fmt.Sprintf("https://example.com/watch?v=%d", i),
-				Unplayable: rapid.SampledFrom([]string{"", "", "", ports.UnplayablePreview}).Draw(t, "unplayable"),
+				Unplayable: rapid.SampledFrom([]string{"", "", "", domain.UnplayablePreview}).Draw(t, "unplayable"),
 			}
 		}
 		track := service.RankTrack{Title: "Song", Artist: "Artist", ExpectedLength: 200}
@@ -1468,7 +1468,7 @@ func TestRank_EveryCandidateIsRankedOrRefusedExactlyOnceWhateverTheOrder(t *test
 	})
 }
 
-func urlSet(candidates []ports.AudioCandidate) []string {
+func urlSet(candidates []domain.AudioCandidate) []string {
 	out := make([]string, len(candidates))
 	for i, c := range candidates {
 		out[i] = c.URL
@@ -1490,12 +1490,12 @@ func song(title, artist string, length float64) service.RankTrack {
 	return service.RankTrack{Title: title, Artist: artist, ExpectedLength: length}
 }
 
-func rank(track service.RankTrack, candidates ...ports.AudioCandidate) ([]ports.AudioCandidate, []service.RankRefusal) {
+func rank(track service.RankTrack, candidates ...domain.AudioCandidate) ([]domain.AudioCandidate, []service.RankRefusal) {
 	ranked, refused, _ := service.Rank(track, candidates)
 	return ranked, refused
 }
 
-func best(track service.RankTrack, candidates ...ports.AudioCandidate) *ports.AudioCandidate {
+func best(track service.RankTrack, candidates ...domain.AudioCandidate) *domain.AudioCandidate {
 	ranked, _ := rank(track, candidates...)
 	if len(ranked) == 0 {
 		return nil
@@ -1503,7 +1503,7 @@ func best(track service.RankTrack, candidates ...ports.AudioCandidate) *ports.Au
 	return &ranked[0]
 }
 
-func urls(candidates []ports.AudioCandidate) []string {
+func urls(candidates []domain.AudioCandidate) []string {
 	out := make([]string, 0, len(candidates))
 	for _, c := range candidates {
 		out = append(out, c.URL)
@@ -1511,7 +1511,7 @@ func urls(candidates []ports.AudioCandidate) []string {
 	return out
 }
 
-func evaluations(t *testing.T, track service.RankTrack, candidates ...ports.AudioCandidate) []map[string]any {
+func evaluations(t *testing.T, track service.RankTrack, candidates ...domain.AudioCandidate) []map[string]any {
 	t.Helper()
 	_, _, evaluated := service.Rank(track, candidates)
 	records := make([]map[string]any, 0, len(evaluated))
@@ -1528,7 +1528,7 @@ func evaluations(t *testing.T, track service.RankTrack, candidates ...ports.Audi
 	return records
 }
 
-func evaluation(t *testing.T, track service.RankTrack, c ports.AudioCandidate) map[string]any {
+func evaluation(t *testing.T, track service.RankTrack, c domain.AudioCandidate) map[string]any {
 	t.Helper()
 	records := evaluations(t, track, c)
 	if len(records) != 1 {

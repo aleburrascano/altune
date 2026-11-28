@@ -19,7 +19,7 @@ type songSearch interface {
 }
 
 type audioDownloader interface {
-	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
+	Download(ctx context.Context, url string, outDir string) (domain.FetchedAudio, error)
 }
 
 var _ ports.AudioSource = (*Source)(nil)
@@ -35,7 +35,7 @@ func NewSource(search songSearch, downloader audioDownloader) *Source {
 
 func (s *Source) Name() domain.SourceName { return SourceName }
 
-func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *Source) Find(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	if req.Title == "" || req.Artist == "" {
 		return nil, nil
 	}
@@ -50,22 +50,22 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	}
 	slog.InfoContext(ctx, "acquisition.ytmsearch_strong_hit",
 		"video_id", hit.VideoID, "title", req.Title, "explicit", hit.Explicit)
-	return []ports.AudioCandidate{CandidateFor(hit)}, nil
+	return []domain.AudioCandidate{CandidateFor(hit)}, nil
 }
 
-func CandidateFor(hit Song) ports.AudioCandidate {
-	return ports.AudioCandidate{
+func CandidateFor(hit Song) domain.AudioCandidate {
+	return domain.AudioCandidate{
 		Title:    hit.Title,
 		Duration: float64(hit.DurationSeconds),
 		URL:      domain.YouTubeMusicWatchURL(hit.VideoID),
 		Explicit: hit.Explicit,
 		Artists:  hit.Artists,
 		Album:    hit.Album,
-		Kind:     ports.KindArtTrack,
+		Kind:     domain.KindArtTrack,
 	}
 }
 
-func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *Source) Fetch(ctx context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	r0, err := s.downloader.Download(ctx, candidate.URL, outDir)
 	if err != nil {
 		return r0, fmt.Errorf("download audio: %w", err)
@@ -73,7 +73,7 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 	return r0, nil
 }
 
-func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {
+func strongHit(songs []Song, req domain.FindRequest) (Song, bool) {
 	var best Song
 	found := false
 	for _, song := range songs[:min(len(songs), topResults)] {
@@ -87,9 +87,9 @@ func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {
 	return best, found
 }
 
-func better(song, best Song, req ports.FindRequest) bool {
+func better(song, best Song, req domain.FindRequest) bool {
 	if song.Explicit != best.Explicit {
-		return song.Explicit == ports.PrefersExplicit(req.CatalogExplicit)
+		return song.Explicit == domain.PrefersExplicit(req.CatalogExplicit)
 	}
 	if onAlbum, bestOnAlbum := onCatalogAlbum(song, req), onCatalogAlbum(best, req); onAlbum != bestOnAlbum {
 		return onAlbum
@@ -97,7 +97,7 @@ func better(song, best Song, req ports.FindRequest) bool {
 	return req.Duration > 0 && lengthGap(song, req.Duration) < lengthGap(best, req.Duration)
 }
 
-func onCatalogAlbum(song Song, req ports.FindRequest) bool {
+func onCatalogAlbum(song Song, req domain.FindRequest) bool {
 	return req.Album != "" && textnorm.NormalizeForMatch(song.Album) == textnorm.NormalizeForMatch(req.Album)
 }
 
@@ -105,7 +105,7 @@ func lengthGap(song Song, savedLength float64) float64 {
 	return math.Abs(float64(song.DurationSeconds) - savedLength)
 }
 
-func matches(song Song, req ports.FindRequest) bool {
+func matches(song Song, req domain.FindRequest) bool {
 	return song.Type == VideoTypeAudioOnly &&
 		comparableTitle(song.Title) == comparableTitle(req.Title) &&
 		domain.Credits(song.Artists, req.Artist)

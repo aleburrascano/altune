@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -25,12 +25,12 @@ type schedulerJobReporter struct {
 }
 
 func (r schedulerJobReporter) Meta(title, artist, album string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
+	r.log.update(r.trackID, func(j *domain.JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
 }
 
 func (r schedulerJobReporter) Stage(ctx context.Context, name string) {
 	var title, artist string
-	r.log.update(r.trackID, func(j *ports.JobRecord) {
+	r.log.update(r.trackID, func(j *domain.JobRecord) {
 		j.Stage = name
 		title, artist = j.Title, j.Artist
 	})
@@ -43,15 +43,15 @@ func (r schedulerJobReporter) Stage(ctx context.Context, name string) {
 }
 
 func (r schedulerJobReporter) Provenance(value string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Provenance = value })
+	r.log.update(r.trackID, func(j *domain.JobRecord) { j.Provenance = value })
 }
 
 func (r schedulerJobReporter) Source(url string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.ResolvedSource = url })
+	r.log.update(r.trackID, func(j *domain.JobRecord) { j.ResolvedSource = url })
 }
 
 func (r schedulerJobReporter) Timing(stage string, d time.Duration) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) {
+	r.log.update(r.trackID, func(j *domain.JobRecord) {
 		if j.StageMs == nil {
 			j.StageMs = map[string]int64{}
 		}
@@ -59,16 +59,16 @@ func (r schedulerJobReporter) Timing(stage string, d time.Duration) {
 	})
 }
 
-func (r schedulerJobReporter) Fetched(format ports.SourceFormat) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Source = format })
+func (r schedulerJobReporter) Fetched(format domain.SourceFormat) {
+	r.log.update(r.trackID, func(j *domain.JobRecord) { j.Source = format })
 }
 
-func (r schedulerJobReporter) Stored(file ports.StoredFile) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stored = file })
+func (r schedulerJobReporter) Stored(file domain.StoredFile) {
+	r.log.update(r.trackID, func(j *domain.JobRecord) { j.Stored = file })
 }
 
 func (r schedulerJobReporter) Decided(confidence float64, sourceKey string, target, measured float64) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) {
+	r.log.update(r.trackID, func(j *domain.JobRecord) {
 		j.Confidence, j.SourceKey, j.TargetSeconds, j.MeasuredSeconds = confidence, sourceKey, target, measured
 	})
 }

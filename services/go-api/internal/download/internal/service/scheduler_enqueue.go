@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -11,18 +10,18 @@ import (
 )
 
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
-	return s.enqueue(ctx, userId, trackId, ports.JobKindReplace)
+	return s.enqueue(ctx, userId, trackId, domain.JobKindReplace)
 }
 
 func (s *BackgroundAcquisitionScheduler) ScheduleUpgrade(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
-	return s.enqueue(ctx, userId, trackId, ports.JobKindUpgrade)
+	return s.enqueue(ctx, userId, trackId, domain.JobKindUpgrade)
 }
 
 func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId ids.UserId, trackId ids.TrackId, _ string) error {
-	return s.enqueue(ctx, userId, trackId, ports.JobKindAcquire)
+	return s.enqueue(ctx, userId, trackId, domain.JobKindAcquire)
 }
 
-func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId ids.UserId, trackId ids.TrackId, kind ports.JobKind) error {
+func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId ids.UserId, trackId ids.TrackId, kind domain.JobKind) error {
 	ctx = logging.ContextWithSubjectUser(ctx, userId.String())
 	if s.gate.closed.Load() {
 		s.rejected.Add(1)
@@ -58,7 +57,7 @@ func (s *BackgroundAcquisitionScheduler) primeEnqueue(trackId ids.TrackId, userI
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trackId ids.TrackId, userId ids.UserId, kind ports.JobKind) error {
+func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trackId ids.TrackId, userId ids.UserId, kind domain.JobKind) error {
 	if s.gate.closed.Load() {
 		s.pending.untrack(trackId.String())
 	}
@@ -66,7 +65,7 @@ func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trac
 	return nil
 }
 
-func (s *BackgroundAcquisitionScheduler) enqueueFailed(ctx context.Context, trackId ids.TrackId, kind ports.JobKind, err error) error {
+func (s *BackgroundAcquisitionScheduler) enqueueFailed(ctx context.Context, trackId ids.TrackId, kind domain.JobKind, err error) error {
 	if errors.Is(err, domain.ErrJobKindConflict) {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.job_in_flight",

@@ -1,6 +1,7 @@
 package ffmpegtag
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/logging"
@@ -21,7 +22,7 @@ func NewTagger(ffmpegBinary string, fallback ports.AudioTagger) *Tagger {
 	return &Tagger{ffmpeg: ffmpegBinary, fallback: fallback}
 }
 
-func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags) error {
+func (t *Tagger) Tag(ctx context.Context, filePath string, tags domain.TrackTags) error {
 	if !strings.HasSuffix(strings.ToLower(filePath), ".m4a") {
 		return t.fallback.Tag(ctx, filePath, tags)
 	}
@@ -48,7 +49,7 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 	return nil
 }
 
-func metadataArgs(tags ports.TrackTags) []string {
+func metadataArgs(tags domain.TrackTags) []string {
 	fields := [][2]string{{"title", tags.Title}, {"artist", tags.Artist}, {"album", tags.Album}, {"album_artist", tags.AlbumArtist}, {"genre", tags.Genre}}
 	if tags.Year > 0 {
 		fields = append(fields, [2]string{"date", strconv.Itoa(tags.Year)})

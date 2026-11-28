@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -13,17 +14,17 @@ type reacquirePolicy struct {
 	audioStore ports.AudioWriter
 }
 
-func (p reacquirePolicy) reconcile(ctx context.Context, track *ports.TrackSnapshot) (proceed bool, err error) {
+func (p reacquirePolicy) reconcile(ctx context.Context, track *domain.TrackSnapshot) (proceed bool, err error) {
 	switch track.Status {
-	case ports.TrackReady:
+	case domain.TrackReady:
 		if proceed, err := p.reconcileReady(ctx, track); !proceed {
 			return false, err
 		}
 		if err := p.revertToPending(ctx, track); err != nil {
 			return false, err
 		}
-	case ports.TrackPending:
-	case ports.TrackFailed:
+	case domain.TrackPending:
+	case domain.TrackFailed:
 		slog.InfoContext(ctx, "acquire_retrying_failed", logging.KeyTrackID, track.ID.String())
 		if err := p.revertToPending(ctx, track); err != nil {
 			return false, err
@@ -32,7 +33,7 @@ func (p reacquirePolicy) reconcile(ctx context.Context, track *ports.TrackSnapsh
 	return true, nil
 }
 
-func (p reacquirePolicy) reconcileReady(ctx context.Context, track *ports.TrackSnapshot) (proceed bool, err error) {
+func (p reacquirePolicy) reconcileReady(ctx context.Context, track *domain.TrackSnapshot) (proceed bool, err error) {
 	if track.AudioRef == nil {
 		return true, nil
 	}
@@ -52,7 +53,7 @@ func (p reacquirePolicy) reconcileReady(ctx context.Context, track *ports.TrackS
 	}
 }
 
-func (p reacquirePolicy) revertToPending(ctx context.Context, track *ports.TrackSnapshot) error {
+func (p reacquirePolicy) revertToPending(ctx context.Context, track *domain.TrackSnapshot) error {
 	if err := p.ledger.RevertAt(ctx, *track); err != nil {
 		return fmt.Errorf("revert to pending: %w", err)
 	}

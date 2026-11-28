@@ -1,39 +1,30 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"slices"
-)
-
-type ProofSource string
-
-const (
-	ProofCatalog         ProofSource = "catalog"
-	ProofPinnedRecording ProofSource = "pinned_recording"
-	ProofFingerprint     ProofSource = "fingerprint"
-	ProofUnproven        ProofSource = "unproven"
 )
 
 type ProofFacts struct {
 	CatalogISRC string
 	CatalogMBID string
-	Identity    ports.RecordingIdentity
+	Identity    domain.RecordingIdentity
 	HardVerdict bool
-	Surviving   []ports.LinkedRecording
+	Surviving   []domain.LinkedRecording
 }
 
-func ProveISRC(f ProofFacts) (string, ProofSource) {
+func ProveISRC(f ProofFacts) (string, domain.ProofSource) {
 	switch {
 	case f.CatalogISRC != "":
-		return f.CatalogISRC, ProofCatalog
+		return f.CatalogISRC, domain.ProofCatalog
 	case f.Identity.ISRC == "":
-		return "", ProofUnproven
+		return "", domain.ProofUnproven
 	case f.identityIsCatalogPin():
-		return f.Identity.ISRC, ProofPinnedRecording
+		return f.Identity.ISRC, domain.ProofPinnedRecording
 	case f.fingerprintProvesIdentity():
-		return f.Identity.ISRC, ProofFingerprint
+		return f.Identity.ISRC, domain.ProofFingerprint
 	}
-	return "", ProofUnproven
+	return "", domain.ProofUnproven
 }
 
 func (f ProofFacts) identityIsCatalogPin() bool {
@@ -44,7 +35,7 @@ func (f ProofFacts) fingerprintProvesIdentity() bool {
 	if !f.HardVerdict || f.Identity.ReferenceDoubted {
 		return false
 	}
-	return slices.ContainsFunc(f.Surviving, func(recording ports.LinkedRecording) bool {
+	return slices.ContainsFunc(f.Surviving, func(recording domain.LinkedRecording) bool {
 		return recording.MBID != "" && slices.Contains(f.Identity.MBIDs, recording.MBID)
 	})
 }

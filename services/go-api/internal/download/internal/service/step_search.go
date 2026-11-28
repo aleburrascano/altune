@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
@@ -9,7 +9,7 @@ import (
 )
 
 type candidateFinder interface {
-	FindReportingOutage(ctx context.Context, req ports.FindRequest) (FindResult, error)
+	FindReportingOutage(ctx context.Context, req domain.FindRequest) (FindResult, error)
 }
 
 type SearchStep struct {
@@ -48,7 +48,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ Pipe
 	return afterSearch{}, nil
 }
 
-func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) (FindResult, error) {
+func (s *SearchStep) find(ctx context.Context, req domain.FindRequest) (FindResult, error) {
 	found, err := s.finder.FindReportingOutage(ctx, req)
 	if err != nil {
 		return found, fmt.Errorf("find candidates: %w", err)
@@ -56,7 +56,7 @@ func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) (FindResul
 	return found, nil
 }
 
-func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []ports.AudioCandidate) (kept, skipped []ports.AudioCandidate) {
+func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []domain.AudioCandidate) (kept, skipped []domain.AudioCandidate) {
 	for _, c := range candidates {
 		switch {
 		case ac.Replace.excludesCandidate(c):
@@ -77,8 +77,8 @@ func (s *SearchStep) Rollback(_ context.Context, _ *AcquisitionContext) error {
 	return nil
 }
 
-func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
-	return ports.FindRequest{
+func findRequestFor(ac *AcquisitionContext) domain.FindRequest {
+	return domain.FindRequest{
 		Title:    ac.Track.Title,
 		Artist:   ac.Track.Artist,
 		Album:    ac.Track.Album,
@@ -110,11 +110,11 @@ const (
 	PassFallbackOnly
 )
 
-func tierOf(pass SearchPass) ports.SourceTier {
+func tierOf(pass SearchPass) domain.SourceTier {
 	if pass == PassFallbackOnly {
-		return ports.TierFallbackOnly
+		return domain.TierFallbackOnly
 	}
-	return ports.TierFirstThenFallback
+	return domain.TierFirstThenFallback
 }
 
 func passAfterSearch(pass SearchPass, res FindResult) SearchPass {

@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"slices"
@@ -36,10 +35,10 @@ type entry struct {
 	uploader       string
 	featMatch      bool
 	explicitFits   bool
-	candidate      ports.AudioCandidate
+	candidate      domain.AudioCandidate
 }
 
-func score(track RankTrack, c ports.AudioCandidate, maxViews int64) entry {
+func score(track RankTrack, c domain.AudioCandidate, maxViews int64) entry {
 	uploader := UploaderOf(track.Artist, c)
 	return entry{
 		ident:         identityScore(track.Title, track.Artist, c.Title),
@@ -49,12 +48,12 @@ func score(track RankTrack, c ports.AudioCandidate, maxViews int64) entry {
 		artistMatch:   artistMatchesCandidate(track.Artist, c),
 		uploader:      uploader,
 		featMatch:     featureMatch(track.Title, c.Title),
-		explicitFits:  c.Explicit == ports.PrefersExplicit(track.CatalogExplicit),
+		explicitFits:  c.Explicit == domain.PrefersExplicit(track.CatalogExplicit),
 		candidate:     c,
 	}
 }
 
-func maxViewCount(candidates []ports.AudioCandidate) int64 {
+func maxViewCount(candidates []domain.AudioCandidate) int64 {
 	var maxViews int64
 	for _, c := range candidates {
 		maxViews = max(maxViews, c.ViewCount)
@@ -69,7 +68,7 @@ func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
 	return math.Max(combined, titleOnly*titleOnlyPenalty)
 }
 
-func metadataRank(c ports.AudioCandidate, uploader string, expectedLength float64, maxViews int64) float64 {
+func metadataRank(c domain.AudioCandidate, uploader string, expectedLength float64, maxViews int64) float64 {
 	channel := channelScore(uploader, c.Channel)
 	category := categoryScore(c.Categories)
 	length := durationScore(expectedLength, c.Duration)

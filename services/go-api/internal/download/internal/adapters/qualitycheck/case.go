@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/tracklength"
@@ -22,7 +22,7 @@ import (
 	"unicode"
 )
 
-//go:embed expected/*.json
+//go:embed golden_*.json
 var goldenFS embed.FS
 
 type Track struct {
@@ -66,7 +66,7 @@ type PinnedRecording struct {
 	Duration       float64  `json:"duration,omitempty"`
 }
 
-func (p PinnedRecording) facts() ports.RecordingFacts { return ports.RecordingFacts(p) }
+func (p PinnedRecording) facts() domain.RecordingFacts { return domain.RecordingFacts(p) }
 
 type SearchedRecording struct {
 	Title    string `json:"title"`
@@ -126,7 +126,7 @@ func (w ObservedWatch) watch() ytmsearch.Watch {
 	return ytmsearch.Watch{VideoID: w.VideoID, Title: w.Title, Artists: w.Artists, Type: w.Type, Explicit: w.Explicit}
 }
 
-func (o Observed) emit() (ports.AudioCandidate, error) {
+func (o Observed) emit() (domain.AudioCandidate, error) {
 	switch {
 	case o.Song != nil && o.Watch == nil && o.Entry == nil:
 		return ytmsearch.CandidateFor(ytmsearch.Song(*o.Song)), nil
@@ -135,7 +135,7 @@ func (o Observed) emit() (ports.AudioCandidate, error) {
 	case o.Entry != nil && o.Song == nil && o.Watch == nil:
 		return ytdlp.CandidateFromEntry(*o.Entry), nil
 	}
-	return ports.AudioCandidate{}, errors.New("observed must hold exactly one of ytmsearch_song, ytmusic_watch, ytdlp_entry")
+	return domain.AudioCandidate{}, errors.New("observed must hold exactly one of ytmsearch_song, ytmusic_watch, ytdlp_entry")
 }
 
 func (c Candidate) setsEmittedFieldsBesidesURL() bool {
@@ -166,16 +166,16 @@ func (c Candidate) builtByItsAdapter() (Candidate, error) {
 	return c, nil
 }
 
-func (c Candidate) audioCandidate() ports.AudioCandidate {
-	return ports.AudioCandidate{
+func (c Candidate) audioCandidate() domain.AudioCandidate {
+	return domain.AudioCandidate{
 		Title:       c.Title,
 		Duration:    c.Duration,
 		URL:         c.URL,
 		Channel:     c.Channel,
 		Categories:  c.Categories,
 		ViewCount:   c.ViewCount,
-		Kind:        ports.CandidateKind(c.Kind),
-		ObservedOMV: ports.CandidateKind(c.Kind) == ports.KindPinnedVideo,
+		Kind:        domain.CandidateKind(c.Kind),
+		ObservedOMV: domain.CandidateKind(c.Kind) == domain.KindPinnedVideo,
 		Artists:     c.Artists,
 		Album:       c.Album,
 		Explicit:    c.Explicit,
@@ -204,39 +204,39 @@ type ReleaseGroup struct {
 	SecondaryTypes []string `json:"secondary_types,omitempty"`
 }
 
-func (t Track) portCatalogSources() []ports.CatalogSource {
+func (t Track) portCatalogSources() []domain.CatalogSource {
 	if len(t.CatalogSources) == 0 {
 		return nil
 	}
-	out := make([]ports.CatalogSource, len(t.CatalogSources))
+	out := make([]domain.CatalogSource, len(t.CatalogSources))
 	for i, s := range t.CatalogSources {
-		out[i] = ports.CatalogSource(s)
+		out[i] = domain.CatalogSource(s)
 	}
 	return out
 }
 
-func (c Candidate) portResults() []ports.AcoustIDResult {
-	results := make([]ports.AcoustIDResult, 0, len(c.AcoustIDResults))
+func (c Candidate) portResults() []domain.AcoustIDResult {
+	results := make([]domain.AcoustIDResult, 0, len(c.AcoustIDResults))
 	for _, r := range c.AcoustIDResults {
-		recordings := make([]ports.LinkedRecording, 0, len(r.Recordings))
+		recordings := make([]domain.LinkedRecording, 0, len(r.Recordings))
 		for _, rec := range r.Recordings {
-			recordings = append(recordings, ports.LinkedRecording{
+			recordings = append(recordings, domain.LinkedRecording{
 				MBID: rec.MBID, Title: rec.Title, Artists: rec.Artists, Duration: rec.Duration,
 				ReleaseGroups: portReleaseGroups(rec.ReleaseGroups),
 			})
 		}
-		results = append(results, ports.AcoustIDResult{ID: r.ID, Score: r.Score, Recordings: recordings})
+		results = append(results, domain.AcoustIDResult{ID: r.ID, Score: r.Score, Recordings: recordings})
 	}
 	return results
 }
 
-func portReleaseGroups(groups []ReleaseGroup) []ports.ReleaseGroup {
+func portReleaseGroups(groups []ReleaseGroup) []domain.ReleaseGroup {
 	if len(groups) == 0 {
 		return nil
 	}
-	out := make([]ports.ReleaseGroup, len(groups))
+	out := make([]domain.ReleaseGroup, len(groups))
 	for i, g := range groups {
-		out[i] = ports.ReleaseGroup(g)
+		out[i] = domain.ReleaseGroup(g)
 	}
 	return out
 }
@@ -402,7 +402,7 @@ type suite struct {
 }
 
 func LoadEmbedded() ([]Case, error) {
-	return loadFS(goldenFS, "expected")
+	return loadFS(goldenFS, ".")
 }
 
 func LoadDir(dir string) ([]Case, error) {
@@ -611,12 +611,12 @@ func validateCandidates(c Case) error {
 }
 
 func validateCandidateShape(caseID string, cand Candidate) error {
-	kindResolved := ports.AudioCandidate{Kind: ports.CandidateKind(cand.Kind)}.IsResolved()
+	kindResolved := domain.AudioCandidate{Kind: domain.CandidateKind(cand.Kind)}.IsResolved()
 	if cand.Resolved != kindResolved {
 		return fmt.Errorf("case %q candidate %q has resolved=%t but kind %q reads as resolved=%t", caseID, cand.URL, cand.Resolved, cand.Kind, kindResolved)
 	}
-	if !slices.Contains([]string{"", ports.UnplayablePreview, ports.UnplayableDRM}, cand.Unplayable) {
-		return fmt.Errorf("case %q candidate %q has unplayable %q, want %q or %q", caseID, cand.URL, cand.Unplayable, ports.UnplayablePreview, ports.UnplayableDRM)
+	if !slices.Contains([]string{"", domain.UnplayablePreview, domain.UnplayableDRM}, cand.Unplayable) {
+		return fmt.Errorf("case %q candidate %q has unplayable %q, want %q or %q", caseID, cand.URL, cand.Unplayable, domain.UnplayablePreview, domain.UnplayableDRM)
 	}
 	return nil
 }

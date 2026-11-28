@@ -2,10 +2,10 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
@@ -28,7 +28,7 @@ func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 	svc := mustAcquisitionServices(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
-	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	err := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	requireReady(t, ledger, track.ID, err)
 	want := service.BuildAudioRef(service.TrackRef{
@@ -45,12 +45,12 @@ func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 func TestExecuteReplace_SwapsTheServingFileForTheOneItStored(t *testing.T) {
 	served := seedReadyTrack(t)
 
-	if err := served.service().ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
+	if err := served.service().ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: served.userID, TrackID: served.trackID}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
 	got, _ := served.ledger.Track(served.trackID)
-	if got.Status != ports.TrackReady || got.AudioRef == nil || *got.AudioRef == served.originalRef {
+	if got.Status != domain.TrackReady || got.AudioRef == nil || *got.AudioRef == served.originalRef {
 		t.Fatalf("track = %v on %v, want ready on a new file, not the original %q", got.Status, got.AudioRef, served.originalRef)
 	}
 	if !served.store.holds(*got.AudioRef) {
@@ -60,8 +60,8 @@ func TestExecuteReplace_SwapsTheServingFileForTheOneItStored(t *testing.T) {
 
 type vanishingLedger struct{ *memory.Ledger }
 
-func (vanishingLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
-	return ports.ErrTrackNotFound
+func (vanishingLedger) Complete(context.Context, ids.TrackId, ids.UserId, domain.ClaimNumber, domain.Completion) error {
+	return domain.ErrTrackNotFound
 }
 
 func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.T) {
@@ -70,7 +70,7 @@ func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.
 	svc := mustAcquisitionServices(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 
-	err := svc.Execute(context.Background(), ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
+	err := svc.Execute(context.Background(), domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID})
 
 	if err == nil || !strings.Contains(err.Error(), "track not found for update") {
 		t.Fatalf("Execute = %v, want the update step's track-not-found failure", err)
@@ -121,26 +121,26 @@ func TestScheduledRun_TellsTheClientWhenItReachesTheUpdateTrackStage(t *testing.
 func TestReplaceGated_AnUnprobedFileGetsNoLengthRescue(t *testing.T) {
 	const recording = "mb-blinding"
 	served := seedReadyTrack(t)
-	source := &offeringSource{found: []ports.AudioCandidate{downloadtest.Candidate(
+	source := &offeringSource{found: []domain.AudioCandidate{downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=fanUploadAA",
 		downloadtest.WithTitle("The Weeknd - Blinding Lights"),
 		downloadtest.WithChannel("Some Fan"),
-		downloadtest.WithKind(ports.KindUpload),
+		downloadtest.WithKind(domain.KindUpload),
 		downloadtest.WithDuration(285),
 		downloadtest.WithCategories([]string{"Music"}),
 	)}}
 	svc := mustAcquisitionServices(served.ledger, service.NewSourceRegistry(source), served.store,
-		scratchfiles.New(), resolving(&resolver{identity: ports.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}},
-			verifiedBy(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
-				{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},
+		scratchfiles.New(), resolving(&resolver{identity: domain.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}},
+			verifiedBy(&identifier{match: domain.RecordingMatch{AcoustID: "ac-1", Results: []domain.AcoustIDResult{
+				{Score: 0.97, Recordings: []domain.LinkedRecording{{MBID: recording}}},
 			}}})), noStages(deletingFrom(served.store)))
 	snapshot, err := served.ledger.Get(context.Background(), served.trackID, served.userID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	gate := service.ReplacementGate{Current: domain.B, CatalogSeconds: 285, StoredSeconds: 231}
+	gate := service.ReplacementGate{Current: domain.GradeB, CatalogSeconds: 285, StoredSeconds: 231}
 
-	_, err = svc.ReplaceGated(context.Background(), ports.AcquisitionJob{UserID: served.userID}, snapshot, gate)
+	_, err = svc.ReplaceGated(context.Background(), domain.AcquisitionJob{UserID: served.userID}, snapshot, gate)
 
 	if !errors.Is(err, service.ErrNotAnUpgrade) {
 		t.Fatalf("ReplaceGated = %v, want ErrNotAnUpgrade: the source's claimed 285 s was never measured", err)
@@ -159,41 +159,43 @@ const (
 )
 
 func hardFingerprintOn(mbid string) *identifier {
-	return &identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
-		{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: mbid}}},
+	return &identifier{match: domain.RecordingMatch{AcoustID: "ac-1", Results: []domain.AcoustIDResult{
+		{Score: 0.97, Recordings: []domain.LinkedRecording{{MBID: mbid}}},
 	}}}
 }
 
 type storedAcquisition struct {
 	track    memory.LedgerTrack
-	evidence service.Evidence
+	evidence domain.AcquisitionEvidence
 	keys     map[string]json.RawMessage
 }
 
-func acquireStoring(t *testing.T, candidate ports.AudioCandidate, opts ...func(*service.AcquireTrackAudioService)) storedAcquisition {
+func acquireStoring(t *testing.T, candidate domain.AudioCandidate, opts ...func(*service.AcquireTrackAudioService)) storedAcquisition {
 	t.Helper()
 	return acquireStoringVerified(t, candidate, noVerification(), opts...)
 }
 
-func acquireStoringVerified(t *testing.T, candidate ports.AudioCandidate, wiring service.VerificationPorts, opts ...func(*service.AcquireTrackAudioService)) storedAcquisition {
+func acquireStoringVerified(t *testing.T, candidate domain.AudioCandidate, wiring service.VerificationPorts, opts ...func(*service.AcquireTrackAudioService)) storedAcquisition {
 	t.Helper()
 	track := pendingBlindingLights()
 	length := blindingLightsLength
 	track.CatalogDurationSeconds = &length
-	ledger, err := acquireVerified(t, track, &offeringSource{found: []ports.AudioCandidate{candidate}}, wiring, noStages(), opts...)
+	ledger, err := acquireVerified(t, track, &offeringSource{found: []domain.AudioCandidate{candidate}}, wiring, noStages(), opts...)
 	requireReady(t, ledger, track.ID, err)
 	got, _ := ledger.Track(track.ID)
 	stored := storedAcquisition{track: got}
-	if err := json.Unmarshal(got.Evidence, &stored.evidence); err != nil {
+	decoded, err := evidence.NewCodec().Decode(got.Evidence)
+	if err != nil {
 		t.Fatalf("evidence not stored as JSON: %v (%q)", err, got.Evidence)
 	}
+	stored.evidence = decoded
 	if err := json.Unmarshal(got.Evidence, &stored.keys); err != nil {
 		t.Fatalf("evidence not a JSON object: %v (%q)", err, got.Evidence)
 	}
 	return stored
 }
 
-func blindingLightsBy(channel string, kind ports.CandidateKind) ports.AudioCandidate {
+func blindingLightsBy(channel string, kind domain.CandidateKind) domain.AudioCandidate {
 	return downloadtest.Candidate(
 		"https://www.youtube.com/watch?v=blindingAAA",
 		downloadtest.WithTitle("The Weeknd - Blinding Lights"),
@@ -204,7 +206,7 @@ func blindingLightsBy(channel string, kind ports.CandidateKind) ports.AudioCandi
 }
 
 func TestExecute_StoresTheVerdictScoreSourceTitleAndTheirConfidence(t *testing.T) {
-	candidate := blindingLightsBy("The Weeknd - Topic", ports.KindUpload)
+	candidate := blindingLightsBy("The Weeknd - Topic", domain.KindUpload)
 	candidate.Title = "The Weeknd - Blinding Lights (Official Audio)"
 
 	stored := acquireStoringVerified(t, candidate,
@@ -222,18 +224,18 @@ func TestExecute_StoresTheSourceKindGenerationAndGradePerKind(t *testing.T) {
 	cases := []struct {
 		name       string
 		channel    string
-		kind       ports.CandidateKind
+		kind       domain.CandidateKind
 		omv        bool
 		identifier *identifier
 		wantKind   domain.SourceKind
 		wantGrade  domain.Grade
 	}{
-		{"art track proven by fingerprint", "The Weeknd - Topic", ports.KindArtTrack, false, hardFingerprintOn(blindingLightsRecording), domain.ArtTrack, domain.A},
-		{"official video proven by fingerprint", "The Weeknd", ports.KindPinnedVideo, true, hardFingerprintOn(blindingLightsRecording), domain.OfficialVideo, domain.A},
-		{"pinned video never seen as official, proven by fingerprint", "The Weeknd", ports.KindPinnedVideo, false, hardFingerprintOn(blindingLightsRecording), domain.FanUpload, domain.B},
-		{"artist's own upload proven by fingerprint", "The Weeknd", ports.KindUpload, false, hardFingerprintOn(blindingLightsRecording), domain.LabelUpload, domain.A},
-		{"fan upload proven by fingerprint", "Some Fan", ports.KindUpload, false, hardFingerprintOn(blindingLightsRecording), domain.FanUpload, domain.B},
-		{"fan upload with no fingerprint answer", "Some Fan", ports.KindUpload, false, nil, domain.FanUpload, domain.D},
+		{"art track proven by fingerprint", "The Weeknd - Topic", domain.KindArtTrack, false, hardFingerprintOn(blindingLightsRecording), domain.ArtTrack, domain.GradeA},
+		{"official video proven by fingerprint", "The Weeknd", domain.KindPinnedVideo, true, hardFingerprintOn(blindingLightsRecording), domain.OfficialVideo, domain.GradeA},
+		{"pinned video never seen as official, proven by fingerprint", "The Weeknd", domain.KindPinnedVideo, false, hardFingerprintOn(blindingLightsRecording), domain.FanUpload, domain.GradeB},
+		{"artist's own upload proven by fingerprint", "The Weeknd", domain.KindUpload, false, hardFingerprintOn(blindingLightsRecording), domain.LabelUpload, domain.GradeA},
+		{"fan upload proven by fingerprint", "Some Fan", domain.KindUpload, false, hardFingerprintOn(blindingLightsRecording), domain.FanUpload, domain.GradeB},
+		{"fan upload with no fingerprint answer", "Some Fan", domain.KindUpload, false, nil, domain.FanUpload, domain.GradeD},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -254,18 +256,18 @@ func TestExecute_StoresTheSourceKindGenerationAndGradePerKind(t *testing.T) {
 }
 
 func TestExecute_ADoubtedReferenceNeverGradesA(t *testing.T) {
-	identity := ports.RecordingIdentity{MBID: blindingLightsRecording, MBIDs: []string{blindingLightsRecording}, ReferenceDoubted: true}
+	identity := domain.RecordingIdentity{MBID: blindingLightsRecording, MBIDs: []string{blindingLightsRecording}, ReferenceDoubted: true}
 
-	e := acquireStoringVerified(t, blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack),
+	e := acquireStoringVerified(t, blindingLightsBy("The Weeknd - Topic", domain.KindArtTrack),
 		resolving(&resolver{identity: identity}, verifiedBy(hardFingerprintOn(blindingLightsRecording)))).evidence
 
-	if e.Grade != domain.B {
+	if e.Grade != domain.GradeB {
 		t.Errorf("grade = %q, want B: a fingerprint on a doubted reference never proves the recording", e.Grade)
 	}
 }
 
 func TestExecute_AnUncomparedLengthIsStoredAsNullInTheEvidence(t *testing.T) {
-	stored := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", ports.KindUpload))
+	stored := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", domain.KindUpload))
 
 	if v, present := stored.keys["duration_delta_seconds"]; !present || string(v) != "null" {
 		t.Errorf("duration_delta_seconds = %s (present %v), want null: no prober measured the file", v, present)
@@ -273,7 +275,7 @@ func TestExecute_AnUncomparedLengthIsStoredAsNullInTheEvidence(t *testing.T) {
 }
 
 func TestExecute_StoredEvidenceHasNoUnsetISRCHit(t *testing.T) {
-	stored := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", ports.KindUpload))
+	stored := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", domain.KindUpload))
 
 	if _, present := stored.keys["isrc_set_hit"]; present {
 		t.Errorf("stored evidence carries isrc_set_hit: %s", stored.track.Evidence)
@@ -281,33 +283,33 @@ func TestExecute_StoredEvidenceHasNoUnsetISRCHit(t *testing.T) {
 }
 
 type perURLSource struct {
-	found   []ports.AudioCandidate
-	formats map[string]ports.SourceFormat
+	found   []domain.AudioCandidate
+	formats map[string]domain.SourceFormat
 	broken  map[string]bool
 }
 
 func (perURLSource) Name() domain.SourceName { return "per-url" }
 
-func (s perURLSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s perURLSource) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
 	return s.found, nil
 }
 
-func (s perURLSource) Fetch(_ context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s perURLSource) Fetch(_ context.Context, candidate domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	if s.broken[candidate.URL] {
-		return ports.FetchedAudio{}, errors.New("fetch failed")
+		return domain.FetchedAudio{}, errors.New("fetch failed")
 	}
 	path := filepath.Join(outDir, "audio.mp3")
-	return ports.FetchedAudio{Path: path, Format: s.formats[candidate.URL]}, os.WriteFile(path, []byte("audio bytes"), 0o600)
+	return domain.FetchedAudio{Path: path, Format: s.formats[candidate.URL]}, os.WriteFile(path, []byte("audio bytes"), 0o600)
 }
 
 func TestExecute_StoresTheSourceURLOfTheFileItKept(t *testing.T) {
 	const first, second = "https://www.youtube.com/watch?v=firstAAAAAA", "https://www.youtube.com/watch?v=secondAAAAA"
-	muxed := ports.SourceFormat{ID: ports.MuxedFallbackFormatID}
+	muxed := domain.SourceFormat{ID: domain.MuxedFallbackFormatID}
 	fingerprinted := verifiedBy(hardFingerprintOn(blindingLightsRecording))
 	cases := []struct {
 		name       string
 		firstTitle string
-		formats    map[string]ports.SourceFormat
+		formats    map[string]domain.SourceFormat
 		broken     map[string]bool
 		wiring     service.VerificationPorts
 		stages     []stageMod
@@ -330,7 +332,7 @@ func TestExecute_StoresTheSourceURLOfTheFileItKept(t *testing.T) {
 		},
 		{
 			"a muxed file when nothing better came", "",
-			map[string]ports.SourceFormat{first: muxed},
+			map[string]domain.SourceFormat{first: muxed},
 			map[string]bool{second: true},
 			fingerprinted,
 			nil,
@@ -338,7 +340,7 @@ func TestExecute_StoresTheSourceURLOfTheFileItKept(t *testing.T) {
 		},
 		{
 			"an audio-only file chosen over a muxed one", "",
-			map[string]ports.SourceFormat{first: muxed},
+			map[string]domain.SourceFormat{first: muxed},
 			nil,
 			fingerprinted,
 			nil,
@@ -347,7 +349,7 @@ func TestExecute_StoresTheSourceURLOfTheFileItKept(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			found := []ports.AudioCandidate{blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack), blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack)}
+			found := []domain.AudioCandidate{blindingLightsBy("The Weeknd - Topic", domain.KindArtTrack), blindingLightsBy("The Weeknd - Topic", domain.KindArtTrack)}
 			found[0].URL, found[1].URL = first, second
 			if tc.firstTitle != "" {
 				found[0].Title = tc.firstTitle

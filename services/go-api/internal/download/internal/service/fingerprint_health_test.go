@@ -15,8 +15,8 @@ type scriptedIdentifier struct {
 	err error
 }
 
-func (s scriptedIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
-	return ports.RecordingMatch{}, s.err
+func (s scriptedIdentifier) Identify(context.Context, string, float64) (domain.RecordingMatch, error) {
+	return domain.RecordingMatch{}, s.err
 }
 
 func TestTracker_VerifiedStaysFalseUntilALookupSucceeds(t *testing.T) {
@@ -40,10 +40,10 @@ type sequencedIdentifier struct {
 	next int
 }
 
-func (s *sequencedIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
+func (s *sequencedIdentifier) Identify(context.Context, string, float64) (domain.RecordingMatch, error) {
 	err := s.errs[s.next]
 	s.next++
-	return ports.RecordingMatch{}, err
+	return domain.RecordingMatch{}, err
 }
 
 func TestTracker_VerifiedFollowsTheLatestLookup(t *testing.T) {

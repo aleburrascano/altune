@@ -1,6 +1,7 @@
 package contracttest
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/tracklength"
@@ -11,42 +12,42 @@ import (
 
 type LedgerUnderTest interface {
 	ports.LibraryTracks
-	AddTrack(t *testing.T, track ports.TrackSnapshot)
+	AddTrack(t *testing.T, track domain.TrackSnapshot)
 }
 
 const contractAudioRef = "audio/contract.opus"
 
-func contractTrack(status ports.TrackStatus) ports.TrackSnapshot {
-	track := ports.TrackSnapshot{
+func contractTrack(status domain.TrackStatus) domain.TrackSnapshot {
+	track := domain.TrackSnapshot{
 		ID: contractIDs.NewTrackId(), UserId: contractIDs.NewUserId(),
 		Title: "Song", Artist: "Artist", Album: "Album", Status: status,
 	}
-	if status == ports.TrackReady {
+	if status == domain.TrackReady {
 		track.Streamable = true
 		return withFileOnRecord(track)
 	}
 	return withoutFileOnRecord(track)
 }
 
-func withFileOnRecord(track ports.TrackSnapshot) ports.TrackSnapshot {
+func withFileOnRecord(track domain.TrackSnapshot) domain.TrackSnapshot {
 	ref := contractAudioRef
 	track.AudioRef = &ref
 	return track
 }
 
-func withoutFileOnRecord(track ports.TrackSnapshot) ports.TrackSnapshot {
+func withoutFileOnRecord(track domain.TrackSnapshot) domain.TrackSnapshot {
 	track.AudioRef = nil
 	return track
 }
 
-func added(t *testing.T, l LedgerUnderTest, status ports.TrackStatus) ports.TrackSnapshot {
+func added(t *testing.T, l LedgerUnderTest, status domain.TrackStatus) domain.TrackSnapshot {
 	t.Helper()
 	track := contractTrack(status)
 	l.AddTrack(t, track)
 	return track
 }
 
-func ownersView(t *testing.T, l LedgerUnderTest, track ports.TrackSnapshot) ports.TrackSnapshot {
+func ownersView(t *testing.T, l LedgerUnderTest, track domain.TrackSnapshot) domain.TrackSnapshot {
 	t.Helper()
 	got, err := l.Get(context.Background(), track.ID, track.UserId)
 	if err != nil || got == nil {
@@ -58,20 +59,20 @@ func ownersView(t *testing.T, l LedgerUnderTest, track ports.TrackSnapshot) port
 func someoneElse() ids.UserId { return contractIDs.NewUserId() }
 
 func contractGetFindsATrackOnlyForItsOwner(t *testing.T, l LedgerUnderTest) {
-	track := added(t, l, ports.TrackPending)
+	track := added(t, l, domain.TrackPending)
 
 	if got := ownersView(t, l, track); got.ID != track.ID || got.UserId != track.UserId {
 		t.Errorf("Get as the owner = %+v, want track %v of user %v", got, track.ID, track.UserId)
 	}
-	if got, err := l.Get(context.Background(), track.ID, someoneElse()); got != nil || !errors.Is(err, ports.ErrTrackNotFound) {
+	if got, err := l.Get(context.Background(), track.ID, someoneElse()); got != nil || !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Errorf("Get as another user = %+v, %v; want ErrTrackNotFound, exactly as for a missing track", got, err)
 	}
-	if got, err := l.Get(context.Background(), contractIDs.NewTrackId(), track.UserId); got != nil || !errors.Is(err, ports.ErrTrackNotFound) {
+	if got, err := l.Get(context.Background(), contractIDs.NewTrackId(), track.UserId); got != nil || !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Errorf("Get of a missing track = %+v, %v; want ErrTrackNotFound", got, err)
 	}
 }
 
-func wantUntouched(t *testing.T, l LedgerUnderTest, track, before ports.TrackSnapshot) {
+func wantUntouched(t *testing.T, l LedgerUnderTest, track, before domain.TrackSnapshot) {
 	t.Helper()
 	after := ownersView(t, l, track)
 	if after.Status != before.Status || after.Version != before.Version || after.AudioRef != nil {
@@ -80,24 +81,24 @@ func wantUntouched(t *testing.T, l LedgerUnderTest, track, before ports.TrackSna
 }
 
 func contractCompleteOnAnotherOwnersTrackIsNotFoundAndWritesNothing(t *testing.T, l LedgerUnderTest) {
-	track := added(t, l, ports.TrackPending)
+	track := added(t, l, domain.TrackPending)
 	before := ownersView(t, l, track)
 
-	err := l.Complete(context.Background(), track.ID, someoneElse(), 0, ports.Completion{AudioRef: contractAudioRef})
+	err := l.Complete(context.Background(), track.ID, someoneElse(), 0, domain.Completion{AudioRef: contractAudioRef})
 
-	if !errors.Is(err, ports.ErrTrackNotFound) {
+	if !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Errorf("Complete as another user = %v, want ErrTrackNotFound", err)
 	}
 	wantUntouched(t, l, track, before)
 }
 
 func contractFailOnAnotherOwnersTrackIsNotFoundAndWritesNothing(t *testing.T, l LedgerUnderTest) {
-	track := added(t, l, ports.TrackPending)
+	track := added(t, l, domain.TrackPending)
 	before := ownersView(t, l, track)
 
 	err := l.Fail(context.Background(), track.ID, someoneElse(), 0, "no_match_found")
 
-	if !errors.Is(err, ports.ErrTrackNotFound) {
+	if !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Errorf("Fail as another user = %v, want ErrTrackNotFound", err)
 	}
 	wantUntouched(t, l, track, before)
@@ -105,16 +106,16 @@ func contractFailOnAnotherOwnersTrackIsNotFoundAndWritesNothing(t *testing.T, l 
 
 func contractGetReportsEachStatusAndWhetherTheTrackIsStreamable(t *testing.T, l LedgerUnderTest) {
 	for _, tt := range []struct {
-		status     ports.TrackStatus
+		status     domain.TrackStatus
 		withFile   bool
 		streamable bool
 	}{
-		{ports.TrackPending, false, false},
-		{ports.TrackPending, true, false},
-		{ports.TrackReady, true, true},
-		{ports.TrackReady, false, false},
-		{ports.TrackFailed, false, false},
-		{ports.TrackFailed, true, false},
+		{domain.TrackPending, false, false},
+		{domain.TrackPending, true, false},
+		{domain.TrackReady, true, true},
+		{domain.TrackReady, false, false},
+		{domain.TrackFailed, false, false},
+		{domain.TrackFailed, true, false},
 	} {
 		track := withoutFileOnRecord(contractTrack(tt.status))
 		if tt.withFile {
@@ -129,16 +130,16 @@ func contractGetReportsEachStatusAndWhetherTheTrackIsStreamable(t *testing.T, l 
 	}
 }
 
-func completeWithLength(t *testing.T, l LedgerUnderTest, prior *float64, length tracklength.TrackLength) ports.TrackSnapshot {
+func completeWithLength(t *testing.T, l LedgerUnderTest, prior *float64, length tracklength.TrackLength) domain.TrackSnapshot {
 	t.Helper()
-	track := contractTrack(ports.TrackPending)
+	track := contractTrack(domain.TrackPending)
 	track.StoredDurationSeconds = prior
 	l.AddTrack(t, track)
-	if err := l.Complete(context.Background(), track.ID, track.UserId, 0, ports.Completion{AudioRef: contractAudioRef, Duration: length}); err != nil {
+	if err := l.Complete(context.Background(), track.ID, track.UserId, 0, domain.Completion{AudioRef: contractAudioRef, Duration: length}); err != nil {
 		t.Fatalf("Complete with length %v = %v, want the track marked ready", length.Seconds(), err)
 	}
 	got := ownersView(t, l, track)
-	if got.Status != ports.TrackReady {
+	if got.Status != domain.TrackReady {
 		t.Errorf("after completing with length %v the track is %v, want ready", length.Seconds(), got.Status)
 	}
 	return got
@@ -181,30 +182,30 @@ func LedgerContract(t *testing.T, newLedger func(t *testing.T) LedgerUnderTest) 
 }
 
 func contractTheStatusRulesAnswerTheSameTableForEveryStatusAndEvent(t *testing.T, l LedgerUnderTest) {
-	p, r, f := ports.TrackPending, ports.TrackReady, ports.TrackFailed
-	legal := map[ports.TrackEvent]map[ports.TrackStatus]ports.TrackStatus{
-		ports.EventMarkReady:       {p: r, r: r, f: r},
-		ports.EventReplaceAudio:    {r: r},
-		ports.EventMarkFailed:      {p: f, r: f},
-		ports.EventFailPending:     {p: f},
-		ports.EventRevertToPending: {r: p, f: p},
+	p, r, f := domain.TrackPending, domain.TrackReady, domain.TrackFailed
+	legal := map[domain.TrackEvent]map[domain.TrackStatus]domain.TrackStatus{
+		domain.EventMarkReady:       {p: r, r: r, f: r},
+		domain.EventReplaceAudio:    {r: r},
+		domain.EventMarkFailed:      {p: f, r: f},
+		domain.EventFailPending:     {p: f},
+		domain.EventRevertToPending: {r: p, f: p},
 	}
-	for _, event := range ports.TrackEvents() {
-		for _, from := range ports.TrackStatuses() {
+	for _, event := range domain.TrackEvents() {
+		for _, from := range domain.TrackStatuses() {
 			next, err := l.Next(from, event)
 			want, ok := legal[event][from]
 			switch {
-			case !ok && !errors.Is(err, ports.ErrIllegalTransition):
+			case !ok && !errors.Is(err, domain.ErrIllegalTransition):
 				t.Errorf("event %d from %s: err = %v, want an illegal transition", event, from.Wire(), err)
 			case ok && (err != nil || next != want):
 				t.Errorf("event %d from %s: next = %s, %v; want %s", event, from.Wire(), next.Wire(), err, want.Wire())
 			}
 		}
 	}
-	for name, got := range map[string][]ports.TrackStatus{"claimable": l.Claimable(), "retryable": l.Retryable(), "upgradable": l.Upgradable()} {
-		want := map[string]ports.TrackStatus{"claimable": p, "retryable": f, "upgradable": r}[name]
+	for name, got := range map[string][]domain.TrackStatus{"claimable": l.Claimable(), "retryable": l.Retryable(), "upgradable": l.Upgradable()} {
+		want := map[string]domain.TrackStatus{"claimable": p, "retryable": f, "upgradable": r}[name]
 		if len(got) != 1 || got[0] != want {
-			t.Errorf("%s = %v, want [%s]", name, ports.StatusWires(got), want.Wire())
+			t.Errorf("%s = %v, want [%s]", name, domain.StatusWires(got), want.Wire())
 		}
 	}
 }
@@ -213,22 +214,22 @@ func contractEveryWriteIsLegalExactlyWhenTheRulesAllowTheEvent(t *testing.T, l L
 	ctx := context.Background()
 	writes := []struct {
 		name  string
-		event ports.TrackEvent
-		do    func(track ports.TrackSnapshot) error
+		event domain.TrackEvent
+		do    func(track domain.TrackSnapshot) error
 	}{
-		{"fail", ports.EventFailPending, func(track ports.TrackSnapshot) error {
+		{"fail", domain.EventFailPending, func(track domain.TrackSnapshot) error {
 			return l.Fail(ctx, track.ID, track.UserId, 0, "no_match_found")
 		}},
-		{"revert", ports.EventRevertToPending, func(track ports.TrackSnapshot) error { return l.RevertAt(ctx, track) }},
-		{"complete", ports.EventMarkReady, func(track ports.TrackSnapshot) error {
-			return l.Complete(ctx, track.ID, track.UserId, 0, ports.Completion{AudioRef: contractAudioRef})
+		{"revert", domain.EventRevertToPending, func(track domain.TrackSnapshot) error { return l.RevertAt(ctx, track) }},
+		{"complete", domain.EventMarkReady, func(track domain.TrackSnapshot) error {
+			return l.Complete(ctx, track.ID, track.UserId, 0, domain.Completion{AudioRef: contractAudioRef})
 		}},
-		{"replace", ports.EventReplaceAudio, func(track ports.TrackSnapshot) error {
-			return l.Complete(ctx, track.ID, track.UserId, 0, ports.Completion{AudioRef: contractAudioRef + ".new", ReplaceAudio: true})
+		{"replace", domain.EventReplaceAudio, func(track domain.TrackSnapshot) error {
+			return l.Complete(ctx, track.ID, track.UserId, 0, domain.Completion{AudioRef: contractAudioRef + ".new", ReplaceAudio: true})
 		}},
 	}
 	for _, write := range writes {
-		for _, from := range ports.TrackStatuses() {
+		for _, from := range domain.TrackStatuses() {
 			track := added(t, l, from)
 			snapshot := ownersView(t, l, track)
 
@@ -236,7 +237,7 @@ func contractEveryWriteIsLegalExactlyWhenTheRulesAllowTheEvent(t *testing.T, l L
 
 			next, legal := l.Next(from, write.event)
 			if legal != nil {
-				if !errors.Is(err, ports.ErrIllegalTransition) {
+				if !errors.Is(err, domain.ErrIllegalTransition) {
 					t.Errorf("%s from %s: err = %v, want an illegal transition", write.name, from.Wire(), err)
 				}
 				continue

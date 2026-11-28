@@ -2,14 +2,14 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"testing"
 )
 
 var finesse = service.TitleTarget{Title: "Finesse", Artist: "Bruno Mars"}
 
-func finesseCandidate(url string, kind ports.CandidateKind, seconds float64) ports.AudioCandidate {
+func finesseCandidate(url string, kind domain.CandidateKind, seconds float64) domain.AudioCandidate {
 	return downloadtest.Candidate(
 		url,
 		downloadtest.WithTitle("Finesse"),
@@ -27,10 +27,10 @@ func wantComparison(t *testing.T, got service.ShadowComparison, pipelineURL, jud
 }
 
 func TestCompare_TheCatalogPinIsJudgedAsThePinnedVideo(t *testing.T) {
-	art := finesseCandidate("art", ports.KindArtTrack, 0)
-	pin := finesseCandidate("pin", ports.KindCatalogPin, 0)
+	art := finesseCandidate("art", domain.KindArtTrack, 0)
+	pin := finesseCandidate("pin", domain.KindCatalogPin, 0)
 
-	got := service.CompareShadow(finesse, &pin, 0, []ports.AudioCandidate{art, pin})
+	got := service.CompareShadow(finesse, &pin, 0, []domain.AudioCandidate{art, pin})
 
 	wantComparison(t, got, "pin", "pin", service.VerdictAgree)
 	if got.Reason == "" || got.Reason == "no candidate accepted" {
@@ -39,9 +39,9 @@ func TestCompare_TheCatalogPinIsJudgedAsThePinnedVideo(t *testing.T) {
 }
 
 func TestCompare_AnAbstainingJudgeIsNotADisagreement(t *testing.T) {
-	upload := finesseCandidate("https://music.youtube.com/watch?v=up", ports.KindUpload, 0)
+	upload := finesseCandidate("https://music.youtube.com/watch?v=up", domain.KindUpload, 0)
 
-	got := service.CompareShadow(finesse, &upload, 191, []ports.AudioCandidate{upload})
+	got := service.CompareShadow(finesse, &upload, 191, []domain.AudioCandidate{upload})
 
 	wantComparison(t, got, upload.URL, "", service.VerdictJudgeAbstained)
 	if got.Reason == "" {
@@ -51,18 +51,18 @@ func TestCompare_AnAbstainingJudgeIsNotADisagreement(t *testing.T) {
 
 func TestCompare_OnlyTheKeptCandidateGainsTheProbedLength(t *testing.T) {
 	target := service.TitleTarget{Title: "Finesse", Artist: "Bruno Mars", Length: 300}
-	kept := finesseCandidate("kept", ports.KindArtTrack, 0)
-	other := finesseCandidate("other", ports.KindArtTrack, 0)
+	kept := finesseCandidate("kept", domain.KindArtTrack, 0)
+	other := finesseCandidate("other", domain.KindArtTrack, 0)
 
-	got := service.CompareShadow(target, &kept, 191, []ports.AudioCandidate{kept, other})
+	got := service.CompareShadow(target, &kept, 191, []domain.AudioCandidate{kept, other})
 
 	wantComparison(t, got, "kept", "other", service.VerdictDisagree)
 }
 
 func TestCompare_APipelineThatKeptNothingFailed(t *testing.T) {
-	art := finesseCandidate("art", ports.KindArtTrack, 0)
+	art := finesseCandidate("art", domain.KindArtTrack, 0)
 
-	got := service.CompareShadow(finesse, nil, 0, []ports.AudioCandidate{art})
+	got := service.CompareShadow(finesse, nil, 0, []domain.AudioCandidate{art})
 
 	wantComparison(t, got, "", "art", service.VerdictPipelineFailed)
 }

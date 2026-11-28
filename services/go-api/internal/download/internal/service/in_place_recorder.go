@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -24,7 +25,7 @@ func NewInPlaceRecorder(verdicts ports.InPlaceVerdicts, state ports.InPlaceState
 	return &InPlaceRecorder{verdicts: verdicts, state: state}, nil
 }
 
-func (r *InPlaceRecorder) RecordInPlace(ctx context.Context, trackID ids.TrackId, record ports.InPlaceRecord) (bool, error) {
+func (r *InPlaceRecorder) RecordInPlace(ctx context.Context, trackID ids.TrackId, record domain.InPlaceRecord) (bool, error) {
 	recorded, err := r.verdicts.RecordInPlaceVerdict(ctx, trackID, record)
 	if err != nil {
 		return false, fmt.Errorf("record in-place verdict: %w", err)

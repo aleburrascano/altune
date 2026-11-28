@@ -54,7 +54,7 @@ A real failure worth keeping becomes a permanent eval case with:
 bash scripts/acq-debug.sh [--staging] capture "<title|uuid>"
 ```
 
-It pulls the track row plus its `candidate_evaluated` and `acquisition.rejection_summary` log lines and turns them into one `eval.Case` JSON object (`class: "RW"`), printed to stdout. It never commits or edits goldens: review the output, then add it under `services/go-api/internal/download/internal/adapters/qualitycheck/goldens/` yourself.
+It pulls the track row plus its `candidate_evaluated` and `acquisition.rejection_summary` log lines and turns them into one `eval.Case` JSON object (`class: "RW"`), printed to stdout. It never commits or edits goldens: review the output, then add it under `services/go-api/internal/download/internal/adapters/qualitycheck/` as a `golden_<suite>.json` file yourself.
 
 To find tracks that were stored with an unrequested version (Instrumental, reaction, and other veto qualifiers):
 

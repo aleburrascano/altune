@@ -37,17 +37,17 @@ type fileWritingSearcher struct {
 	calls     int
 }
 
-func (s *fileWritingSearcher) Search(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
+func (s *fileWritingSearcher) Search(_ context.Context, _ string) ([]domain.AudioCandidate, error) {
 	return nil, nil
 }
 
 func (s *fileWritingSearcher) Name() domain.SourceName { return "filewriting" }
 
-func (s *fileWritingSearcher) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *fileWritingSearcher) Find(_ context.Context, _ domain.FindRequest) ([]domain.AudioCandidate, error) {
 	return nil, nil
 }
 
-func (s *fileWritingSearcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *fileWritingSearcher) Fetch(ctx context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	return fetchedFrom(s.Download(ctx, c.URL, outDir))
 }
 
@@ -72,7 +72,7 @@ func (s *fileWritingSearcher) Download(_ context.Context, url, outDir string) (s
 func TestDownloadStep_Execute_Success(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	step := newTestDownloadStep(searcher)
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
@@ -100,7 +100,7 @@ func TestDownloadStep_Execute_NoSelected(t *testing.T) {
 func TestConstructors_RefuseAMissingTempWorkspace(t *testing.T) {
 	builders := map[string]func() error{
 		"NewDownloadStep": func() error {
-			_, err := service.NewDownloadStep(previewingOrPlain(&fileWritingSearcher{}), nil, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
+			_, err := service.NewDownloadStep(previewingOrPlain(&fileWritingSearcher{}), nil, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"NewStoreStep": func() error {
@@ -138,7 +138,7 @@ func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.
 			return err
 		},
 		"fetcher": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"sleeper": func() error {
@@ -150,7 +150,7 @@ func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.
 			return err
 		},
 		"clock": func() error {
-			_, err := service.NewDownloadStep(previewingOrPlain(&fileWritingSearcher{}), osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), nil)
+			_, err := service.NewDownloadStep(previewingOrPlain(&fileWritingSearcher{}), osWorkspace{}, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), nil)
 			return err
 		},
 		"audio store step audio store": func() error {
@@ -259,23 +259,23 @@ func TestCoreSteps_RefuseAMissingCollaborator(t *testing.T) {
 func TestNewDownloadStep_RefusesAMissingCollaborator(t *testing.T) {
 	builders := map[string]func() error{
 		"identifier": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, nil, ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, nil, memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"recording lookup": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), nil, downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, memory.NoopAudioIdentifier(), nil, downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"prober": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), nil, ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), nil, memory.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"skip recorder": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), nil, service.Unlimited(), time.Now)
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), nil, service.Unlimited(), time.Now)
 			return err
 		},
 		"download limit": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), nil, time.Now)
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), nil, time.Now)
 			return err
 		},
 	}
@@ -293,7 +293,7 @@ func TestNewDownloadStep_RefusesAMissingCollaborator(t *testing.T) {
 func TestDownloadStep_Execute_DownloadError_CleansTempDir(t *testing.T) {
 	searcher := &fileWritingSearcher{err: errors.New("boom")}
 	step := newTestDownloadStep(searcher)
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err == nil {
 		t.Fatal("expected download error")
@@ -330,7 +330,7 @@ type cancellingFetcher struct {
 	calls  atomic.Int32
 }
 
-func (f *cancellingFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
+func (f *cancellingFetcher) Fetch(_ context.Context, _ domain.AudioCandidate, _ string) (domain.FetchedAudio, error) {
 	f.calls.Add(1)
 	if f.cancel != nil {
 		f.cancel()
@@ -368,7 +368,7 @@ func TestDownloadStep_CancelledMidLoop_ReportsCancellationAndStops(t *testing.T)
 			defer cancel()
 			fetcher := &cancellingFetcher{cancel: cancel, err: tt.fetch}
 			step := newTestDownloadStep(fetcher)
-			ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{
+			ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{
 				downloadtest.Candidate("https://example.com/a"),
 				downloadtest.Candidate("https://example.com/b"),
 				downloadtest.Candidate("https://example.com/c"),
@@ -393,7 +393,7 @@ func TestDownloadStep_CancelledOnLastCandidate_ReportsCancellation(t *testing.T)
 	defer cancel()
 	fetcher := &cancellingFetcher{cancel: cancel, err: errors.New("connection reset")}
 	step := newTestDownloadStep(fetcher)
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/only")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/only")}}
 
 	_, err := step.Execute(ctx, ac, service.AfterSelect{})
 	if err == nil {
@@ -409,7 +409,7 @@ func TestDownloadStep_DeadlineExpiredBeforeStart_ReportsCancellation(t *testing.
 	defer cancel()
 	fetcher := &cancellingFetcher{err: errors.New("unused")}
 	step := newTestDownloadStep(fetcher)
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/a")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/a")}}
 
 	_, err := step.Execute(ctx, ac, service.AfterSelect{})
 	if err == nil {
@@ -426,7 +426,7 @@ func TestDownloadStep_DeadlineExpiredBeforeStart_ReportsCancellation(t *testing.
 func TestDownloadStep_GenuineFailure_KeepsDownloadReasonAndTriesAll(t *testing.T) {
 	fetcher := &cancellingFetcher{err: errors.New("yt-dlp: exit 1")}
 	step := newTestDownloadStep(fetcher)
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{
 		downloadtest.Candidate("https://example.com/a"),
 		downloadtest.Candidate("https://example.com/b"),
 	}}
@@ -449,7 +449,7 @@ func TestDownloadStep_ImplausibleSearchDuration_IsSkippedBeforeFetch(t *testing.
 	step := newTestDownloadStep(searcher)
 	ac := &service.AcquisitionContext{
 		Track: service.TrackRef{Title: "X", Artist: "Y", CatalogDuration: 200},
-		Ranked: []ports.AudioCandidate{
+		Ranked: []domain.AudioCandidate{
 			downloadtest.Candidate(mix, downloadtest.WithDuration(10800)),
 			downloadtest.Candidate("https://example.com/track", downloadtest.WithDuration(201)),
 		},
@@ -478,7 +478,7 @@ func TestDownloadStep_CandidateSearchDurationCannotDisqualify_IsStillFetched(t *
 	for _, tt := range []struct {
 		name      string
 		track     service.TrackRef
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 	}{
 		{
 			name:      "search reported no duration",
@@ -494,7 +494,7 @@ func TestDownloadStep_CandidateSearchDurationCannotDisqualify_IsStillFetched(t *
 		t.Run(tt.name, func(t *testing.T) {
 			searcher := &fileWritingSearcher{writeFile: true}
 			step := newTestDownloadStep(searcher)
-			ac := &service.AcquisitionContext{Track: tt.track, Ranked: []ports.AudioCandidate{tt.candidate}}
+			ac := &service.AcquisitionContext{Track: tt.track, Ranked: []domain.AudioCandidate{tt.candidate}}
 
 			if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
 				t.Fatalf("Execute error: %v", err)
@@ -517,8 +517,8 @@ func TestDownloadStep_AResolvedCandidateFarFromTheTargetLength_IsSkippedBeforeFe
 	step := newTestDownloadStep(searcher)
 	ac := &service.AcquisitionContext{
 		Track: service.TrackRef{Title: "X", Artist: "Y", CatalogDuration: 200},
-		Ranked: []ports.AudioCandidate{
-			downloadtest.Candidate(mix, downloadtest.WithDuration(10800), downloadtest.WithKind(ports.KindArtTrack)),
+		Ranked: []domain.AudioCandidate{
+			downloadtest.Candidate(mix, downloadtest.WithDuration(10800), downloadtest.WithKind(domain.KindArtTrack)),
 			downloadtest.Candidate("https://example.com/track", downloadtest.WithDuration(201)),
 		},
 	}
@@ -540,7 +540,7 @@ func TestDownloadStep_AResolvedCandidateFarFromTheTargetLength_IsSkippedBeforeFe
 }
 
 func TestDownloadStep_SkippedCandidatesDoNotSpendTheAttemptBudget(t *testing.T) {
-	ranked := make([]ports.AudioCandidate, 0, service.MaxDownloadAttempts+1)
+	ranked := make([]domain.AudioCandidate, 0, service.MaxDownloadAttempts+1)
 	for i := 0; i < service.MaxDownloadAttempts; i++ {
 		ranked = append(ranked, downloadtest.Candidate("https://example.com/mix", downloadtest.WithDuration(10800)))
 	}
@@ -565,7 +565,7 @@ type sequenceFetcher struct {
 	calls int
 }
 
-func (f *sequenceFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
+func (f *sequenceFetcher) Fetch(_ context.Context, _ domain.AudioCandidate, _ string) (domain.FetchedAudio, error) {
 	err := f.errs[f.calls]
 	f.calls++
 	return fetchedFrom("", err)
@@ -576,7 +576,7 @@ func TestDownloadStep_WidthOne_EarlierUnavailableSurvivesADifferentLastFailure(t
 		&domain.SourceUnavailableError{Source: "ytdlp", Err: errors.New("HTTP Error 429")},
 		errors.New("exit 1"),
 	}}
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("u1"), downloadtest.Candidate("u2")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("u1"), downloadtest.Candidate("u2")}}
 
 	_, err := newTestDownloadStep(fetcher, service.WithVerifyWidth(1)).Execute(context.Background(), ac, service.AfterSelect{})
 
@@ -619,7 +619,7 @@ func TestDownloadStep_WidthOne_ProbeQueueVerifiesAndFallsBack(t *testing.T) {
 
 	ac := &service.AcquisitionContext{
 		Track: service.TrackRef{Title: "How Sweet", Artist: "NewJeans", CatalogDuration: 226},
-		Ranked: []ports.AudioCandidate{
+		Ranked: []domain.AudioCandidate{
 			downloadtest.Candidate("https://youtube.com/watch?v=bloated", downloadtest.WithDuration(0)),
 			downloadtest.Candidate("https://youtube.com/watch?v=correct", downloadtest.WithDuration(227)),
 		},
@@ -648,7 +648,7 @@ func TestDownloadStep_AllCandidatesWrongDuration_Errors(t *testing.T) {
 
 	ac := &service.AcquisitionContext{
 		Track:  service.TrackRef{Title: "How Sweet", Artist: "NewJeans", CatalogDuration: 226},
-		Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=bloated", downloadtest.WithDuration(840))},
+		Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=bloated", downloadtest.WithDuration(840))},
 	}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err == nil {
@@ -675,11 +675,11 @@ func TestDownloadStep_AnOfficialTrackIsCheckedAgainstItsOwnLength(t *testing.T) 
 				withTestProber(&queueProber{durations: []float64{tc.fileSeconds}}))
 			ac := &service.AcquisitionContext{
 				Track: service.TrackRef{Title: "Demigod", Artist: "SLAYR", CatalogDuration: tc.target},
-				Ranked: []ports.AudioCandidate{
+				Ranked: []domain.AudioCandidate{
 					downloadtest.Candidate(
 						"https://music.youtube.com/watch?v=official",
 						downloadtest.WithDuration(168),
-						downloadtest.WithKind(ports.KindArtTrack),
+						downloadtest.WithKind(domain.KindArtTrack),
 					),
 				},
 			}
@@ -710,11 +710,11 @@ func TestDownloadStep_AResolvedTrackMustMatchTheTargetLength(t *testing.T) {
 				withTestProber(&queueProber{durations: []float64{tc.fileSeconds}}))
 			ac := &service.AcquisitionContext{
 				Track: service.TrackRef{Title: "Human", Artist: "The Human League", CatalogDuration: 264},
-				Ranked: []ports.AudioCandidate{
+				Ranked: []domain.AudioCandidate{
 					downloadtest.Candidate(
 						"https://music.youtube.com/watch?v=art",
 						downloadtest.WithDuration(tc.byline),
-						downloadtest.WithKind(ports.KindArtTrack),
+						downloadtest.WithKind(domain.KindArtTrack),
 					),
 				},
 			}
@@ -734,13 +734,13 @@ func TestDownloadStep_AProbedFileOffTheTargetLengthIsRejectedAfterDownload(t *te
 	art := downloadtest.Candidate(
 		"https://music.youtube.com/watch?v=art",
 		downloadtest.WithDuration(275),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 	)
 	searcher := &fileWritingSearcher{writeFile: true}
 	step := newTestDownloadStep(searcher, withTestProber(&queueProber{durations: []float64{283}}))
 	ac := &service.AcquisitionContext{
 		Track:  service.TrackRef{Title: "Human", Artist: "The Human League", CatalogDuration: 264},
-		Ranked: []ports.AudioCandidate{art},
+		Ranked: []domain.AudioCandidate{art},
 	}
 
 	_, err := step.Execute(context.Background(), ac, service.AfterSelect{})
@@ -766,7 +766,7 @@ func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 
 	ac := &service.AcquisitionContext{
 		Track:  service.TrackRef{Title: "Unknown", Artist: "Artist", CatalogDuration: 0},
-		Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=whatever", downloadtest.WithDuration(840))},
+		Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=whatever", downloadtest.WithDuration(840))},
 	}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
@@ -792,7 +792,7 @@ func TestDownloadStep_WidthOne_DecodeQueueRejectsUndecodableAudio(t *testing.T) 
 
 	ac := &service.AcquisitionContext{
 		Track: service.TrackRef{Title: "X", Artist: "Y", CatalogDuration: 226},
-		Ranked: []ports.AudioCandidate{
+		Ranked: []domain.AudioCandidate{
 			downloadtest.Candidate("https://youtube.com/watch?v=corruptAAAA", downloadtest.WithDuration(226)),
 			downloadtest.Candidate("https://youtube.com/watch?v=goodAAAAAAA", downloadtest.WithDuration(226)),
 		},
@@ -819,8 +819,8 @@ func (p cancellingProber) ValidateDecodable(_ context.Context, _ string) error {
 	return context.Canceled
 }
 
-func rejectionBasisOf(ac *service.AcquisitionContext) ports.RejectionBasis {
-	return ports.RejectionBasis{ExpectedSeconds: ac.ExpectedLength(), ReferenceMBID: ac.Identity.MBID}
+func rejectionBasisOf(ac *service.AcquisitionContext) domain.RejectionBasis {
+	return domain.RejectionBasis{ExpectedSeconds: ac.ExpectedLength(), ReferenceMBID: ac.Identity.MBID}
 }
 
 func lengthsOf(ac *service.AcquisitionContext) service.LengthPolicy {
@@ -830,7 +830,7 @@ func lengthsOf(ac *service.AcquisitionContext) service.LengthPolicy {
 	return service.NewLengthPolicy(ac.Track.CatalogDuration, ac.Identity.Duration)
 }
 
-func provenISRCOf(ac *service.AcquisitionContext) (string, service.ProofSource) {
+func provenISRCOf(ac *service.AcquisitionContext) (string, domain.ProofSource) {
 	return service.ProveISRC(service.ProofFacts{
 		CatalogISRC: ac.Track.ISRC,
 		CatalogMBID: ac.Track.CatalogMBID,
@@ -846,7 +846,7 @@ func TestDownloadStep_DecodeCancelled_RecordsNoLastingRejection(t *testing.T) {
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestProber(cancellingProber{cancel: cancel}))
 	ac := &service.AcquisitionContext{
 		Track:  service.TrackRef{ID: "t1", Title: "X", Artist: "Y", CatalogDuration: 226},
-		Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=abc", downloadtest.WithDuration(226))},
+		Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=abc", downloadtest.WithDuration(226))},
 	}
 
 	_, err := step.Execute(ctx, ac, service.AfterSelect{})
@@ -867,7 +867,7 @@ func TestDownloadStep_DecodeFailureWithLiveContext_RecordsUndecodable(t *testing
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestProber(prober))
 	ac := &service.AcquisitionContext{
 		Track:  service.TrackRef{ID: "t1", Title: "X", Artist: "Y", CatalogDuration: 226},
-		Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=abcabcabcab", downloadtest.WithDuration(226))},
+		Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=abcabcabcab", downloadtest.WithDuration(226))},
 	}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err == nil {
@@ -889,7 +889,7 @@ func TestDownloadStep_AllUndecodable_Errors(t *testing.T) {
 
 	ac := &service.AcquisitionContext{
 		Track:  service.TrackRef{Title: "X", Artist: "Y", CatalogDuration: 226},
-		Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=corruptAAAA", downloadtest.WithDuration(226))},
+		Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://youtube.com/watch?v=corruptAAAA", downloadtest.WithDuration(226))},
 	}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err == nil {
@@ -935,7 +935,7 @@ func findLogRecord(t *testing.T, buf *logging.Capture, want string) map[string]a
 	return nil
 }
 
-func logTestCandidate() ports.AudioCandidate {
+func logTestCandidate() domain.AudioCandidate {
 	return downloadtest.Candidate(
 		"https://soundcloud.com/artist/song",
 		downloadtest.WithTitle("Artist - Song"),
@@ -946,7 +946,7 @@ func logTestCandidate() ports.AudioCandidate {
 func logTestDownloadContext() *service.AcquisitionContext {
 	return &service.AcquisitionContext{
 		Track:  service.TrackRef{ID: logTestTrackID, Title: "Song", Artist: "Artist", CatalogDuration: 200},
-		Ranked: []ports.AudioCandidate{logTestCandidate()},
+		Ranked: []domain.AudioCandidate{logTestCandidate()},
 	}
 }
 
@@ -954,7 +954,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 	identityCtx := func() *service.AcquisitionContext {
 		ac := logTestDownloadContext()
 		ac.Track.CatalogDuration = 0
-		ac.Identity = ports.RecordingIdentity{MBID: "mb-want"}
+		ac.Identity = domain.RecordingIdentity{MBID: "mb-want"}
 		return ac
 	}
 
@@ -970,7 +970,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			run: func(ctx context.Context, t *testing.T) {
 				c := logTestCandidate()
 				other := downloadtest.Candidate("https://soundcloud.com/artist/other", downloadtest.WithSource(logTestSource))
-				step := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{c, other}}))
+				step := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []domain.AudioCandidate{c, other}}))
 				ac := &service.AcquisitionContext{
 					Track:   service.TrackRef{ID: logTestTrackID, Title: "Song", Artist: "Artist"},
 					Replace: service.ReplaceState{ExcludeKeys: []string{domain.SourceKey(c.URL)}},
@@ -983,7 +983,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			msg:  "candidate_evaluated",
 			run: func(ctx context.Context, t *testing.T) {
 				ac := &service.AcquisitionContext{Track: service.TrackRef{ID: logTestTrackID, Title: "Song", Artist: "Artist"}}
-				searched, _ := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{logTestCandidate()}})).Execute(ctx, ac, service.PipelineStart{})
+				searched, _ := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []domain.AudioCandidate{logTestCandidate()}})).Execute(ctx, ac, service.PipelineStart{})
 				_, _ = service.NewSelectStep().Execute(ctx, ac, searched)
 			},
 		},
@@ -1018,7 +1018,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			attrs: map[string]any{"track_id": logTestTrackID, "source": logTestSource, "authoritative": true},
 			run: func(ctx context.Context, t *testing.T) {
 				ac := logTestDownloadContext()
-				ac.Identity = ports.RecordingIdentity{Duration: 200}
+				ac.Identity = domain.RecordingIdentity{Duration: 200}
 				runDownloadForLog(ctx, t, ac, withTestProber(scriptedProber{duration: 30}))
 			},
 		},
@@ -1051,7 +1051,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			msg:  "acquisition.identify_uncorroborated",
 			run: func(ctx context.Context, t *testing.T) {
 				runDownloadForLog(ctx, t, identityCtx(),
-					withTestIdentifier(&stubIdentifier{match: ports.RecordingMatch{MBIDs: []string{"mb-other"}}}))
+					withTestIdentifier(&stubIdentifier{match: domain.RecordingMatch{MBIDs: []string{"mb-other"}}}))
 			},
 		},
 		{
@@ -1099,12 +1099,12 @@ func runDownloadForLog(ctx context.Context, t *testing.T, ac *service.Acquisitio
 
 type stubIdentifier struct {
 	mu    sync.Mutex
-	match ports.RecordingMatch
+	match domain.RecordingMatch
 	err   error
 	calls int
 }
 
-func (s *stubIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
+func (s *stubIdentifier) Identify(context.Context, string, float64) (domain.RecordingMatch, error) {
 	s.mu.Lock()
 	s.calls++
 	s.mu.Unlock()
@@ -1114,25 +1114,25 @@ func (s *stubIdentifier) Identify(context.Context, string, float64) (ports.Recor
 func downloadContext(mbid string) *service.AcquisitionContext {
 	return &service.AcquisitionContext{
 		Track:    service.TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart"},
-		Identity: ports.RecordingIdentity{MBID: mbid},
-		Ranked: []ports.AudioCandidate{
+		Identity: domain.RecordingIdentity{MBID: mbid},
+		Ranked: []domain.AudioCandidate{
 			downloadtest.Candidate("https://youtube.com/watch?v=first000000"),
 			downloadtest.Candidate("https://youtube.com/watch?v=second00000"),
 		},
 	}
 }
 
-func referenceMatch() ports.RecordingMatch {
-	return ports.RecordingMatch{
+func referenceMatch() domain.RecordingMatch {
+	return domain.RecordingMatch{
 		AcoustID: "ac-master", MBIDs: []string{"mb-master"}, Score: 0.98,
-		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night", Artists: []string{"Corey Hart"}}),
+		Results: linkedResults(domain.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night", Artists: []string{"Corey Hart"}}),
 	}
 }
 
-func differentSongMatch() ports.RecordingMatch {
-	return ports.RecordingMatch{
+func differentSongMatch() domain.RecordingMatch {
+	return domain.RecordingMatch{
 		AcoustID: "ac-other", MBIDs: []string{"mb-other"}, Score: 0.98,
-		Results: linkedResults(ports.LinkedRecording{MBID: "mb-other", Title: "Take On Me", Artists: []string{"a-ha"}}),
+		Results: linkedResults(domain.LinkedRecording{MBID: "mb-other", Title: "Take On Me", Artists: []string{"a-ha"}}),
 	}
 }
 
@@ -1176,12 +1176,12 @@ func TestDownloadStep_AcceptsAudioFingerprintedAsTheReferenceRecording(t *testin
 
 func TestDownloadStep_NeverRejectsAudioTheFingerprintCannotLink(t *testing.T) {
 	identifier := &stubIdentifier{
-		match: ports.RecordingMatch{AcoustID: "ac-unrelated", MBIDs: []string{"mb-unrelated"}},
+		match: domain.RecordingMatch{AcoustID: "ac-unrelated", MBIDs: []string{"mb-unrelated"}},
 	}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(identifier))
 	ac := downloadContext("mb-master")
 	ac.Track.CatalogDuration = 236
-	ac.Ranked = []ports.AudioCandidate{downloadtest.Candidate(
+	ac.Ranked = []domain.AudioCandidate{downloadtest.Candidate(
 		"https://youtube.com/watch?v=first000000",
 		downloadtest.WithChannel("Corey Hart"),
 		downloadtest.WithDuration(236),
@@ -1205,7 +1205,7 @@ func TestDownloadStep_UnknownAudioIsAccepted(t *testing.T) {
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(identifier))
 	ac := downloadContext("mb-master")
 	ac.Track.CatalogDuration = 236
-	ac.Ranked = []ports.AudioCandidate{downloadtest.Candidate(
+	ac.Ranked = []domain.AudioCandidate{downloadtest.Candidate(
 		"https://youtube.com/watch?v=first000000",
 		downloadtest.WithChannel("Corey Hart"),
 		downloadtest.WithDuration(236),
@@ -1233,7 +1233,7 @@ func TestDownloadStep_IdentifierErrorIsFailOpen(t *testing.T) {
 }
 
 func TestDownloadStep_NoExpectedMBIDSkipsIdentificationEntirely(t *testing.T) {
-	identifier := &stubIdentifier{match: ports.RecordingMatch{AcoustID: "ac-whatever"}}
+	identifier := &stubIdentifier{match: domain.RecordingMatch{AcoustID: "ac-whatever"}}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(identifier))
 	ac := downloadContext("")
 
@@ -1266,7 +1266,7 @@ type rejectFirstIdentifier struct {
 	calls int
 }
 
-func (r *rejectFirstIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
+func (r *rejectFirstIdentifier) Identify(context.Context, string, float64) (domain.RecordingMatch, error) {
 	r.calls++
 	if r.calls == 1 {
 		return differentSongMatch(), nil
@@ -1274,21 +1274,21 @@ func (r *rejectFirstIdentifier) Identify(context.Context, string, float64) (port
 	return referenceMatch(), nil
 }
 
-func linkedResults(recordings ...ports.LinkedRecording) []ports.AcoustIDResult {
-	return []ports.AcoustIDResult{{ID: "ac-audio", Score: 0.97, Recordings: recordings}}
+func linkedResults(recordings ...domain.LinkedRecording) []domain.AcoustIDResult {
+	return []domain.AcoustIDResult{{ID: "ac-audio", Score: 0.97, Recordings: recordings}}
 }
 
 func TestDownloadStep_WidthOne_LiveOnlyLinksRejectedThenCleanCandidateVerified(t *testing.T) {
-	live := ports.RecordingMatch{
+	live := domain.RecordingMatch{
 		AcoustID: "ac-live", MBIDs: []string{"mb-live"}, Score: 0.97,
-		Results: linkedResults(ports.LinkedRecording{MBID: "mb-live", Title: "Nessun dorma (live)"}),
+		Results: linkedResults(domain.LinkedRecording{MBID: "mb-live", Title: "Nessun dorma (live)"}),
 	}
-	clean := ports.RecordingMatch{
+	clean := domain.RecordingMatch{
 		AcoustID: "ac-studio", MBIDs: []string{"mb-studio"}, Score: 0.98,
-		Results: linkedResults(ports.LinkedRecording{MBID: "mb-studio", Title: "Nessun dorma"}),
+		Results: linkedResults(domain.LinkedRecording{MBID: "mb-studio", Title: "Nessun dorma"}),
 	}
-	identifier := &sequenceIdentifier{matches: []ports.RecordingMatch{live, clean}}
-	liveFacts := &stubVersionLookup{facts: map[string]ports.RecordingFacts{"mb-live": {MBID: "mb-live", Title: "Nessun dorma", Disambiguation: "live"}}}
+	identifier := &sequenceIdentifier{matches: []domain.RecordingMatch{live, clean}}
+	liveFacts := &stubVersionLookup{facts: map[string]domain.RecordingFacts{"mb-live": {MBID: "mb-live", Title: "Nessun dorma", Disambiguation: "live"}}}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(identifier), withTestLookup(liveFacts), service.WithVerifyWidth(1))
 	ac := downloadContext("mb-studio")
 	ac.Track.Title = "Nessun dorma"
@@ -1309,9 +1309,9 @@ func TestDownloadStep_WidthOne_LiveOnlyLinksRejectedThenCleanCandidateVerified(t
 }
 
 func TestDownloadStep_LinksToAnotherSongAreRejected(t *testing.T) {
-	match := ports.RecordingMatch{
+	match := domain.RecordingMatch{
 		AcoustID: "ac-x", MBIDs: []string{"mb-x"}, Score: 0.9,
-		Results: linkedResults(ports.LinkedRecording{MBID: "mb-x", Title: "Something Else Entirely"}),
+		Results: linkedResults(domain.LinkedRecording{MBID: "mb-x", Title: "Something Else Entirely"}),
 	}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(&stubIdentifier{match: match}))
 	ac := downloadContext("mb-master")
@@ -1329,9 +1329,9 @@ func TestDownloadStep_LinksToAnotherSongAreRejected(t *testing.T) {
 
 func TestDownloadStep_LogsAudioVerdictForEveryDecision(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
-	match := ports.RecordingMatch{
+	match := domain.RecordingMatch{
 		AcoustID: "ac-a", MBIDs: []string{"mb-master"}, Score: 0.97,
-		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
+		Results: linkedResults(domain.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
 	}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(&stubIdentifier{match: match}))
 	ac := downloadContext("mb-master")
@@ -1348,11 +1348,11 @@ func TestDownloadStep_LogsAudioVerdictForEveryDecision(t *testing.T) {
 }
 
 type sequenceIdentifier struct {
-	matches []ports.RecordingMatch
+	matches []domain.RecordingMatch
 	calls   int
 }
 
-func (s *sequenceIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
+func (s *sequenceIdentifier) Identify(context.Context, string, float64) (domain.RecordingMatch, error) {
 	match := s.matches[min(s.calls, len(s.matches)-1)]
 	s.calls++
 	return match, nil
@@ -1364,11 +1364,11 @@ type previewingFetcher struct {
 	previewDirs []string
 }
 
-func (f *previewingFetcher) PreviewFetcherFor(ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+func (f *previewingFetcher) PreviewFetcherFor(domain.AudioCandidate) (ports.PreviewFetcher, bool) {
 	return f, true
 }
 
-func (f *previewingFetcher) FetchPreview(_ context.Context, _ ports.AudioCandidate, outDir string, _ int) (string, error) {
+func (f *previewingFetcher) FetchPreview(_ context.Context, _ domain.AudioCandidate, outDir string, _ int) (string, error) {
 	f.previewDirs = append(f.previewDirs, outDir)
 	if f.previewErr != nil {
 		return "", f.previewErr
@@ -1378,19 +1378,19 @@ func (f *previewingFetcher) FetchPreview(_ context.Context, _ ports.AudioCandida
 }
 
 type durationRecordingIdentifier struct {
-	match     ports.RecordingMatch
+	match     domain.RecordingMatch
 	durations []float64
 }
 
-func (d *durationRecordingIdentifier) Identify(_ context.Context, _ string, hint float64) (ports.RecordingMatch, error) {
+func (d *durationRecordingIdentifier) Identify(_ context.Context, _ string, hint float64) (domain.RecordingMatch, error) {
 	d.durations = append(d.durations, hint)
 	return d.match, nil
 }
 
-func previewMatch(mbid, title string) ports.RecordingMatch {
-	return ports.RecordingMatch{
+func previewMatch(mbid, title string) domain.RecordingMatch {
+	return domain.RecordingMatch{
 		AcoustID: "ac-" + mbid, MBIDs: []string{mbid}, Score: 0.98,
-		Results: linkedResults(ports.LinkedRecording{MBID: mbid, Title: title}),
+		Results: linkedResults(domain.LinkedRecording{MBID: mbid, Title: title}),
 	}
 }
 
@@ -1405,7 +1405,7 @@ func previewContext() *service.AcquisitionContext {
 func TestDownloadStep_PreviewOtherVersionRejectsWithoutFullFetch(t *testing.T) {
 	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
 	identifier := &durationRecordingIdentifier{match: previewMatch("mb-live", "Nessun dorma (live)")}
-	liveFacts := &stubVersionLookup{facts: map[string]ports.RecordingFacts{"mb-live": {MBID: "mb-live", Title: "Nessun dorma", Disambiguation: "live"}}}
+	liveFacts := &stubVersionLookup{facts: map[string]domain.RecordingFacts{"mb-live": {MBID: "mb-live", Title: "Nessun dorma", Disambiguation: "live"}}}
 	step := newTestDownloadStep(fetcher, withTestIdentifier(identifier), withTestLookup(liveFacts))
 	ac := previewContext()
 	ac.Ranked[0].Title = "Nessun dorma (Live)"
@@ -1490,7 +1490,7 @@ func newGatedFetcher(gates map[string]chan struct{}) *gatedFetcher {
 	return &gatedFetcher{dirs: map[string]string{}, gates: gates, started: make(chan string, 64), finished: make(chan string, 64)}
 }
 
-func (f *gatedFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (f *gatedFetcher) Fetch(_ context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	now := f.inFlight.Add(1)
 	defer func() {
 		f.inFlight.Add(-1)
@@ -1522,7 +1522,7 @@ func (f *gatedFetcher) dirOf(url string) string {
 func TestDownloadStep_WindowedKeepsBestRankedAcceptedEvenWhenLowerRankFinishesFirst(t *testing.T) {
 	rank1Gate := make(chan struct{})
 	fetcher := newGatedFetcher(map[string]chan struct{}{"rank1": rank1Gate})
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("rank1"), downloadtest.Candidate("rank2")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("rank1"), downloadtest.Candidate("rank2")}}
 	done := make(chan error, 1)
 
 	go func() {
@@ -1558,7 +1558,7 @@ func sharedLimiterCapsInFlightFetches(t *testing.T) {
 	var wg sync.WaitGroup
 	execute := func(step *service.DownloadStep, urls ...string) {
 		defer wg.Done()
-		ranked := make([]ports.AudioCandidate, 0, len(urls))
+		ranked := make([]domain.AudioCandidate, 0, len(urls))
 		for _, u := range urls {
 			ranked = append(ranked, downloadtest.Candidate(u))
 		}
@@ -1653,7 +1653,7 @@ func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
 	ac := logTestDownloadContext()
 	ac.Track.CatalogDuration = 0
-	ac.Identity = ports.RecordingIdentity{MBID: "mb-want"}
+	ac.Identity = domain.RecordingIdentity{MBID: "mb-want"}
 	throttled := fmt.Errorf("acoustid lookup: %w", domain.ErrIdentifyThrottled)
 
 	runDownloadForLog(context.Background(), t, ac,
@@ -1688,7 +1688,7 @@ func TestDownloadStep_ThrottledPreviewLogsThrottledNotPreviewFallback(t *testing
 
 type nestedLayoutFetcher struct{}
 
-func (nestedLayoutFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (nestedLayoutFetcher) Fetch(_ context.Context, _ domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	dir := filepath.Join(outDir, "Artist", "Album")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fetchedFrom("", err)
@@ -1699,14 +1699,14 @@ func (nestedLayoutFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, outD
 
 func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T) {
 	step := newTestDownloadStep(nestedLayoutFetcher{})
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
 	root := ac.TempDir
-	if !strings.HasPrefix(filepath.Base(root), ports.TempDirPrefix) || filepath.Dir(root) != os.TempDir() {
-		t.Fatalf("TempDir = %q, want the %s* MkdirTemp root", root, ports.TempDirPrefix)
+	if !strings.HasPrefix(filepath.Base(root), domain.TempDirPrefix) || filepath.Dir(root) != os.TempDir() {
+		t.Fatalf("TempDir = %q, want the %s* MkdirTemp root", root, domain.TempDirPrefix)
 	}
 
 	if err := step.Rollback(context.Background(), ac); err != nil {
@@ -1719,31 +1719,31 @@ func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T
 
 type findOnlySource struct {
 	name       domain.SourceName
-	candidates []ports.AudioCandidate
+	candidates []domain.AudioCandidate
 	err        error
 	fetchErr   error
 }
 
 func (s findOnlySource) Name() domain.SourceName { return s.name }
 
-func (s findOnlySource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s findOnlySource) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
 	return s.candidates, s.err
 }
 
-func (s findOnlySource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
+func (s findOnlySource) Fetch(context.Context, domain.AudioCandidate, string) (domain.FetchedAudio, error) {
 	return fetchedFrom("", s.fetchErr)
 }
 
-func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (ports.AcquisitionJob, error) {
+func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (domain.AcquisitionJob, error) {
 	t.Helper()
 	healthy := findOnlySource{
 		name:       "healthy",
-		candidates: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/a")},
+		candidates: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/a")},
 		fetchErr:   errors.New("exit 1"),
 	}
 	registry := service.NewSourceRegistry(down, healthy)
 	ctx := context.Background()
-	job := ports.AcquisitionJob{Attempt: 1}
+	job := domain.AcquisitionJob{Attempt: 1}
 	ac := &service.AcquisitionContext{Job: job}
 	if _, err := service.NewSearchStep(registry).Execute(ctx, ac, service.PipelineStart{}); err != nil {
 		t.Fatalf("search: %v", err)
@@ -1778,29 +1778,29 @@ func TestDownloadStep_HealthySourcesAllRejected_StaysPermanent(t *testing.T) {
 
 type urlIdentifier struct {
 	fetcher *gatedFetcher
-	matches map[string]ports.RecordingMatch
+	matches map[string]domain.RecordingMatch
 }
 
-func (i *urlIdentifier) Identify(_ context.Context, path string, _ float64) (ports.RecordingMatch, error) {
+func (i *urlIdentifier) Identify(_ context.Context, path string, _ float64) (domain.RecordingMatch, error) {
 	for url, match := range i.matches {
 		if i.fetcher.dirOf(url) == filepath.Dir(path) {
 			return match, nil
 		}
 	}
-	return ports.RecordingMatch{}, nil
+	return domain.RecordingMatch{}, nil
 }
 
-func hardMatch() ports.RecordingMatch {
-	return ports.RecordingMatch{
+func hardMatch() domain.RecordingMatch {
+	return domain.RecordingMatch{
 		AcoustID: "ac-a", MBIDs: []string{"mb-master"}, Score: 0.97,
-		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
+		Results: linkedResults(domain.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
 	}
 }
 
-func heldTrackContext(ranked ...ports.AudioCandidate) *service.AcquisitionContext {
+func heldTrackContext(ranked ...domain.AudioCandidate) *service.AcquisitionContext {
 	return &service.AcquisitionContext{
 		Track:    service.TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", CatalogDuration: 236},
-		Identity: ports.RecordingIdentity{MBID: "mb-master"},
+		Identity: domain.RecordingIdentity{MBID: "mb-master"},
 		Ranked:   ranked,
 	}
 }
@@ -1809,7 +1809,7 @@ func TestDownloadStep_WalksPastUnknownFingerprintToALaterHardMatch(t *testing.T)
 	for _, width := range []int{1, 2} {
 		t.Run(fmt.Sprintf("width %d", width), func(t *testing.T) {
 			fetcher := newGatedFetcher(nil)
-			identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"hard": hardMatch()}}
+			identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]domain.RecordingMatch{"hard": hardMatch()}}
 			ac := heldTrackContext(
 				downloadtest.Candidate(
 					"unknown",
@@ -1840,7 +1840,7 @@ func TestDownloadStep_WalksPastUnknownFingerprintToALaterHardMatch(t *testing.T)
 
 func TestDownloadStep_CleanHoldBeatsAHigherRankedOtherVersionHold(t *testing.T) {
 	fetcher := newGatedFetcher(nil)
-	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"edit": hardMatch()}}
+	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]domain.RecordingMatch{"edit": hardMatch()}}
 	ac := heldTrackContext(
 		downloadtest.Candidate(
 			"edit",
@@ -1922,7 +1922,7 @@ type panickingFetcher struct {
 	url   string
 }
 
-func (f *panickingFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (f *panickingFetcher) Fetch(ctx context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	if c.URL == f.url {
 		f.inner.mu.Lock()
 		f.inner.dirs[c.URL] = outDir
@@ -1935,7 +1935,7 @@ func (f *panickingFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, ou
 func TestDownloadStep_WindowedPanickingAttemptIsRejectedAndOthersStillWin(t *testing.T) {
 	inner := newGatedFetcher(nil)
 	fetcher := &panickingFetcher{inner: inner, url: "rank1"}
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("rank1"), downloadtest.Candidate("rank2")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("rank1"), downloadtest.Candidate("rank2")}}
 
 	_, err := newTestDownloadStep(fetcher, service.WithVerifyWidth(2)).Execute(context.Background(), ac, service.AfterSelect{})
 	if err != nil {
@@ -1953,7 +1953,7 @@ func TestDownloadStep_WindowedPanickingAttemptIsRejectedAndOthersStillWin(t *tes
 func TestDownloadStep_WindowedAllAttemptsPanickingReturnsErrorNotCrash(t *testing.T) {
 	inner := newGatedFetcher(nil)
 	fetcher := &panickingFetcher{inner: inner, url: "only"}
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("only")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("only")}}
 
 	_, err := newTestDownloadStep(fetcher, service.WithVerifyWidth(2)).Execute(context.Background(), ac, service.AfterSelect{})
 
@@ -1983,7 +1983,7 @@ func TestDownloadStep_ProbeErrorIsAcceptedAndRecordsAProbeFailedSkip(t *testing.
 	if ac.TempPath == "" {
 		t.Error("probe error should still accept the candidate")
 	}
-	assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
+	assertWindowSkips(t, rec.gates, domain.SkipProbeFailed)
 }
 
 func TestDownloadStep_AProbeNoRecordingCanHaveIsAProbeFailureAndNothingIsRecordedAsTheLength(t *testing.T) {
@@ -2006,7 +2006,7 @@ func TestDownloadStep_AProbeNoRecordingCanHaveIsAProbeFailureAndNothingIsRecorde
 			if ac.ProbedDuration.Known() || ac.DurationVerified {
 				t.Errorf("probed length = %v s, duration verified = %v, want neither recorded", ac.ProbedDuration.Seconds(), ac.DurationVerified)
 			}
-			assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
+			assertWindowSkips(t, rec.gates, domain.SkipProbeFailed)
 		})
 	}
 }
@@ -2041,7 +2041,7 @@ func TestDownloadStep_UnknownDurationIsAcceptedAndRecordsANoDurationSkip(t *test
 	if ac.TempPath == "" {
 		t.Error("unknown duration should still accept the candidate")
 	}
-	assertWindowSkips(t, rec.gates, ports.SkipNoDuration)
+	assertWindowSkips(t, rec.gates, domain.SkipNoDuration)
 }
 
 func TestDownloadStep_SuccessfulProbeRecordsNoSkip(t *testing.T) {
@@ -2068,7 +2068,7 @@ type scriptedSourceFetcher struct {
 	calls       map[domain.SourceName]int
 }
 
-func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	f.mu.Lock()
 	f.calls[c.Source]++
 	f.mu.Unlock()
@@ -2085,7 +2085,7 @@ func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidat
 
 func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T) {
 	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[domain.SourceName]int{}}
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{
 		downloadtest.Candidate("u1", downloadtest.WithSource("ytmusic")),
 		downloadtest.Candidate("u2", downloadtest.WithSource("ytdlp")),
 	}}
@@ -2104,7 +2104,7 @@ func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T
 
 func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[domain.SourceName]int{}}
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithSource("ytmusic"))}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("u1", downloadtest.WithSource("ytmusic"))}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -2113,7 +2113,7 @@ func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != downloadfailure.FailureSourceUnavailable {
 		t.Fatalf("failure code = %s, want %s (err=%v)", code, downloadfailure.FailureSourceUnavailable, err)
 	}
-	if !service.WillRetry(ports.AcquisitionJob{Attempt: 1}, err) {
+	if !service.WillRetry(domain.AcquisitionJob{Attempt: 1}, err) {
 		t.Fatalf("willRetry = false for %v", err)
 	}
 }
@@ -2122,7 +2122,7 @@ func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 	for _, width := range []int{1, 2} {
 		t.Run(fmt.Sprintf("width%d", width), func(t *testing.T) {
 			fetcher := &scriptedSourceFetcher{unavailable: "ytdlp", calls: map[domain.SourceName]int{}}
-			ranked := make([]ports.AudioCandidate, 8)
+			ranked := make([]domain.AudioCandidate, 8)
 			for i := range ranked {
 				ranked[i] = downloadtest.Candidate(fmt.Sprintf("u%d", i), downloadtest.WithSource("ytdlp"))
 			}
@@ -2143,8 +2143,8 @@ func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 
 func TestDownloadStep_WorkspaceRejectedCandidateLeavesNoLiveDir(t *testing.T) {
 	ws := newCreationRecordingWorkspace()
-	step := mustNewDownloadStep(&fileWritingSearcher{err: errors.New("boom")}, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
+	step := mustNewDownloadStep(&fileWritingSearcher{err: errors.New("boom")}, ws, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited())
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/x")}}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err == nil {
 		t.Fatal("expected download error")
@@ -2162,11 +2162,11 @@ func TestDownloadStep_WorkspaceWindowRemovesLoserAndKeepsWinnerUntilCleanup(t *t
 	ws := newCreationRecordingWorkspace()
 	rank1Gate := make(chan struct{})
 	fetcher := newGatedFetcher(map[string]chan struct{}{"rank1": rank1Gate})
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("rank1"), downloadtest.Candidate("rank2")}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("rank1"), downloadtest.Candidate("rank2")}}
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := mustNewDownloadStep(fetcher, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(2)).Execute(context.Background(), ac, service.AfterSelect{})
+		_, err := mustNewDownloadStep(fetcher, ws, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(2)).Execute(context.Background(), ac, service.AfterSelect{})
 		done <- err
 	}()
 	for range 2 {
@@ -2206,7 +2206,7 @@ func TestDownloadStep_WorkspacePreviewDirCreatedAndRemovedAfterIdentify(t *testi
 	ws := newCreationRecordingWorkspace()
 	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
 	identifier := &durationRecordingIdentifier{match: previewMatch("mb-live", "Nessun dorma (live)")}
-	step := mustNewDownloadStep(fetcher, ws, identifier, ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+	step := mustNewDownloadStep(fetcher, ws, identifier, memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited())
 
 	if _, err := step.Execute(context.Background(), previewContext(), service.AfterSelect{}); err == nil {
 		t.Fatal("expected the live preview to reject the only candidate")
@@ -2216,8 +2216,8 @@ func TestDownloadStep_WorkspacePreviewDirCreatedAndRemovedAfterIdentify(t *testi
 		t.Fatalf("preview dirs = %v, want one", fetcher.previewDirs)
 	}
 	preview := fetcher.previewDirs[0]
-	if !strings.HasPrefix(filepath.Base(preview), ports.TempDirPrefix+"preview-") {
-		t.Errorf("preview dir %q, want a %spreview-* dir", preview, ports.TempDirPrefix)
+	if !strings.HasPrefix(filepath.Base(preview), domain.TempDirPrefix+"preview-") {
+		t.Errorf("preview dir %q, want a %spreview-* dir", preview, domain.TempDirPrefix)
 	}
 	if ws.removedCount(preview) != 1 {
 		t.Errorf("preview dir removed %d times, want 1", ws.removedCount(preview))
@@ -2234,7 +2234,7 @@ func TestDownloadStep_WorkspaceRollbackWithOnlyTempPathRemovesThatFile(t *testin
 		t.Fatal(err)
 	}
 
-	step := mustNewDownloadStep(&fileWritingSearcher{}, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+	step := mustNewDownloadStep(&fileWritingSearcher{}, ws, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited())
 	if err := step.Rollback(context.Background(), &service.AcquisitionContext{TempPath: file}); err != nil {
 		t.Fatalf("Rollback error: %v", err)
 	}
@@ -2260,7 +2260,7 @@ func assertNoCookiePathInText(t *testing.T, logs string, wantMsg string) {
 func TestDownloadStep_CandidateDownloadFailedLogRedactsCookiePath(t *testing.T) {
 	logs := logging.CaptureText(t, slog.LevelDebug)
 	step := newTestDownloadStep(&fileWritingSearcher{err: ytdlpCookieErr()})
-	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{downloadtest.Candidate("https://example.com/x", downloadtest.WithSource("youtube"))}}
+	ac := &service.AcquisitionContext{Ranked: []domain.AudioCandidate{downloadtest.Candidate("https://example.com/x", downloadtest.WithSource("youtube"))}}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err == nil {
 		t.Fatal("expected download error")
@@ -2275,36 +2275,36 @@ func TestDownloadStep_CandidateDownloadFailedLogRedactsCookiePath(t *testing.T) 
 
 type stubVersionLookup struct {
 	mu    sync.Mutex
-	facts map[string]ports.RecordingFacts
+	facts map[string]domain.RecordingFacts
 	err   error
 	calls []string
 }
 
-func (s *stubVersionLookup) RecordingByMBID(_ context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+func (s *stubVersionLookup) RecordingByMBID(_ context.Context, mbid string) (domain.RecordingFacts, bool, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, mbid)
 	s.mu.Unlock()
 	if s.err != nil {
-		return ports.RecordingFacts{}, false, s.err
+		return domain.RecordingFacts{}, false, s.err
 	}
 	facts, found := s.facts[mbid]
 	return facts, found, nil
 }
 
-func plainTitledLinks(mbids ...string) ports.RecordingMatch {
-	recordings := make([]ports.LinkedRecording, 0, len(mbids))
+func plainTitledLinks(mbids ...string) domain.RecordingMatch {
+	recordings := make([]domain.LinkedRecording, 0, len(mbids))
 	for _, mbid := range mbids {
-		recordings = append(recordings, ports.LinkedRecording{MBID: mbid, Title: "Sunglasses at Night", Artists: []string{"Corey Hart"}})
+		recordings = append(recordings, domain.LinkedRecording{MBID: mbid, Title: "Sunglasses at Night", Artists: []string{"Corey Hart"}})
 	}
-	return ports.RecordingMatch{AcoustID: "ac-linked", MBIDs: mbids, Score: 0.97, Results: linkedResults(recordings...)}
+	return domain.RecordingMatch{AcoustID: "ac-linked", MBIDs: mbids, Score: 0.97, Results: linkedResults(recordings...)}
 }
 
 func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
-	plain := ports.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night"}
-	acoustic := ports.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night", Disambiguation: "acoustic"}
-	remastered := ports.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night", Disambiguation: "remastered"}
-	factsLookup := func(facts ports.RecordingFacts) *stubVersionLookup {
-		return &stubVersionLookup{facts: map[string]ports.RecordingFacts{facts.MBID: facts}}
+	plain := domain.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night"}
+	acoustic := domain.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night", Disambiguation: "acoustic"}
+	remastered := domain.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night", Disambiguation: "remastered"}
+	factsLookup := func(facts domain.RecordingFacts) *stubVersionLookup {
+		return &stubVersionLookup{facts: map[string]domain.RecordingFacts{facts.MBID: facts}}
 	}
 	tests := []struct {
 		name         string
@@ -2367,7 +2367,7 @@ func TestDownloadStep_ASoftVerdictIsAcceptedButNotIdentityVerified(t *testing.T)
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lookup := &stubVersionLookup{facts: map[string]ports.RecordingFacts{
+			lookup := &stubVersionLookup{facts: map[string]domain.RecordingFacts{
 				"mb-linked": {MBID: "mb-linked", Title: "Sunglasses at Night"},
 			}}
 			step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
@@ -2397,17 +2397,17 @@ func TestDownloadStep_ASoftVerdictIsAcceptedButNotIdentityVerified(t *testing.T)
 	}
 }
 
-func fourLinksOneOfThemAnotherTitle() ports.RecordingMatch {
+func fourLinksOneOfThemAnotherTitle() domain.RecordingMatch {
 	match := plainTitledLinks("mb-1", "mb-2", "mb-3", "mb-4")
 	match.Results[0].Recordings[3].Title = "Take On Me"
 	return match
 }
 
 func TestDownloadStep_WidthOne_VersionLookupsAreCappedAndCachedPerJob(t *testing.T) {
-	acoustic := func(mbid string) ports.RecordingFacts {
-		return ports.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night", Disambiguation: "acoustic"}
+	acoustic := func(mbid string) domain.RecordingFacts {
+		return domain.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night", Disambiguation: "acoustic"}
 	}
-	lookup := &stubVersionLookup{facts: map[string]ports.RecordingFacts{
+	lookup := &stubVersionLookup{facts: map[string]domain.RecordingFacts{
 		"mb-1": acoustic("mb-1"), "mb-2": acoustic("mb-2"), "mb-3": acoustic("mb-3"), "mb-4": acoustic("mb-4"),
 	}}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
@@ -2428,13 +2428,13 @@ func TestDownloadStep_WidthOne_VersionLookupsAreCappedAndCachedPerJob(t *testing
 	}
 }
 
-func versionLookupsFor(t *testing.T, match ports.RecordingMatch, otherTitled ...int) []string {
+func versionLookupsFor(t *testing.T, match domain.RecordingMatch, otherTitled ...int) []string {
 	t.Helper()
 	for _, i := range otherTitled {
 		match.Results[0].Recordings[i].Title = "Take On Me"
 		match.Results[0].Recordings[i].Artists = []string{"a-ha"}
 	}
-	lookup := &stubVersionLookup{facts: map[string]ports.RecordingFacts{}}
+	lookup := &stubVersionLookup{facts: map[string]domain.RecordingFacts{}}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
 		withTestIdentifier(&stubIdentifier{match: match}), withTestLookup(lookup), service.WithVerifyWidth(1))
 	ac := downloadContext("mb-master")
@@ -2486,7 +2486,7 @@ func TestDownloadStep_AnOtherVersionWithNoKnownLengthIsNeverStored(t *testing.T)
 
 func TestDownloadStep_AFingerprintedOtherVersionWithNoKnownLengthIsNeverStored(t *testing.T) {
 	fetcher := newGatedFetcher(nil)
-	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"edit": hardMatch()}}
+	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]domain.RecordingMatch{"edit": hardMatch()}}
 	ac := heldTrackContext(downloadtest.Candidate(
 		"edit",
 		downloadtest.WithTitle("Sunglasses at Night (Radio Edit)"),
@@ -2519,7 +2519,7 @@ func TestDownloadStep_AFingerprintNamingAnotherSongAndATitleWithOtherVersionTags
 	identifier := &stubIdentifier{match: differentSongMatch()}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(identifier))
 	ac := downloadContext("mb-master")
-	ac.Ranked = []ports.AudioCandidate{downloadtest.Candidate(
+	ac.Ranked = []domain.AudioCandidate{downloadtest.Candidate(
 		"https://youtube.com/watch?v=live0000000",
 		downloadtest.WithTitle("Corey Hart - Sunglasses at Night (Live)"),
 	)}
@@ -2533,18 +2533,18 @@ func TestDownloadStep_AFingerprintNamingAnotherSongAndATitleWithOtherVersionTags
 
 func TestDownloadStep_TheGradeOfAVerifiedFileIsTheJudgesAndFollowsTheSource(t *testing.T) {
 	cases := map[string]struct {
-		candidate ports.AudioCandidate
+		candidate domain.AudioCandidate
 		want      string
 	}{
 		"an art track": {downloadtest.Candidate(
 			"https://music.youtube.com/watch?v=art00000000",
 			downloadtest.WithTitle("Sunglasses at Night"),
-			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithKind(domain.KindArtTrack),
 		), "A"},
 		"a fan upload": {downloadtest.Candidate(
 			"https://youtube.com/watch?v=fan00000000",
 			downloadtest.WithTitle("Sunglasses at Night"),
-			downloadtest.WithKind(ports.KindUpload),
+			downloadtest.WithKind(domain.KindUpload),
 			downloadtest.WithChannel("Some Fan"),
 		), "B"},
 	}
@@ -2552,7 +2552,7 @@ func TestDownloadStep_TheGradeOfAVerifiedFileIsTheJudgesAndFollowsTheSource(t *t
 		t.Run(name, func(t *testing.T) {
 			step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(&stubIdentifier{match: referenceMatch()}))
 			ac := downloadContext("mb-master")
-			ac.Ranked = []ports.AudioCandidate{tc.candidate}
+			ac.Ranked = []domain.AudioCandidate{tc.candidate}
 
 			if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
 				t.Fatalf("Execute: %v", err)
@@ -2570,10 +2570,10 @@ func TestDownloadStep_ATrackWithNoCatalogIdentityIsGradedBestAvailable(t *testin
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true})
 	ac := &service.AcquisitionContext{
 		Track: service.TrackRef{Title: "Leaked Song", Artist: "Corey Hart"},
-		Ranked: []ports.AudioCandidate{downloadtest.Candidate(
+		Ranked: []domain.AudioCandidate{downloadtest.Candidate(
 			"https://youtube.com/watch?v=leak0000000",
 			downloadtest.WithTitle("Leaked Song"),
-			downloadtest.WithKind(ports.KindArtTrack),
+			downloadtest.WithKind(domain.KindArtTrack),
 		)},
 	}
 
@@ -2600,13 +2600,13 @@ func TestDownloadStep_ASameTitleLinkWhoseVersionWasNeverLookedUpIsNeverLikely(t 
 }
 
 func TestDownloadStep_ALinkWithNoMBIDNamesNothingSoItNeverContradicts(t *testing.T) {
-	match := ports.RecordingMatch{
+	match := domain.RecordingMatch{
 		AcoustID: "ac-nameless", Score: 0.97,
-		Results: linkedResults(ports.LinkedRecording{Title: "Take On Me", Artists: []string{"a-ha"}}),
+		Results: linkedResults(domain.LinkedRecording{Title: "Take On Me", Artists: []string{"a-ha"}}),
 	}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, withTestIdentifier(&stubIdentifier{match: match}))
 	ac := downloadContext("mb-master")
-	ac.Ranked = []ports.AudioCandidate{downloadtest.Candidate(
+	ac.Ranked = []domain.AudioCandidate{downloadtest.Candidate(
 		"https://youtube.com/watch?v=live0000000",
 		downloadtest.WithTitle("Corey Hart - Sunglasses at Night (Live)"),
 	)}
@@ -2678,11 +2678,11 @@ func TestDownloadStep_AnOtherVersionIsStoredOrRejectedByItsProbedLength(t *testi
 
 type windowSiblingFetcher struct{ *gatedFetcher }
 
-func (f windowSiblingFetcher) PreviewFetcherFor(ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+func (f windowSiblingFetcher) PreviewFetcherFor(domain.AudioCandidate) (ports.PreviewFetcher, bool) {
 	return f, true
 }
 
-func (f windowSiblingFetcher) FetchPreview(_ context.Context, c ports.AudioCandidate, outDir string, _ int) (string, error) {
+func (f windowSiblingFetcher) FetchPreview(_ context.Context, c domain.AudioCandidate, outDir string, _ int) (string, error) {
 	path := filepath.Join(outDir, "preview-"+c.URL+".mp3")
 	return path, os.WriteFile(path, []byte("preview-bytes"), 0o644)
 }
@@ -2693,11 +2693,11 @@ type cancelledSiblingIdentifier struct {
 	rank2Starting sync.Once
 }
 
-func (i *cancelledSiblingIdentifier) Identify(ctx context.Context, path string, _ float64) (ports.RecordingMatch, error) {
+func (i *cancelledSiblingIdentifier) Identify(ctx context.Context, path string, _ float64) (domain.RecordingMatch, error) {
 	if strings.Contains(path, "rank2") || filepath.Dir(path) == i.fetcher.dirOf("rank2") {
 		i.rank2Starting.Do(func() { close(i.rank2Started) })
 		<-ctx.Done()
-		return ports.RecordingMatch{}, ctx.Err()
+		return domain.RecordingMatch{}, ctx.Err()
 	}
 	<-i.rank2Started
 	return hardMatch(), nil
@@ -2768,7 +2768,7 @@ func TestDownloadStep_AProbeFailureOnALiveAttemptIsStillASkip(t *testing.T) {
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
-	assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
+	assertWindowSkips(t, rec.gates, domain.SkipProbeFailed)
 }
 
 func TestDownloadStep_ConcurrentCandidatesShareOneVersionLookup(t *testing.T) {
@@ -2806,15 +2806,15 @@ type gatedVersionLookup struct {
 	calls   atomic.Int32
 }
 
-func (g *gatedVersionLookup) RecordingByMBID(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+func (g *gatedVersionLookup) RecordingByMBID(ctx context.Context, mbid string) (domain.RecordingFacts, bool, error) {
 	if g.calls.Add(1) == 1 {
 		close(g.started)
 	}
 	select {
 	case <-g.release:
-		return ports.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night"}, true, nil
+		return domain.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night"}, true, nil
 	case <-ctx.Done():
-		return ports.RecordingFacts{}, false, ctx.Err()
+		return domain.RecordingFacts{}, false, ctx.Err()
 	}
 }
 
@@ -2862,7 +2862,7 @@ func TestDownloadStep_ALookupSharedWithACancelledJobStillAnswersTheOtherJob(t *t
 
 type panickingVersionLookup struct{}
 
-func (panickingVersionLookup) RecordingByMBID(context.Context, string) (ports.RecordingFacts, bool, error) {
+func (panickingVersionLookup) RecordingByMBID(context.Context, string) (domain.RecordingFacts, bool, error) {
 	panic("lookup exploded")
 }
 
@@ -2903,27 +2903,27 @@ func TestDownloadStep_AnEmptyFingerprintIsAVerifySkip(t *testing.T) {
 }
 
 type formatByURLFetcher struct {
-	formats map[string]ports.SourceFormat
+	formats map[string]domain.SourceFormat
 }
 
-func (f *formatByURLFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (f *formatByURLFetcher) Fetch(_ context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	path := filepath.Join(outDir, "track.mp3")
 	if err := os.WriteFile(path, []byte("audio-bytes"), 0o644); err != nil {
-		return ports.FetchedAudio{}, err
+		return domain.FetchedAudio{}, err
 	}
-	return ports.FetchedAudio{Path: path, Format: f.formats[c.URL]}, nil
+	return domain.FetchedAudio{Path: path, Format: f.formats[c.URL]}, nil
 }
 
-func selectedAmongMuxedAndAudioOnly(t *testing.T, width int, muxedKind ports.CandidateKind) string {
+func selectedAmongMuxedAndAudioOnly(t *testing.T, width int, muxedKind domain.CandidateKind) string {
 	t.Helper()
 	const muxedURL, audioOnlyURL = "https://youtube.com/watch?v=muxed0000000", "https://soundcloud.com/a/audio"
-	fetcher := &formatByURLFetcher{formats: map[string]ports.SourceFormat{
+	fetcher := &formatByURLFetcher{formats: map[string]domain.SourceFormat{
 		muxedURL:     {ID: "18", Kbps: 96},
 		audioOnlyURL: {ID: "hls_aac_160k", Kbps: 160},
 	}}
-	step := mustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
+	step := mustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
 	ac := downloadContext("mb-master")
-	ac.Ranked = []ports.AudioCandidate{downloadtest.Candidate(muxedURL, downloadtest.WithKind(muxedKind)), downloadtest.Candidate(audioOnlyURL, downloadtest.WithKind(ports.KindUpload))}
+	ac.Ranked = []domain.AudioCandidate{downloadtest.Candidate(muxedURL, downloadtest.WithKind(muxedKind)), downloadtest.Candidate(audioOnlyURL, downloadtest.WithKind(domain.KindUpload))}
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
@@ -2933,7 +2933,7 @@ func selectedAmongMuxedAndAudioOnly(t *testing.T, width int, muxedKind ports.Can
 
 func TestDownloadStep_AMuxedFallbackYieldsToAnAudioOnlyStreamOfTheSameGrade(t *testing.T) {
 	for _, width := range []int{1, 2} {
-		if got := selectedAmongMuxedAndAudioOnly(t, width, ports.KindUpload); got != "https://soundcloud.com/a/audio" {
+		if got := selectedAmongMuxedAndAudioOnly(t, width, domain.KindUpload); got != "https://soundcloud.com/a/audio" {
 			t.Errorf("width %d: selected %s, want the audio-only candidate", width, got)
 		}
 	}
@@ -2941,7 +2941,7 @@ func TestDownloadStep_AMuxedFallbackYieldsToAnAudioOnlyStreamOfTheSameGrade(t *t
 
 func TestDownloadStep_AMuxedFallbackOfAHigherGradeIsKept(t *testing.T) {
 	for _, width := range []int{1, 2} {
-		if got := selectedAmongMuxedAndAudioOnly(t, width, ports.KindArtTrack); got != "https://youtube.com/watch?v=muxed0000000" {
+		if got := selectedAmongMuxedAndAudioOnly(t, width, domain.KindArtTrack); got != "https://youtube.com/watch?v=muxed0000000" {
 			t.Errorf("width %d: selected %s, want the higher-graded muxed candidate", width, got)
 		}
 	}
@@ -2950,13 +2950,13 @@ func TestDownloadStep_AMuxedFallbackOfAHigherGradeIsKept(t *testing.T) {
 func TestDownloadStep_WhenEveryCandidateIsMuxedTheFirstAcceptedFileIsStored(t *testing.T) {
 	const firstURL, secondURL = "https://youtube.com/watch?v=first0000000", "https://youtube.com/watch?v=second000000"
 	for _, width := range []int{1, 2} {
-		fetcher := &formatByURLFetcher{formats: map[string]ports.SourceFormat{
+		fetcher := &formatByURLFetcher{formats: map[string]domain.SourceFormat{
 			firstURL:  {ID: "18", Kbps: 96},
 			secondURL: {ID: "18", Kbps: 96},
 		}}
-		step := mustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
+		step := mustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
 		ac := downloadContext("mb-master")
-		ac.Ranked = []ports.AudioCandidate{downloadtest.Candidate(firstURL, downloadtest.WithKind(ports.KindUpload)), downloadtest.Candidate(secondURL, downloadtest.WithKind(ports.KindUpload))}
+		ac.Ranked = []domain.AudioCandidate{downloadtest.Candidate(firstURL, downloadtest.WithKind(domain.KindUpload)), downloadtest.Candidate(secondURL, downloadtest.WithKind(domain.KindUpload))}
 		if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
 			t.Fatalf("width %d: Execute error: %v", width, err)
 		}
@@ -2974,10 +2974,10 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 	const isrc, mbid = "USAAA2400001", "standing-in-the-dark-live"
 	resolver := service.NewRecordedResolver(
 		[]songfields.RecordingIdentity{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, RecordingMBID: mbid, DurationSeconds: 197}},
-		[]ports.ISRCRecording{{MBID: mbid, Duration: 197}}, nil)
+		[]domain.ISRCRecording{{MBID: mbid, Duration: 197}}, nil)
 	ac := &service.AcquisitionContext{
 		Track:   service.TrackRef{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, CatalogDuration: 300},
-		Verdict: service.AudioVerdict{Kind: service.VerdictHard, Surviving: []ports.LinkedRecording{{MBID: mbid}}},
+		Verdict: service.AudioVerdict{Kind: service.VerdictHard, Surviving: []domain.LinkedRecording{{MBID: mbid}}},
 	}
 
 	service.ResolveIdentity(context.Background(), resolver, ac)
@@ -2992,14 +2992,14 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 		t.Error("lengths corroborated = true, want false: catalog 300s and reference 197s still disagree")
 	}
 	ac.Track.ISRC = ""
-	if got, source := provenISRCOf(ac); got != isrc || source != service.ProofFingerprint {
+	if got, source := provenISRCOf(ac); got != isrc || source != domain.ProofFingerprint {
 		t.Errorf("proven ISRC = (%q, %q), want (%q, fingerprint): with the catalog's own ISRC set aside, the surviving recording on the undoubted reference proves it", got, source, isrc)
 	}
 }
 
 func TestDownloadStep_RollbackLogsAScratchFolderItCouldNotRemove(t *testing.T) {
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
-	step := mustNewDownloadStep(&fileWritingSearcher{}, failingRemoveWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), downloadtest.SilentAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+	step := mustNewDownloadStep(&fileWritingSearcher{}, failingRemoveWorkspace{}, memory.NoopAudioIdentifier(), memory.NoopRecordingLookup(), downloadtest.SilentAudioProber(), memory.NoopVerifySkipRecorder(), service.Unlimited())
 
 	if err := step.Rollback(context.Background(), &service.AcquisitionContext{TempDir: "/tmp/altune-acquire-x"}); err != nil {
 		t.Fatalf("Rollback: %v, want nil", err)

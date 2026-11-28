@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
@@ -35,7 +36,7 @@ func MustDirectDeleteOrphans(store audioDeleter) ports.OrphanedAudioRecorder {
 	return recorder
 }
 
-func (d directDeleteOrphans) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
+func (d directDeleteOrphans) RecordOrphanedAudio(ctx context.Context, orphan domain.OrphanedAudio) error {
 	if err := d.store.Delete(ctx, orphan.AudioRef); err != nil {
 		return fmt.Errorf("delete orphaned audio: %w", err)
 	}
@@ -43,10 +44,10 @@ func (d directDeleteOrphans) RecordOrphanedAudio(ctx context.Context, orphan por
 }
 
 func recordOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, userId ids.UserId, trackId ids.TrackId, audioRef string) {
-	_ = queueOrphanedAudio(ctx, q, ports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
+	_ = queueOrphanedAudio(ctx, q, domain.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
 }
 
-func queueOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, orphan ports.OrphanedAudio) error {
+func queueOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, orphan domain.OrphanedAudio) error {
 	recordCtx, cancel := background.Detach(ctx, orphanRecordTimeout)
 	defer cancel()
 	err := q.RecordOrphanedAudio(recordCtx, orphan)

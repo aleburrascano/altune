@@ -3,7 +3,7 @@ package ytdlp_test
 import (
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -75,7 +75,7 @@ func TestDownload_MaxFilesizeFlagIsTheDownloadedFileCap(t *testing.T) {
 	}
 }
 
-func searchOneQuery(t *testing.T) ([]ports.AudioCandidate, error) {
+func searchOneQuery(t *testing.T) ([]domain.AudioCandidate, error) {
 	t.Helper()
 	return ytdlp.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).SearchQueries(context.Background(), []string{"q"})
 }
@@ -317,7 +317,7 @@ func TestDownload_ReadsRealYtDlpStdout(t *testing.T) {
 	if want := "The Sound Of Silence (Simon & Garfunkel).m4a"; filepath.Base(got.Path) != want {
 		t.Fatalf("Download path = %q, want %q", got.Path, want)
 	}
-	if want := (ports.SourceFormat{ID: "hls_aac_160k", Codec: "mp4a.40.2", Kbps: 160}); got.Format != want {
+	if want := (domain.SourceFormat{ID: "hls_aac_160k", Codec: "mp4a.40.2", Kbps: 160}); got.Format != want {
 		t.Fatalf("Download format = %+v, want %+v", got.Format, want)
 	}
 }
@@ -489,7 +489,7 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			installYtDlp(t, inspectedAs(tc.inspection))
-			candidates := []ports.AudioCandidate{downloadtest.Candidate(
+			candidates := []domain.AudioCandidate{downloadtest.Candidate(
 				soundCloudTrackURL,
 				downloadtest.WithTitle("Drinking in L.A."),
 				downloadtest.WithDuration(240),
@@ -521,7 +521,7 @@ func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAn
 }
 
 func TestYtDlpAudioSearcher_MarkUnplayable_APanicInsideAnInspectionLeavesTheCandidatePlayable(t *testing.T) {
-	candidates := []ports.AudioCandidate{downloadtest.Candidate(
+	candidates := []domain.AudioCandidate{downloadtest.Candidate(
 		soundCloudTrackURL,
 		downloadtest.WithTitle("Drinking in L.A."),
 		downloadtest.WithDuration(240),
@@ -576,7 +576,7 @@ func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
 func TestYtDlpAudioSearcher_InspectFailureLogCapsStderr(t *testing.T) {
 	installYtDlp(t, leakyStderr)
 	logs := logging.CaptureJSON(t, slog.LevelDebug)
-	candidates := []ports.AudioCandidate{downloadtest.Candidate(soundCloudTrackURL, downloadtest.WithDuration(240))}
+	candidates := []domain.AudioCandidate{downloadtest.Candidate(soundCloudTrackURL, downloadtest.WithDuration(240))}
 
 	ytdlp.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(context.Background(), candidates)
 
@@ -625,7 +625,7 @@ var ytDlpCallers = map[string]ytDlpCaller{
 		_, _ = s.Download(ctx, youTubeWatchURL, outDir)
 	}},
 	"inspect": {"-J", func(ctx context.Context, s *ytdlp.YouTubeAudioSearcher, _ string) {
-		s.MarkUnplayable(ctx, []ports.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/a/b")})
+		s.MarkUnplayable(ctx, []domain.AudioCandidate{downloadtest.Candidate("https://soundcloud.com/a/b")})
 	}},
 	"canary": {"--simulate", func(ctx context.Context, s *ytdlp.YouTubeAudioSearcher, _ string) {
 		_ = s.Canary(ctx, ytdlp.YouTubeCanary)
@@ -690,10 +690,10 @@ func TestYtDlpAudioSearcher_NoJSRuntimeEmitsNoComponentFlags(t *testing.T) {
 func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) {
 	cases := []struct {
 		name, line string
-		want       ports.SourceFormat
+		want       domain.SourceFormat
 	}{
-		{"audio-only opus", "251|opus|129.6", ports.SourceFormat{ID: "251", Codec: "opus", Kbps: 130}},
-		{"combined video has no audio bitrate", "18|mp4a.40.2|NA", ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"}},
+		{"audio-only opus", "251|opus|129.6", domain.SourceFormat{ID: "251", Codec: "opus", Kbps: 130}},
+		{"combined video has no audio bitrate", "18|mp4a.40.2|NA", domain.SourceFormat{ID: "18", Codec: "mp4a.40.2"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -710,7 +710,7 @@ func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) 
 
 func TestYtDlpAudioSearcher_Download_WithoutAFormatLineStillReturnsTheFile(t *testing.T) {
 	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a; echo altune-output-path:OUT/a.m4a")
-	if err != nil || filepath.Base(got.Path) != "a.m4a" || got.Format != (ports.SourceFormat{}) {
+	if err != nil || filepath.Base(got.Path) != "a.m4a" || got.Format != (domain.SourceFormat{}) {
 		t.Fatalf("Download = %+v, %v, want a.m4a with an unknown format", got, err)
 	}
 }
@@ -834,7 +834,7 @@ func TestSearch_ASearchResultIsAnUpload(t *testing.T) {
 		downloadtest.WithChannel("Bruno Mars"),
 		downloadtest.WithCategories([]string{"Music"}),
 		downloadtest.WithViewCount(42),
-		downloadtest.WithKind(ports.KindUpload),
+		downloadtest.WithKind(domain.KindUpload),
 	)
 	if c := got[0]; c.Title != want.Title || c.Duration != want.Duration || c.URL != want.URL || c.Channel != want.Channel ||
 		!slices.Equal(c.Categories, want.Categories) || c.ViewCount != want.ViewCount || c.Kind != want.Kind {
@@ -939,7 +939,7 @@ func TestMarkUnplayable_InspectionUsesATempCopyOfTheCookieJarAndCleansItUp(t *te
 	capture := captureCookieJar(t, "echo '{\"duration\":240}'")
 
 	ytdlp.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).MarkUnplayable(context.Background(),
-		[]ports.AudioCandidate{downloadtest.Candidate(soundCloudTrackURL, downloadtest.WithDuration(240))})
+		[]domain.AudioCandidate{downloadtest.Candidate(soundCloudTrackURL, downloadtest.WithDuration(240))})
 
 	capture.assertTempCopyUsedAndRemoved(t, jar)
 }

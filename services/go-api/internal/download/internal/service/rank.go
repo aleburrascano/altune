@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"fmt"
 	"math"
 	"strings"
@@ -20,18 +20,18 @@ type RankStage string
 const (
 	StageIdentity  RankStage = "identity"
 	StageQualifier RankStage = "qualifier"
-	StageDRM       RankStage = ports.UnplayableDRM
-	StagePreview   RankStage = ports.UnplayablePreview
+	StageDRM       RankStage = domain.UnplayableDRM
+	StagePreview   RankStage = domain.UnplayablePreview
 )
 
 type RankRefusal struct {
-	Candidate ports.AudioCandidate
+	Candidate domain.AudioCandidate
 	Stage     RankStage
 	Reason    string
 }
 
 type RankEvaluation struct {
-	Candidate         ports.AudioCandidate
+	Candidate         domain.AudioCandidate
 	IdentityScore     float64
 	MetadataRank      float64
 	QualifierDistance int
@@ -57,7 +57,7 @@ func evaluationOf(e entry) RankEvaluation {
 	}
 }
 
-func Rank(track RankTrack, candidates []ports.AudioCandidate) (ranked []ports.AudioCandidate, refused []RankRefusal, evaluated []RankEvaluation) {
+func Rank(track RankTrack, candidates []domain.AudioCandidate) (ranked []domain.AudioCandidate, refused []RankRefusal, evaluated []RankEvaluation) {
 	maxViews := maxViewCount(candidates)
 	var b buckets
 	for _, c := range candidates {
@@ -73,7 +73,7 @@ type buckets struct {
 	evaluated              []RankEvaluation
 }
 
-func (b *buckets) place(track RankTrack, c ports.AudioCandidate, maxViews int64) (RankRefusal, bool) {
+func (b *buckets) place(track RankTrack, c domain.AudioCandidate, maxViews int64) (RankRefusal, bool) {
 	if c.Unplayable != "" {
 		return RankRefusal{Candidate: c, Stage: unplayableStage(c.Unplayable), Reason: "soundcloud " + c.Unplayable}, false
 	}
@@ -107,21 +107,21 @@ func (b *buckets) placeUnresolved(track RankTrack, e entry) (RankRefusal, bool) 
 	return RankRefusal{}, true
 }
 
-func (b *buckets) ranked() []ports.AudioCandidate {
-	var ranked []ports.AudioCandidate
+func (b *buckets) ranked() []domain.AudioCandidate {
+	var ranked []domain.AudioCandidate
 	ranked = appendSorted(ranked, b.resolved, compareResolved)
 	ranked = appendSorted(ranked, b.topic, compareTopic)
 	return appendSorted(ranked, b.other, compareOther)
 }
 
 func unplayableStage(reason string) RankStage {
-	if reason == ports.UnplayablePreview {
+	if reason == domain.UnplayablePreview {
 		return StagePreview
 	}
 	return StageDRM
 }
 
-func qualifierRefusal(c ports.AudioCandidate, veto []string) RankRefusal {
+func qualifierRefusal(c domain.AudioCandidate, veto []string) RankRefusal {
 	return RankRefusal{Candidate: c, Stage: StageQualifier, Reason: "unrequested " + strings.Join(veto, ", ")}
 }
 

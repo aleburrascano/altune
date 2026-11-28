@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 )
 
-type Names struct {
+type AudioRefParts struct {
 	UserID string
 	Artist string
 	Album  string
@@ -29,15 +29,15 @@ func TrackScoped(canonical string, trackID ids.TrackId) string {
 	return strings.TrimSuffix(canonical, ext) + "." + trackID.String() + ext
 }
 
-func Build(names Names, tempPath string) string {
+func NewAudioRef(names AudioRefParts, tempPath string) string {
 	return build(names, tempPath, normalizePathComponent)
 }
 
-func BuildLegacy(names Names, tempPath string) string {
+func LegacyAudioRef(names AudioRefParts, tempPath string) string {
 	return build(names, tempPath, sanitizePathComponent)
 }
 
-func build(names Names, tempPath string, segment func(string) string) string {
+func build(names AudioRefParts, tempPath string, segment func(string) string) string {
 	artist := segment(names.Artist)
 	album := names.Album
 	if album == "" {

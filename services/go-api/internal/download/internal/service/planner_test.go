@@ -16,12 +16,12 @@ import (
 
 type pickingStore struct {
 	upgradeStore
-	picks     []ports.UpgradeCandidate
+	picks     []domain.UpgradeCandidate
 	pickErr   error
-	selection ports.UpgradeSelection
+	selection domain.UpgradeSelection
 }
 
-func (s *pickingStore) Candidates(_ context.Context, selection ports.UpgradeSelection) ([]ports.UpgradeCandidate, error) {
+func (s *pickingStore) Candidates(_ context.Context, selection domain.UpgradeSelection) ([]domain.UpgradeCandidate, error) {
 	s.selection = selection
 	return s.picks, s.pickErr
 }
@@ -38,7 +38,7 @@ func (r *recordingScheduler) ScheduleUpgrade(_ context.Context, _ ids.UserId, tr
 
 func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 	trackId := ids.NewTrackId()
-	store := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: trackId, UserID: ids.NewUserId(uuid.New()), Grade: "F"}}}
+	store := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: trackId, UserID: ids.NewUserId(uuid.New()), Grade: "F"}}}
 	scheduler := &recordingScheduler{}
 
 	if err := service.NewReplacementPlanner(store, scheduler, 2, 6*time.Hour).PlanNext(context.Background()); err != nil {
@@ -48,7 +48,7 @@ func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 	if len(scheduler.scheduled) != 1 || scheduler.scheduled[0] != trackId {
 		t.Errorf("scheduled = %v, want the picked track", scheduler.scheduled)
 	}
-	want := ports.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2}
+	want := domain.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2}
 	if !reflect.DeepEqual(store.selection, want) {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}
@@ -56,7 +56,9 @@ func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 
 type upgradableOnly struct{ ports.StatusRules }
 
-func (upgradableOnly) Upgradable() []ports.TrackStatus { return []ports.TrackStatus{ports.TrackReady} }
+func (upgradableOnly) Upgradable() []domain.TrackStatus {
+	return []domain.TrackStatus{domain.TrackReady}
+}
 
 func TestPlanner_AsksTheStoreForTheStatusesTheRulesCallUpgradable(t *testing.T) {
 	store := &pickingStore{}
@@ -65,7 +67,7 @@ func TestPlanner_AsksTheStoreForTheStatusesTheRulesCallUpgradable(t *testing.T) 
 		t.Fatalf("PlanNext: %v", err)
 	}
 
-	if want := []ports.TrackStatus{ports.TrackReady}; !reflect.DeepEqual(store.selection.Upgradable, want) {
+	if want := []domain.TrackStatus{domain.TrackReady}; !reflect.DeepEqual(store.selection.Upgradable, want) {
 		t.Errorf("Upgradable = %v, want %v", store.selection.Upgradable, want)
 	}
 }
@@ -77,7 +79,7 @@ func TestPlanner_CheckingUploadsAsksTheStoreForUnverifiedUserUploadsToo(t *testi
 		t.Fatalf("PlanNext: %v", err)
 	}
 
-	want := ports.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, CheckInPlace: true}
+	want := domain.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, CheckInPlace: true}
 	if !reflect.DeepEqual(store.selection, want) {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}
@@ -102,14 +104,14 @@ func TestPlanner_ReportsAFailedPickOrSchedule(t *testing.T) {
 	}
 
 	scheduleErr := errors.New("paused")
-	picks := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	picks := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
 	if err := service.NewReplacementPlanner(picks, &recordingScheduler{err: scheduleErr}, 1, time.Hour).PlanNext(context.Background()); !errors.Is(err, scheduleErr) {
 		t.Errorf("PlanNext with a failing schedule = %v, want the schedule error", err)
 	}
 }
 
 func TestPlanner_ASchedulerThatIsPausedIsNotAnError(t *testing.T) {
-	picks := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	picks := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
 	scheduler := &recordingScheduler{err: domain.ErrAcquisitionPaused}
 
 	if err := service.NewReplacementPlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
@@ -127,7 +129,7 @@ func TestInterval_SpreadsTheHourlyBudgetEvenly(t *testing.T) {
 }
 
 func TestPlanner_ATrackWithAJobInFlightIsSkippedNotAFailure(t *testing.T) {
-	picks := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	picks := &pickingStore{picks: []domain.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
 	scheduler := &recordingScheduler{err: domain.ErrTrackJobInFlight}
 
 	if err := service.NewReplacementPlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
@@ -142,7 +144,7 @@ func TestPlanner_RescuingLowBitrateAsksTheStoreForTheFloor(t *testing.T) {
 		t.Fatalf("PlanNext: %v", err)
 	}
 
-	want := ports.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, LowBitrateFloorKbps: 112}
+	want := domain.UpgradeSelection{Limit: 1, Generation: domain.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, LowBitrateFloorKbps: 112}
 	if !reflect.DeepEqual(store.selection, want) {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}

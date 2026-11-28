@@ -52,7 +52,7 @@ func (c *claimer) claimJob(ctx context.Context) (<-chan struct{}, bool) {
 	return c.claimFrom(ctx, c.queue.Claim)
 }
 
-type claimFunc func(ctx context.Context, lease time.Duration) (ports.Job, error)
+type claimFunc func(ctx context.Context, lease time.Duration) (domain.Job, error)
 
 func (c *claimer) claimFrom(ctx context.Context, claim claimFunc) (<-chan struct{}, bool) {
 	c.gate.mu.RLock()
@@ -72,14 +72,14 @@ func (c *claimer) claimFrom(ctx context.Context, claim claimFunc) (<-chan struct
 	return done, true
 }
 
-func (c *claimer) claimNext(ctx context.Context, claim claimFunc) (ports.Job, bool) {
+func (c *claimer) claimNext(ctx context.Context, claim claimFunc) (domain.Job, bool) {
 	job, err := claim(ctx, c.leaseDuration)
 	if errors.Is(err, domain.ErrNoJobAvailable) {
-		return ports.Job{}, false
+		return domain.Job{}, false
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.claim_failed", logging.KeyError, err)
-		return ports.Job{}, false
+		return domain.Job{}, false
 	}
 	return job, true
 }

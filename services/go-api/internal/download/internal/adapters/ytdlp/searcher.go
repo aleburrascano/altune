@@ -2,7 +2,6 @@ package ytdlp
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
@@ -157,7 +156,7 @@ func (s *YouTubeAudioSearcher) Available() bool {
 }
 
 func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, parent, run context.Context) error {
-	if s.Available() && !ports.RunTimedOut(parent, run) && !outbound.YtdlpOutputShowsSourceUnavailable(stderr) {
+	if s.Available() && !domain.RunTimedOut(parent, run) && !outbound.YtdlpOutputShowsSourceUnavailable(stderr) {
 		return err
 	}
 	return &domain.SourceUnavailableError{Source: SourceName, Err: err}
@@ -166,7 +165,7 @@ func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, paren
 var errSearchPanicked = errors.New("yt-dlp search panicked")
 
 type pairOutcome struct {
-	candidates []ports.AudioCandidate
+	candidates []domain.AudioCandidate
 	err        error
 }
 
@@ -191,7 +190,7 @@ func (s *YouTubeAudioSearcher) runSearchPairs(ctx context.Context, queries []str
 	return outcomes
 }
 
-func logDroppedCandidates(ctx context.Context, candidates []ports.AudioCandidate) {
+func logDroppedCandidates(ctx context.Context, candidates []domain.AudioCandidate) {
 	for _, c := range candidates {
 		if !c.HasSourceKey() {
 			slog.WarnContext(ctx, "acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
@@ -199,13 +198,13 @@ func logDroppedCandidates(ctx context.Context, candidates []ports.AudioCandidate
 	}
 }
 
-func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query string, outcomes []pairOutcome) ([]ports.AudioCandidate, error) {
-	return ports.CollectCandidates(
+func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query string, outcomes []pairOutcome) ([]domain.AudioCandidate, error) {
+	candidates, err := domain.CollectCandidates(
 		len(outcomes),
-		func(ei int) ([]ports.AudioCandidate, error) {
+		func(ei int) ([]domain.AudioCandidate, error) {
 			return outcomes[ei].candidates, outcomes[ei].err
 		},
-		func(ei int, candidates []ports.AudioCandidate) {
+		func(ei int, candidates []domain.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.engine_search_results",
 				"spec", searchEngines[ei]+query, "candidates", len(candidates))
 			logDroppedCandidates(ctx, candidates)
@@ -218,17 +217,21 @@ func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query str
 			return fmt.Errorf("all search engines failed: %w", firstErr)
 		},
 	)
+	if err != nil {
+		return candidates, fmt.Errorf("%w", err)
+	}
+	return candidates, nil
 }
 
-func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []string) ([]ports.AudioCandidate, error) {
+func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []string) ([]domain.AudioCandidate, error) {
 	outcomes := s.runSearchPairs(ctx, queries)
 
-	return ports.CollectCandidates(
+	candidates, err := domain.CollectCandidates(
 		len(queries),
-		func(qi int) ([]ports.AudioCandidate, error) {
+		func(qi int) ([]domain.AudioCandidate, error) {
 			return s.foldEngineOutcomes(ctx, queries[qi], outcomes[qi])
 		},
-		func(qi int, candidates []ports.AudioCandidate) {
+		func(qi int, candidates []domain.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.search_query_results",
 				"query", queries[qi], "candidates", len(candidates))
 		},
@@ -238,6 +241,10 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 		},
 		func(firstErr error) error { return firstErr },
 	)
+	if err != nil {
+		return candidates, fmt.Errorf("%w", err)
+	}
+	return candidates, nil
 }
 
 func (s *YouTubeAudioSearcher) jsRuntimeFlags() []string {
@@ -262,7 +269,7 @@ func (s *YouTubeAudioSearcher) authFlags(args []string, cookieFile string) []str
 	return args
 }
 
-func (s *YouTubeAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error) {
+func (s *YouTubeAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec string) ([]domain.AudioCandidate, error) {
 	searchCtx, cancel := context.WithTimeout(ctx, s.searchTimeout)
 	defer cancel()
 
@@ -298,7 +305,7 @@ func (s *YouTubeAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec st
 	return candidates, nil
 }
 
-func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate, skipped int) {
+func candidatesFromEntryLines(lines [][]byte) (candidates []domain.AudioCandidate, skipped int) {
 	for _, line := range lines {
 		var entry Entry
 		if err := json.Unmarshal(line, &entry); err != nil || entry.WebpageURL == "" {
@@ -310,7 +317,7 @@ func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate
 	return candidates, skipped
 }
 
-func (s *YouTubeAudioSearcher) Download(ctx context.Context, url, outDir string) (ports.FetchedAudio, error) {
+func (s *YouTubeAudioSearcher) Download(ctx context.Context, url, outDir string) (domain.FetchedAudio, error) {
 	return s.fetchAudio(ctx, "download", url, outDir, nil, s.downloadTimeout)
 }
 
@@ -327,7 +334,7 @@ const (
 	sourceFormatFields = 3
 )
 
-func parseSourceFormat(stdout string) ports.SourceFormat {
+func parseSourceFormat(stdout string) domain.SourceFormat {
 	for line := range strings.Lines(stdout) {
 		fields, ok := strings.CutPrefix(strings.TrimSpace(line), sourceFormatPrefix)
 		if !ok {
@@ -335,15 +342,15 @@ func parseSourceFormat(stdout string) ports.SourceFormat {
 		}
 		parts := strings.Split(fields, "|")
 		if len(parts) != sourceFormatFields {
-			return ports.SourceFormat{}
+			return domain.SourceFormat{}
 		}
-		format := ports.SourceFormat{ID: parts[0], Codec: parts[1]}
+		format := domain.SourceFormat{ID: parts[0], Codec: parts[1]}
 		if kbps, err := strconv.ParseFloat(parts[2], 64); err == nil {
 			format.Kbps = int(math.Round(kbps))
 		}
 		return format
 	}
-	return ports.SourceFormat{}
+	return domain.SourceFormat{}
 }
 
 func (s *YouTubeAudioSearcher) fetchAudio(
@@ -351,7 +358,7 @@ func (s *YouTubeAudioSearcher) fetchAudio(
 	run, url, outDir string,
 	sectionArgs []string,
 	timeout time.Duration,
-) (ports.FetchedAudio, error) {
+) (domain.FetchedAudio, error) {
 	outTemplate := filepath.Join(outDir, "%(title)s.%(ext)s")
 	args := []string{
 		"-f", audioFormatSelector,
@@ -372,7 +379,7 @@ func (s *YouTubeAudioSearcher) fetchAudio(
 	}
 	cookies, err := s.leaseCookieJar(ctx, run, url)
 	if err != nil {
-		return ports.FetchedAudio{}, fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
+		return domain.FetchedAudio{}, fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
 	}
 	defer cookies.cleanup()
 	args = s.authFlags(args, cookies.path)
@@ -382,14 +389,14 @@ func (s *YouTubeAudioSearcher) fetchAudio(
 	stdout, stderr, err := childprocess.Run(runCtx, ytDlpBinary, args...)
 	cookies.settle(ctx, err, stderr)
 	if err != nil {
-		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ctx, runCtx)
+		return domain.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ctx, runCtx)
 	}
 
 	path, err := validatedOutputPath(outDir, parseOutputPath(stdout))
 	if err != nil {
-		return ports.FetchedAudio{}, err
+		return domain.FetchedAudio{}, err
 	}
-	return ports.FetchedAudio{Path: path, Format: parseSourceFormat(stdout)}, nil
+	return domain.FetchedAudio{Path: path, Format: parseSourceFormat(stdout)}, nil
 }
 
 func parseOutputPath(stdout string) string {
@@ -432,14 +439,14 @@ type Entry struct {
 	ViewCount  int64    `json:"view_count"`
 }
 
-func CandidateFromEntry(e Entry) ports.AudioCandidate {
-	return ports.AudioCandidate{
+func CandidateFromEntry(e Entry) domain.AudioCandidate {
+	return domain.AudioCandidate{
 		Title:      e.Title,
 		Duration:   e.Duration,
 		URL:        e.WebpageURL,
 		Channel:    e.Channel,
 		Categories: e.Categories,
 		ViewCount:  e.ViewCount,
-		Kind:       ports.KindUpload,
+		Kind:       domain.KindUpload,
 	}
 }

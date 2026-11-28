@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -17,13 +18,13 @@ type storedFileFingerprinter struct {
 	identifier ports.AudioIdentifier
 }
 
-func (f storedFileFingerprinter) fingerprint(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot) {
+func (f storedFileFingerprinter) fingerprint(ctx context.Context, ac *AcquisitionContext, track *domain.TrackSnapshot) {
 	if track.AudioSourceURL != nil || track.AudioRef == nil {
 		return
 	}
 	trackId := track.ID
 	match, err := f.identify(ctx, *track.AudioRef, deref(track.StoredDurationSeconds))
-	if errors.Is(err, ports.ErrNoStoredAudioReader) || errors.Is(err, ports.ErrNoAudioIdentifier) {
+	if errors.Is(err, domain.ErrNoStoredAudioReader) || errors.Is(err, domain.ErrNoAudioIdentifier) {
 		warnCurrentFileUnidentified(ctx, trackId, "no stored-audio reader or identifier is wired")
 		return
 	}
@@ -49,16 +50,16 @@ func warnCurrentFileUnidentified(ctx context.Context, trackId ids.TrackId, reaso
 		"effect", "no candidate is excluded as the current file")
 }
 
-func (f storedFileFingerprinter) identify(ctx context.Context, audioRef string, durationHint float64) (ports.RecordingMatch, error) {
+func (f storedFileFingerprinter) identify(ctx context.Context, audioRef string, durationHint float64) (domain.RecordingMatch, error) {
 	dir, err := f.workspace.Create("stored-*")
 	if err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("create stored-audio dir: %w", err)
+		return domain.RecordingMatch{}, fmt.Errorf("create stored-audio dir: %w", err)
 	}
 	defer removeScratch(ctx, f.workspace, dir)
 
 	path, err := f.reader.CopyStored(ctx, audioRef, dir)
 	if err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("copy stored audio: %w", err)
+		return domain.RecordingMatch{}, fmt.Errorf("copy stored audio: %w", err)
 	}
 	return f.identifier.Identify(ctx, path, durationHint)
 }

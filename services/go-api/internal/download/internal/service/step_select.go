@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
@@ -53,7 +53,7 @@ func logEvaluated(ctx context.Context, track TrackRef, ev RankEvaluation) {
 	)
 }
 
-func rankAndCollect(ctx context.Context, track TrackRef, expectedLength float64, candidates []ports.AudioCandidate) ([]ports.AudioCandidate, []RejectionEntry) {
+func rankAndCollect(ctx context.Context, track TrackRef, expectedLength float64, candidates []domain.AudioCandidate) ([]domain.AudioCandidate, []RejectionEntry) {
 	ranked, refused, evaluated := Rank(RankTrack{
 		ID:              track.ID,
 		Title:           track.Title,

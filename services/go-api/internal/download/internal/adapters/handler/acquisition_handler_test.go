@@ -3,9 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/download/internal/adapters/handler"
 	"altune/go-api/internal/download/internal/adapters/memory"
-	"altune/go-api/internal/download/internal/contracttest"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
@@ -56,7 +54,7 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	track := failedTrack(retryTestUserId)
 	repo.Seed(track)
 	manual := clocktest.NewManual(time.Now())
-	store := contracttest.MustNewCooldownStore(manual.Func())
+	store := memory.MustNewCooldownStore(manual.Func())
 	h := handler.NewRetryHandler(repo, &retryFakeScheduler{}, service.NewRetryAdmission(store))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
@@ -163,7 +161,7 @@ func assertShuttingDown(t *testing.T, status int, body []byte) {
 
 type admitAlways struct{}
 
-func (admitAlways) Admit(_ context.Context, _ *ports.TrackSnapshot, schedule func() error) error {
+func (admitAlways) Admit(_ context.Context, _ *domain.TrackSnapshot, schedule func() error) error {
 	return schedule()
 }
 
@@ -222,7 +220,7 @@ func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ ids.UserId
 }
 
 func buildReacquireRouter(trackRepo *memory.Ledger, scheduler *reacquireFakeScheduler) chi.Router {
-	h := handler.NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission(contracttest.MustNewCooldownStore(time.Now)))
+	h := handler.NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission(memory.MustNewCooldownStore(time.Now)))
 	r := chi.NewRouter()
 	r.Use(signedInAs(reacquireTestUserId))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -365,21 +363,21 @@ func signedInAs(userID ids.UserId) func(http.Handler) http.Handler {
 }
 
 func pendingTrack(userId ids.UserId) memory.LedgerTrack {
-	return memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
-		ID: ids.NewTrackId(), UserId: userId, Title: "Song", Artist: "Artist", Album: "Album", Status: ports.TrackPending,
+	return memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{
+		ID: ids.NewTrackId(), UserId: userId, Title: "Song", Artist: "Artist", Album: "Album", Status: domain.TrackPending,
 	}}
 }
 
 func failedTrack(userId ids.UserId) memory.LedgerTrack {
 	track := pendingTrack(userId)
-	track.Status = ports.TrackFailed
+	track.Status = domain.TrackFailed
 	return track
 }
 
 func readyTrack(userId ids.UserId) memory.LedgerTrack {
 	track := pendingTrack(userId)
 	audioRef := "audio/ready.opus"
-	track.AudioRef, track.Status, track.Streamable = &audioRef, ports.TrackReady, true
+	track.AudioRef, track.Status, track.Streamable = &audioRef, domain.TrackReady, true
 	return track
 }
 
@@ -413,7 +411,7 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 }
 
 func buildRetryRouter(trackRepo *memory.Ledger, scheduler *retryFakeScheduler) chi.Router {
-	h := handler.NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now)))
+	h := handler.NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now)))
 	r := chi.NewRouter()
 	r.Use(signedInAs(retryTestUserId))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -422,14 +420,14 @@ func buildRetryRouter(trackRepo *memory.Ledger, scheduler *retryFakeScheduler) c
 
 type unreachableLedger struct{ *memory.Ledger }
 
-func (unreachableLedger) Get(context.Context, ids.TrackId, ids.UserId) (*ports.TrackSnapshot, error) {
+func (unreachableLedger) Get(context.Context, ids.TrackId, ids.UserId) (*domain.TrackSnapshot, error) {
 	return nil, errors.New("database unavailable")
 }
 
 func TestHandleRetryAcquisition_ALedgerFailureIsA500AndSchedulesNothing(t *testing.T) {
 	track := failedTrack(retryTestUserId)
 	scheduler := &retryFakeScheduler{}
-	h := handler.NewRetryHandler(unreachableLedger{memory.NewLedger(track)}, scheduler, service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now)))
+	h := handler.NewRetryHandler(unreachableLedger{memory.NewLedger(track)}, scheduler, service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now)))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -518,7 +516,7 @@ type ownedRoute struct {
 	name       string
 	path       string
 	actionable func(ids.UserId) memory.LedgerTrack
-	mount      func(ledger *memory.Ledger, cooldowns *contracttest.CooldownStore, as ids.UserId) (chi.Router, func() int)
+	mount      func(ledger *memory.Ledger, cooldowns *memory.CooldownStore, as ids.UserId) (chi.Router, func() int)
 }
 
 func ownedRoutes() []ownedRoute {
@@ -527,7 +525,7 @@ func ownedRoutes() []ownedRoute {
 			name:       "retry",
 			path:       "/retry",
 			actionable: failedTrack,
-			mount: func(ledger *memory.Ledger, cooldowns *contracttest.CooldownStore, as ids.UserId) (chi.Router, func() int) {
+			mount: func(ledger *memory.Ledger, cooldowns *memory.CooldownStore, as ids.UserId) (chi.Router, func() int) {
 				scheduler := &retryFakeScheduler{}
 				r := chi.NewRouter()
 				r.Use(signedInAs(as))
@@ -539,7 +537,7 @@ func ownedRoutes() []ownedRoute {
 			name:       "reacquire",
 			path:       "/reacquire",
 			actionable: readyTrack,
-			mount: func(ledger *memory.Ledger, cooldowns *contracttest.CooldownStore, as ids.UserId) (chi.Router, func() int) {
+			mount: func(ledger *memory.Ledger, cooldowns *memory.CooldownStore, as ids.UserId) (chi.Router, func() int) {
 				scheduler := &reacquireFakeScheduler{}
 				r := chi.NewRouter()
 				r.Use(signedInAs(as))
@@ -556,7 +554,7 @@ func TestHandlers_AnotherUsersTrackIsAnsweredExactlyLikeAMissingOne(t *testing.T
 			owner, intruder := ids.NewUserId(uuid.New()), ids.NewUserId(uuid.New())
 			track := route.actionable(owner)
 			ledger := memory.NewLedger(track)
-			cooldowns := contracttest.MustNewCooldownStore(time.Now)
+			cooldowns := memory.MustNewCooldownStore(time.Now)
 			asIntruder, intruderScheduled := route.mount(ledger, cooldowns, intruder)
 
 			missing := retryServe(t, asIntruder, http.MethodPost, "/tracks/"+uuid.New().String()+route.path)
@@ -641,7 +639,7 @@ func logRecords(t *testing.T, out *logging.Capture) []map[string]any {
 func TestHandleRetryAcquisition_ALedgerFailureIsLoggedOnceByTheBoundaryWithTheTrack(t *testing.T) {
 	out := captureDefaultLog(t)
 	track := failedTrack(retryTestUserId)
-	h := handler.NewRetryHandler(unreachableLedger{memory.NewLedger(track)}, &retryFakeScheduler{}, service.NewRetryAdmission(contracttest.MustNewCooldownStore(time.Now)))
+	h := handler.NewRetryHandler(unreachableLedger{memory.NewLedger(track)}, &retryFakeScheduler{}, service.NewRetryAdmission(memory.MustNewCooldownStore(time.Now)))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)

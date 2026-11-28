@@ -16,7 +16,7 @@ import (
 )
 
 type queueRefuser interface {
-	RefuseQueued(ctx context.Context, job ports.AcquisitionJob)
+	RefuseQueued(ctx context.Context, job domain.AcquisitionJob)
 }
 
 type jobFinisher struct {
@@ -33,13 +33,13 @@ func newJobFinisher(queue ports.DownloadQueue, pending *pendingTracker, log *job
 	return &jobFinisher{queue: queue, pending: pending, log: log, refuser: refuser, outcomes: outcomes, unit: unit}
 }
 
-func (f *jobFinisher) releaseWithin(ctx context.Context, job ports.Job, delay time.Duration) error {
+func (f *jobFinisher) releaseWithin(ctx context.Context, job domain.Job, delay time.Duration) error {
 	queueCtx, cancel := background.Detach(ctx, queueCallBudget)
 	defer cancel()
 	return f.queue.Release(queueCtx, job.TrackID, job.ClaimNumber, delay)
 }
 
-func (f *jobFinisher) settleWithin(ctx context.Context, job ports.Job) error {
+func (f *jobFinisher) settleWithin(ctx context.Context, job domain.Job) error {
 	queueCtx, cancel := background.Detach(ctx, queueCallBudget)
 	defer cancel()
 	return f.queue.Settle(queueCtx, job.TrackID, job.ClaimNumber)
@@ -53,7 +53,7 @@ type jobEnd struct {
 const LeaseLostReason = "lease_lost"
 
 type jobCompletion struct {
-	state   ports.JobState
+	state   domain.JobState
 	reason  string
 	level   slog.Level
 	message string
@@ -64,7 +64,7 @@ func (f *jobFinisher) completeClaimedJob(ctx context.Context, trackId ids.TrackI
 	defer background.RecoverContext(ctx, "acquisition.job_completion_panic", logging.KeyTrackID, trackId.String())
 	done := f.classifyJob(ctx, end)
 	record := f.log.complete(trackId, done.state, done.reason)
-	if done.state != ports.JobRetrying {
+	if done.state != domain.JobRetrying {
 		f.recordOutcome(ctx, record)
 	}
 	if done.message != "" {
@@ -72,44 +72,44 @@ func (f *jobFinisher) completeClaimedJob(ctx context.Context, trackId ids.TrackI
 	}
 }
 
-var leaseLost = jobCompletion{state: ports.JobCancelled, reason: LeaseLostReason, level: slog.LevelWarn, message: "background acquisition cancelled after lease loss"}
+var leaseLost = jobCompletion{state: domain.JobCancelled, reason: LeaseLostReason, level: slog.LevelWarn, message: "background acquisition cancelled after lease loss"}
 
 func (f *jobFinisher) classifyJob(ctx context.Context, end jobEnd) jobCompletion {
 	err := end.err
 	switch {
 	case errors.Is(err, errJobPanicked):
-		return jobCompletion{state: ports.JobFailed, reason: "panic"}
+		return jobCompletion{state: domain.JobFailed, reason: "panic"}
 	case err != nil && end.shutdown:
-		return jobCompletion{state: ports.JobCancelled, reason: "shutdown", level: slog.LevelWarn, message: "background acquisition cancelled for shutdown"}
+		return jobCompletion{state: domain.JobCancelled, reason: "shutdown", level: slog.LevelWarn, message: "background acquisition cancelled for shutdown"}
 	case errors.Is(err, ErrKept):
-		return jobCompletion{state: ports.JobKept}
+		return jobCompletion{state: domain.JobKept}
 	case errors.Is(err, domain.ErrLeaseLost):
 		return leaseLost
 	case errors.Is(err, ErrAcquisitionRetryable):
 		reason := redact.LogError(err)
-		return jobCompletion{state: ports.JobRetrying, reason: reason, level: slog.LevelInfo, message: "background acquisition will retry", attrs: []any{"reason", reason}}
+		return jobCompletion{state: domain.JobRetrying, reason: reason, level: slog.LevelInfo, message: "background acquisition will retry", attrs: []any{"reason", reason}}
 	case err != nil && ctx.Err() != nil:
 		return leaseLost
 	case err != nil:
 		reason := redact.LogError(err)
-		return jobCompletion{state: ports.JobFailed, reason: reason, level: slog.LevelError, message: "background acquisition failed", attrs: []any{logging.KeyError, reason}}
+		return jobCompletion{state: domain.JobFailed, reason: reason, level: slog.LevelError, message: "background acquisition failed", attrs: []any{logging.KeyError, reason}}
 	default:
-		return jobCompletion{state: ports.JobSucceeded}
+		return jobCompletion{state: domain.JobSucceeded}
 	}
 }
 
-func (f *jobFinisher) recordOutcome(ctx context.Context, record ports.JobRecord) {
+func (f *jobFinisher) recordOutcome(ctx context.Context, record domain.JobRecord) {
 	if record.TrackID == "" {
 		return
 	}
 	var sourceHost string
-	if record.State == ports.JobSucceeded {
+	if record.State == domain.JobSucceeded {
 		sourceHost = hostOf(record.ResolvedSource)
 	}
 	f.outcomeRecords.Track(func() {
 		recCtx, cancel := background.Detach(ctx, OutcomeRecordTimeout)
 		defer cancel()
-		err := f.outcomes.Record(recCtx, ports.AcquisitionOutcome{
+		err := f.outcomes.Record(recCtx, domain.AcquisitionOutcome{
 			TrackID:    record.TrackID,
 			Outcome:    record.State,
 			Reason:     record.Reason,
@@ -134,7 +134,7 @@ func (f *jobFinisher) recordOutcome(ctx context.Context, record ports.JobRecord)
 	})
 }
 
-func (f *jobFinisher) finishJob(ctx context.Context, job ports.Job, end jobEnd) {
+func (f *jobFinisher) finishJob(ctx context.Context, job domain.Job, end jobEnd) {
 	defer f.pending.untrack(job.TrackID.String())
 
 	if end.shutdown {
@@ -152,7 +152,7 @@ func (f *jobFinisher) finishJob(ctx context.Context, job ports.Job, end jobEnd) 
 	f.logQueueOutcome(ctx, "settle", job.TrackID, f.settleWithin(ctx, job))
 }
 
-func (f *jobFinisher) releasePanickedJob(ctx context.Context, job ports.Job) {
+func (f *jobFinisher) releasePanickedJob(ctx context.Context, job domain.Job) {
 	if job.Run >= MaxAcquisitionAttempts {
 		f.refuseQueuedRecovering(ctx, job)
 		f.logQueueOutcome(ctx, "settle", job.TrackID, f.settleWithin(ctx, job))
@@ -161,9 +161,9 @@ func (f *jobFinisher) releasePanickedJob(ctx context.Context, job ports.Job) {
 	f.logQueueOutcome(ctx, "release", job.TrackID, f.releaseWithin(ctx, job, retryBackoff(job.Run, f.unit)))
 }
 
-func (f *jobFinisher) refuseQueuedRecovering(ctx context.Context, job ports.Job) {
+func (f *jobFinisher) refuseQueuedRecovering(ctx context.Context, job domain.Job) {
 	defer background.RecoverContext(ctx, "acquisition_panic_fail_track", logging.KeyTrackID, job.TrackID.String())
-	f.refuser.RefuseQueued(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID, Claim: job.ClaimNumber})
+	f.refuser.RefuseQueued(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID, Claim: job.ClaimNumber})
 }
 
 func (f *jobFinisher) logQueueOutcome(ctx context.Context, op string, trackID ids.TrackId, err error) {

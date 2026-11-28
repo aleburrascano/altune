@@ -9,7 +9,7 @@ import (
 var specNow = time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
 
 func eligibleRow() domain.UpgradeRow {
-	return domain.UpgradeRow{Ready: true, HasAudio: true, SourceURL: "https://example.test/a", Grade: domain.C}
+	return domain.UpgradeRow{Ready: true, HasAudio: true, SourceURL: "https://example.test/a", Grade: domain.GradeC}
 }
 
 func specRules() domain.UpgradeRules {
@@ -32,15 +32,15 @@ func TestUpgradeEligible(t *testing.T) {
 		{"no source and the judgement is done", func(r *domain.UpgradeRow) { r.SourceURL = ""; r.InPlaceGeneration = 2 }, func(u *domain.UpgradeRules) { u.CheckInPlace = true }, false},
 		{"a job is queued", func(r *domain.UpgradeRow) { r.JobQueued = true }, func(*domain.UpgradeRules) {}, false},
 		{"ungraded counts as the worst gradeable", func(r *domain.UpgradeRow) { r.Grade = "" }, func(*domain.UpgradeRules) {}, true},
-		{"the user's own upload", func(r *domain.UpgradeRow) { r.Grade = domain.AUser }, func(*domain.UpgradeRules) {}, false},
+		{"the user's own upload", func(r *domain.UpgradeRow) { r.Grade = domain.GradeAUser }, func(*domain.UpgradeRules) {}, false},
 		{"best available", func(r *domain.UpgradeRow) { r.Grade = domain.BestAvailable }, func(*domain.UpgradeRules) {}, false},
-		{"grade A is left alone", func(r *domain.UpgradeRow) { r.Grade = domain.A }, func(*domain.UpgradeRules) {}, false},
-		{"grade A awaiting the in place judgement", func(r *domain.UpgradeRow) { r.Grade = domain.A }, func(u *domain.UpgradeRules) { u.CheckInPlace = true }, true},
-		{"grade A muxed under the floor", func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "18" }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, true},
-		{"grade A muxed with the rescue off", func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceFormatID = "18" }, func(*domain.UpgradeRules) {}, false},
-		{"grade A below the floor", func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceKbps = 111 }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, true},
-		{"grade A at the floor", func(r *domain.UpgradeRow) { r.Grade = domain.A; r.SourceKbps = 112 }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, false},
-		{"grade A with an unknown bitrate", func(r *domain.UpgradeRow) { r.Grade = domain.A }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, false},
+		{"grade A is left alone", func(r *domain.UpgradeRow) { r.Grade = domain.GradeA }, func(*domain.UpgradeRules) {}, false},
+		{"grade A awaiting the in place judgement", func(r *domain.UpgradeRow) { r.Grade = domain.GradeA }, func(u *domain.UpgradeRules) { u.CheckInPlace = true }, true},
+		{"grade A muxed under the floor", func(r *domain.UpgradeRow) { r.Grade = domain.GradeA; r.SourceFormatID = "18" }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, true},
+		{"grade A muxed with the rescue off", func(r *domain.UpgradeRow) { r.Grade = domain.GradeA; r.SourceFormatID = "18" }, func(*domain.UpgradeRules) {}, false},
+		{"grade A below the floor", func(r *domain.UpgradeRow) { r.Grade = domain.GradeA; r.SourceKbps = 111 }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, true},
+		{"grade A at the floor", func(r *domain.UpgradeRow) { r.Grade = domain.GradeA; r.SourceKbps = 112 }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, false},
+		{"grade A with an unknown bitrate", func(r *domain.UpgradeRow) { r.Grade = domain.GradeA }, func(u *domain.UpgradeRules) { u.LowBitrateFloorKbps = 112 }, false},
 		{"given up this generation", func(r *domain.UpgradeRow) { r.BestAvailableGeneration = 2 }, func(*domain.UpgradeRules) {}, false},
 		{"given up an earlier generation", func(r *domain.UpgradeRow) { r.BestAvailableGeneration = 1 }, func(*domain.UpgradeRules) {}, true},
 		{"tried long ago", func(r *domain.UpgradeRow) { r.UpgradeTriedAt = &longAgo }, func(*domain.UpgradeRules) {}, true},

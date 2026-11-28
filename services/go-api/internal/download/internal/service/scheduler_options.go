@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"context"
 	"log/slog"
 	"sync/atomic"
@@ -47,7 +47,7 @@ func WithPollInterval(d time.Duration) func(*BackgroundAcquisitionScheduler) {
 const fingerprintLookupUnverified = "unverified until the first successful lookup"
 
 type upgradeRunner interface {
-	ExecuteUpgrade(ctx context.Context, job ports.AcquisitionJob) error
+	ExecuteUpgrade(ctx context.Context, job domain.AcquisitionJob) error
 }
 
 type VerifySkipCounter struct{ n atomic.Uint64 }
@@ -56,7 +56,7 @@ func (c *VerifySkipCounter) RecordVerifySkip(string) { c.n.Add(1) }
 
 func (c *VerifySkipCounter) Count() uint64 { return c.n.Load() }
 
-func logVerification(ctx context.Context, v ports.Verification) {
+func logVerification(ctx context.Context, v domain.Verification) {
 	if !v.ToolsPresent() {
 		slog.WarnContext(ctx, "acquisition.verification_degraded",
 			"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp,

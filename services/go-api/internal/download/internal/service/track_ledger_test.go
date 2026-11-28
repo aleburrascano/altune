@@ -3,7 +3,6 @@ package service_test
 import (
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -20,26 +19,26 @@ type libraryHalf struct {
 	accepts bool
 }
 
-func (l libraryHalf) EvidenceAccepted(ports.Completion) bool { return l.accepts }
+func (l libraryHalf) EvidenceAccepted(domain.Completion) bool { return l.accepts }
 
 type settleCall struct {
-	fence ports.ClaimNumber
+	fence domain.ClaimNumber
 	keys  []string
 	reset bool
 }
 
 type spyUpgradeState struct {
-	snapshot ports.UpgradeStateSnapshot
+	snapshot domain.UpgradeStateSnapshot
 	settled  []settleCall
 	err      error
 }
 
-func (s *spyUpgradeState) State(context.Context, ids.TrackId) (ports.UpgradeStateSnapshot, error) {
+func (s *spyUpgradeState) State(context.Context, ids.TrackId) (domain.UpgradeStateSnapshot, error) {
 	return s.snapshot, s.err
 }
 
-func (s *spyUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, fence ports.ClaimNumber, keys []string, evidence ports.EvidenceFate) error {
-	s.settled = append(s.settled, settleCall{fence: fence, keys: keys, reset: evidence == ports.ResetEvidence})
+func (s *spyUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, fence domain.ClaimNumber, keys []string, evidence domain.EvidenceFate) error {
+	s.settled = append(s.settled, settleCall{fence: fence, keys: keys, reset: evidence == domain.ResetEvidence})
 	return s.err
 }
 
@@ -51,10 +50,10 @@ type ledgerFixture struct {
 	user    ids.UserId
 }
 
-func newLedgerFixture(t *testing.T, accepts bool, seed func(*ports.TrackSnapshot)) ledgerFixture {
+func newLedgerFixture(t *testing.T, accepts bool, seed func(*domain.TrackSnapshot)) ledgerFixture {
 	t.Helper()
 	user := ids.NewUserId(uuid.New())
-	snapshot := ports.TrackSnapshot{ID: ids.NewTrackId(), UserId: user, Title: "Title", Artist: "Artist", Status: ports.TrackPending}
+	snapshot := domain.TrackSnapshot{ID: ids.NewTrackId(), UserId: user, Title: "Title", Artist: "Artist", Status: domain.TrackPending}
 	if seed != nil {
 		seed(&snapshot)
 	}
@@ -68,10 +67,10 @@ func newLedgerFixture(t *testing.T, accepts bool, seed func(*ports.TrackSnapshot
 }
 
 func TestGetOverlaysTheUpgradeStateOnTheTrackEvidence(t *testing.T) {
-	f := newLedgerFixture(t, true, func(s *ports.TrackSnapshot) {
+	f := newLedgerFixture(t, true, func(s *domain.TrackSnapshot) {
 		s.Evidence = json.RawMessage(`{"grade":"B","upgrade_tries":9}`)
 	})
-	f.state.snapshot = ports.UpgradeStateSnapshot{Evidence: json.RawMessage(`{"upgrade_tries":2}`), RejectedSourceKeys: []string{"bad"}}
+	f.state.snapshot = domain.UpgradeStateSnapshot{Evidence: json.RawMessage(`{"upgrade_tries":2}`), RejectedSourceKeys: []string{"bad"}}
 
 	snap, err := f.ledger.Get(context.Background(), f.id, f.user)
 	if err != nil {
@@ -96,7 +95,7 @@ func TestGetReturnsTheTrackNotFoundOfTheLibraryHalfWithoutReadingTheState(t *tes
 
 	_, err := f.ledger.Get(context.Background(), f.id, ids.NewUserId(uuid.New()))
 
-	if !errors.Is(err, ports.ErrTrackNotFound) {
+	if !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Fatalf("Get = %v, want ErrTrackNotFound", err)
 	}
 }
@@ -104,7 +103,7 @@ func TestGetReturnsTheTrackNotFoundOfTheLibraryHalfWithoutReadingTheState(t *tes
 func TestCompleteMarksPendingTrackReadyAndSettlesTheRejectedKeys(t *testing.T) {
 	f := newLedgerFixture(t, true, nil)
 
-	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, ports.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad-key"}})
+	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad-key"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +111,7 @@ func TestCompleteMarksPendingTrackReadyAndSettlesTheRejectedKeys(t *testing.T) {
 	if len(f.state.settled) != 1 || len(f.state.settled[0].keys) != 1 || f.state.settled[0].keys[0] != "bad-key" || !f.state.settled[0].reset {
 		t.Fatalf("upgrade state settled = %+v, want the rejected key and a reset for the replaced evidence", f.state.settled)
 	}
-	if got, _ := f.library.Track(f.id); got.Status != ports.TrackReady {
+	if got, _ := f.library.Track(f.id); got.Status != domain.TrackReady {
 		t.Errorf("status = %v, want ready", got.Status)
 	}
 }
@@ -120,7 +119,7 @@ func TestCompleteMarksPendingTrackReadyAndSettlesTheRejectedKeys(t *testing.T) {
 func TestCompleteSettlesNothingWhenThereIsNoRejectionAndNoNewEvidence(t *testing.T) {
 	f := newLedgerFixture(t, false, nil)
 
-	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, ports.Completion{AudioRef: "ref-1"})
+	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, domain.Completion{AudioRef: "ref-1"})
 
 	if err != nil || len(f.state.settled) != 0 {
 		t.Errorf("Complete = %v, settled = %+v, want success and no state write", err, f.state.settled)
@@ -131,19 +130,19 @@ func TestCompleteReturnsTheStateErrorAndLeavesTheTrackUntouchedSoTheSchedulerRet
 	f := newLedgerFixture(t, true, nil)
 	f.state.err = errors.New("state unavailable")
 
-	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, ports.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
+	err := f.ledger.Complete(context.Background(), f.id, f.user, 0, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
 
 	if !errors.Is(err, f.state.err) {
 		t.Fatalf("Complete = %v, want the state error", err)
 	}
-	if got, _ := f.library.Track(f.id); got.Status != ports.TrackPending {
+	if got, _ := f.library.Track(f.id); got.Status != domain.TrackPending {
 		t.Errorf("status = %v, want the track untouched because the library write never ran", got.Status)
 	}
 }
 
 func TestCompleteThatFailsAfterTheStateWriteIsRetriedWithTheSameStateWrite(t *testing.T) {
 	f := newLedgerFixture(t, true, nil)
-	completion := ports.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}, Confidence: 0.5, Evidence: json.RawMessage(`{"k":1}`)}
+	completion := domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}, Confidence: 0.5, Evidence: json.RawMessage(`{"k":1}`)}
 	f.library.FailWrites(errors.New("library down"))
 
 	if err := f.ledger.Complete(context.Background(), f.id, f.user, 0, completion); err == nil {
@@ -157,7 +156,7 @@ func TestCompleteThatFailsAfterTheStateWriteIsRetriedWithTheSameStateWrite(t *te
 	if len(f.state.settled) != 2 || !reflect.DeepEqual(f.state.settled[0], f.state.settled[1]) {
 		t.Errorf("settled = %+v, want the identical idempotent write twice", f.state.settled)
 	}
-	if got, _ := f.library.Track(f.id); got.Status != ports.TrackReady {
+	if got, _ := f.library.Track(f.id); got.Status != domain.TrackReady {
 		t.Errorf("status = %v, want ready after the retry", got.Status)
 	}
 }
@@ -166,7 +165,7 @@ func TestCompleteHandsTheClaimFenceToTheStateWriteAndReturnsALostLease(t *testin
 	f := newLedgerFixture(t, true, nil)
 	f.state.err = domain.ErrLeaseLost
 
-	err := f.ledger.Complete(context.Background(), f.id, f.user, 4, ports.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
+	err := f.ledger.Complete(context.Background(), f.id, f.user, 4, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
 
 	if !errors.Is(err, domain.ErrLeaseLost) {
 		t.Fatalf("Complete = %v, want ErrLeaseLost from the fenced state write", err)
@@ -174,7 +173,7 @@ func TestCompleteHandsTheClaimFenceToTheStateWriteAndReturnsALostLease(t *testin
 	if len(f.state.settled) != 1 || f.state.settled[0].fence != 4 {
 		t.Errorf("settled = %+v, want one write carrying fence 4", f.state.settled)
 	}
-	if got, _ := f.library.Track(f.id); got.Status != ports.TrackPending {
+	if got, _ := f.library.Track(f.id); got.Status != domain.TrackPending {
 		t.Errorf("status = %v, want pending because the library write never ran", got.Status)
 	}
 }
@@ -192,7 +191,7 @@ func TestCompleteResetsTheUpgradeEvidenceOnlyWhenTheLibraryAcceptsTheNewEvidence
 		t.Run(tc.name, func(t *testing.T) {
 			f := newLedgerFixture(t, tc.accepts, nil)
 
-			err := f.ledger.Complete(context.Background(), f.id, f.user, 0, ports.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
+			err := f.ledger.Complete(context.Background(), f.id, f.user, 0, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -206,9 +205,9 @@ func TestCompleteResetsTheUpgradeEvidenceOnlyWhenTheLibraryAcceptsTheNewEvidence
 func TestCompleteByAnotherOwnerWritesNoUpgradeState(t *testing.T) {
 	f := newLedgerFixture(t, true, nil)
 
-	err := f.ledger.Complete(context.Background(), f.id, ids.NewUserId(uuid.New()), 1, ports.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
+	err := f.ledger.Complete(context.Background(), f.id, ids.NewUserId(uuid.New()), 1, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
 
-	if !errors.Is(err, ports.ErrTrackNotFound) {
+	if !errors.Is(err, domain.ErrTrackNotFound) {
 		t.Fatalf("Complete = %v, want ErrTrackNotFound", err)
 	}
 	if len(f.state.settled) != 0 {
@@ -234,13 +233,13 @@ func TestNewTrackLedgerRefusesAMissingLibraryHalfOrUpgradeState(t *testing.T) {
 func TestTrackLedgerKeepsTheUpgradeStateOfAMemoryStateAcrossGetAndComplete(t *testing.T) {
 	user := ids.NewUserId(uuid.New())
 	id := ids.NewTrackId()
-	library := libraryHalf{Ledger: memory.NewLedger(memory.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{ID: id, UserId: user, Status: ports.TrackPending}}), accepts: true}
+	library := libraryHalf{Ledger: memory.NewLedger(memory.LedgerTrack{TrackSnapshot: domain.TrackSnapshot{ID: id, UserId: user, Status: domain.TrackPending}}), accepts: true}
 	ledger, err := service.NewTrackLedger(library, memory.NewUpgradeState())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := ledger.Complete(context.Background(), id, user, 0, ports.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}}); err != nil {
+	if err := ledger.Complete(context.Background(), id, user, 0, domain.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}}); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := ledger.Get(context.Background(), id, user)

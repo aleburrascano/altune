@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 )
@@ -29,7 +28,7 @@ func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, ac
 	ac.Identity = identity
 }
 
-func withCatalogPin(identity ports.RecordingIdentity, pin string) ports.RecordingIdentity {
+func withCatalogPin(identity domain.RecordingIdentity, pin string) domain.RecordingIdentity {
 	if pin == "" || identity.MBID != "" {
 		return identity
 	}
@@ -71,21 +70,21 @@ func findingOf(verdict Verdict, basis string, score, bitErrorRate float64) Findi
 	return finding
 }
 
-func storedEvidenceOf(ctx context.Context, track *ports.TrackSnapshot) Evidence {
+func storedEvidenceOf(ctx context.Context, codec ports.EvidenceCodec, track *domain.TrackSnapshot) domain.AcquisitionEvidence {
 	if len(track.Evidence) == 0 {
-		return Evidence{}
+		return domain.AcquisitionEvidence{}
 	}
-	var stored Evidence
-	if err := json.Unmarshal(track.Evidence, &stored); err != nil {
+	stored, err := codec.Decode(track.Evidence)
+	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.stored_evidence_unreadable",
 			logging.KeyTrackID, track.ID.String(), logging.KeyError, redact.LogError(err))
-		return Evidence{}
+		return domain.AcquisitionEvidence{}
 	}
 	return stored
 }
 
-func storedSourceOf(ctx context.Context, track *ports.TrackSnapshot) judgedSource {
-	stored := storedEvidenceOf(ctx, track)
+func storedSourceOf(ctx context.Context, codec ports.EvidenceCodec, track *domain.TrackSnapshot) judgedSource {
+	stored := storedEvidenceOf(ctx, codec, track)
 	kind := cmp.Or(stored.SourceKind, domain.FanUpload)
 	if track.AudioSourceURL == nil || *track.AudioSourceURL == "" {
 		kind = domain.UserUpload
@@ -93,10 +92,10 @@ func storedSourceOf(ctx context.Context, track *ports.TrackSnapshot) judgedSourc
 	return judgedSource{kind: kind, title: stored.SourceTitle}
 }
 
-func previewTargetOf(track *ports.TrackSnapshot) ports.PreviewTarget {
-	target := ports.PreviewTarget{ISRC: deref(track.ISRC)}
+func previewTargetOf(track *domain.TrackSnapshot) domain.PreviewTarget {
+	target := domain.PreviewTarget{ISRC: deref(track.ISRC)}
 	for _, source := range track.CatalogSources {
-		if source.Provider == string(ports.ProviderDeezer) {
+		if source.Provider == string(domain.ProviderDeezer) {
 			target.DeezerTrackID = source.ExternalID
 		}
 	}

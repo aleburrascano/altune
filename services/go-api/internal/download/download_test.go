@@ -4,7 +4,11 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/download/internal/adapters/memory"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/adapters/savedlink"
+	"altune/go-api/internal/download/internal/adapters/youtubemusic"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/platform/outbound/outboundtest"
 	"altune/go-api/internal/shared/clock"
@@ -18,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -28,22 +33,22 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-func fixtureTiers() download.SourceOrder {
-	return download.SourceOrder{
-		First:    []download.AudioSource{downloadtest.NewArtTrackSource(downloadtest.Clip)},
-		Fallback: []download.AudioSource{downloadtest.NewUploadSource(downloadtest.Clip)},
+func fixtureTiers() downloadtest.SourceOrder {
+	return downloadtest.SourceOrder{
+		First:    []downloadtest.AudioSource{downloadtest.NewArtTrackSource(downloadtest.Clip)},
+		Fallback: []downloadtest.AudioSource{downloadtest.NewUploadSource(downloadtest.Clip)},
 	}
 }
 
 type orphanSink struct{}
 
-func (orphanSink) RecordOrphanedAudio(context.Context, ports.OrphanedAudio) error { return nil }
+func (orphanSink) RecordOrphanedAudio(context.Context, domain.OrphanedAudio) error { return nil }
 
 func newClient(timeout time.Duration, transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: timeout, Transport: transport}
 }
 
-func offlineDeps(cfg *config.Config, sources download.SourceOrder) download.Deps {
+func offlineDeps(cfg *config.Config, sources downloadtest.SourceOrder) download.Deps {
 	cfg.AcquisitionDeezerPreviewTimeout = time.Second
 	return download.Deps{
 		Config:            cfg,
@@ -52,7 +57,7 @@ func offlineDeps(cfg *config.Config, sources download.SourceOrder) download.Deps
 		NewClient:         newClient,
 		Library:           memory.NewLibrary(),
 		AudioStore:        memory.NewAudioStore(),
-		StoredAudio:       ports.NoopStoredAudioReader(),
+		StoredAudio:       memory.NoopStoredAudioReader(),
 		Orphans:           orphanSink{},
 		RecordingResolver: download.NoopRecordingResolver(),
 		RecordingLookup:   download.NoopRecordingLookup(),
@@ -61,7 +66,7 @@ func offlineDeps(cfg *config.Config, sources download.SourceOrder) download.Deps
 	}
 }
 
-func newOfflineModule(t *testing.T, cfg *config.Config, sources download.SourceOrder) *download.Module {
+func newOfflineModule(t *testing.T, cfg *config.Config, sources downloadtest.SourceOrder) *download.Module {
 	t.Helper()
 	module, err := download.New(t.Context(), offlineDeps(cfg, sources))
 	if err != nil {
@@ -193,17 +198,17 @@ func TestNew_ReportsFingerprintingReadyOnlyWithAnAcoustIDKey(t *testing.T) {
 	}
 }
 
-func liveTiers(t *testing.T, cfg *config.Config) (download.SourceOrder, download.Verification) {
+func liveSources(t *testing.T, cfg *config.Config) downloadtest.SourceOrder {
 	t.Helper()
 	cfg.AcquisitionFileHostPageTimeout = time.Second
-	tiers, tools, err := download.LiveTiers(t.Context(), cfg, http.DefaultTransport)
+	sources, err := download.LiveSources(t.Context(), cfg, nil, http.DefaultTransport, newClient)
 	if err != nil {
-		t.Fatalf("LiveTiers: %v", err)
+		t.Fatalf("LiveSources: %v", err)
 	}
-	return tiers, tools
+	return sources
 }
 
-func TestLiveTiers_EachSourceFollowsItsSwitch(t *testing.T) {
+func TestLiveSources_EachSourceFollowsItsSwitch(t *testing.T) {
 	tests := []struct {
 		name        string
 		ytMusic     bool
@@ -219,50 +224,50 @@ func TestLiveTiers_EachSourceFollowsItsSwitch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sources, _ := liveTiers(t, &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp})
+			sources := liveSources(t, &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp})
 			names := sourceNames(sources.All())
 
-			if got := containsSource(names, download.YtMusicSourceName); got != tt.wantYtMusic {
+			if got := containsSource(names, youtubemusic.SourceName); got != tt.wantYtMusic {
 				t.Errorf("ytmusic present = %v, want %v (sources=%v)", got, tt.wantYtMusic, names)
 			}
-			if got := containsSource(names, download.YtDlpSourceName); got != tt.wantYtDlp {
+			if got := containsSource(names, ytdlp.SourceName); got != tt.wantYtDlp {
 				t.Errorf("ytdlp present = %v, want %v (sources=%v)", got, tt.wantYtDlp, names)
 			}
 		})
 	}
 }
 
-func TestLiveTiers_WithEverySourceSwitchedOffTheCatalogLinkIsNotAddedAlone(t *testing.T) {
-	tiers, _ := liveTiers(t, &config.Config{})
+func TestLiveSources_WithEverySourceSwitchedOffTheCatalogLinkIsNotAddedAlone(t *testing.T) {
+	tiers := liveSources(t, &config.Config{})
 
 	if names := sourceNames(tiers.All()); len(names) != 0 {
 		t.Errorf("sources = %v with YTMUSIC_ENABLED and YTDLP_ENABLED off, want none", names)
 	}
 }
 
-func TestLiveTiers_YouTubeMusicSearchRunsFirstAndYtDlpIsTheFallback(t *testing.T) {
-	tiers, _ := liveTiers(t, &config.Config{YtMusicEnabled: true, YtDLPEnabled: true})
+func TestLiveSources_YouTubeMusicSearchRunsFirstAndYtDlpIsTheFallback(t *testing.T) {
+	tiers := liveSources(t, &config.Config{YtMusicEnabled: true, YtDLPEnabled: true})
 
 	first, fallback := sourceNames(tiers.First), sourceNames(tiers.Fallback)
-	if !containsSource(first, download.YtMusicSourceName) || !containsSource(first, download.YouTubeMusicSearchSourceName) {
+	if !containsSource(first, youtubemusic.SourceName) || !containsSource(first, ytmsearch.SourceName) {
 		t.Errorf("first tier = %v, want the catalog id and the songs search", first)
 	}
-	if len(fallback) != 1 || fallback[0] != download.YtDlpSourceName {
+	if len(fallback) != 1 || fallback[0] != ytdlp.SourceName {
 		t.Errorf("fallback = %v, want only ytdlp", fallback)
 	}
 }
 
-func TestLiveTiers_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *testing.T) {
-	tiers, _ := liveTiers(t, &config.Config{YtMusicEnabled: true, YtDLPEnabled: true})
+func TestLiveSources_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *testing.T) {
+	tiers := liveSources(t, &config.Config{YtMusicEnabled: true, YtDLPEnabled: true})
 	first := sourceNames(tiers.First)
 
-	if len(first) != 3 || first[0] != download.SavedLinkSourceName || first[1] != download.YouTubeMusicSearchSourceName || first[2] != download.YtMusicSourceName {
+	if len(first) != 3 || first[0] != savedlink.SourceName || first[1] != ytmsearch.SourceName || first[2] != youtubemusic.SourceName {
 		t.Errorf("first tier = %v, want [%s %s %s]: duplicates keep the earlier source, and only the songs search carries the video's own length",
-			first, download.SavedLinkSourceName, download.YouTubeMusicSearchSourceName, download.YtMusicSourceName)
+			first, savedlink.SourceName, ytmsearch.SourceName, youtubemusic.SourceName)
 	}
 }
 
-func TestLiveTiers_ReportWhetherYtDlpIsInstalled(t *testing.T) {
+func TestNew_ReportsWhetherYtDlpIsInstalled(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		installed bool
@@ -279,13 +284,14 @@ func TestLiveTiers_ReportWhetherYtDlpIsInstalled(t *testing.T) {
 			}
 			t.Setenv("PATH", bin)
 
-			tiers, tools := liveTiers(t, &config.Config{YtDLPEnabled: true})
-
-			if tools.YtDlp != tt.installed {
-				t.Errorf("tools report yt-dlp installed = %v, want %v", tools.YtDlp, tt.installed)
-			}
-			if names := sourceNames(tiers.All()); !containsSource(names, download.YtDlpSourceName) {
+			tiers := liveSources(t, &config.Config{YtDLPEnabled: true})
+			if names := sourceNames(tiers.All()); !containsSource(names, ytdlp.SourceName) {
 				t.Errorf("sources %v, want the yt-dlp source wired whether or not the binary is found", names)
+			}
+			s := newOfflineModule(t, &config.Config{AcquisitionDownloadConcurrency: 1}, tiers).Scheduler()
+
+			if got := s.Status(t.Context()).Verification.YtDlp; got != tt.installed {
+				t.Errorf("Status().Verification.YtDlp = %v, want %v", got, tt.installed)
 			}
 		})
 	}
@@ -384,20 +390,20 @@ func (r *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	}, nil
 }
 
-func TestLiveTiers_TheSavedLinkReadsFileHostPagesThroughTheInjectedTransport(t *testing.T) {
+func TestLiveSources_TheSavedLinkReadsFileHostPagesThroughTheInjectedTransport(t *testing.T) {
 	transport := &recordingTransport{}
-	tiers, _, err := download.LiveTiers(t.Context(), &config.Config{YtMusicEnabled: true, AcquisitionFileHostPageTimeout: time.Second}, transport)
+	tiers, err := download.LiveSources(t.Context(), &config.Config{YtMusicEnabled: true, AcquisitionFileHostPageTimeout: time.Second}, nil, transport, newClient)
 	if err != nil {
-		t.Fatalf("LiveTiers: %v", err)
+		t.Fatalf("LiveSources: %v", err)
 	}
 	link := tiers.First[0]
-	if link.Name() != download.SavedLinkSourceName {
+	if link.Name() != savedlink.SourceName {
 		t.Fatalf("first source = %s, want the saved link", link.Name())
 	}
 
-	candidates, err := link.Find(t.Context(), download.FindRequest{
+	candidates, err := link.Find(t.Context(), downloadtest.FindRequest{
 		Title:          "Song",
-		CatalogSources: []download.CatalogSource{{Provider: "imgurgg", ExternalID: "abcde12345"}},
+		CatalogSources: []domain.CatalogSource{{Provider: "imgurgg", ExternalID: "abcde12345"}},
 	})
 	if err != nil {
 		t.Fatalf("Find: %v", err)
@@ -410,15 +416,15 @@ func TestLiveTiers_TheSavedLinkReadsFileHostPagesThroughTheInjectedTransport(t *
 	}
 }
 
-func sourceNames(sources []download.AudioSource) []download.SourceName {
-	names := make([]download.SourceName, 0, len(sources))
+func sourceNames(sources []downloadtest.AudioSource) []domain.SourceName {
+	names := make([]domain.SourceName, 0, len(sources))
 	for _, s := range sources {
 		names = append(names, s.Name())
 	}
 	return names
 }
 
-func containsSource(list []download.SourceName, want download.SourceName) bool {
+func containsSource(list []domain.SourceName, want domain.SourceName) bool {
 	for _, s := range list {
 		if s == want {
 			return true
@@ -428,13 +434,30 @@ func containsSource(list []download.SourceName, want download.SourceName) bool {
 }
 
 func TestCanaryYTMClient_BoundsEveryCall(t *testing.T) {
-	client, err := download.InnerTubeClient(context.Background(), &config.Config{}, nil)
-	if err != nil {
-		t.Fatalf("InnerTubeClient without redis: %v", err)
+	var asked []time.Duration
+	recording := func(timeout time.Duration, transport http.RoundTripper) *http.Client {
+		asked = append(asked, timeout)
+		return newClient(timeout, transport)
 	}
 
-	if client.Timeout() <= 0 {
-		t.Errorf("Timeout() = %s, want a positive bound on every InnerTube call", client.Timeout())
+	cfg := &config.Config{YtMusicEnabled: true, AcquisitionFileHostPageTimeout: time.Second}
+	if _, err := download.LiveSources(t.Context(), cfg, nil, http.DefaultTransport, recording); err != nil {
+		t.Fatalf("LiveSources without redis: %v", err)
+	}
+
+	if len(asked) == 0 {
+		t.Fatal("LiveSources built no InnerTube client with ytmusic enabled")
+	}
+	for _, timeout := range asked {
+		if timeout <= 0 {
+			t.Errorf("client asked with timeout %s, want a positive bound on every InnerTube call", timeout)
+		}
+	}
+	unbounded := func(_ time.Duration, transport http.RoundTripper) *http.Client {
+		return &http.Client{Transport: transport}
+	}
+	if _, err := download.LiveSources(t.Context(), cfg, nil, http.DefaultTransport, unbounded); err == nil {
+		t.Error("LiveSources accepted an InnerTube client without a timeout, want a refusal")
 	}
 }
 
@@ -448,31 +471,68 @@ func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches
 	if err := otherInstance.CoolDown(t.Context()); err != nil {
 		t.Fatalf("record the cooldown: %v", err)
 	}
-	client, err := download.InnerTubeClient(context.Background(), &config.Config{}, redis)
+	sources, err := download.LiveSources(t.Context(), &config.Config{YtMusicEnabled: true, AcquisitionFileHostPageTimeout: time.Second}, redis, http.DefaultTransport, newClient)
 	if err != nil {
-		t.Fatalf("InnerTubeClient with redis: %v", err)
+		t.Fatalf("LiveSources with redis: %v", err)
 	}
+	search := sourceNamed(t, sources, ytmsearch.SourceName)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	_, err = client.SearchSongs(ctx, "fixture query")
+	_, err = search.Find(ctx, downloadtest.FindRequest{Title: "fixture", Artist: "query"})
 
 	if !errors.Is(err, outboundtest.ErrYouTubeMusicBudgetRefused) {
-		t.Errorf("SearchSongs during a shared cooldown: err = %v, want %v before any request leaves", err, outboundtest.ErrYouTubeMusicBudgetRefused)
+		t.Errorf("Find during a shared cooldown: err = %v, want %v before any request leaves", err, outboundtest.ErrYouTubeMusicBudgetRefused)
 	}
 }
 
-func innerTube(t *testing.T) *download.YouTubeMusicSearchClient {
+func sourceNamed(t *testing.T, sources downloadtest.SourceOrder, name domain.SourceName) downloadtest.AudioSource {
 	t.Helper()
-	client, err := download.NewYtmSearchFor(&http.Client{Timeout: time.Second})
-	if err != nil {
-		t.Fatalf("build the InnerTube client: %v", err)
+	for _, s := range sources.All() {
+		if s.Name() == name {
+			return s
+		}
 	}
-	return client
+	t.Fatalf("no %s source in %v", name, sourceNames(sources.All()))
+	return nil
+}
+
+type failingTransport struct{}
+
+func (failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("no network in this test")
+}
+
+var darkSourceName = regexp.MustCompile(`(\w+) \("`)
+
+func checkedSources(t *testing.T, cfg *config.Config, ytDlpInstalled bool) string {
+	t.Helper()
+	bin := t.TempDir()
+	if ytDlpInstalled {
+		if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+			t.Fatalf("write the stub yt-dlp: %v", err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	deps := offlineDeps(cfg, downloadtest.SourceOrder{})
+	deps.AudioStore = nil
+	deps.Transport = failingTransport{}
+	module, err := download.New(t.Context(), deps)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	err = module.CheckSources(t.Context())
+	if err == nil {
+		return ""
+	}
+	var names []string
+	for _, m := range darkSourceName.FindAllStringSubmatch(err.Error(), -1) {
+		names = append(names, m[1])
+	}
+	return strings.Join(names, ",")
 }
 
 func TestChecks_OnlyProbeEnabledSources(t *testing.T) {
-	searcher := download.YtDlpSearcher(&config.Config{})
 	tests := []struct {
 		ytMusic, ytDlp bool
 		want           string
@@ -483,7 +543,7 @@ func TestChecks_OnlyProbeEnabledSources(t *testing.T) {
 		{false, false, ""},
 	}
 	for _, tt := range tests {
-		got := download.SourceCheckNames(searcher, true, innerTube(t), tt.ytMusic, tt.ytDlp)
+		got := checkedSources(t, &config.Config{Env: "test", YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp}, true)
 		if got != tt.want {
 			t.Errorf("checks(ytMusic=%v, ytDlp=%v) = %q, want %q", tt.ytMusic, tt.ytDlp, got, tt.want)
 		}
@@ -491,22 +551,11 @@ func TestChecks_OnlyProbeEnabledSources(t *testing.T) {
 }
 
 func TestChecks_ProbeInnerTubeWithoutYtDlp(t *testing.T) {
-	for _, searcher := range []bool{false, true} {
-		var got string
-		if searcher {
-			got = download.SourceCheckNames(download.YtDlpSearcher(&config.Config{}), false, innerTube(t), true, true)
-		} else {
-			got = download.SourceCheckNames(nil, true, innerTube(t), true, true)
-		}
-		if got != "ytmsearch" {
-			t.Errorf("checks(searcher=%v, unavailable) = %q, want only ytmsearch", searcher, got)
-		}
+	if got := checkedSources(t, &config.Config{Env: "test", YtMusicEnabled: true, YtDLPEnabled: true}, false); got != "ytmsearch" {
+		t.Errorf("checks with yt-dlp not installed = %q, want only ytmsearch", got)
 	}
-	if got := download.SourceCheckNames(nil, false, nil, true, true); got != "" {
-		t.Errorf("checks without any client = %q, want none", got)
-	}
-	if got := download.SourceCheckNames(nil, false, innerTube(t), false, true); got != "" {
-		t.Errorf("checks with ytmusic disabled = %q, want none", got)
+	if got := checkedSources(t, &config.Config{Env: "test", YtDLPEnabled: true}, false); got != "" {
+		t.Errorf("checks with ytmusic disabled and yt-dlp not installed = %q, want none", got)
 	}
 }
 
@@ -515,7 +564,7 @@ func TestModule_ReportsSourceChecksOnlyWhenOneExists(t *testing.T) {
 		ytMusic bool
 		want    bool
 	}{{true, true}, {false, false}} {
-		deps := offlineDeps(&config.Config{Env: "test", YtMusicEnabled: tt.ytMusic}, download.SourceOrder{})
+		deps := offlineDeps(&config.Config{Env: "test", YtMusicEnabled: tt.ytMusic}, downloadtest.SourceOrder{})
 		deps.AudioStore = nil
 
 		module, err := download.New(t.Context(), deps)

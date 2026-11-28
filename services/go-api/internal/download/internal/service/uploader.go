@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/domain"
-	"altune/go-api/internal/download/internal/ports"
 	"strings"
 )
 
@@ -14,8 +13,8 @@ const (
 
 const topicChannelSuffix = "- Topic"
 
-func UploaderOf(trackArtist string, c ports.AudioCandidate) string {
-	if c.Kind == ports.KindCatalogPin {
+func UploaderOf(trackArtist string, c domain.AudioCandidate) string {
+	if c.Kind == domain.KindCatalogPin {
 		return ChannelTopic
 	}
 	switch {
@@ -30,8 +29,8 @@ func UploaderOf(trackArtist string, c ports.AudioCandidate) string {
 	}
 }
 
-func artistMatchesCandidate(trackArtist string, c ports.AudioCandidate) bool {
-	if c.Kind == ports.KindCatalogPin {
+func artistMatchesCandidate(trackArtist string, c domain.AudioCandidate) bool {
+	if c.Kind == domain.KindCatalogPin {
 		return true
 	}
 	if isCreditedKind(c.Kind) {
@@ -40,8 +39,8 @@ func artistMatchesCandidate(trackArtist string, c ports.AudioCandidate) bool {
 	return artistMatchesChannel(trackArtist, c.Channel)
 }
 
-func isCreditedKind(kind ports.CandidateKind) bool {
-	return kind == ports.KindArtTrack || kind == ports.KindPinnedVideo
+func isCreditedKind(kind domain.CandidateKind) bool {
+	return kind == domain.KindArtTrack || kind == domain.KindPinnedVideo
 }
 
 func creditedClass(trackArtist string, credited []string) string {

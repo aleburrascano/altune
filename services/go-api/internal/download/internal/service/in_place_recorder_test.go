@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/ids"
@@ -15,7 +16,7 @@ type fakeVerdicts struct {
 	calls    int
 }
 
-func (f *fakeVerdicts) RecordInPlaceVerdict(context.Context, ids.TrackId, ports.InPlaceRecord) (bool, error) {
+func (f *fakeVerdicts) RecordInPlaceVerdict(context.Context, ids.TrackId, domain.InPlaceRecord) (bool, error) {
 	f.calls++
 	return f.recorded, f.err
 }
@@ -48,7 +49,7 @@ func TestInPlaceRecorder_AStateFailureAfterTheVerdictIsReturnedAndRetryRewritesT
 	state := &fakeInPlaceState{err: errors.New("state unavailable")}
 	recorder := newInPlaceRecorder(t, verdicts, state)
 	id := ids.NewTrackId()
-	record := ports.InPlaceRecord{AudioRef: "ref", Generation: 2, Verdict: "hard", Grade: "A"}
+	record := domain.InPlaceRecord{AudioRef: "ref", Generation: 2, Verdict: "hard", Grade: "A"}
 
 	recorded, err := recorder.RecordInPlace(context.Background(), id, record)
 	if err == nil || recorded {
@@ -69,7 +70,7 @@ func TestInPlaceRecorder_AVerdictOnAFileThatChangedWritesNoState(t *testing.T) {
 	verdicts := &fakeVerdicts{recorded: false}
 	state := &fakeInPlaceState{}
 
-	recorded, err := newInPlaceRecorder(t, verdicts, state).RecordInPlace(context.Background(), ids.NewTrackId(), ports.InPlaceRecord{AudioRef: "old"})
+	recorded, err := newInPlaceRecorder(t, verdicts, state).RecordInPlace(context.Background(), ids.NewTrackId(), domain.InPlaceRecord{AudioRef: "old"})
 
 	if err != nil || recorded || state.calls != 0 {
 		t.Errorf("RecordInPlace = %v, %v, state writes = %d, want not recorded and no state write", recorded, err, state.calls)
@@ -80,7 +81,7 @@ func TestInPlaceRecorder_AVerdictErrorWritesNoState(t *testing.T) {
 	verdicts := &fakeVerdicts{err: errors.New("library down")}
 	state := &fakeInPlaceState{}
 
-	_, err := newInPlaceRecorder(t, verdicts, state).RecordInPlace(context.Background(), ids.NewTrackId(), ports.InPlaceRecord{})
+	_, err := newInPlaceRecorder(t, verdicts, state).RecordInPlace(context.Background(), ids.NewTrackId(), domain.InPlaceRecord{})
 
 	if !errors.Is(err, verdicts.err) || state.calls != 0 {
 		t.Errorf("RecordInPlace = %v, state writes = %d, want the verdict error and no state write", err, state.calls)

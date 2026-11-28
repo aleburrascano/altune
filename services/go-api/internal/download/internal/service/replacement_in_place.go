@@ -27,27 +27,15 @@ type Finding struct {
 	BitErrorRate float64
 }
 
-func (f Finding) Answered() bool { return f.Fingerprint != domain.Silent }
+func (f Finding) Answered() bool { return f.Fingerprint != domain.FingerprintSilent }
 
 type InPlaceProbe interface {
-	CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (Finding, error)
+	CheckInPlace(ctx context.Context, track *domain.TrackSnapshot) (Finding, error)
 }
 
-type inPlaceEvidence struct {
-	Grade             domain.Grade      `json:"grade"`
-	SourceKind        domain.SourceKind `json:"source_kind"`
-	InPlaceGeneration int               `json:"in_place_generation"`
-	SourceFormatID    string            `json:"source_format_id"`
-	SourceKbps        int               `json:"source_kbps"`
-}
-
-func (e inPlaceEvidence) format() ports.SourceFormat {
-	return ports.SourceFormat{ID: e.SourceFormatID, Kbps: e.SourceKbps}
-}
-
-func inPlaceEvidenceOf(raw json.RawMessage) inPlaceEvidence {
-	var stored inPlaceEvidence
-	if err := json.Unmarshal(raw, &stored); err != nil || (!stored.Grade.IsKnown() && !stored.Grade.IsBestAvailable()) {
+func (r *Runner) inPlaceEvidenceOf(raw json.RawMessage) domain.InPlaceEvidence {
+	stored, err := r.evidence.DecodeInPlace(raw)
+	if err != nil || (!stored.Grade.IsKnown() && !stored.Grade.IsBestAvailable()) {
 		stored.Grade = domain.Ungraded
 	}
 	return stored
@@ -84,7 +72,7 @@ type inPlaceCheck struct {
 
 func (c *inPlaceCheck) waitForSlot(ctx context.Context) error { return c.pacer.wait(ctx) }
 
-func (c *inPlaceCheck) check(ctx context.Context, track *ports.TrackSnapshot) (Finding, error) {
+func (c *inPlaceCheck) check(ctx context.Context, track *domain.TrackSnapshot) (Finding, error) {
 	r0, err := c.checker.CheckInPlace(ctx, track)
 	if err != nil {
 		return r0, fmt.Errorf("check in place: %w", err)
@@ -96,7 +84,7 @@ func (c *inPlaceCheck) noteFailure(ctx context.Context, trackID ids.TrackId) (in
 	return c.recorder.NoteInPlaceFailure(ctx, trackID)
 }
 
-func (c *inPlaceCheck) record(ctx context.Context, trackID ids.TrackId, record ports.InPlaceRecord) (bool, error) {
+func (c *inPlaceCheck) record(ctx context.Context, trackID ids.TrackId, record domain.InPlaceRecord) (bool, error) {
 	return c.recorder.RecordInPlace(ctx, trackID, record)
 }
 
@@ -117,12 +105,12 @@ func InPlaceCheckOf(checker InPlaceProbe, recorder ports.InPlaceStore, perHour i
 	return InPlace{check: &inPlaceCheck{checker: checker, recorder: recorder, pacer: &pacer{every: every, now: now, sleep: sleep}}, enabled: true}, nil
 }
 
-func isUserUpload(track *ports.TrackSnapshot) bool {
+func isUserUpload(track *domain.TrackSnapshot) bool {
 	return track.AudioSourceURL == nil || *track.AudioSourceURL == ""
 }
 
-func (r *Runner) isUnchecked(track *ports.TrackSnapshot) bool {
-	return r.inPlace.enabled && inPlaceEvidenceOf(track.Evidence).InPlaceGeneration < domain.PipelineGeneration
+func (r *Runner) isUnchecked(track *domain.TrackSnapshot) bool {
+	return r.inPlace.enabled && r.inPlaceEvidenceOf(track.Evidence).InPlaceGeneration < domain.PipelineGeneration
 }
 
 type inPlaceOutcome struct {
@@ -130,7 +118,7 @@ type inPlaceOutcome struct {
 	settled bool
 }
 
-func (r *Runner) recheckedGrade(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, current domain.Grade) (domain.Grade, bool, error) {
+func (r *Runner) recheckedGrade(ctx context.Context, track *domain.TrackSnapshot, stored domain.InPlaceEvidence, current domain.Grade) (domain.Grade, bool, error) {
 	if !r.isUnchecked(track) {
 		return current, false, nil
 	}
@@ -141,7 +129,7 @@ func (r *Runner) recheckedGrade(ctx context.Context, track *ports.TrackSnapshot,
 	return checked.grade, false, nil
 }
 
-func (r *Runner) checkInPlace(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence) (inPlaceOutcome, error) {
+func (r *Runner) checkInPlace(ctx context.Context, track *domain.TrackSnapshot, stored domain.InPlaceEvidence) (inPlaceOutcome, error) {
 	if err := r.inPlace.check.waitForSlot(ctx); err != nil {
 		return inPlaceOutcome{}, err
 	}
@@ -154,7 +142,7 @@ func (r *Runner) checkInPlace(ctx context.Context, track *ports.TrackSnapshot, s
 
 const maxInPlaceFailures = 3
 
-func (r *Runner) failedCheck(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, checkErr error) (inPlaceOutcome, error) {
+func (r *Runner) failedCheck(ctx context.Context, track *domain.TrackSnapshot, stored domain.InPlaceEvidence, checkErr error) (inPlaceOutcome, error) {
 	failures, err := r.inPlace.check.noteFailure(ctx, track.ID)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.upgrade_in_place_failure_unrecorded",
@@ -168,7 +156,7 @@ func (r *Runner) failedCheck(ctx context.Context, track *ports.TrackSnapshot, st
 	return inPlaceOutcome{}, fmt.Errorf("check track %s in place: %w", track.ID, checkErr)
 }
 
-func (r *Runner) settleFinding(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, finding Finding) (inPlaceOutcome, error) {
+func (r *Runner) settleFinding(ctx context.Context, track *domain.TrackSnapshot, stored domain.InPlaceEvidence, finding Finding) (inPlaceOutcome, error) {
 	record := inPlaceVerdictOf(track, stored, finding)
 	slog.InfoContext(ctx, "acquisition.upgrade_in_place",
 		logging.KeyTrackID, track.ID.String(), "from", string(stored.Grade), "to", record.Grade,
@@ -181,7 +169,7 @@ func (r *Runner) settleFinding(ctx context.Context, track *ports.TrackSnapshot, 
 	return inPlaceOutcome{grade: after, settled: isUserUpload(track) || after.IsTop()}, nil
 }
 
-func gradeAfter(stored domain.Grade, record ports.InPlaceRecord) domain.Grade {
+func gradeAfter(stored domain.Grade, record domain.InPlaceRecord) domain.Grade {
 	recorded := domain.Grade(record.Grade)
 	if recorded == "" || (!record.MayLower && !recorded.Beats(stored)) {
 		return stored
@@ -189,8 +177,8 @@ func gradeAfter(stored domain.Grade, record ports.InPlaceRecord) domain.Grade {
 	return recorded
 }
 
-func inPlaceVerdictOf(track *ports.TrackSnapshot, stored inPlaceEvidence, finding Finding) ports.InPlaceRecord {
-	record := ports.InPlaceRecord{
+func inPlaceVerdictOf(track *domain.TrackSnapshot, stored domain.InPlaceEvidence, finding Finding) domain.InPlaceRecord {
+	record := domain.InPlaceRecord{
 		AudioRef: *track.AudioRef, Generation: domain.PipelineGeneration,
 		Verdict: finding.Verdict, Basis: finding.Basis, Score: finding.Score, BitErrorRate: finding.BitErrorRate,
 	}
@@ -204,23 +192,23 @@ func inPlaceVerdictOf(track *ports.TrackSnapshot, stored inPlaceEvidence, findin
 	if kind == "" {
 		kind = domain.FanUpload
 	}
-	record.Grade = string(domain.Of(finding.Fingerprint, downloadprovenance.ProvenanceBestEffort, kind))
-	record.MayLower = finding.Lowers || finding.Fingerprint == domain.Contradicts || finding.Fingerprint == domain.Unsupported
+	record.Grade = string(domain.GradeOf(finding.Fingerprint, downloadprovenance.ProvenanceBestEffort, kind))
+	record.MayLower = finding.Lowers || finding.Fingerprint == domain.FingerprintContradicts || finding.Fingerprint == domain.FingerprintUnsupported
 	return record
 }
 
-func userUploadVerdict(record ports.InPlaceRecord, finding Finding) ports.InPlaceRecord {
+func userUploadVerdict(record domain.InPlaceRecord, finding Finding) domain.InPlaceRecord {
 	switch finding.Fingerprint {
-	case domain.Matches:
-		record.Grade = string(domain.AUser)
-	case domain.Contradicts, domain.Unsupported:
+	case domain.FingerprintMatches:
+		record.Grade = string(domain.GradeAUser)
+	case domain.FingerprintContradicts, domain.FingerprintUnsupported:
 		record.UserUploadMismatch = true
-	case domain.Silent, domain.Approximates:
+	case domain.FingerprintSilent, domain.FingerprintApproximates:
 	}
 	return record
 }
 
-func (r *Runner) recordInPlace(ctx context.Context, track *ports.TrackSnapshot, record ports.InPlaceRecord) error {
+func (r *Runner) recordInPlace(ctx context.Context, track *domain.TrackSnapshot, record domain.InPlaceRecord) error {
 	recorded, err := r.inPlace.check.record(ctx, track.ID, record)
 	if err != nil {
 		return fmt.Errorf("record in-place verdict of track %s: %w", track.ID, err)

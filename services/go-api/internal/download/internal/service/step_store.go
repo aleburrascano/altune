@@ -119,8 +119,8 @@ func (s *StoreStep) refFor(ctx context.Context, ac *AcquisitionContext) string {
 	return audioRef
 }
 
-func (s *StoreStep) storedFileAt(path string) ports.StoredFile {
-	file := ports.StoredFile{Codec: strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")}
+func (s *StoreStep) storedFileAt(path string) domain.StoredFile {
+	file := domain.StoredFile{Codec: strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")}
 	if size, err := s.workspace.Size(path); err == nil {
 		file.Bytes = size
 	}

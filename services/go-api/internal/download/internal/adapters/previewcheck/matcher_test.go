@@ -2,6 +2,7 @@ package previewcheck_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/previewcheck"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -72,7 +73,7 @@ func TestMatcher_AFileContainingThePreviewMatches(t *testing.T) {
 	server := deezerServing(t, previewTrackBody)
 
 	got, err := matcherFor(server, &printByCall{prints: [][]uint32{preview, file}}).
-		MatchesPreview(context.Background(), "file.mp3", ports.PreviewTarget{ISRC: "USSM11607554"})
+		MatchesPreview(context.Background(), "file.mp3", domain.PreviewTarget{ISRC: "USSM11607554"})
 
 	if err != nil || !got.Matched || got.BitErrorRate > 0.01 {
 		t.Errorf("comparison = %+v, err = %v, want a match at about zero bit errors", got, err)
@@ -84,7 +85,7 @@ func TestMatcher_AnotherSongDoesNotMatch(t *testing.T) {
 	server := deezerServing(t, previewTrackBody)
 
 	got, err := matcherFor(server, &printByCall{prints: [][]uint32{randomItems(1, 300), file}}).
-		MatchesPreview(context.Background(), "file.mp3", ports.PreviewTarget{DeezerTrackID: "132201194"})
+		MatchesPreview(context.Background(), "file.mp3", domain.PreviewTarget{DeezerTrackID: "132201194"})
 
 	if err != nil || got.Matched || got.BitErrorRate < 0.35 {
 		t.Errorf("comparison = %+v, err = %v, want no match and a rate near one half", got, err)
@@ -95,15 +96,15 @@ func TestMatcher_SaysWhyItCouldNotCompare(t *testing.T) {
 	cases := []struct {
 		name   string
 		body   func(string) string
-		target ports.PreviewTarget
+		target domain.PreviewTarget
 		prints [][]uint32
 		want   string
 	}{
-		{"no lookup key", previewTrackBody, ports.PreviewTarget{}, nil, "no ISRC or Deezer track id to look a preview up by"},
-		{"deezer has no preview", func(string) string { return `{"id":1,"title":"x","preview":""}` }, ports.PreviewTarget{ISRC: "USSM11607554"}, nil, "deezer has no preview for this track"},
-		{"the preview is too short", previewTrackBody, ports.PreviewTarget{ISRC: "USSM11607554"}, [][]uint32{randomItems(1, 10), randomItems(2, 500)}, previewcheck.ErrPreviewTooShort.Error()},
-		{"the file is longer than fpcalc reads", previewTrackBody, ports.PreviewTarget{ISRC: "USSM11607554"}, [][]uint32{randomItems(1, 200), randomItems(2, previewcheck.FingerprintedItemCap)}, previewcheck.ErrFileReachesCap.Error()},
-		{"the preview is longer than the file", previewTrackBody, ports.PreviewTarget{ISRC: "USSM11607554"}, [][]uint32{randomItems(1, 300), randomItems(2, 200)}, previewcheck.ErrPrintLongerThanRef.Error()},
+		{"no lookup key", previewTrackBody, domain.PreviewTarget{}, nil, "no ISRC or Deezer track id to look a preview up by"},
+		{"deezer has no preview", func(string) string { return `{"id":1,"title":"x","preview":""}` }, domain.PreviewTarget{ISRC: "USSM11607554"}, nil, "deezer has no preview for this track"},
+		{"the preview is too short", previewTrackBody, domain.PreviewTarget{ISRC: "USSM11607554"}, [][]uint32{randomItems(1, 10), randomItems(2, 500)}, previewcheck.ErrPreviewTooShort.Error()},
+		{"the file is longer than fpcalc reads", previewTrackBody, domain.PreviewTarget{ISRC: "USSM11607554"}, [][]uint32{randomItems(1, 200), randomItems(2, previewcheck.FingerprintedItemCap)}, previewcheck.ErrFileReachesCap.Error()},
+		{"the preview is longer than the file", previewTrackBody, domain.PreviewTarget{ISRC: "USSM11607554"}, [][]uint32{randomItems(1, 300), randomItems(2, 200)}, previewcheck.ErrPrintLongerThanRef.Error()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,7 +129,7 @@ func TestMatcher_AThrottledDeezerIsAnErrorAtOnce(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	got, err := matcherFor(server, pathPrinter{}).MatchesPreview(ctx, "file.mp3", ports.PreviewTarget{ISRC: "USSM11607554"})
+	got, err := matcherFor(server, pathPrinter{}).MatchesPreview(ctx, "file.mp3", domain.PreviewTarget{ISRC: "USSM11607554"})
 
 	if !errors.Is(err, previewcheck.ErrDeezerThrottled) || got.Matched {
 		t.Errorf("MatchesPreview = %+v, %v; want ErrDeezerThrottled at once: the egress transport already retried the 429", got, err)

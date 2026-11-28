@@ -19,7 +19,7 @@ func NewFingerprintHealth(identifier ports.AudioIdentifier) *FingerprintHealth {
 	return &FingerprintHealth{identifier: identifier}
 }
 
-func (h *FingerprintHealth) Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (ports.RecordingMatch, error) {
+func (h *FingerprintHealth) Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (domain.RecordingMatch, error) {
 	match, err := h.identifier.Identify(ctx, filePath, fullLengthForPreview)
 	switch {
 	case err == nil:

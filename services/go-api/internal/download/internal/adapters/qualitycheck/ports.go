@@ -76,14 +76,14 @@ func (p *casePorts) sources() []*evalSource {
 var flatTierOrder = []domain.SourceName{ytmsearch.SourceName, youtubemusic.SourceName, savedlink.SourceName, ytdlp.SourceName}
 
 func flatTierOf(c Candidate) domain.SourceName {
-	switch ports.CandidateKind(c.Kind) {
-	case ports.KindArtTrack:
+	switch domain.CandidateKind(c.Kind) {
+	case domain.KindArtTrack:
 		return ytmsearch.SourceName
-	case ports.KindPinnedVideo:
+	case domain.KindPinnedVideo:
 		return youtubemusic.SourceName
-	case ports.KindCatalogPin:
+	case domain.KindCatalogPin:
 		return savedlink.SourceName
-	case ports.KindUpload:
+	case domain.KindUpload:
 		return ytdlp.SourceName
 	}
 	return ytdlp.SourceName
@@ -105,7 +105,7 @@ func flatTiers(candidates []Candidate) []Source {
 	return tiers
 }
 
-func queryVariantsFor(req ports.FindRequest) map[string]bool {
+func queryVariantsFor(req domain.FindRequest) map[string]bool {
 	variants := map[string]bool{
 		QueryTitleArtist:      true,
 		QueryTitleArtistAudio: true,
@@ -126,8 +126,8 @@ type evalSource struct {
 
 func (s *evalSource) Name() domain.SourceName { return domain.SourceName(s.spec.Name) }
 
-func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	s.shared.clock.recordSearch(req.Tier == ports.TierFallbackOnly, s.spec.searchSeconds())
+func (s *evalSource) Find(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
+	s.shared.clock.recordSearch(req.Tier == domain.TierFallbackOnly, s.spec.searchSeconds())
 	if s.spec.Fails {
 		return nil, &domain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
 	}
@@ -149,7 +149,7 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 		return r0, nil
 	}
 	variants := queryVariantsFor(req)
-	out := make([]ports.AudioCandidate, 0, len(s.spec.Candidates))
+	out := make([]domain.AudioCandidate, 0, len(s.spec.Candidates))
 	for _, c := range s.spec.Candidates {
 		if c.Query != "" && !variants[c.Query] {
 			continue
@@ -159,7 +159,7 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 	return out, nil
 }
 
-func (s *evalSource) recordedFind(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *evalSource) recordedFind(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	fetcher := evalFetcher{shared: s.shared}
 	if s.Name() == ytmsearch.SourceName {
 		r0, err := ytmsearch.NewSource(recordedSongs(s.spec.ObservedSongs), fetcher).Find(ctx, req)
@@ -197,12 +197,12 @@ func (r recordedWatches) Watch(_ context.Context, videoID string) (ytmsearch.Wat
 
 type evalFetcher struct{ shared *casePorts }
 
-func (f evalFetcher) Download(ctx context.Context, url, outDir string) (ports.FetchedAudio, error) {
+func (f evalFetcher) Download(ctx context.Context, url, outDir string) (domain.FetchedAudio, error) {
 	path, err := f.shared.Download(ctx, url, outDir)
-	return ports.FetchedAudio{Path: path}, err
+	return domain.FetchedAudio{Path: path}, err
 }
 
-func (s *evalSource) pinnedVideos(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *evalSource) pinnedVideos(ctx context.Context, req domain.FindRequest) ([]domain.AudioCandidate, error) {
 	r0, err := youtubemusic.NewSource(nil, goldenWatches{candidates: s.spec.Candidates}).Find(ctx, req)
 	if err != nil {
 		return r0, fmt.Errorf("find replayed candidates: %w", err)
@@ -221,7 +221,7 @@ func (g goldenWatches) Watch(_ context.Context, videoID string) (ytmsearch.Watch
 	return ytmsearch.Watch{}, fmt.Errorf("eval: no golden watch for video %q", videoID)
 }
 
-func (s *evalSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *evalSource) Fetch(ctx context.Context, c domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	return evalFetcher{shared: s.shared}.Download(ctx, c.URL, outDir)
 }
 
@@ -269,16 +269,16 @@ func (p *casePorts) ValidateDecodable(_ context.Context, filePath string) error 
 	return nil
 }
 
-func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (ports.RecordingMatch, error) {
+func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (domain.RecordingMatch, error) {
 	cand, ok := p.candidateAt(filePath)
 	if !ok || (len(cand.RecordingMBIDs) == 0 && cand.AcoustID == "" && len(cand.AcoustIDResults) == 0) {
-		return ports.RecordingMatch{}, nil
+		return domain.RecordingMatch{}, nil
 	}
 	acoustID := cand.AcoustID
 	if acoustID == "" && len(cand.AcoustIDResults) > 0 {
 		acoustID = cand.AcoustIDResults[0].ID
 	}
-	return ports.RecordingMatch{AcoustID: acoustID, MBIDs: cand.RecordingMBIDs, Score: 1, Results: cand.chromaprintResults(p.kase.Track.Artist)}, nil
+	return domain.RecordingMatch{AcoustID: acoustID, MBIDs: cand.RecordingMBIDs, Score: 1, Results: cand.chromaprintResults(p.kase.Track.Artist)}, nil
 }
 
 func (p *casePorts) CopyStored(_ context.Context, _, dir string) (string, error) {
@@ -292,10 +292,10 @@ func (p *casePorts) CopyStored(_ context.Context, _, dir string) (string, error)
 	return path, nil
 }
 
-type copiedIdentity ports.RecordingIdentity
+type copiedIdentity domain.RecordingIdentity
 
-func (c copiedIdentity) Resolve(context.Context, songfields.RecordingIdentity) (ports.RecordingIdentity, error) {
-	return ports.RecordingIdentity(c), nil
+func (c copiedIdentity) Resolve(context.Context, songfields.RecordingIdentity) (domain.RecordingIdentity, error) {
+	return domain.RecordingIdentity(c), nil
 }
 
 func (p *casePorts) Exists(_ context.Context, _ string) (bool, error) { return false, nil }
@@ -315,33 +315,33 @@ func (p *casePorts) Delete(_ context.Context, audioRef string) error {
 	return nil
 }
 
-func (c Candidate) chromaprintResults(trackArtist string) []ports.AcoustIDResult {
+func (c Candidate) chromaprintResults(trackArtist string) []domain.AcoustIDResult {
 	if len(c.AcoustIDResults) > 0 {
 		return c.portResults()
 	}
-	recordings := make([]ports.LinkedRecording, 0, len(c.RecordingMBIDs))
+	recordings := make([]domain.LinkedRecording, 0, len(c.RecordingMBIDs))
 	for _, mbid := range c.RecordingMBIDs {
-		recordings = append(recordings, ports.LinkedRecording{MBID: mbid, Title: c.Title, Artists: []string{trackArtist}, Duration: c.Duration})
+		recordings = append(recordings, domain.LinkedRecording{MBID: mbid, Title: c.Title, Artists: []string{trackArtist}, Duration: c.Duration})
 	}
-	return []ports.AcoustIDResult{{ID: c.AcoustID, Score: 1, Recordings: recordings}}
+	return []domain.AcoustIDResult{{ID: c.AcoustID, Score: 1, Recordings: recordings}}
 }
 
 func (c Candidate) watch(videoID string) ytmsearch.Watch {
 	if c.Observed != nil && c.Observed.Watch != nil {
 		return c.Observed.Watch.watch()
 	}
-	return ytmsearch.Watch{VideoID: videoID, Title: c.Title, Artists: c.Artists, Explicit: c.Explicit, Type: watchTypeOf(ports.CandidateKind(c.Kind))}
+	return ytmsearch.Watch{VideoID: videoID, Title: c.Title, Artists: c.Artists, Explicit: c.Explicit, Type: watchTypeOf(domain.CandidateKind(c.Kind))}
 }
 
-func watchTypeOf(kind ports.CandidateKind) ytmsearch.VideoType {
+func watchTypeOf(kind domain.CandidateKind) ytmsearch.VideoType {
 	switch kind {
-	case ports.KindArtTrack:
+	case domain.KindArtTrack:
 		return ytmsearch.VideoTypeAudioOnly
-	case ports.KindUpload:
+	case domain.KindUpload:
 		return ytmsearch.VideoTypeUserUpload
-	case ports.KindPinnedVideo:
+	case domain.KindPinnedVideo:
 		return ytmsearch.VideoTypeOfficialVideo
-	case ports.KindCatalogPin:
+	case domain.KindCatalogPin:
 		return ""
 	}
 	return ""
@@ -349,8 +349,8 @@ func watchTypeOf(kind ports.CandidateKind) ytmsearch.VideoType {
 
 type uninspectedPins struct{}
 
-func (uninspectedPins) Download(context.Context, string, string) (ports.FetchedAudio, error) {
-	return ports.FetchedAudio{}, errors.New("eval: pins are never downloaded")
+func (uninspectedPins) Download(context.Context, string, string) (domain.FetchedAudio, error) {
+	return domain.FetchedAudio{}, errors.New("eval: pins are never downloaded")
 }
 
-func (uninspectedPins) MarkUnplayable(context.Context, []ports.AudioCandidate) {}
+func (uninspectedPins) MarkUnplayable(context.Context, []domain.AudioCandidate) {}

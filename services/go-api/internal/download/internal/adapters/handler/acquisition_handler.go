@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/ports"
-	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
@@ -13,7 +13,7 @@ import (
 )
 
 type trackAdmission interface {
-	Admit(ctx context.Context, track *ports.TrackSnapshot, schedule func() error) error
+	Admit(ctx context.Context, track *domain.TrackSnapshot, schedule func() error) error
 }
 
 type acquisitionCommand struct {
@@ -33,27 +33,27 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	schedule := func() error { return c.schedule(ctx, userId, trackId) }
 	if err := c.admission.Admit(ctx, track, schedule); err != nil {
-		httpserver.HandleServiceError(w, r, err)
+		httpserver.HandleServiceError(w, r, MapError(err))
 		return
 	}
 
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request, userId ids.UserId) (ids.TrackId, *ports.TrackSnapshot, bool) {
+func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request, userId ids.UserId) (ids.TrackId, *domain.TrackSnapshot, bool) {
 	trackId, err := ids.ParseTrackId(httpserver.URLParam(r, "trackId"))
 	if err != nil {
-		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeCatalogInvalidTrackID, "invalid track ID"))
+		httpserver.HandleServiceError(w, r, errInvalidTrackID)
 		return trackId, nil, false
 	}
 	track, ok := c.loadTrack(w, r, userId, trackId)
 	return trackId, track, ok
 }
 
-func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, userId ids.UserId, trackId ids.TrackId) (*ports.TrackSnapshot, bool) {
+func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, userId ids.UserId, trackId ids.TrackId) (*domain.TrackSnapshot, bool) {
 	track, err := c.trackRepo.Get(r.Context(), trackId, userId)
-	if errors.Is(err, ports.ErrTrackNotFound) {
-		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeCatalogTrackNotFound, "track not found"))
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		httpserver.HandleServiceError(w, r, MapError(err))
 		return nil, false
 	}
 	if err != nil {

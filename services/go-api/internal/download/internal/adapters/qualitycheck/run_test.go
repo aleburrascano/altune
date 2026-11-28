@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/ids/idstest"
 	"altune/go-api/internal/shared/logging"
@@ -1620,7 +1620,7 @@ func factsOf(c qualitycheck.Candidate) qualitycheck.Candidate {
 	return c
 }
 
-func emitted(c ports.AudioCandidate) qualitycheck.Candidate {
+func emitted(c domain.AudioCandidate) qualitycheck.Candidate {
 	return qualitycheck.Candidate{
 		Title: c.Title, URL: c.URL, Channel: c.Channel, Categories: c.Categories, Duration: c.Duration,
 		ViewCount: c.ViewCount, Resolved: c.IsResolved(), Kind: string(c.Kind), Artists: c.Artists, Album: c.Album, Explicit: c.Explicit,
@@ -1629,9 +1629,9 @@ func emitted(c ports.AudioCandidate) qualitycheck.Candidate {
 
 func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 	ctx := context.Background()
-	req := ports.FindRequest{Title: "Halo", Artist: "Nova"}
+	req := domain.FindRequest{Title: "Halo", Artist: "Nova"}
 	pinReq := req
-	pinReq.CatalogSources = []ports.CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}}
+	pinReq.CatalogSources = []domain.CatalogSource{{Provider: string(domain.ProviderYouTube), ExternalID: "abcdefghijk"}}
 
 	t.Run("ytmsearch song", func(t *testing.T) {
 		song := ytmsearch.Song{VideoID: "abcdefghijk", Title: "Halo", Artists: []string{"Nova"}, Album: "Glow", DurationSeconds: 201, Type: ytmsearch.VideoTypeAudioOnly, Explicit: true}
@@ -1673,7 +1673,7 @@ func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 			downloadtest.WithChannel("Nova"),
 			downloadtest.WithCategories([]string{"Music"}),
 			downloadtest.WithViewCount(7),
-			downloadtest.WithKind(ports.KindUpload),
+			downloadtest.WithKind(domain.KindUpload),
 		))
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("golden candidate = %+v, want every yt-dlp entry field carried over as an unresolved upload: %+v", got, want)
@@ -1729,7 +1729,7 @@ func TestRun_APinnedVideoIsGradedAsTheKindItsWatchReports(t *testing.T) {
 			ID: "watch", Class: "OK",
 			Track: qualitycheck.Track{
 				Title: "Halo", Artist: "Nova", CatalogDuration: 200, MBID: "halo",
-				CatalogSources: []qualitycheck.CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}},
+				CatalogSources: []qualitycheck.CatalogSource{{Provider: string(domain.ProviderYouTube), ExternalID: "abcdefghijk"}},
 			},
 			Sources: []qualitycheck.Source{{Name: "ytmusic", Adapter: "ytmusic", Candidates: []qualitycheck.Candidate{cand}}},
 		}
@@ -1765,18 +1765,18 @@ func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
 
 	var artTracks, uploads int
 	for _, cand := range allCandidates(kase) {
-		switch ports.CandidateKind(cand.Kind) {
-		case ports.KindArtTrack:
+		switch domain.CandidateKind(cand.Kind) {
+		case domain.KindArtTrack:
 			artTracks++
 			if !cand.Resolved || cand.Channel != "" || len(cand.Categories) != 0 || cand.Duration != 140 {
 				t.Errorf("art track %+v is not what ytmsearch emits for the 140 s hit", cand)
 			}
-		case ports.KindUpload:
+		case domain.KindUpload:
 			uploads++
 			if cand.Resolved || cand.Channel != "" {
 				t.Errorf("upload %+v is not what ytdlp emits for a SoundCloud result", cand)
 			}
-		case ports.KindPinnedVideo, ports.KindCatalogPin:
+		case domain.KindPinnedVideo, domain.KindCatalogPin:
 			fallthrough
 		default:
 			t.Errorf("candidate %q has kind %q: prod's ytmusic emits nothing for this resolution", cand.URL, cand.Kind)
@@ -1790,13 +1790,13 @@ func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
 	}
 }
 
-var liveSearchGoldens = []string{"pipeline.json", "current_file.json", "verification.json", "art_track_length.json"}
+var liveSearchGoldens = []string{"golden_pipeline.json", "golden_current_file.json", "golden_verification.json", "golden_art_track_length.json"}
 
 const handBuiltNoteMarker = "hand-built because"
 
 func TestEmbedded_LiveSearchCandidatesAreObserved(t *testing.T) {
 	for _, name := range liveSearchGoldens {
-		raw, err := os.ReadFile(filepath.Join("expected", name))
+		raw, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
@@ -1854,7 +1854,7 @@ func TestRun_AnUnplayableCandidateIsNeverStored(t *testing.T) {
 	t.Run("a preview listed at the full length is rejected before any download", func(t *testing.T) {
 		var previews []qualitycheck.Candidate
 		for _, c := range allCandidates(kase) {
-			if c.Unplayable == ports.UnplayablePreview {
+			if c.Unplayable == domain.UnplayablePreview {
 				c.Duration, c.ActualDuration, c.Correct = kase.Track.CatalogDuration, 30, false
 				previews = append(previews, c)
 			}
@@ -1959,7 +1959,7 @@ func TestRun_RecordedObservationsGoThroughTheRealAdapters(t *testing.T) {
 	t.Run("ytmusic emits the recorded watch of the pinned video as an art track", func(t *testing.T) {
 		logged := logging.CaptureText(t, slog.LevelInfo)
 
-		out := qualitycheck.Run(context.Background(), time.Now, idstest.Sequence(), watchesAlone([]qualitycheck.CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}}))
+		out := qualitycheck.Run(context.Background(), time.Now, idstest.Sequence(), watchesAlone([]qualitycheck.CatalogSource{{Provider: string(domain.ProviderYouTube), ExternalID: "abcdefghijk"}}))
 
 		if out.Stored != cleanURL {
 			t.Fatalf("stored %q (%s), want the recorded watch of the pinned video at %q", out.Stored, out.Reason, cleanURL)

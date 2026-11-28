@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/downloadtest"
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
@@ -61,11 +62,11 @@ type source struct {
 
 func (s *source) Name() domain.SourceName { return "new-audio" }
 
-func (s *source) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *source) Find(context.Context, domain.FindRequest) ([]domain.AudioCandidate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.finds++
-	return []ports.AudioCandidate{downloadtest.Candidate(
+	return []domain.AudioCandidate{downloadtest.Candidate(
 		freshURL,
 		downloadtest.WithTitle("Blinding Lights"),
 		downloadtest.WithChannel("The Weeknd - Topic"),
@@ -73,23 +74,23 @@ func (s *source) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidat
 	)}, nil
 }
 
-func (s *source) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+func (s *source) Fetch(_ context.Context, _ domain.AudioCandidate, outDir string) (domain.FetchedAudio, error) {
 	path := filepath.Join(outDir, "audio.mp3")
-	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("new bytes"), 0o600)
+	return domain.FetchedAudio{Path: path}, os.WriteFile(path, []byte("new bytes"), 0o600)
 }
 
 type upgradeStore struct {
 	mu       sync.Mutex
 	tries    int
-	attempts []ports.UpgradeAttempt
+	attempts []domain.UpgradeAttempt
 	gaveUp   []string
 }
 
-func (f *upgradeStore) Candidates(context.Context, ports.UpgradeSelection) ([]ports.UpgradeCandidate, error) {
+func (f *upgradeStore) Candidates(context.Context, domain.UpgradeSelection) ([]domain.UpgradeCandidate, error) {
 	return nil, nil
 }
 
-func (f *upgradeStore) NoteAttempt(_ context.Context, _ ids.TrackId, attempt ports.UpgradeAttempt) (int, error) {
+func (f *upgradeStore) NoteAttempt(_ context.Context, _ ids.TrackId, attempt domain.UpgradeAttempt) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts = append(f.attempts, attempt)
@@ -131,10 +132,10 @@ func seed(t *testing.T, stored domain.Grade) *world {
 	t.Helper()
 	ref, sourceURL, isrc := originalRef, currentURL, "USUG11904206"
 	track := memory.LedgerTrack{
-		TrackSnapshot: ports.TrackSnapshot{
+		TrackSnapshot: domain.TrackSnapshot{
 			ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 			Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
-			Status: ports.TrackReady, Streamable: true, AudioRef: &ref, AudioSourceURL: &sourceURL, ISRC: &isrc,
+			Status: domain.TrackReady, Streamable: true, AudioRef: &ref, AudioSourceURL: &sourceURL, ISRC: &isrc,
 			Evidence: json.RawMessage(fmt.Sprintf(`{"grade":%q,"pipeline_generation":1}`, stored)),
 		},
 		Confidence: 0.5,
@@ -154,7 +155,7 @@ type unstreamableLedger struct {
 	*memory.Ledger
 }
 
-func (l unstreamableLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*ports.TrackSnapshot, error) {
+func (l unstreamableLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*domain.TrackSnapshot, error) {
 	track, err := l.Ledger.Get(ctx, id, userId)
 	if track != nil {
 		track.Streamable = false
@@ -163,11 +164,11 @@ func (l unstreamableLedger) Get(ctx context.Context, id ids.TrackId, userId ids.
 }
 
 func TestRunner_TrustsTheLedgersStreamableAndSkipsAFileItCallsUnplayable(t *testing.T) {
-	w := seed(t, domain.B)
+	w := seed(t, domain.GradeB)
 	replacer := &replaceGateRecorder{}
 	runner := newRunner(t, unstreamableLedger{w.tracks}, replacer, w.upgrades, service.RunnerConfig{MaxTries: 3})
 
-	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -204,7 +205,7 @@ func (w *world) runnerChecking(cfg service.RunnerConfig, pub events.Publisher, i
 	stages := replaceNoStages(w.audio)
 	stages.Events = pub
 	svc := service.MustNewAcquireTrackAudioService(w.tracks, service.NewSourceRegistry(w.source), w.audio, scratchfiles.New(), replaceNoVerification(), stages)
-	runner, err := service.NewRunner(w.tracks, service.NewReplaceService(svc), w.upgrades, cfg, inPlace(svc))
+	runner, err := service.NewRunner(w.tracks, service.NewReplaceService(svc), w.upgrades, evidence.NewCodec(), cfg, inPlace(svc))
 	if err != nil {
 		w.t.Fatalf("NewUpgradeRunner: %v", err)
 	}
@@ -213,7 +214,7 @@ func (w *world) runnerChecking(cfg service.RunnerConfig, pub events.Publisher, i
 
 func newRunner(t testing.TB, ledger ports.LibraryTracks, replacer service.Replacer, store ports.UpgradeStore, cfg service.RunnerConfig) *service.Runner {
 	t.Helper()
-	runner, err := service.NewRunner(ledger, replacer, store, cfg, service.NoInPlaceCheck())
+	runner, err := service.NewRunner(ledger, replacer, store, evidence.NewCodec(), cfg, service.NoInPlaceCheck())
 	if err != nil {
 		t.Fatalf("NewUpgradeRunner: %v", err)
 	}
@@ -221,16 +222,16 @@ func newRunner(t testing.TB, ledger ports.LibraryTracks, replacer service.Replac
 }
 
 func TestNewUpgradeRunner_RefusesEachMissingPort(t *testing.T) {
-	w := seed(t, domain.B)
+	w := seed(t, domain.GradeB)
 	cases := map[string]func() (*service.Runner, error){
 		"ledger": func() (*service.Runner, error) {
-			return service.NewRunner(nil, &replaceGateRecorder{}, w.upgrades, service.RunnerConfig{}, service.NoInPlaceCheck())
+			return service.NewRunner(nil, &replaceGateRecorder{}, w.upgrades, evidence.NewCodec(), service.RunnerConfig{}, service.NoInPlaceCheck())
 		},
 		"replacer": func() (*service.Runner, error) {
-			return service.NewRunner(w.tracks, nil, w.upgrades, service.RunnerConfig{}, service.NoInPlaceCheck())
+			return service.NewRunner(w.tracks, nil, w.upgrades, evidence.NewCodec(), service.RunnerConfig{}, service.NoInPlaceCheck())
 		},
 		"store": func() (*service.Runner, error) {
-			return service.NewRunner(w.tracks, &replaceGateRecorder{}, nil, service.RunnerConfig{}, service.NoInPlaceCheck())
+			return service.NewRunner(w.tracks, &replaceGateRecorder{}, nil, evidence.NewCodec(), service.RunnerConfig{}, service.NoInPlaceCheck())
 		},
 	}
 	for name, build := range cases {
@@ -249,11 +250,12 @@ type replaceAudioDeleter interface {
 func replaceNoStages(store replaceAudioDeleter) service.StagePorts {
 	return service.StagePorts{
 		Prober:        downloadtest.SilentAudioProber(),
-		Tagger:        ports.NoopAudioTagger(),
-		Rejections:    ports.NoopRejectionStore(),
-		StoredAudio:   ports.NoopStoredAudioReader(),
+		Tagger:        memory.NoopAudioTagger(),
+		Rejections:    memory.NoopRejectionStore(),
+		StoredAudio:   memory.NoopStoredAudioReader(),
 		Orphans:       service.MustDirectDeleteOrphans(store),
-		Skips:         ports.NoopVerifySkipRecorder(),
+		Skips:         memory.NoopVerifySkipRecorder(),
+		Evidence:      evidence.NewCodec(),
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
@@ -265,11 +267,11 @@ func replaceNoStages(store replaceAudioDeleter) service.StagePorts {
 
 func replaceNoVerification() service.VerificationPorts {
 	return service.VerificationPorts{
-		Identifier:      ports.NoopAudioIdentifier(),
-		RecordingLookup: ports.NoopRecordingLookup(),
-		Rerecordings:    ports.NoopRerecordingFinder(),
-		Previews:        ports.NoopPreviewMatcher(),
-		Recordings:      ports.NoopRecordingResolver(),
+		Identifier:      memory.NoopAudioIdentifier(),
+		RecordingLookup: memory.NoopRecordingLookup(),
+		Rerecordings:    memory.NoopRerecordingFinder(),
+		Previews:        memory.NoopPreviewMatcher(),
+		Recordings:      memory.NoopRecordingResolver(),
 	}
 }
 
@@ -290,9 +292,9 @@ func (w *world) committedGrade(t *testing.T) domain.Grade {
 }
 
 func TestRunner_ALowerGradeTrackGetsTheBetterFile(t *testing.T) {
-	w := seed(t, domain.F)
+	w := seed(t, domain.GradeF)
 
-	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -303,7 +305,7 @@ func TestRunner_ALowerGradeTrackGetsTheBetterFile(t *testing.T) {
 	if _, stillThere := w.audio.objects[originalRef]; stillThere {
 		t.Error("the superseded file must be deleted once the better one is committed")
 	}
-	if got := w.committedGrade(t); !got.Beats(domain.F) {
+	if got := w.committedGrade(t); !got.Beats(domain.GradeF) {
 		t.Errorf("stored grade = %q, want the new file's grade above F", got)
 	}
 	if len(w.upgrades.attempts) != 0 || len(w.upgrades.gaveUp) != 0 {
@@ -312,9 +314,9 @@ func TestRunner_ALowerGradeTrackGetsTheBetterFile(t *testing.T) {
 }
 
 func TestRunner_AnEqualGradeKeepsTheOldFileAndRejectsTheTriedSource(t *testing.T) {
-	w := seed(t, domain.D)
+	w := seed(t, domain.GradeD)
 
-	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, service.ErrKept) {
+	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, service.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v, want a kept file to be a settled job", err)
 	}
 
@@ -324,32 +326,32 @@ func TestRunner_AnEqualGradeKeepsTheOldFileAndRejectsTheTriedSource(t *testing.T
 	if len(w.audio.objects) != 1 || w.audio.objects[originalRef] != "original bytes" {
 		t.Errorf("objects = %v, want only the untouched original: the new file is discarded", w.audio.objects)
 	}
-	want := []ports.UpgradeAttempt{{RejectedSourceKey: "youtube:freshAAAAAA", CountsAsTry: true}}
+	want := []domain.UpgradeAttempt{{RejectedSourceKey: "youtube:freshAAAAAA", CountsAsTry: true}}
 	if fmt.Sprint(w.upgrades.attempts) != fmt.Sprint(want) {
 		t.Errorf("attempts = %v, want %v: the tried source joins the rejected keys", w.upgrades.attempts, want)
 	}
 }
 
 func TestRunner_ALowerGradeKeepsTheOldFile(t *testing.T) {
-	w := seed(t, domain.B)
+	w := seed(t, domain.GradeB)
 
-	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, service.ErrKept) {
+	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, service.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
 	if row := w.committed(); row.AudioRef == nil || *row.AudioRef != originalRef || len(w.audio.objects) != 1 {
 		t.Errorf("audio_ref = %v, objects = %v, want the old file alone", row.AudioRef, w.audio.objects)
 	}
-	if got := w.committedGrade(t); got != domain.B {
+	if got := w.committedGrade(t); got != domain.GradeB {
 		t.Errorf("stored grade = %q, want B untouched", got)
 	}
 }
 
 func TestRunner_AUserUploadIsNeverReplaced(t *testing.T) {
-	w := seed(t, domain.F)
+	w := seed(t, domain.GradeF)
 	w.asUserUpload()
 
-	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -368,10 +370,10 @@ func TestRunner_ATrackThatIsGoneOrNotTheCallersIsSkippedWithoutError(t *testing.
 	}
 	for name, pick := range cases {
 		t.Run(name, func(t *testing.T) {
-			w := seed(t, domain.F)
+			w := seed(t, domain.GradeF)
 			userId, trackId := pick(w)
 
-			if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: userId, TrackID: trackId}); err != nil {
+			if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: userId, TrackID: trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade = %v, want nil: a missing track is skipped, not a failure", err)
 			}
 
@@ -386,9 +388,9 @@ func TestRunner_ATrackThatIsGoneOrNotTheCallersIsSkippedWithoutError(t *testing.
 }
 
 func TestRunner_AGradeATrackIsLeftAlone(t *testing.T) {
-	w := seed(t, domain.A)
+	w := seed(t, domain.GradeA)
 
-	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := w.runner(service.RunnerConfig{MaxTries: 3}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -398,11 +400,11 @@ func TestRunner_AGradeATrackIsLeftAlone(t *testing.T) {
 }
 
 func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
-	w := seed(t, domain.D)
+	w := seed(t, domain.GradeD)
 	runner := w.runner(service.RunnerConfig{MaxTries: 3})
 
 	for try := 1; try <= 3; try++ {
-		if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, service.ErrKept) {
+		if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); !errors.Is(err, service.ErrKept) {
 			t.Fatalf("ExecuteUpgrade try %d: %v", try, err)
 		}
 		if try < 3 && len(w.upgrades.gaveUp) != 0 {
@@ -419,10 +421,10 @@ func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
 }
 
 func TestRunner_ASwapThatFailsToCommitKeepsTheOldFileAndCountsNoTry(t *testing.T) {
-	w := seed(t, domain.F)
+	w := seed(t, domain.GradeF)
 	w.tracks.FailWrites(errors.New("transient db error"))
 
-	err := w.runner(service.RunnerConfig{MaxTries: 1}).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := w.runner(service.RunnerConfig{MaxTries: 1}).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if err == nil {
 		t.Fatal("ExecuteUpgrade = nil, want the failed commit reported")
@@ -430,19 +432,19 @@ func TestRunner_ASwapThatFailsToCommitKeepsTheOldFileAndCountsNoTry(t *testing.T
 	if w.audio.objects[originalRef] != "original bytes" || len(w.audio.objects) != 1 {
 		t.Errorf("objects = %v, want the original untouched and the staged file rolled back", w.audio.objects)
 	}
-	if row := w.committed(); row.Status != ports.TrackReady || *row.AudioRef != originalRef {
+	if row := w.committed(); row.Status != domain.TrackReady || *row.AudioRef != originalRef {
 		t.Errorf("track = %v %v, want it ready on the original ref", row.Status, row.AudioRef)
 	}
-	if len(w.upgrades.gaveUp) != 0 || fmt.Sprint(w.upgrades.attempts) != fmt.Sprint([]ports.UpgradeAttempt{{}}) {
+	if len(w.upgrades.gaveUp) != 0 || fmt.Sprint(w.upgrades.attempts) != fmt.Sprint([]domain.UpgradeAttempt{{}}) {
 		t.Errorf("attempts = %v, give-ups = %v, want an infrastructure failure to count for nothing", w.upgrades.attempts, w.upgrades.gaveUp)
 	}
 }
 
 func TestRunner_PublishesNothingToTheUser(t *testing.T) {
-	w := seed(t, domain.F)
+	w := seed(t, domain.GradeF)
 	pub := &publisher{}
 
-	if err := w.runnerPublishingTo(service.RunnerConfig{MaxTries: 3}, pub).ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := w.runnerPublishingTo(service.RunnerConfig{MaxTries: 3}, pub).ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -452,11 +454,11 @@ func TestRunner_PublishesNothingToTheUser(t *testing.T) {
 }
 
 func TestReplace_IsNotHeldToTheRatchet(t *testing.T) {
-	w := seed(t, domain.B)
+	w := seed(t, domain.GradeB)
 	svc := service.MustNewAcquireTrackAudioService(w.tracks, service.NewSourceRegistry(w.source), w.audio,
 		scratchfiles.New(), replaceNoVerification(), replaceNoStages(w.audio))
 
-	if err := service.NewReplaceService(svc).ExecuteReplace(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := service.NewReplaceService(svc).ExecuteReplace(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
@@ -476,12 +478,12 @@ func (f *failingGiveUpStore) GiveUp(context.Context, ids.TrackId, int, string) e
 }
 
 func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
-	w := seed(t, domain.D)
+	w := seed(t, domain.GradeD)
 	store := &failingGiveUpStore{}
 	svc := service.MustNewAcquireTrackAudioService(w.tracks, service.NewSourceRegistry(w.source), w.audio, scratchfiles.New(), replaceNoVerification(), replaceNoStages(w.audio))
 	runner := newRunner(t, w.tracks, service.NewReplaceService(svc), store, service.RunnerConfig{MaxTries: 1})
 
-	err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
+	err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId})
 
 	if !errors.Is(err, service.ErrKept) {
 		t.Errorf("ExecuteUpgrade = %v, want the kept outcome even though the give-up could not be written", err)
@@ -498,7 +500,7 @@ type replaceGateRecorder struct {
 	gates []service.ReplacementGate
 }
 
-func (g *replaceGateRecorder) ReplaceGated(_ context.Context, job ports.AcquisitionJob, _ *ports.TrackSnapshot, gate service.ReplacementGate) (service.ReplaceAttempt, error) {
+func (g *replaceGateRecorder) ReplaceGated(_ context.Context, job domain.AcquisitionJob, _ *domain.TrackSnapshot, gate service.ReplacementGate) (service.ReplaceAttempt, error) {
 	g.gates = append(g.gates, gate)
 	return service.ReplaceAttempt{}, nil
 }
@@ -514,12 +516,12 @@ func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := seed(t, domain.A)
+			w := seed(t, domain.GradeA)
 			w.storedEvidence(fmt.Sprintf(tc.evidence, domain.PipelineGeneration))
 			replacer := &replaceGateRecorder{}
 			runner := newRunner(t, w.tracks, replacer, w.upgrades, service.RunnerConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
-			if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+			if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
 			}
 
@@ -537,12 +539,12 @@ func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
 }
 
 func TestRunner_TheGateCarriesTheCatalogAndStoredLengths(t *testing.T) {
-	w := seed(t, domain.B)
+	w := seed(t, domain.GradeB)
 	w.storedLengths(285, 231)
 	replacer := &replaceGateRecorder{}
 	runner := newRunner(t, w.tracks, replacer, w.upgrades, service.RunnerConfig{MaxTries: 3})
 
-	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -552,13 +554,13 @@ func TestRunner_TheGateCarriesTheCatalogAndStoredLengths(t *testing.T) {
 }
 
 func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.T) {
-	w := seed(t, domain.A)
+	w := seed(t, domain.GradeA)
 	w.storedEvidence(fmt.Sprintf(`{"grade":"A","source_format_id":"18","source_kbps":96,"in_place_generation":%d}`, domain.PipelineGeneration))
 	w.storedLengths(195, 292)
 	replacer := &replaceGateRecorder{}
 	runner := newRunner(t, w.tracks, replacer, w.upgrades, service.RunnerConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
-	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -572,11 +574,11 @@ func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.
 }
 
 func TestRunner_ATrackWithNoKnownLengthsGetsAGateWithTheLengthRescueOff(t *testing.T) {
-	w := seed(t, domain.B)
+	w := seed(t, domain.GradeB)
 	replacer := &replaceGateRecorder{}
 	runner := newRunner(t, w.tracks, replacer, w.upgrades, service.RunnerConfig{MaxTries: 3})
 
-	if err := runner.ExecuteUpgrade(context.Background(), ports.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
+	if err := runner.ExecuteUpgrade(context.Background(), domain.AcquisitionJob{UserID: w.userId, TrackID: w.trackId}); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 

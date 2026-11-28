@@ -1,6 +1,7 @@
 package qualitycheck
 
 import (
+	"altune/go-api/internal/download/internal/adapters/evidence"
 	"altune/go-api/internal/download/internal/adapters/memory"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/domain"
@@ -50,8 +51,8 @@ func Run(ctx context.Context, now clock.Func, newIDs ids.Source, kase Case) Outc
 	wiring := service.VerificationPorts{
 		Identifier:      p,
 		RecordingLookup: recordedLookups(kase.Recordings),
-		Rerecordings:    ports.NoopRerecordingFinder(),
-		Previews:        ports.NoopPreviewMatcher(),
+		Rerecordings:    memory.NoopRerecordingFinder(),
+		Previews:        memory.NoopPreviewMatcher(),
 		Recordings:      resolverFor(kase),
 	}
 	if kase.Rerecording != nil {
@@ -59,11 +60,12 @@ func Run(ctx context.Context, now clock.Func, newIDs ids.Source, kase Case) Outc
 	}
 	stages := service.StagePorts{
 		Prober:        p,
-		Tagger:        ports.NoopAudioTagger(),
-		Rejections:    ports.NoopRejectionStore(),
+		Tagger:        memory.NoopAudioTagger(),
+		Rejections:    memory.NoopRejectionStore(),
 		StoredAudio:   p,
 		Orphans:       service.MustDirectDeleteOrphans(p),
-		Skips:         ports.NoopVerifySkipRecorder(),
+		Skips:         memory.NoopVerifySkipRecorder(),
+		Evidence:      evidence.NewCodec(),
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
 		Observer:      func(ac *service.AcquisitionContext) { observed = ac },
@@ -81,11 +83,11 @@ func Run(ctx context.Context, now clock.Func, newIDs ids.Source, kase Case) Outc
 
 type recordedRerecording struct{ answer RecordedRerecording }
 
-func (r recordedRerecording) FindRerecording(_ context.Context, q ports.RerecordingQuery) (ports.TrackLabel, bool, error) {
+func (r recordedRerecording) FindRerecording(_ context.Context, q domain.RerecordingQuery) (domain.TrackLabel, bool, error) {
 	if q.OriginalMBID != r.answer.OriginalMBID {
-		return ports.TrackLabel{}, false, nil
+		return domain.TrackLabel{}, false, nil
 	}
-	return ports.TrackLabel{
+	return domain.TrackLabel{
 		MBID:            r.answer.MBID,
 		Title:           r.answer.Title,
 		Album:           r.answer.Album,
@@ -95,22 +97,22 @@ func (r recordedRerecording) FindRerecording(_ context.Context, q ports.Rerecord
 	}, true, nil
 }
 
-func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, track ports.TrackSnapshot) error {
+func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, track domain.TrackSnapshot) error {
 	if kase.Stored != nil {
-		if err := service.NewReplaceService(svc).ExecuteReplace(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err != nil {
+		if err := service.NewReplaceService(svc).ExecuteReplace(ctx, domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err != nil {
 			return fmt.Errorf("execute replace: %w", err)
 		}
 		return nil
 	}
-	if err := svc.Execute(ctx, ports.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err != nil {
+	if err := svc.Execute(ctx, domain.AcquisitionJob{UserID: track.UserId, TrackID: track.ID}); err != nil {
 		return fmt.Errorf("execute acquisition: %w", err)
 	}
 	return nil
 }
 
-func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
+func seededTrack(newIDs ids.Source, kase Case) domain.TrackSnapshot {
 	t := kase.Track
-	track := ports.TrackSnapshot{
+	track := domain.TrackSnapshot{
 		ID:                 newIDs.NewTrackId(),
 		UserId:             newIDs.NewUserId(),
 		Title:              strings.TrimSpace(t.Title),
@@ -122,7 +124,7 @@ func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
 		CatalogSources:     t.portCatalogSources(),
 		AudioSourceURL:     optional(t.AudioSourceURL),
 		RejectedSourceKeys: rejectedKeys(kase.ExcludeURLs),
-		Status:             ports.TrackPending,
+		Status:             domain.TrackPending,
 	}
 	if length := targetLength(t); length > 0 {
 		track.CatalogDurationSeconds, track.StoredDurationSeconds = &length, &length
@@ -131,7 +133,7 @@ func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
 		return track
 	}
 	ref := storedAudioRef
-	track.Status, track.AudioRef, track.Streamable = ports.TrackReady, &ref, true
+	track.Status, track.AudioRef, track.Streamable = domain.TrackReady, &ref, true
 	if length := kase.Stored.Duration; length > 0 {
 		track.StoredDurationSeconds = &length
 	}
@@ -166,14 +168,14 @@ func resolverFor(kase Case) ports.RecordingResolver {
 	if res == nil {
 		return copiedIdentity(identityFor(kase))
 	}
-	isrcRecordings := make([]ports.ISRCRecording, 0, len(res.ISRCRecordings))
+	isrcRecordings := make([]domain.ISRCRecording, 0, len(res.ISRCRecordings))
 	for _, rec := range res.ISRCRecordings {
-		isrcRecordings = append(isrcRecordings, ports.ISRCRecording{MBID: rec.MBID, Duration: float64(rec.Duration)})
+		isrcRecordings = append(isrcRecordings, domain.ISRCRecording{MBID: rec.MBID, Duration: float64(rec.Duration)})
 	}
 	return service.NewRecordedResolver(searchHitsFor(res), isrcRecordings, pinnedFactsFor(res))
 }
 
-func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
+func pinnedFactsFor(res *Resolution) *domain.RecordingFacts {
 	if res.Pinned == nil {
 		return nil
 	}
@@ -316,8 +318,8 @@ func judgeStored(kase Case, out Outcome) (bool, string) {
 	return true, "stored the right recording"
 }
 
-func identityFor(kase Case) ports.RecordingIdentity {
-	return ports.RecordingIdentity{
+func identityFor(kase Case) domain.RecordingIdentity {
+	return domain.RecordingIdentity{
 		ISRC:     kase.Track.ISRC,
 		MBID:     kase.Track.MBID,
 		Duration: kase.Track.AuthoritativeDuration,
@@ -333,13 +335,13 @@ func targetLength(t Track) float64 {
 
 type recordedLookups []PinnedRecording
 
-func (l recordedLookups) RecordingByMBID(_ context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+func (l recordedLookups) RecordingByMBID(_ context.Context, mbid string) (domain.RecordingFacts, bool, error) {
 	for _, rec := range l {
 		if rec.MBID == mbid {
 			return rec.facts(), true, nil
 		}
 	}
-	return ports.RecordingFacts{}, false, nil
+	return domain.RecordingFacts{}, false, nil
 }
 
 type SavedTrack struct {
@@ -361,14 +363,14 @@ func savedTrackOf(ledger *memory.Ledger, id ids.TrackId) SavedTrack {
 	if !ok {
 		return SavedTrack{}
 	}
-	var evidence struct {
+	var stored struct {
 		ISRCSource string `json:"isrc_source"`
 	}
-	if len(saved.Evidence) > 0 && json.Unmarshal(saved.Evidence, &evidence) != nil {
-		evidence.ISRCSource = unreadableEvidence
+	if len(saved.Evidence) > 0 && json.Unmarshal(saved.Evidence, &stored) != nil {
+		stored.ISRCSource = unreadableEvidence
 	}
 	out := SavedTrack{
-		ISRCSource:   evidence.ISRCSource,
+		ISRCSource:   stored.ISRCSource,
 		Provenance:   string(saved.Provenance),
 		RejectedKeys: saved.RejectedSourceKeys,
 		Title:        saved.Title,

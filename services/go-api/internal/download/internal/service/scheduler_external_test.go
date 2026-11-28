@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download/internal/adapters/memory"
-	"altune/go-api/internal/download/internal/ports"
+	"altune/go-api/internal/download/internal/domain"
 	"altune/go-api/internal/download/internal/service"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
@@ -40,16 +40,16 @@ func (r *ranTracks) has(id ids.TrackId) bool {
 
 type recordingAcquirer struct{ ranTracks }
 
-func (a *recordingAcquirer) Execute(_ context.Context, job ports.AcquisitionJob) error {
+func (a *recordingAcquirer) Execute(_ context.Context, job domain.AcquisitionJob) error {
 	a.record(job.TrackID)
 	return nil
 }
 
-func (a *recordingAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (a *recordingAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	return nil
 }
 
-func (a *recordingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (a *recordingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func (r *ranTracks) count() int {
 	r.mu.Lock()
@@ -59,7 +59,7 @@ func (r *ranTracks) count() int {
 
 type recordingUpgrader struct{ ranTracks }
 
-func (u *recordingUpgrader) ExecuteUpgrade(_ context.Context, job ports.AcquisitionJob) error {
+func (u *recordingUpgrader) ExecuteUpgrade(_ context.Context, job domain.AcquisitionJob) error {
 	u.record(job.TrackID)
 	return nil
 }
@@ -69,17 +69,17 @@ type holdingAcquirer struct {
 	release chan struct{}
 }
 
-func (a *holdingAcquirer) Execute(_ context.Context, job ports.AcquisitionJob) error {
+func (a *holdingAcquirer) Execute(_ context.Context, job domain.AcquisitionJob) error {
 	a.record(job.TrackID)
 	<-a.release
 	return nil
 }
 
-func (a *holdingAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (a *holdingAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	return nil
 }
 
-func (a *holdingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (a *holdingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func TestScheduler_ABurstOfAddsStartsOnEveryIdleAcquireWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -230,15 +230,15 @@ func TestScheduler_ASelectOutageOnTheFinalRunIsNotRetried(t *testing.T) {
 
 type failingAcquirer struct{}
 
-func (failingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (failingAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	return errors.New("every source refused the track")
 }
 
-func (failingAcquirer) ExecuteReplace(context.Context, ports.AcquisitionJob) error {
+func (failingAcquirer) ExecuteReplace(context.Context, domain.AcquisitionJob) error {
 	return errors.New("every source refused the track")
 }
 
-func (failingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (failingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 type panicOnMessage struct {
 	slog.Handler
@@ -264,7 +264,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 	}
 	<-queue.outcome
 
-	var records []ports.JobRecord
+	var records []domain.JobRecord
 	for _, r := range scheduler.Status(t.Context()).Recent {
 		if r.TrackID == trackID.String() {
 			records = append(records, r)
@@ -273,14 +273,14 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 	if len(records) != 1 {
 		t.Fatalf("recent records for the job = %+v, want exactly one", records)
 	}
-	if records[0].State != ports.JobFailed || records[0].Reason == "panic" {
+	if records[0].State != domain.JobFailed || records[0].Reason == "panic" {
 		t.Errorf("record = %s %q, want the job's own failure, not the log handler's panic", records[0].State, records[0].Reason)
 	}
 }
 
 type succeedingAcquirer struct{ failingAcquirer }
 
-func (succeedingAcquirer) Execute(context.Context, ports.AcquisitionJob) error { return nil }
+func (succeedingAcquirer) Execute(context.Context, domain.AcquisitionJob) error { return nil }
 
 type capturedLogs struct {
 	mu      *sync.Mutex
@@ -301,9 +301,9 @@ func (h capturedLogs) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h capturedLogs) WithGroup(string) slog.Handler { return h }
 
 func logsOfOneJob(t *testing.T, acquirer interface {
-	Execute(context.Context, ports.AcquisitionJob) error
-	ExecuteReplace(context.Context, ports.AcquisitionJob) error
-	RefuseQueued(context.Context, ports.AcquisitionJob)
+	Execute(context.Context, domain.AcquisitionJob) error
+	ExecuteReplace(context.Context, domain.AcquisitionJob) error
+	RefuseQueued(context.Context, domain.AcquisitionJob)
 },
 ) []slog.Record {
 	t.Helper()
@@ -413,7 +413,7 @@ func signal(ch chan queueCall, call queueCall) {
 	}
 }
 
-func (q *callRecordingQueue) Release(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, delay time.Duration) error {
+func (q *callRecordingQueue) Release(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber, delay time.Duration) error {
 	call := callOf(ctx)
 	q.mu.Lock()
 	q.releases = append(q.releases, call)
@@ -434,16 +434,16 @@ type alwaysPanickingAcquirer struct {
 	refusedCorrID atomic.Value
 }
 
-func (a *alwaysPanickingAcquirer) Execute(context.Context, ports.AcquisitionJob) error {
+func (a *alwaysPanickingAcquirer) Execute(context.Context, domain.AcquisitionJob) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
-	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
+func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
+	return a.Execute(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *alwaysPanickingAcquirer) RefuseQueued(ctx context.Context, job ports.AcquisitionJob) {
+func (a *alwaysPanickingAcquirer) RefuseQueued(ctx context.Context, job domain.AcquisitionJob) {
 	a.refusedCorrID.Store(logging.CorrelationIDFromContext(ctx))
 	a.refused.Add(1)
 }
@@ -497,7 +497,7 @@ func TestScheduler_TheQueueReleaseOfARetryableJobCarriesTheCorrelationIDAndABudg
 	})
 }
 
-func (q *callRecordingQueue) Settle(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber) error {
+func (q *callRecordingQueue) Settle(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber) error {
 	call := callOf(ctx)
 	q.mu.Lock()
 	q.settles = append(q.settles, call)
@@ -506,7 +506,7 @@ func (q *callRecordingQueue) Settle(ctx context.Context, trackID ids.TrackId, fe
 	return q.Queue.Settle(ctx, trackID, fence)
 }
 
-func (q *callRecordingQueue) Heartbeat(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, lease time.Duration) error {
+func (q *callRecordingQueue) Heartbeat(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber, lease time.Duration) error {
 	call := callOf(ctx)
 	q.mu.Lock()
 	q.heartbeats = append(q.heartbeats, call)
@@ -578,7 +578,7 @@ type correlationNotingAcquirer struct {
 	finished chan struct{}
 }
 
-func (a *correlationNotingAcquirer) Execute(ctx context.Context, job ports.AcquisitionJob) error {
+func (a *correlationNotingAcquirer) Execute(ctx context.Context, job domain.AcquisitionJob) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.corrIDs = append(a.corrIDs, logging.CorrelationIDFromContext(ctx))
@@ -589,11 +589,11 @@ func (a *correlationNotingAcquirer) Execute(ctx context.Context, job ports.Acqui
 	return nil
 }
 
-func (a *correlationNotingAcquirer) ExecuteReplace(ctx context.Context, job ports.AcquisitionJob) error {
-	return a.Execute(ctx, ports.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
+func (a *correlationNotingAcquirer) ExecuteReplace(ctx context.Context, job domain.AcquisitionJob) error {
+	return a.Execute(ctx, domain.AcquisitionJob{UserID: job.UserID, TrackID: job.TrackID})
 }
 
-func (a *correlationNotingAcquirer) RefuseQueued(context.Context, ports.AcquisitionJob) {}
+func (a *correlationNotingAcquirer) RefuseQueued(context.Context, domain.AcquisitionJob) {}
 
 func (a *correlationNotingAcquirer) seen() []string {
 	a.mu.Lock()

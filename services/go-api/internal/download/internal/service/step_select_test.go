@@ -22,7 +22,7 @@ func blindingLightsRef() service.TrackRef {
 }
 
 func TestSelectStep_Execute(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(
+	source := &searchSource{name: "ytdlp", found: []domain.AudioCandidate{downloadtest.Candidate(
 		"https://youtube.com/watch?v=topic111111",
 		downloadtest.WithTitle("Blinding Lights"),
 		downloadtest.WithChannel("The Weeknd - Topic"),
@@ -43,7 +43,7 @@ func TestSelectStep_Execute(t *testing.T) {
 }
 
 func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
-	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{downloadtest.Candidate(
+	source := &searchSource{name: "ytdlp", found: []domain.AudioCandidate{downloadtest.Candidate(
 		"https://youtube.com/watch?v=cook1111111",
 		downloadtest.WithTitle("Cooking Tutorial Episode 47"),
 		downloadtest.WithChannel("CookingChannel"),
@@ -91,7 +91,7 @@ func searchOutageThenSelect(t *testing.T, down, healthy *searchSource) error {
 }
 
 func healthyButRejected() *searchSource {
-	return &searchSource{name: "healthy", found: []ports.AudioCandidate{rejectedCandidate}}
+	return &searchSource{name: "healthy", found: []domain.AudioCandidate{rejectedCandidate}}
 }
 
 func TestSelectStep_SearchOutageWithAllRejected_IsTransient(t *testing.T) {
@@ -103,7 +103,7 @@ func TestSelectStep_SearchOutageWithAllRejected_IsTransient(t *testing.T) {
 }
 
 func TestSearchStep_OutageWithOnlyStoredFileMatch_IsSourceUnavailable(t *testing.T) {
-	healthy := &searchSource{name: "healthy", found: []ports.AudioCandidate{matchingCandidate}}
+	healthy := &searchSource{name: "healthy", found: []domain.AudioCandidate{matchingCandidate}}
 	ac := &service.AcquisitionContext{
 		Track:   blindingLightsRef(),
 		Replace: service.ReplaceState{ExcludeKeys: []string{domain.SourceKey(matchingCandidate.URL)}},
@@ -162,10 +162,10 @@ func TestSelectStep_LogsOneEvaluationPerScoredCandidate(t *testing.T) {
 	drm := downloadtest.Candidate(
 		"sc:drm",
 		downloadtest.WithTitle("Song"),
-		downloadtest.WithUnplayable(ports.UnplayableDRM),
+		downloadtest.WithUnplayable(domain.UnplayableDRM),
 	)
 	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Song (feat. Guest)", Artist: "Artist", CatalogDuration: 200}}
-	searched, err := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []ports.AudioCandidate{scored, topic, drm}})).Execute(context.Background(), ac, service.PipelineStart{})
+	searched, err := service.NewSearchStep(downloadtest.PlainFinder(&fakeAudioSearcher{searchResults: []domain.AudioCandidate{scored, topic, drm}})).Execute(context.Background(), ac, service.PipelineStart{})
 	if err != nil {
 		t.Fatalf("search Execute() = %v", err)
 	}
@@ -219,10 +219,10 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 		"https://music.youtube.com/watch?v=TB0z2HVFxEE",
 		downloadtest.WithTitle("Phone (Interlude)"),
 		downloadtest.WithDuration(112),
-		downloadtest.WithKind(ports.KindArtTrack),
+		downloadtest.WithKind(domain.KindArtTrack),
 		downloadtest.WithArtists([]string{"SLAYR"}),
 	)
-	first := &searchSource{name: "ytmsearch", found: []ports.AudioCandidate{storedArtTrack}}
+	first := &searchSource{name: "ytmsearch", found: []domain.AudioCandidate{storedArtTrack}}
 	fallback := &searchSource{name: "ytdlp"}
 	ac := &service.AcquisitionContext{
 		Track:   service.TrackRef{Title: "Phone (Interlude)", Artist: "SLAYR", CatalogDuration: 128},
@@ -232,7 +232,7 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 	_ = runPipeline(context.Background(), service.NewSourceRegistryWithFallback([]ports.AudioSource{first}, []ports.AudioSource{fallback}), ac)
 
 	seen := fallback.seen()
-	if len(seen) != 1 || seen[0].Tier != ports.TierFallbackOnly {
+	if len(seen) != 1 || seen[0].Tier != domain.TierFallbackOnly {
 		t.Fatalf("fallback requests = %+v, want one fallback-only search after the first tier held only the stored file", seen)
 	}
 }

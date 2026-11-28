@@ -25,9 +25,9 @@ type (
 	PipelineStart struct{}
 	afterSearch   struct{}
 	AfterSelect   struct{}
-	afterDownload struct{ Kept ports.AudioCandidate }
-	afterTag      struct{ Kept ports.AudioCandidate }
-	AfterStore    struct{ Kept ports.AudioCandidate }
+	afterDownload struct{ Kept domain.AudioCandidate }
+	afterTag      struct{ Kept domain.AudioCandidate }
+	AfterStore    struct{ Kept domain.AudioCandidate }
 	afterUpdate   struct{}
 )
 
@@ -140,7 +140,7 @@ func runStages(ctx context.Context, run *pipelineRun, p Pipeline) error {
 
 func logShadowJudge(ctx context.Context, ac *AcquisitionContext, downloadErr error) {
 	defer background.RecoverContext(ctx, "acquisition.judge_shadow_panic", logging.KeyTrackID, ac.Track.ID)
-	var kept *ports.AudioCandidate
+	var kept *domain.AudioCandidate
 	if downloadErr == nil {
 		kept = ac.Selected
 	}
@@ -251,13 +251,13 @@ func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext)
 }
 
 type AcquisitionContext struct {
-	Job               ports.AcquisitionJob
+	Job               domain.AcquisitionJob
 	Track             TrackRef
-	Identity          ports.RecordingIdentity
-	Candidates        []ports.AudioCandidate
+	Identity          domain.RecordingIdentity
+	Candidates        []domain.AudioCandidate
 	SearchUnavailable error
-	Ranked            []ports.AudioCandidate
-	Selected          *ports.AudioCandidate
+	Ranked            []domain.AudioCandidate
+	Selected          *domain.AudioCandidate
 	TempPath          string
 	TempDir           string
 	AudioRef          string
@@ -266,9 +266,9 @@ type AcquisitionContext struct {
 	IdentityVerified  bool
 	Verdict           AudioVerdict
 	Confidence        float64
-	Evidence          Evidence
+	Evidence          domain.AcquisitionEvidence
 	BestEffort        bool
-	SourceFormat      ports.SourceFormat
+	SourceFormat      domain.SourceFormat
 
 	Rejections []RejectionEntry
 	Attempted  []AttemptedCandidate
@@ -277,9 +277,9 @@ type AcquisitionContext struct {
 
 	Pass SearchPass
 
-	PriorRejections []ports.PriorRejection
+	PriorRejections []domain.PriorRejection
 
-	Relabel *ports.TrackLabel
+	Relabel *domain.TrackLabel
 
 	rollbackHandedOver bool
 }
@@ -314,10 +314,10 @@ func (ac *AcquisitionContext) clearCandidates() {
 	ac.Candidates, ac.Ranked, ac.Selected = nil, nil, nil
 }
 
-func (ac *AcquisitionContext) retargetTo(label ports.TrackLabel) {
+func (ac *AcquisitionContext) retargetTo(label domain.TrackLabel) {
 	ac.clearCandidates()
 	ac.Pass = PassAllTiers
-	ac.Identity = ports.RecordingIdentity{}
+	ac.Identity = domain.RecordingIdentity{}
 	ac.Track.Title, ac.Track.Album, ac.Track.Year = label.Title, label.Album, label.Year
 	ac.Track.ISRC, ac.Track.CatalogMBID, ac.Track.CatalogDuration = label.ISRC, label.MBID, label.DurationSeconds
 	ac.Track.CatalogSources, ac.Track.AudioSourceURL = nil, ""
@@ -328,7 +328,7 @@ func (ac *AcquisitionContext) refetchesCurrentSource() bool {
 	return ac.Replace.Gate.RefetchesCurrentSource()
 }
 
-func (ac *AcquisitionContext) preserveCurrentAudio(track *ports.TrackSnapshot) {
+func (ac *AcquisitionContext) preserveCurrentAudio(track *domain.TrackSnapshot) {
 	ac.Replace.PreservedRef = deref(track.AudioRef)
 	ac.Track.AudioSourceURL = ""
 	if !ac.refetchesCurrentSource() {
@@ -374,11 +374,11 @@ func (r ReplaceState) excludes(url string) bool {
 	return false
 }
 
-func (r ReplaceState) isCurrentFile(match ports.RecordingMatch) bool {
+func (r ReplaceState) isCurrentFile(match domain.RecordingMatch) bool {
 	return r.StoredAcoustID != "" && match.AcoustID == r.StoredAcoustID
 }
 
-func (r ReplaceState) excludesCandidate(c ports.AudioCandidate) bool {
+func (r ReplaceState) excludesCandidate(c domain.AudioCandidate) bool {
 	return r.excludes(c.URL)
 }
 
@@ -392,7 +392,7 @@ func (ac *AcquisitionContext) priorRejected(url string) bool {
 	return false
 }
 
-func (ac *AcquisitionContext) stillJudgedOnTheSameBasis(recorded *ports.RejectionBasis) bool {
+func (ac *AcquisitionContext) stillJudgedOnTheSameBasis(recorded *domain.RejectionBasis) bool {
 	if recorded == nil || recorded.ReferenceMBID != ac.Identity.MBID {
 		return false
 	}
@@ -445,7 +445,7 @@ type TrackRef struct {
 	CatalogDuration float64
 	CatalogExplicit *bool
 	CatalogMBID     string
-	CatalogSources  []ports.CatalogSource
+	CatalogSources  []domain.CatalogSource
 
 	AudioSourceURL string
 }
@@ -476,7 +476,7 @@ func (s *pipeline) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
 		},
 		WithStoreOwner(userId, trackId),
 		WithStoreKeyPrefix(s.storeKeyPrefix)).
-		withUpdateTrack(NewUpdateTrackStep(s.ledger, userId, trackId))
+		withUpdateTrack(NewUpdateTrackStep(s.ledger, s.evidence, userId, trackId))
 }
 
 func CoreSteps(
