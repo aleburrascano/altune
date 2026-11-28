@@ -2,18 +2,15 @@ import React from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { makeWrapper } from '@testing/makeWrapper';
 import { retryOptionsWithJitter } from '@testing/retryOptions';
 import { signInTestUser } from '@testing/signInTestUser';
-import {
-  httpSettingsPort,
-  useBackfillFeatured,
-  SettingsPortProvider,
-  useSettingsPort,
-} from '@features/settings';
+import { httpSettingsPort } from '@features/settings/adapters/http/settingsHttp';
+import type { BackfillFeaturedResult } from '@features/settings/core/backfillResult';
+import { useBackfillFeatured } from '@features/settings/view/useBackfillFeatured';
+import { SettingsProvider, useSettingsPort } from '@features/settings/view/SettingsProvider';
 import { createMemorySettingsPort } from '@testing/fakes/settings/inMemorySettingsPort';
-import type { SettingsPort } from '@features/settings';
+import type { SettingsPort } from '@features/settings/ports/ports';
 import { ApiError, NetworkError } from '@shared/apiClient';
 import { LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
@@ -93,7 +90,7 @@ describe('useBackfillFeatured on the memory fake', () => {
     const port = createMemorySettingsPort({ pages: [firstPage, donePage] });
     const Query = makeWrapper(queryClient);
     function wrapper({ children }: { children: React.ReactNode }) {
-      return React.createElement(Query, null, SettingsPortProvider({ port, children }));
+      return React.createElement(Query, null, SettingsProvider({ port, children }));
     }
 
     const { result } = renderHook(() => useBackfillFeatured(retryOptionsWithJitter()), { wrapper });
@@ -199,7 +196,7 @@ describe('useBackfillFeatured on the HTTP port the composition root provides', (
 describe('useSettingsPort', () => {
   function providing(port: SettingsPort) {
     return function Wrapper({ children }: { children: React.ReactNode }) {
-      return SettingsPortProvider({ port, children });
+      return SettingsProvider({ port, children });
     };
   }
 
@@ -219,9 +216,9 @@ describe('useSettingsPort', () => {
     const outer = createMemorySettingsPort();
     const inner = createMemorySettingsPort();
     function Nested({ children }: { children: React.ReactNode }) {
-      return SettingsPortProvider({
+      return SettingsProvider({
         port: outer,
-        children: SettingsPortProvider({ port: inner, children }),
+        children: SettingsProvider({ port: inner, children }),
       });
     }
 

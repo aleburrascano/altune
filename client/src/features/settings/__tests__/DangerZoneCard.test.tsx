@@ -10,8 +10,10 @@ import { installAuthClient, useSignOut, type SignOutResult } from '@shared/auth'
 import { usePinnedStore, provideOfflinePort } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';
 
-import { useRemoveDownloads, downloadStats, DangerZoneCard } from '@features/settings';
-import type { ClearHistoryState } from '@features/settings';
+import { useRemoveDownloads } from '@features/settings/view/useDownloads';
+import { downloadStats } from '@features/settings/core/downloadStatsModel';
+import { DangerZoneCard } from '@features/settings/view/DangerZoneCard';
+import type { ClearHistoryState } from '@features/settings/core/dangerZoneActions';
 import { scriptedAuth, type SignOutOutcome } from '@testing/scriptedAuth';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 

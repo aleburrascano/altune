@@ -7,13 +7,13 @@ import { usePinnedStore } from '@shared/offline';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
+import type { RemoveDownloads } from '@features/settings/core/removeDownloads';
+import { downloadStats } from '@features/settings/core/downloadStatsModel';
 import {
-  type RemoveDownloads,
-  downloadStats,
   buildDangerZoneActions,
   type ClearHistoryState,
   type DangerZoneActionKey,
-} from '@features/settings';
+} from '@features/settings/core/dangerZoneActions';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 

@@ -12,7 +12,7 @@ import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDisco
 import { createMemoryFavoritesPort } from '@testing/fakes/discovery/inMemoryFavoritesPort';
 import { useLibraryPort } from '@features/library';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
-import { useSettingsPort } from '@features/settings';
+import { useSettingsPort } from '@testing/fakes/settings/useSettingsPort';
 import { createMemorySettingsPort } from '@testing/fakes/settings/inMemorySettingsPort';
 import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 

@@ -1,12 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { guardedMutationOptions } from '@shared/session';
 import { detailKeys, libraryKeys, refetchWithoutEvent, useAppMutation } from '@shared/query';
-import type { RetryOptions } from '@features/settings/view/retryOptions';
+import type { RetryOptions } from '@features/settings/core/retryOptions';
 import { ContractError, NetworkError } from '@shared/failure';
-import { useSettingsPort } from '@features/settings/view/SettingsPortProvider';
-import type { SettingsPort } from '@features/settings/ports/settingsPort';
+import type { BackfillFeaturedResult } from '@features/settings/core/backfillResult';
+import { useSettingsPort } from '@features/settings/view/SettingsProvider';
+import type { SettingsPort } from '@features/settings/ports/ports';
 
 function nextBackfillOffset(page: BackfillFeaturedResult, offset: number): number {
   if (page.nextOffset > offset) return page.nextOffset;

@@ -3,8 +3,8 @@ import { render, screen, within } from '@testing-library/react-native';
 
 import { darkTheme } from '@shared/ui';
 
-import type { DownloadStats } from '@features/settings';
-import { OfflineDownloadsCard } from '@features/settings';
+import type { DownloadStats } from '@features/settings/core/downloadStatsModel';
+import { OfflineDownloadsCard } from '@features/settings/view/OfflineDownloadsCard';
 
 function makeStats(over: Partial<DownloadStats> = {}): DownloadStats {
   return {

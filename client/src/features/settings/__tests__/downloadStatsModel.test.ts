@@ -1,4 +1,8 @@
-import { downloadStats, buildDangerZoneActions, type ClearHistoryState } from '@features/settings';
+import { downloadStats } from '@features/settings/core/downloadStatsModel';
+import {
+  buildDangerZoneActions,
+  type ClearHistoryState,
+} from '@features/settings/core/dangerZoneActions';
 const LEFTOVER_BYTES = 2048;
 
 type PinnedEntry = Parameters<typeof downloadStats>[0][string];

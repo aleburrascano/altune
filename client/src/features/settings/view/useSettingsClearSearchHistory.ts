@@ -1,4 +1,4 @@
-import type { RetryOptions } from '@features/settings/view/retryOptions';
+import type { RetryOptions } from '@features/settings/core/retryOptions';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory';
 
 export function useSettingsClearSearchHistory(retryOptions: RetryOptions) {
