@@ -109,8 +109,6 @@ func TestNew_RefusesAMissingCollaboratorInsteadOfPanickingLater(t *testing.T) {
 		"resolver":    func(d *download.Deps) { d.RecordingResolver = nil },
 		"lookup":      func(d *download.Deps) { d.RecordingLookup = nil },
 		"rerecording": func(d *download.Deps) { d.Rerecordings = nil },
-		"database":    func(d *download.Deps) { d.Database = nil },
-		"verdicts":    func(d *download.Deps) { d.InPlaceVerdicts = nil },
 	}
 	for name, drop := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -119,6 +117,29 @@ func TestNew_RefusesAMissingCollaboratorInsteadOfPanickingLater(t *testing.T) {
 
 			if module, err := download.New(t.Context(), deps); err == nil || module != nil {
 				t.Errorf("New = %v, %v, want a refusal", module, err)
+			}
+		})
+	}
+}
+
+func TestNew_RefusesAMissingDatabaseOrVerdictsAndNamesIt(t *testing.T) {
+	cases := map[string]struct {
+		drop func(*download.Deps)
+		want string
+	}{
+		"no database": {func(d *download.Deps) { d.Database = nil }, "Deps.Database"},
+		"nil pool":    {func(d *download.Deps) { d.Database = download.NewDatabase(nil) }, "Deps.Database"},
+		"no verdicts": {func(d *download.Deps) { d.InPlaceVerdicts = nil }, "Deps.InPlaceVerdicts"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			deps := offlineDeps(&config.Config{Env: "test", AcquisitionDownloadConcurrency: 1}, fixtureTiers())
+			c.drop(&deps)
+
+			module, err := download.New(t.Context(), deps)
+
+			if err == nil || module != nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("New = %v, %v, want an error naming %s and no module", module, err, c.want)
 			}
 		})
 	}
