@@ -80,7 +80,7 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **EntityIdentity** — durable cross-provider identity record: `(provider, external_id, kind) → (mbid, xref)`. Keyed on stable provider ids, never names. Held in the `entity_identity` table, which is frozen: its only writer was the search-time identity stamper, gone since MusicBrainz left search, so the rows are only read now, by artist detail and by search's artwork filler.
 - **IdentityStore** — read-only outbound port over `EntityIdentity`: `LookupByProviderID(kind, provider, external_id)`. Postgres source of truth, Redis read-through on the hot path. Defined in `services/go-api/internal/search/internal/ports/ports.go`.
 
-- **DiscogsArtistInfo** — artist enrichment resolved from Discogs: `(id, name, genre, country, overlap)`, `overlap` scoring how many of the artist's known albums a candidate Discogs artist's releases share. Not persisted. Defined in `services/go-api/internal/search/internal/ports/ports.go`; resolved by `DiscogsAdapter.ResolveDiscogsArtist` in `services/go-api/internal/search/internal/adapters/providers/discogs/discogs.go`.
+- **DiscogsArtistInfo** — artist enrichment resolved from Discogs: `(id, name, genre, country, overlap)`, `overlap` scoring how many of the artist's known albums a candidate Discogs artist's releases share. Not persisted. Defined in `services/go-api/internal/search/internal/ports/ports.go`; resolved by `DiscogsAdapter.ResolveDiscogsArtist` in `services/go-api/internal/search/internal/adapters/discogs/discogs.go`.
 - **DiscogsRelease** — one release from a Discogs artist's discography, `(title, year, type)`, used for the artist-overlap match above. Defined in `services/go-api/internal/search/internal/ports/ports.go`.
 
 
