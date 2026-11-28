@@ -44,6 +44,12 @@ type orphanSink struct{}
 
 func (orphanSink) RecordOrphanedAudio(context.Context, domain.OrphanedAudio) error { return nil }
 
+type verdictSink struct{}
+
+func (verdictSink) RecordInPlaceVerdict(context.Context, ids.TrackId, domain.InPlaceRecord) (bool, error) {
+	return true, nil
+}
+
 func newClient(timeout time.Duration, transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: timeout, Transport: transport}
 }
@@ -53,6 +59,8 @@ func offlineDeps(cfg *config.Config, sources downloadtest.SourceOrder) download.
 	return download.Deps{
 		Config:            cfg,
 		Transport:         http.DefaultTransport,
+		Database:          memory.NewDatabase(clock.Now),
+		InPlaceVerdicts:   verdictSink{},
 		Events:            events.NoopPublisher(),
 		NewClient:         newClient,
 		Library:           memory.NewLibrary(),
@@ -109,6 +117,29 @@ func TestNew_RefusesAMissingCollaboratorInsteadOfPanickingLater(t *testing.T) {
 
 			if module, err := download.New(t.Context(), deps); err == nil || module != nil {
 				t.Errorf("New = %v, %v, want a refusal", module, err)
+			}
+		})
+	}
+}
+
+func TestNew_RefusesAMissingDatabaseOrVerdictsAndNamesIt(t *testing.T) {
+	cases := map[string]struct {
+		drop func(*download.Deps)
+		want string
+	}{
+		"no database": {func(d *download.Deps) { d.Database = nil }, "Deps.Database"},
+		"nil pool":    {func(d *download.Deps) { d.Database = download.NewDatabase(nil) }, "Deps.Database"},
+		"no verdicts": {func(d *download.Deps) { d.InPlaceVerdicts = nil }, "Deps.InPlaceVerdicts"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			deps := offlineDeps(&config.Config{Env: "test", AcquisitionDownloadConcurrency: 1}, fixtureTiers())
+			c.drop(&deps)
+
+			module, err := download.New(t.Context(), deps)
+
+			if err == nil || module != nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("New = %v, %v, want an error naming %s and no module", module, err, c.want)
 			}
 		})
 	}

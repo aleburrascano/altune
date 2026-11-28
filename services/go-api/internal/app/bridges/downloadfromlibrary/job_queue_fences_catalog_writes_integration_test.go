@@ -600,6 +600,6 @@ func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDurin
 	}
 }
 
-func newQueue(pool *pgxpool.Pool) *downloadtest.PostgresJobQueue {
+func newQueue(pool *pgxpool.Pool) downloadtest.DownloadQueue {
 	return downloadtest.NewPostgresJobQueue(download.NewDatabase(pool), downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool, librarytest.DiscardDBCallMetrics()), time.Now, ids.Real))
 }

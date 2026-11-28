@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func NewQueueFactory() func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue {
+func NewQueueFactory() ports.QueueFactory {
 	return func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue { return New(wake, now) }
 }
 

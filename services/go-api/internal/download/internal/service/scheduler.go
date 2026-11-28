@@ -67,7 +67,7 @@ type BackgroundAcquisitionScheduler struct {
 	upgrades UpgradeLane
 }
 
-type QueueFactory func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue
+type QueueFactory = ports.QueueFactory
 
 func QueueOf(queue ports.DownloadQueue) QueueFactory {
 	return func(chan<- struct{}, clock.Func) ports.DownloadQueue { return queue }

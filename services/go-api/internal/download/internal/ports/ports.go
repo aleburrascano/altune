@@ -2,6 +2,7 @@ package ports
 
 import (
 	"altune/go-api/internal/download/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/songfields"
 	"context"
@@ -76,6 +77,28 @@ type DownloadQueue interface {
 	Heartbeat(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber, lease time.Duration) error
 	Release(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber, delay time.Duration) error
 	Settle(ctx context.Context, trackID ids.TrackId, fence domain.ClaimNumber) error
+}
+
+type QueueFactory func(wake chan<- struct{}, now clock.Func) DownloadQueue
+
+type RetentionPruner interface {
+	Prune(ctx context.Context, now time.Time) (int64, error)
+}
+
+type UpgradeRecords interface {
+	UpgradeStore
+	UpgradeState
+	InPlaceState
+}
+
+type Database interface {
+	Rejections() RejectionStore
+	Outcomes() OutcomeRecorder
+	Upgrades() UpgradeRecords
+	Cooldowns() CooldownStore
+	JobQueue(requeuer QueueTracks) QueueFactory
+	JobNotifier(sleep clock.Sleeper) JobNotifier
+	Retention() (outcomes, rejections RetentionPruner)
 }
 
 type UpgradeJobQueue interface {

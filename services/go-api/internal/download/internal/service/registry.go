@@ -148,7 +148,7 @@ func mergeSlotsReportingOutage(
 		},
 	)
 	if err != nil {
-		return FindResult{Candidates: candidates, Outage: outage}, fmt.Errorf("%w", err)
+		return FindResult{Candidates: candidates, Outage: outage}, fmt.Errorf("find candidates across sources: %w", err)
 	}
 	return FindResult{Candidates: candidates, Outage: outage}, nil
 }
