@@ -1,7 +1,17 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, spacing, Tappable } from '@shared/ui';
-import type { ListPaging } from '@features/library/view/libraryView';
+import type { ListPaging, SortKey } from '@features/library/core/libraryView';
+
+export type ActiveView = {
+  content: ReactElement;
+  count: number;
+  noun: string;
+  options: { key: SortKey; label: string }[];
+  isLoading: boolean;
+  error: Error | null;
+  onRetry: () => void;
+};
 
 export function LibraryEmptyMessage({ label }: { label: string }): ReactElement {
   return (

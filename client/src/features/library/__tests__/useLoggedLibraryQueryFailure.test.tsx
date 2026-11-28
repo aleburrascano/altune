@@ -2,16 +2,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { ApiError, NetworkError } from '@shared/failure';
-import {
-  LibraryPortProvider,
-  useLibraryAlbums,
-  useLibraryArtists,
-  useLibraryTracks,
-  usePlaylistActions,
-  usePlaylistsView,
-} from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { useLibraryAlbums, useLibraryArtists } from '@features/library/view/useLibraryGroups';
+import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
+import { usePlaylistActions } from '@features/library/view/usePlaylistActions';
+import { usePlaylistsView } from '@features/library/view/usePlaylistsView';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import { PlaylistsPortProvider } from '@shared/playlists';
 import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 
@@ -29,7 +26,7 @@ function wrapperFor(port: LibraryPort) {
     return (
       <QueryClientProvider client={client}>
         <PlaylistsPortProvider port={playlistsPort}>
-          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+          <LibraryProvider port={port}>{children}</LibraryProvider>
         </PlaylistsPortProvider>
       </QueryClientProvider>
     );

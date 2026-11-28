@@ -18,7 +18,7 @@ import { useLibrarySearch } from '@features/library/view/useLibrarySearch';
 import { useLibraryTrackSelection } from '@features/library/view/useLibraryTrackSelection';
 import { usePlaylistActions } from '@features/library/view/usePlaylistActions';
 import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
-import { librarySection, type LibraryChip, type SortKey } from '@features/library/view/libraryView';
+import { librarySection, type LibraryChip, type SortKey } from '@features/library/core/libraryView';
 import { LibraryChips } from '@features/library/view/LibraryChips';
 import {
   LibraryHeader,

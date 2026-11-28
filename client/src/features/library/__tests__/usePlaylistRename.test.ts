@@ -6,7 +6,7 @@ import type { PlaylistResponse } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { usePlaylistRename } from '@features/library';
+import { usePlaylistRename } from '@features/library/view/usePlaylistRename';
 import { PlaylistsPortProvider } from '@shared/playlists';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 import { EVENT_ROUTES } from '@testing/eventRoutes';

@@ -5,16 +5,16 @@ import {
   type QueryKey,
   type UseInfiniteQueryResult,
 } from '@tanstack/react-query';
-import type { LibrarySort } from '@shared/apiClient';
+import type { LibrarySort } from '@features/library/core/libraryGroups';
 import {
   pagedListControls,
   GROUP_PAGE_SIZE,
   nextGroupPageOffset,
 } from '@features/library/core/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
-import type { LibraryChip } from '@features/library/view/libraryView';
+import type { LibraryChip } from '@features/library/core/libraryView';
 import { libraryKeys, STALE } from '@shared/query';
-import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryProvider';
 
 interface GroupPage<T> {
   items: T[];

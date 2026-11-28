@@ -7,12 +7,9 @@ import {
   type TrackId,
 } from '@shared/catalog';
 import { trackResponseFactory } from '@testing/factories';
-import {
-  useReacquireTrack,
-  useRetryAcquisition,
-  TracksList,
-  LibraryPortProvider,
-} from '@features/library';
+import { useReacquireTrack, useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
+import { TracksList } from '@features/library/view/TracksList';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
 import {
   setup,
   track,
@@ -32,7 +29,7 @@ import { useTrackStatusStore } from '@shared/acquisition';
 import { usePinnedStore } from '@shared/offline';
 import type { ReactNode } from 'react';
 import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import { signInTestUser } from '@testing/signInTestUser';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { flushPromises } from '@testing/flushPromises';
@@ -373,7 +370,7 @@ describe('useReacquireTrack', () => {
       return function Wrapper({ children }: { children: ReactNode }) {
         return (
           <QueryClientProvider client={queryClient}>
-            <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+            <LibraryProvider port={port}>{children}</LibraryProvider>
           </QueryClientProvider>
         );
       };

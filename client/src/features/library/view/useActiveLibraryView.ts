@@ -8,7 +8,8 @@ import { usePlaylistsView } from '@features/library/view/usePlaylistsView';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import type { Selection } from '@features/library/view/useSelection';
 import { useTracksView } from '@features/library/view/useTracksView';
-import type { ActiveView, LibraryChip, SortKey } from '@features/library/view/libraryView';
+import type { LibraryChip, SortKey } from '@features/library/core/libraryView';
+import type { ActiveView } from '@features/library/view/LibraryListParts';
 
 type ActiveLibraryViewDeps = {
   pl: PlaylistActionsState;

@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { signInTestUser } from '@testing/signInTestUser';
-import { useLibraryAlbums, useLibraryArtists, useLibraryTracks } from '@features/library';
+import { useLibraryAlbums, useLibraryArtists } from '@features/library/view/useLibraryGroups';
+import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
 const { __http } = require('@testing/doubles/fetch.js');
 

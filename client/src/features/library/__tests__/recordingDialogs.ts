@@ -1,5 +1,5 @@
 import type { FailureAlert } from '@shared/ui';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 
 type ConfirmRequest = Parameters<LibraryPort['confirmDestructive']>[0];
 type TitleAndMessage = [string, string];

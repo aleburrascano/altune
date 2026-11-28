@@ -6,7 +6,7 @@ import type { PlaybackTrack } from '@shared/playback';
 import type { FailureAlert } from '@shared/ui';
 import { trackResponseFactory } from '@testing/factories';
 
-import { buildSelectionActions } from '@features/library';
+import { buildSelectionActions } from '@features/library/view/selectionActions';
 import { flushPromises } from '@testing/flushPromises';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {

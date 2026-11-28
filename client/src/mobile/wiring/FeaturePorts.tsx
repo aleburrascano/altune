@@ -8,7 +8,7 @@ import {
   FavoritesPortProvider,
   UnreleasedHitsSlotProvider,
 } from '@features/discovery';
-import { LibraryPortProvider } from '@features/library';
+import { LibraryProvider } from '@features/library';
 import { SettingsProvider } from '@features/settings';
 
 import type { FeaturePortSet } from '@/mobile/wiring/httpFeaturePorts';
@@ -33,7 +33,7 @@ function DiscoveryPorts({ ports, children }: FeaturePortsProps): ReactElement {
 function CatalogPorts({ ports, children }: FeaturePortsProps): ReactElement {
   return (
     <DetailPortProvider port={ports.detail}>
-      <LibraryPortProvider port={ports.library}>{children}</LibraryPortProvider>
+      <LibraryProvider port={ports.library}>{children}</LibraryProvider>
     </DetailPortProvider>
   );
 }

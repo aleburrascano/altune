@@ -6,17 +6,17 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { LibrarySort } from '@shared/apiClient';
+import type { LibrarySort } from '@features/library/core/libraryGroups';
 import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { libraryKeys, STALE } from '@shared/query';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/ports';
+import { useLibraryPort } from '@features/library/view/LibraryProvider';
 import {
   failureLogFields,
   classifyLibraryError,
   type LibraryFailure,
   type LibraryWarn,
-} from '@features/library/core/libraryFailure';
+} from '@features/library/core/errors';
 import { pagedListControls } from '@features/library/core/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 import { isPending } from '@shared/catalog';

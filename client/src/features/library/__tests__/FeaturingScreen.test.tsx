@@ -10,13 +10,14 @@ import { ApiError, NetworkError } from '@shared/failure';
 import { warn } from '@shared/log';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
-import { LibraryPortProvider, FeaturingScreen } from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { FeaturingScreen } from '@features/library/view/FeaturingScreen';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import {
   recordingDialogs,
   type RecordingDialogs,
 } from '@features/library/__tests__/recordingDialogs';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import { readDetailHandoff } from '@shared/navigation';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
@@ -70,7 +71,7 @@ function wrapper({ children }: { children: ReactNode }) {
     <QueryClientProvider client={client}>
       <PlaybackContext.Provider value={idlePlayback}>
         <AcquisitionPortProvider port={apiClientAcquisitionPort}>
-          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+          <LibraryProvider port={port}>{children}</LibraryProvider>
         </AcquisitionPortProvider>
       </PlaybackContext.Provider>
     </QueryClientProvider>

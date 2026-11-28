@@ -11,10 +11,11 @@ import {
   restoreTrackPlacements,
 } from '@shared/events';
 
-import { useLibraryTracks, LibraryPortProvider } from '@features/library';
+import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import { track as seededTrack } from '@features/library/__tests__/trackMutationFixtures';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 
 const SERVICE_UNAVAILABLE = 503;
 const MAX_PENDING_POLLS = 10;
@@ -47,7 +48,7 @@ let port: LibraryPort;
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <LibraryProvider port={port}>{children}</LibraryProvider>
     </QueryClientProvider>
   );
 }

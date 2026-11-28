@@ -2,7 +2,7 @@ import { renderHook } from '@testing-library/react-native';
 import { asTrackId } from '@shared/catalog';
 import { usePinnedStore } from '@shared/offline';
 
-import { useLibraryOffline, usePinnedStatus } from '@features/library';
+import { useLibraryOffline, usePinnedStatus } from '@features/library/view/useLibraryOffline';
 
 describe('useLibraryOffline on web — offline downloads do not exist here', () => {
   it('reports offline downloads unsupported on web', () => {

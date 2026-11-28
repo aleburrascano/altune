@@ -5,7 +5,7 @@ import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition';
 import type { FailedAcquisition, TrackFields } from '@shared/catalog';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
-import { LibraryRowFailure } from '@features/library';
+import { LibraryRowFailure } from '@features/library/view/LibraryRowFailure';
 import { flushPromises } from '@testing/flushPromises';
 import { EVENT_ROUTES, isEventPath } from '@testing/eventRoutes';
 

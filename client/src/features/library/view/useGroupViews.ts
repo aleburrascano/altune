@@ -1,13 +1,14 @@
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
+import { createElement } from 'react';
+import type { AlbumGroup, ArtistGroup } from '@features/library/core/libraryGroups';
 import { useLibraryAlbums, useLibraryArtists } from '@features/library/view/useLibraryGroups';
 import {
-  type ActiveView,
   type ListPaging,
   type ListRefresh,
   ALBUM_SORT_OPTIONS,
   type SortKey,
   ARTIST_SORT_OPTIONS,
-} from '@features/library/view/libraryView';
+} from '@features/library/core/libraryView';
+import { type ActiveView } from '@features/library/view/LibraryListParts';
 import { AlbumsGrid, ArtistsGrid } from '@features/library/view/GroupGrids';
 
 type AlbumsViewDeps = {
@@ -39,15 +40,13 @@ export function useAlbumsView({ query, sort, isActive, onAlbumPress }: AlbumsVie
     isLoading: albumsState.isLoading,
     error: albumsState.albums.length === 0 ? albumsState.error : null,
     onRetry: albumsState.refetch,
-    content: (
-      <AlbumsGrid
-        albums={albumsState.albums}
-        emptyLabel={'No albums yet'}
-        refresh={refresh}
-        onAlbumPress={onAlbumPress}
-        paging={paging}
-      />
-    ),
+    content: createElement(AlbumsGrid, {
+      albums: albumsState.albums,
+      emptyLabel: 'No albums yet',
+      refresh,
+      onAlbumPress,
+      paging,
+    }),
   };
 }
 
@@ -85,14 +84,12 @@ export function useArtistsView({
     isLoading: artistsState.isLoading,
     error: artistsState.artists.length === 0 ? artistsState.error : null,
     onRetry: artistsState.refetch,
-    content: (
-      <ArtistsGrid
-        artists={artistsState.artists}
-        emptyLabel={'No artists yet'}
-        refresh={refresh}
-        onArtistPress={onArtistPress}
-        paging={paging}
-      />
-    ),
+    content: createElement(ArtistsGrid, {
+      artists: artistsState.artists,
+      emptyLabel: 'No artists yet',
+      refresh,
+      onArtistPress,
+      paging,
+    }),
   };
 }

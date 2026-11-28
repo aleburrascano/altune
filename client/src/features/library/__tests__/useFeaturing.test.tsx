@@ -2,12 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import type { FeaturedArtist } from '@shared/catalog';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
 import {
-  LibraryPortProvider,
   parseDeezerIdParam,
   parseStringParam,
   useTracksFeaturing,
-} from '@features/library';
+} from '@features/library/view/useFeaturing';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 
 const memory = createMemoryLibraryPort();
@@ -18,7 +18,7 @@ function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <LibraryProvider port={port}>{children}</LibraryProvider>
     </QueryClientProvider>
   );
 }

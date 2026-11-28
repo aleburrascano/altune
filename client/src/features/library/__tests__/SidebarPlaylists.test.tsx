@@ -7,9 +7,10 @@ import { StyleSheet } from 'react-native';
 import { asPlaylistId } from '@shared/catalog';
 import type { PlaylistDetailResponse } from '@shared/catalog';
 import { Sidebar, darkTheme } from '@shared/ui';
-import { LibraryPortProvider, SidebarPlaylists } from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { SidebarPlaylists } from '@features/library/view/SidebarPlaylists';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import { PlaylistsPortProvider } from '@shared/playlists';
 import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 
@@ -60,7 +61,7 @@ function wrapper({ children }: WrapperProps) {
   return (
     <QueryClientProvider client={client}>
       <PlaylistsPortProvider port={playlistsPort}>
-        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        <LibraryProvider port={port}>{children}</LibraryProvider>
       </PlaylistsPortProvider>
     </QueryClientProvider>
   );

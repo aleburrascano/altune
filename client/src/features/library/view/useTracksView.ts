@@ -1,19 +1,19 @@
-import { useRef, useState } from 'react';
+import { createElement, useRef, useState } from 'react';
 import type { TrackResponse } from '@shared/catalog';
 import { isCurrentlyPlaying, buildPlayableQueue } from '@shared/playback';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';
-import { libraryFailureAlert, type ShowFailure } from '@features/library/core/libraryFailure';
+import { libraryFailureAlert, type ShowFailure } from '@features/library/core/errors';
 import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import type { Selection } from '@features/library/view/useSelection';
 import {
-  type ActiveView,
   type ListPaging,
   type ListRefresh,
   TRACK_SORT_OPTIONS,
   type SortKey,
-} from '@features/library/view/libraryView';
+} from '@features/library/core/libraryView';
+import { type ActiveView } from '@features/library/view/LibraryListParts';
 import { TracksList } from '@features/library/view/TracksList';
 
 type TracksViewDeps = {
@@ -120,23 +120,21 @@ export function useTracksView({
       isLoading: tracksState.isLoading,
       error: tracksState.tracks.length === 0 ? tracksState.error : null,
       onRetry: tracksState.refetch,
-      content: (
-        <TracksList
-          tracks={tracksState.tracks}
-          emptyLabel={'No tracks yet'}
-          refresh={refresh}
-          paging={paging}
-          shuffleBusy={wholeLibraryBusy}
-          onShuffleAll={() => void shuffleWholeLibrary()}
-          onPlay={(track) => void playWholeLibraryFrom(track)}
-          onPress={onTrackPress}
-          onMore={onTrackMore}
-          onRetry={(track) => retryMutation.mutate(track.id)}
-          isRetrying={retryMutation.isInFlight}
-          isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
-          selection={selection}
-        />
-      ),
+      content: createElement(TracksList, {
+        tracks: tracksState.tracks,
+        emptyLabel: 'No tracks yet',
+        refresh,
+        paging,
+        shuffleBusy: wholeLibraryBusy,
+        onShuffleAll: () => void shuffleWholeLibrary(),
+        onPlay: (track) => void playWholeLibraryFrom(track),
+        onPress: onTrackPress,
+        onMore: onTrackMore,
+        onRetry: (track) => retryMutation.mutate(track.id),
+        isRetrying: retryMutation.isInFlight,
+        isPlaying: (id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id }),
+        selection,
+      }),
     },
   };
 }

@@ -9,7 +9,7 @@ import {
   reportUnpinBatch,
   useLibraryOffline,
 } from '@features/library/view/useLibraryOffline';
-import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryProvider';
 
 const DELETE_PROMPT = {
   title: 'Delete Playlist',

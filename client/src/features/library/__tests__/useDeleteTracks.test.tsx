@@ -11,7 +11,8 @@ import { useTrackStatusStore } from '@shared/acquisition';
 import { usePinnedStore } from '@shared/offline';
 import { TRACK_CACHE_FAMILIES } from '@shared/events';
 import type { ReactNode } from 'react';
-import { LibraryPortProvider, useDeleteTracks, useDeleteTrack } from '@features/library';
+import { LibraryProvider } from '@features/library/view/LibraryProvider';
+import { useDeleteTracks, useDeleteTrack } from '@features/library/view/useDeleteTracks';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import {
   track,
@@ -27,7 +28,7 @@ import {
   PLAYLIST_KEY,
   READY,
 } from '@features/library/__tests__/trackMutationFixtures';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library/ports/ports';
 import type { RecordingDialogs } from '@features/library/__tests__/recordingDialogs';
 import { libraryKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
@@ -552,7 +553,7 @@ describe('useDeleteTracks', () => {
       return function Wrapper({ children }: { children: ReactNode }) {
         return (
           <QueryClientProvider client={queryClient}>
-            <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+            <LibraryProvider port={port}>{children}</LibraryProvider>
           </QueryClientProvider>
         );
       };
@@ -929,7 +930,7 @@ describe('useDeleteTrack', () => {
       return function Wrapper({ children }: { children: ReactNode }) {
         return (
           <QueryClientProvider client={queryClient}>
-            <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+            <LibraryProvider port={port}>{children}</LibraryProvider>
           </QueryClientProvider>
         );
       };

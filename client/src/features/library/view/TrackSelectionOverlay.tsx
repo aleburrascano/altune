@@ -15,10 +15,8 @@ import {
 } from '@shared/ui';
 import { AddToPlaylistSheet } from '@shared/playlists';
 import { useReconcileSelection } from '@features/library/view/useSelection';
-import type {
-  TrackSelectionController,
-  SelectionAction,
-} from '@features/library/view/useTrackSelection';
+import type { TrackSelectionController } from '@features/library/view/useTrackSelection';
+import type { SelectionAction } from '@features/library/view/selectionActions';
 import { StyleSheet, View, type ListRenderItemInfo } from 'react-native';
 type TrackSelectionOverlayProps = {
   controller: TrackSelectionController;

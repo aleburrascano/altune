@@ -18,7 +18,7 @@ import { LibraryEmptyMessage, ListPagingFooter } from '@features/library/view/Li
 import { listContent } from '@features/library/view/listContentStyles';
 import { LibraryRow } from '@features/library/view/LibraryRow';
 import { WideTrackHeader } from '@features/library/view/WideTrackHeader';
-import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
+import type { ListPaging, ListRefresh } from '@features/library/core/libraryView';
 import { canRetry, isReady } from '@shared/catalog';
 type TracksListHeaderProps = {
   isWide: boolean;

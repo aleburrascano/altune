@@ -3,7 +3,7 @@ import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline';
 import { trackResponseFactory } from '@testing/factories';
 
-import { buildTrackMenuItems } from '@features/library';
+import { buildTrackMenuItems } from '@features/library/view/trackMenuItems';
 
 function readyPin(trackId: string): PinnedEntry {
   return {

@@ -14,7 +14,7 @@ import {
   type ContentProps,
 } from '@features/library/view/PlaylistDetailContent';
 import { describeError } from '@shared/failure';
-import { classifyLibraryError } from '@features/library/core/libraryFailure';
+import { classifyLibraryError } from '@features/library/core/errors';
 
 type ScreenQuery = {
   playlist: PlaylistDetailResponse | undefined;

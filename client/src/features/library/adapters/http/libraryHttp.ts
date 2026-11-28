@@ -12,7 +12,8 @@ import {
 } from '@shared/apiClient';
 import { warn } from '@shared/log';
 import { confirmDestructive, showFailureAlert } from '@shared/ui';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { toAlbumsPage, toArtistsPage } from '@features/library/adapters/http/mapping';
+import type { LibraryPort } from '@features/library/ports/ports';
 
 export const httpLibraryPort: LibraryPort = {
   warn: (message, fields) => warn(message, fields),
@@ -23,8 +24,8 @@ export const httpLibraryPort: LibraryPort = {
   listTracksFeaturing: (...args) => listTracksFeaturing(...args),
   deleteTrack: (...args) => deleteTrack(...args),
   reacquireTrack: (...args) => reacquireTrack(...args),
-  getLibraryAlbums: (...args) => getLibraryAlbums(...args),
-  getLibraryArtists: (...args) => getLibraryArtists(...args),
+  getLibraryAlbums: async (query, signal) => toAlbumsPage(await getLibraryAlbums(query, signal)),
+  getLibraryArtists: async (query, signal) => toArtistsPage(await getLibraryArtists(query, signal)),
   getPlaylists: (...args) => getPlaylists(...args),
   getPlaylist: (...args) => getPlaylist(...args),
   searchDiscovery: (...args) => searchDiscovery(...args),
